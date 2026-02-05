@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Output directories (large data, regenerated)
+output/
+sfho_tables_output/
+eos_plots/
+compose_comparison_plots/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
