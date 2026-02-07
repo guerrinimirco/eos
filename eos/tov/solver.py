@@ -13,7 +13,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.interpolate import CubicSpline, PchipInterpolator
 from dataclasses import dataclass
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Callable, Union
 import os
 
 # Import physical constants
@@ -742,7 +742,7 @@ def _compute_tidal(sol, r_surface: float, M_msun: float, R_km: float,
 # =============================================================================
 
 def compute_tov_sequence(
-    eos_file: str,
+    eos_input: Union[str, EOSTable_for_TOV],
     e_c_vec: np.ndarray,
     add_crust_table: str = 'No',
     add_crust_mode: str = 'attach',
@@ -762,7 +762,7 @@ def compute_tov_sequence(
     Compute TOV sequence for array of central energy densities.
 
     Args:
-        eos_file: Path to EOS table file
+        eos_input: Path to EOS table file OR an EOSTable_for_TOV object
         e_c_vec: Array of central energy densities [MeV/fm³]
         add_crust_table: 'No', 'BPS', 'compose_sfho_nYCT', 'compose_sfho_nT0_beta',
                          'compose_sfho_nYLS_trap', or 'personalized'
@@ -775,16 +775,19 @@ def compute_tov_sequence(
         compute_baryonic_mass: Whether to compute M_b
         compute_tidal: Whether to compute k2 and Lambda
         output_file: Path for output file (optional)
-        eos_columns: Column indices (P, epsilon, nB)
-        skip_header: Header lines to skip
+        eos_columns: Column indices (P, epsilon, nB) - only used if eos_input is a file path
+        skip_header: Header lines to skip - only used if eos_input is a file path
         verbose: Print progress
 
     Returns:
         Structured array with columns:
         - e_c, n_c, P_c, R, M, [M_b], [k2], [Lambda]
     """
-    # Load EOS
-    eos = EOSTable_for_TOV.from_file(eos_file, columns=eos_columns, skip_header=skip_header)
+    # Load EOS from file or use provided object
+    if isinstance(eos_input, str):
+        eos = EOSTable_for_TOV.from_file(eos_input, columns=eos_columns, skip_header=skip_header)
+    else:
+        eos = eos_input
 
     # Add crust
     eos = add_crust(
