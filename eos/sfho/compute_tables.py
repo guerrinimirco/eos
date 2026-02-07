@@ -700,6 +700,299 @@ settings = TableSettings(
 
 
 #==============================================================================
+# TABLE LOADING AND INTERPOLATION
+#==============================================================================
+
+# Column mappings for each equilibrium type
+COLUMN_MAPS = {
+    'beta_eq': {
+        'n_B': 0, 'T': 1, 'sigma': 2, 'omega': 3, 'rho': 4, 'phi': 5,
+        'mu_B': 6, 'mu_C': 7, 'mu_S': 8, 'mu_e': 9, 'mu_nu': 10,
+        'P_total': 11, 'e_total': 12, 's_total': 13,
+        'Y_C': 14, 'Y_S': 15, 'Y_L': 16, 'converged': 17
+    },
+    'trapped_neutrinos': {
+        'n_B': 0, 'Y_L': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
+        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
+        'P_total': 12, 'e_total': 13, 's_total': 14,
+        'Y_C': 15, 'Y_S': 16, 'converged': 17
+    },
+    'fixed_yc': {
+        'n_B': 0, 'Y_C': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
+        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
+        'P_total': 12, 'e_total': 13, 's_total': 14,
+        'Y_S': 15, 'Y_L': 16, 'converged': 17
+    },
+    'isentropic_beta_eq': {
+        'n_B': 0, 'S': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
+        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
+        'P_total': 12, 'e_total': 13, 's_total': 14,
+        'Y_C': 15, 'Y_S': 16, 'Y_L': 17, 'converged': 18
+    },
+    'isentropic_trapped': {
+        'n_B': 0, 'Y_L': 1, 'S': 2, 'T': 3, 'sigma': 4, 'omega': 5, 'rho': 6, 'phi': 7,
+        'mu_B': 8, 'mu_C': 9, 'mu_S': 10, 'mu_e': 11, 'mu_nu': 12,
+        'P_total': 13, 'e_total': 14, 's_total': 15,
+        'Y_C': 16, 'Y_S': 17, 'converged': 18
+    },
+}
+
+# Grid axes for each equilibrium type (order matters for reshaping)
+GRID_AXES = {
+    'beta_eq': ['n_B', 'T'],
+    'trapped_neutrinos': ['n_B', 'Y_L', 'T'],
+    'fixed_yc': ['n_B', 'Y_C', 'T'],
+    'isentropic_beta_eq': ['n_B', 'S'],
+    'isentropic_trapped': ['n_B', 'Y_L', 'S'],
+}
+
+
+@dataclass
+class EOSTableData:
+    """Container for loaded EOS table with structured grids."""
+    eq_type: str
+    grids: Dict[str, np.ndarray]      # {'n_B': array, 'T': array, ...}
+    data: Dict[str, np.ndarray]       # {'P_total': 2D/3D array, ...}
+    filepath: str = ""
+
+    def __repr__(self):
+        axes = list(self.grids.keys())
+        shapes = [f"{k}={len(v)}" for k, v in self.grids.items()]
+        return f"EOSTableData(eq_type='{self.eq_type}', axes={axes}, shape=({', '.join(shapes)}))"
+
+
+def load_eos_table(filepath: str, eq_type: str) -> EOSTableData:
+    """
+    Load an EOS table from file and return structured grids.
+
+    Parameters:
+        filepath: Path to the .dat file
+        eq_type: Equilibrium type - 'beta_eq', 'trapped_neutrinos', 'fixed_yc',
+                 'isentropic_beta_eq', or 'isentropic_trapped'
+
+    Returns:
+        EOSTableData with:
+        - grids: dict of 1D arrays for each axis (n_B, T, Y_L, etc.)
+        - data: dict of N-dimensional arrays for each quantity
+                e.g., data['P_total'][i, j] for beta_eq (2D)
+                      data['P_total'][i, j, k] for trapped (3D)
+
+    Example:
+        >>> table = load_eos_table('eos_betaeq.dat', 'beta_eq')
+        >>> P = table.data['P_total']  # Shape: (n_nB, n_T)
+        >>> nB = table.grids['n_B']    # 1D array of n_B values
+        >>> T = table.grids['T']       # 1D array of T values
+        >>> print(f"P(n_B[10], T[5]) = {P[10, 5]} MeV/fm^3")
+    """
+    if eq_type not in COLUMN_MAPS:
+        raise ValueError(f"Unknown eq_type: {eq_type}. "
+                        f"Valid options: {list(COLUMN_MAPS.keys())}")
+
+    col_map = COLUMN_MAPS[eq_type]
+    axes = GRID_AXES[eq_type]
+
+    # Load raw data
+    raw_data = np.loadtxt(filepath, comments='#')
+    print(f"Loaded {len(raw_data)} points from {filepath}")
+
+    # Extract unique grid values for each axis
+    grids = {}
+    for axis in axes:
+        grids[axis] = np.unique(raw_data[:, col_map[axis]])
+
+    # Determine grid shape
+    shape = tuple(len(grids[axis]) for axis in axes)
+    n_points_expected = np.prod(shape)
+
+    if len(raw_data) != n_points_expected:
+        print(f"  Warning: Expected {n_points_expected} points for complete grid, got {len(raw_data)}")
+
+    # Columns to extract (exclude grid axes and converged flag)
+    exclude = set(axes) | {'converged'}
+    columns = [c for c in col_map.keys() if c not in exclude]
+
+    # Build structured arrays using vectorized approach
+    data = {}
+
+    # Create index mapping: for each raw data row, find its grid indices
+    indices = []
+    for axis in axes:
+        axis_values = raw_data[:, col_map[axis]]
+        grid_values = grids[axis]
+        # Find index of each value in the grid
+        idx = np.searchsorted(grid_values, axis_values)
+        indices.append(idx)
+    indices = tuple(indices)
+
+    # Fill in data arrays
+    for col in columns:
+        arr = np.full(shape, np.nan)
+        arr[indices] = raw_data[:, col_map[col]]
+        data[col] = arr
+
+    # Add derived quantities
+    # f_total = e_total - T * s_total (free energy density)
+    if 'e_total' in data and 's_total' in data:
+        if eq_type in ['beta_eq', 'trapped_neutrinos', 'fixed_yc']:
+            # T is one of the axes
+            T_idx = axes.index('T')
+            T_broadcast_shape = [1] * len(axes)
+            T_broadcast_shape[T_idx] = len(grids['T'])
+            T_grid = grids['T'].reshape(T_broadcast_shape)
+            data['f_total'] = data['e_total'] - T_grid * data['s_total']
+        elif 'T' in data:
+            # T is computed (isentropic cases)
+            data['f_total'] = data['e_total'] - data['T'] * data['s_total']
+
+    # mu_L = mu_e + mu_nu for trapped cases (lepton chemical potential)
+    if eq_type in ['trapped_neutrinos', 'isentropic_trapped']:
+        if 'mu_e' in data and 'mu_nu' in data:
+            data['mu_L'] = data['mu_e'] + data['mu_nu']
+
+    # Print summary
+    print(f"  Equilibrium: {eq_type}")
+    for axis in axes:
+        print(f"  {axis}: [{grids[axis][0]:.4g}, {grids[axis][-1]:.4g}], {len(grids[axis])} points")
+
+    return EOSTableData(
+        eq_type=eq_type,
+        grids=grids,
+        data=data,
+        filepath=filepath
+    )
+
+
+def build_interpolators(table: EOSTableData,
+                        method: str = 'linear',
+                        bounds_error: bool = False,
+                        fill_value: float = np.nan) -> Dict[str, Any]:
+    """
+    Build interpolation functions from loaded EOS table data.
+
+    Parameters:
+        table: EOSTableData from load_eos_table()
+        method: Interpolation method ('linear', 'nearest', 'cubic', etc.)
+        bounds_error: If True, raise error for out-of-bounds queries
+        fill_value: Value to return for out-of-bounds queries
+
+    Returns:
+        Dict with:
+        - 'interpolators': dict of RegularGridInterpolator for each quantity
+        - 'grids': reference to the grid arrays
+        - 'axes': list of axis names in order
+        - Convenience functions for common quantities
+
+    Example:
+        >>> table = load_eos_table('eos_betaeq.dat', 'beta_eq')
+        >>> interp = build_interpolators(table)
+        >>>
+        >>> # Using interpolators directly
+        >>> P = interp['interpolators']['P_total']((0.16, 10.0))
+        >>>
+        >>> # Using convenience functions (beta_eq)
+        >>> P = interp['P'](0.16, 10.0)
+        >>> eps = interp['eps'](0.16, 10.0)
+        >>>
+        >>> # For trapped neutrinos (3 arguments)
+        >>> P = interp['P'](0.16, 0.4, 50.0)  # n_B, Y_L, T
+    """
+    from scipy.interpolate import RegularGridInterpolator
+
+    axes = GRID_AXES[table.eq_type]
+    grid_tuple = tuple(table.grids[axis] for axis in axes)
+
+    interpolators = {}
+    for name, arr in table.data.items():
+        interpolators[name] = RegularGridInterpolator(
+            grid_tuple, arr,
+            method=method,
+            bounds_error=bounds_error,
+            fill_value=fill_value
+        )
+
+    result = {
+        'interpolators': interpolators,
+        'grids': table.grids,
+        'axes': axes,
+        'eq_type': table.eq_type,
+    }
+
+    # Add convenience functions based on equilibrium type
+    if table.eq_type == 'beta_eq':
+        # 2D: f(n_B, T)
+        result['P'] = lambda nB, T: interpolators['P_total']((nB, T))
+        result['eps'] = lambda nB, T: interpolators['e_total']((nB, T))
+        result['s'] = lambda nB, T: interpolators['s_total']((nB, T))
+        result['f'] = lambda nB, T: interpolators['f_total']((nB, T))
+        result['mu_B'] = lambda nB, T: interpolators['mu_B']((nB, T))
+        result['mu_C'] = lambda nB, T: interpolators['mu_C']((nB, T))
+        result['mu_S'] = lambda nB, T: interpolators['mu_S']((nB, T))
+        result['mu_e'] = lambda nB, T: interpolators['mu_e']((nB, T))
+        result['Y_C'] = lambda nB, T: interpolators['Y_C']((nB, T))
+        result['Y_S'] = lambda nB, T: interpolators['Y_S']((nB, T))
+
+    elif table.eq_type == 'trapped_neutrinos':
+        # 3D: f(n_B, Y_L, T)
+        result['P'] = lambda nB, YL, T: interpolators['P_total']((nB, YL, T))
+        result['eps'] = lambda nB, YL, T: interpolators['e_total']((nB, YL, T))
+        result['s'] = lambda nB, YL, T: interpolators['s_total']((nB, YL, T))
+        result['f'] = lambda nB, YL, T: interpolators['f_total']((nB, YL, T))
+        result['mu_B'] = lambda nB, YL, T: interpolators['mu_B']((nB, YL, T))
+        result['mu_C'] = lambda nB, YL, T: interpolators['mu_C']((nB, YL, T))
+        result['mu_S'] = lambda nB, YL, T: interpolators['mu_S']((nB, YL, T))
+        result['mu_L'] = lambda nB, YL, T: interpolators['mu_L']((nB, YL, T))
+        result['mu_e'] = lambda nB, YL, T: interpolators['mu_e']((nB, YL, T))
+        result['mu_nu'] = lambda nB, YL, T: interpolators['mu_nu']((nB, YL, T))
+        result['Y_C'] = lambda nB, YL, T: interpolators['Y_C']((nB, YL, T))
+        result['Y_S'] = lambda nB, YL, T: interpolators['Y_S']((nB, YL, T))
+
+    elif table.eq_type == 'fixed_yc':
+        # 3D: f(n_B, Y_C, T)
+        result['P'] = lambda nB, YC, T: interpolators['P_total']((nB, YC, T))
+        result['eps'] = lambda nB, YC, T: interpolators['e_total']((nB, YC, T))
+        result['s'] = lambda nB, YC, T: interpolators['s_total']((nB, YC, T))
+        result['f'] = lambda nB, YC, T: interpolators['f_total']((nB, YC, T))
+        result['mu_B'] = lambda nB, YC, T: interpolators['mu_B']((nB, YC, T))
+        result['mu_C'] = lambda nB, YC, T: interpolators['mu_C']((nB, YC, T))
+        result['mu_S'] = lambda nB, YC, T: interpolators['mu_S']((nB, YC, T))
+        result['mu_e'] = lambda nB, YC, T: interpolators['mu_e']((nB, YC, T))
+        result['Y_S'] = lambda nB, YC, T: interpolators['Y_S']((nB, YC, T))
+
+    elif table.eq_type == 'isentropic_beta_eq':
+        # 2D: f(n_B, S)
+        result['P'] = lambda nB, S: interpolators['P_total']((nB, S))
+        result['eps'] = lambda nB, S: interpolators['e_total']((nB, S))
+        result['s'] = lambda nB, S: interpolators['s_total']((nB, S))
+        result['T'] = lambda nB, S: interpolators['T']((nB, S))
+        result['f'] = lambda nB, S: interpolators['f_total']((nB, S))
+        result['mu_B'] = lambda nB, S: interpolators['mu_B']((nB, S))
+        result['mu_C'] = lambda nB, S: interpolators['mu_C']((nB, S))
+        result['mu_S'] = lambda nB, S: interpolators['mu_S']((nB, S))
+        result['mu_e'] = lambda nB, S: interpolators['mu_e']((nB, S))
+        result['mu_nu'] = lambda nB, S: interpolators['mu_nu']((nB, S))
+        result['Y_C'] = lambda nB, S: interpolators['Y_C']((nB, S))
+        result['Y_S'] = lambda nB, S: interpolators['Y_S']((nB, S))
+
+    elif table.eq_type == 'isentropic_trapped':
+        # 3D: f(n_B, Y_L, S)
+        result['P'] = lambda nB, YL, S: interpolators['P_total']((nB, YL, S))
+        result['eps'] = lambda nB, YL, S: interpolators['e_total']((nB, YL, S))
+        result['s'] = lambda nB, YL, S: interpolators['s_total']((nB, YL, S))
+        result['T'] = lambda nB, YL, S: interpolators['T']((nB, YL, S))
+        result['f'] = lambda nB, YL, S: interpolators['f_total']((nB, YL, S))
+        result['mu_B'] = lambda nB, YL, S: interpolators['mu_B']((nB, YL, S))
+        result['mu_C'] = lambda nB, YL, S: interpolators['mu_C']((nB, YL, S))
+        result['mu_S'] = lambda nB, YL, S: interpolators['mu_S']((nB, YL, S))
+        result['mu_e'] = lambda nB, YL, S: interpolators['mu_e']((nB, YL, S))
+        result['mu_nu'] = lambda nB, YL, S: interpolators['mu_nu']((nB, YL, S))
+        result['mu_L'] = lambda nB, YL, S: interpolators['mu_L']((nB, YL, S))
+        result['Y_C'] = lambda nB, YL, S: interpolators['Y_C']((nB, YL, S))
+        result['Y_S'] = lambda nB, YL, S: interpolators['Y_S']((nB, YL, S))
+
+    return result
+
+
+#==============================================================================
 # MAIN
 #==============================================================================
 if __name__ == "__main__":
