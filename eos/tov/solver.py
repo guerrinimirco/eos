@@ -79,18 +79,24 @@ class TOVResult:
 # Default crust file paths
 CRUST_PATHS = {
     'BPS': '/Users/mircoguerrini/Desktop/Research/Crust/BPST0.dat',
-    'compose_sfho': '/Users/mircoguerrini/Desktop/Research/Compose/SFHO_Compose/eos.thermo.ns',
+    'compose_sfho_nYCT': '/Users/mircoguerrini/Desktop/Research/Compose/SFHO_Compose/eos.thermo.ns',
+    'compose_sfho_nT0_beta': '/Users/mircoguerrini/Desktop/Research/Crust/SFHO_compose_betaeq_T0.dat',
+    'compose_sfho_nYLS_trap': '/Users/mircoguerrini/Desktop/Research/Crust/SFHO_compose_betaeq_S.dat',
 }
 
 
-def load_crust_table(crust_name: str, custom_path: Optional[str] = None) -> EOSTable_for_TOV:
+def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
+                     YL: Optional[float] = None, S: Optional[float] = None) -> EOSTable_for_TOV:
     """
     Load a crust EOS table.
-    
+
     Args:
-        crust_name: 'BPS', 'compose_sfho', or 'personalized'
+        crust_name: 'BPS', 'compose_sfho_nYCT', 'compose_sfho_nT0_beta',
+                    'compose_sfho_nYLS_trap', or 'personalized'
         custom_path: Path to custom crust file (required if personalized)
-        
+        YL: Lepton fraction (required for 'compose_sfho_nYLS_trap')
+        S: Entropy per baryon (required for 'compose_sfho_nYLS_trap')
+
     Returns:
         EOSTable_for_TOV with crust data
     """
@@ -100,7 +106,7 @@ def load_crust_table(crust_name: str, custom_path: Optional[str] = None) -> EOST
         filepath = custom_path
         # Assume columns: P, epsilon, nB
         return EOSTable_for_TOV.from_file(filepath, columns=(0, 1, 2))
-    
+
     elif crust_name == 'BPS':
         # BPS file format: P [km^-2], epsilon [km^-2], nB [fm⁻³]
         # Convert to MeV/fm³
@@ -108,21 +114,41 @@ def load_crust_table(crust_name: str, custom_path: Optional[str] = None) -> EOST
         data = np.loadtxt(filepath)
         P_geo = data[:, 0]       # km^-2
         e_geo = data[:, 1]       # km^-2
-        nB = data[:, 2]          # fm⁻³ 
+        nB = data[:, 2]          # fm⁻³
 
         # Convert to MeV/fm³
         P_mev = P_geo / MEV_FM3_TO_KM2_INV      # km^-2 → MeV/fm³
         e_mev = e_geo / MEV_FM3_TO_KM2_INV         # km^-2 → MeV/fm³
 
         return EOSTable_for_TOV(P=P_mev, epsilon=e_mev, nB=nB)
-    
-    elif crust_name == 'compose_sfho':
+
+    elif crust_name == 'compose_sfho_nYCT':
         # Compose format
-        filepath = CRUST_PATHS['compose_sfho']
+        filepath = CRUST_PATHS['compose_sfho_nYCT']
         return _load_compose_crust(filepath)
-    
+
+    elif crust_name == 'compose_sfho_nT0_beta':
+        # SFHO beta-equilibrium at T=0 - columns: P [MeV/fm³], epsilon [MeV/fm³], nB [fm⁻³]
+        filepath = CRUST_PATHS['compose_sfho_nT0_beta']
+        return EOSTable_for_TOV.from_file(filepath, columns=(0, 1, 2))
+
+    elif crust_name == 'compose_sfho_nYLS_trap':
+        # SFHO with trapped neutrinos - columns: YL, S, P, epsilon, nB
+        if YL is None or S is None:
+            raise ValueError("Must provide YL and S for 'compose_sfho_nYLS_trap' crust")
+        filepath = CRUST_PATHS['compose_sfho_nYLS_trap']
+        data = np.loadtxt(filepath)
+        # Filter rows matching YL and S (with tolerance for float comparison)
+        tol = 1e-6
+        mask = (np.abs(data[:, 0] - YL) < tol) & (np.abs(data[:, 1] - S) < tol)
+        if not np.any(mask):
+            raise ValueError(f"No data found for YL={YL}, S={S} in {filepath}")
+        filtered = data[mask]
+        return EOSTable_for_TOV(P=filtered[:, 2], epsilon=filtered[:, 3], nB=filtered[:, 4])
+
     else:
-        raise ValueError(f"Unknown crust: {crust_name}. Use 'BPS', 'compose_sfho', or 'personalized'")
+        raise ValueError(f"Unknown crust: {crust_name}. Use 'BPS', 'compose_sfho_nYCT', "
+                         f"'compose_sfho_nT0_beta', 'compose_sfho_nYLS_trap', or 'personalized'")
 
 
 def _load_compose_crust(filepath: str) -> EOSTable_for_TOV:
@@ -139,8 +165,10 @@ def add_crust(
     mode: str = 'attach',
     n_transition: Optional[float] = None,
     delta_n: float = 0.01,
-    delta_P: float = 0.0, 
+    delta_P: float = 0.0,
     custom_crust_path: Optional[str] = None,
+    crust_YL: Optional[float] = None,
+    crust_S: Optional[float] = None,
     save_merged: bool = False,
     output_dir: Optional[str] = None,
     input_filename: Optional[str] = None,
@@ -151,13 +179,16 @@ def add_crust(
 
     Args:
         eos_table: High-density EOS table
-        crust_name: 'No', 'BPS', 'compose_sfho', or 'personalized'
+        crust_name: 'No', 'BPS', 'compose_sfho_nYCT', 'compose_sfho_nT0_beta',
+                    'compose_sfho_nYLS_trap', or 'personalized'
         mode: 'attach', 'interpolate', or 'maxwell'
         n_transition: Transition density [fm⁻³] (if None, use crust max)
         delta_n: Width of interpolation region [fm⁻³] (for 'interpolate' mode)
         delta_P: Pressure smoothing width [MeV/fm³] (for 'maxwell' mode)
                  If delta_P=0, sharp Maxwell construction; if delta_P>0, smooth crossover
         custom_crust_path: Path to custom crust file
+        crust_YL: Lepton fraction for 'compose_sfho_nYLS_trap' crust
+        crust_S: Entropy per baryon for 'compose_sfho_nYLS_trap' crust
         save_merged: Whether to save merged table
         output_dir: Directory for output file
         input_filename: Base name for output file
@@ -170,7 +201,7 @@ def add_crust(
         return eos_table
 
     # Load crust
-    crust = load_crust_table(crust_name, custom_crust_path)
+    crust = load_crust_table(crust_name, custom_crust_path, YL=crust_YL, S=crust_S)
 
 
     if mode == 'attach':
@@ -718,6 +749,8 @@ def compute_tov_sequence(
     n_transition: Optional[float] = None,
     delta_n: float = 0.01,
     custom_crust_path: Optional[str] = None,
+    crust_YL: Optional[float] = None,
+    crust_S: Optional[float] = None,
     compute_baryonic_mass: bool = True,
     compute_tidal: bool = True,
     output_file: Optional[str] = None,
@@ -727,37 +760,42 @@ def compute_tov_sequence(
 ) -> np.ndarray:
     """
     Compute TOV sequence for array of central energy densities.
-    
+
     Args:
         eos_file: Path to EOS table file
         e_c_vec: Array of central energy densities [MeV/fm³]
-        add_crust_table: 'No', 'BPS', 'compose_sfho', or 'personalized'
+        add_crust_table: 'No', 'BPS', 'compose_sfho_nYCT', 'compose_sfho_nT0_beta',
+                         'compose_sfho_nYLS_trap', or 'personalized'
         add_crust_mode: 'attach' or 'interpolate'
         n_transition: Transition density for crust [fm⁻³]
         delta_n: Interpolation width [fm⁻³]
         custom_crust_path: Path to custom crust file
+        crust_YL: Lepton fraction for 'compose_sfho_nYLS_trap' crust
+        crust_S: Entropy per baryon for 'compose_sfho_nYLS_trap' crust
         compute_baryonic_mass: Whether to compute M_b
         compute_tidal: Whether to compute k2 and Lambda
         output_file: Path for output file (optional)
         eos_columns: Column indices (P, epsilon, nB)
         skip_header: Header lines to skip
         verbose: Print progress
-        
+
     Returns:
         Structured array with columns:
         - e_c, n_c, P_c, R, M, [M_b], [k2], [Lambda]
     """
     # Load EOS
     eos = EOSTable_for_TOV.from_file(eos_file, columns=eos_columns, skip_header=skip_header)
-    
+
     # Add crust
     eos = add_crust(
-        eos, 
+        eos,
         crust_name=add_crust_table,
         mode=add_crust_mode,
         n_transition=n_transition,
         delta_n=delta_n,
         custom_crust_path=custom_crust_path,
+        crust_YL=crust_YL,
+        crust_S=crust_S,
     )
     
     # Create interpolators
