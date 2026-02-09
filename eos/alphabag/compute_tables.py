@@ -348,7 +348,17 @@ def save_alphabag_results(
     phase: str
 ):
     """Save results to file."""
-    params = settings.params if settings.params is not None else get_alphabag_default()
+    # Match the logic from _compute_unpaired_table for consistency
+    if settings.params is not None:
+        params = settings.params
+    elif settings.alpha is not None or settings.B4 is not None or settings.m_s is not None:
+        params = get_alphabag_custom(
+            alpha=settings.alpha if settings.alpha is not None else 0.3,
+            B4=settings.B4 if settings.B4 is not None else 165.0,
+            m_s=settings.m_s if settings.m_s is not None else 150.0
+        )
+    else:
+        params = get_alphabag_default()
     
     if settings.output_filename:
         filename = settings.output_filename
@@ -434,8 +444,422 @@ def results_to_arrays(results: List, phase: str = 'unpaired') -> Dict[str, np.nd
             except AttributeError:
                 pass
         arrays['converged'] = np.array([r.converged for r in results])
-    
+
     return arrays
+
+
+# =============================================================================
+# TABLE LOADING AND INTERPOLATION
+# =============================================================================
+
+# Column mappings for each equilibrium type
+COLUMN_MAPS = {
+    'beta_eq': {
+        'n_B': 0, 'T': 1, 'mu_u': 2, 'mu_d': 3, 'mu_s': 4, 'mu_e': 5,
+        'Y_u': 6, 'Y_d': 7, 'Y_s': 8, 'P_total': 9, 'e_total': 10,
+        's_total': 11, 'converged': 12
+    },
+    'fixed_yc': {
+        'n_B': 0, 'Y_C': 1, 'T': 2, 'mu_u': 3, 'mu_d': 4, 'mu_s': 5,
+        'Y_u': 6, 'Y_d': 7, 'Y_s': 8, 'P_total': 9, 'e_total': 10,
+        's_total': 11, 'converged': 12
+    },
+    'cfl': {
+        'n_B': 0, 'T': 1, 'Delta0': 2, 'Delta': 3, 'mu_u': 4, 'mu_d': 5,
+        'mu_s': 6, 'P_total': 7, 'e_total': 8, 's_total': 9, 'f_total': 10
+    },
+}
+
+# Grid axes for each equilibrium type (order matters for reshaping)
+# Note: alpha, B4 are added when loading multiple tables
+GRID_AXES = {
+    'beta_eq': ['n_B', 'T'],
+    'fixed_yc': ['n_B', 'Y_C', 'T'],
+    'cfl': ['n_B', 'T', 'Delta0'],
+}
+
+
+@dataclass
+class EOSTableData:
+    """Container for loaded AlphaBag EOS table with structured grids."""
+    eq_type: str
+    grids: Dict[str, np.ndarray]      # {'n_B': array, 'T': array, 'alpha': array, 'B4': array, ...}
+    data: Dict[str, np.ndarray]       # {'P_total': N-D array, ...}
+    filepath: str = ""
+
+    def __repr__(self):
+        axes = list(self.grids.keys())
+        shapes = [f"{k}={len(v)}" for k, v in self.grids.items()]
+        return f"EOSTableData(eq_type='{self.eq_type}', axes={axes}, shape=({', '.join(shapes)}))"
+
+
+def load_eos_table(filepath: str, eq_type: str,
+                   alpha: Optional[float] = None,
+                   B4: Optional[float] = None) -> EOSTableData:
+    """
+    Load an AlphaBag EOS table from file and return structured grids.
+
+    Parameters:
+        filepath: Path to the .dat file
+        eq_type: Equilibrium type - 'beta_eq', 'fixed_yc', or 'cfl'
+        alpha: Override alpha value (if None, read from file header)
+        B4: Override B4 value (if None, read from file header)
+
+    Returns:
+        EOSTableData with:
+        - grids: dict of 1D arrays for each axis (n_B, T, etc.)
+        - data: dict of N-dimensional arrays for each quantity
+
+    Example:
+        >>> table = load_eos_table('eos_quark_betaeq.dat', 'beta_eq')
+        >>> P = table.data['P_total']  # Shape: (n_nB, n_T)
+    """
+    if eq_type not in COLUMN_MAPS:
+        raise ValueError(f"Unknown eq_type: {eq_type}. "
+                        f"Valid options: {list(COLUMN_MAPS.keys())}")
+
+    col_map = COLUMN_MAPS[eq_type]
+    axes = GRID_AXES[eq_type]
+
+    # Parse header for model parameters if not provided
+    B4_file, alpha_file, m_s_file = 165.0, 0.3, 150.0
+    with open(filepath, 'r') as f:
+        for line in f:
+            if line.startswith('# Parameters:'):
+                import re
+                match = re.search(r'B\^1/4=(\d+\.?\d*)', line)
+                if match:
+                    B4_file = float(match.group(1))
+                match = re.search(r'α_s=(\d+\.?\d*)', line)
+                if match:
+                    alpha_file = float(match.group(1))
+                match = re.search(r'm_s=(\d+\.?\d*)', line)
+                if match:
+                    m_s_file = float(match.group(1))
+                break
+
+    # Use file values if not overridden
+    if alpha is None:
+        alpha = alpha_file
+    if B4 is None:
+        B4 = B4_file
+
+    # Load raw data
+    raw_data = np.loadtxt(filepath, comments='#')
+    print(f"Loaded {len(raw_data)} points from {filepath}")
+
+    # Extract unique grid values for each axis
+    grids = {}
+    for axis in axes:
+        grids[axis] = np.unique(raw_data[:, col_map[axis]])
+
+    # Determine grid shape
+    shape = tuple(len(grids[axis]) for axis in axes)
+    n_points_expected = np.prod(shape)
+
+    if len(raw_data) != n_points_expected:
+        print(f"  Warning: Expected {n_points_expected} points for complete grid, got {len(raw_data)}")
+
+    # Columns to extract (exclude grid axes and converged flag)
+    exclude = set(axes) | {'converged'}
+    columns = [c for c in col_map.keys() if c not in exclude]
+
+    # Build structured arrays using vectorized approach
+    data = {}
+
+    # Create index mapping
+    indices = []
+    for axis in axes:
+        axis_values = raw_data[:, col_map[axis]]
+        grid_values = grids[axis]
+        idx = np.searchsorted(grid_values, axis_values)
+        indices.append(idx)
+    indices = tuple(indices)
+
+    # Fill in data arrays
+    for col in columns:
+        arr = np.full(shape, np.nan)
+        arr[indices] = raw_data[:, col_map[col]]
+        data[col] = arr
+
+    # Add derived quantities: f_total = e_total - T * s_total
+    if 'e_total' in data and 's_total' in data:
+        if eq_type in ['beta_eq', 'fixed_yc']:
+            T_idx = axes.index('T')
+            T_broadcast_shape = [1] * len(axes)
+            T_broadcast_shape[T_idx] = len(grids['T'])
+            T_grid = grids['T'].reshape(T_broadcast_shape)
+            data['f_total'] = data['e_total'] - T_grid * data['s_total']
+
+    # Print summary
+    print(f"  Equilibrium: {eq_type}")
+    print(f"  Model: B^1/4={B4} MeV, α_s={alpha}, m_s={m_s_file} MeV")
+    for axis in axes:
+        print(f"  {axis}: [{grids[axis][0]:.4g}, {grids[axis][-1]:.4g}], {len(grids[axis])} points")
+
+    return EOSTableData(
+        eq_type=eq_type,
+        grids=grids,
+        data=data,
+        filepath=filepath
+    )
+
+
+def load_eos_tables_multi(filepaths: List[str], eq_type: str,
+                          alpha_values: List[float],
+                          B4_values: List[float],
+                          Delta0_values: Optional[List[float]] = None) -> EOSTableData:
+    """
+    Load multiple AlphaBag EOS tables and combine into a single multi-dimensional grid.
+
+    Parameters:
+        filepaths: List of file paths (one per parameter combination)
+        eq_type: Equilibrium type - 'beta_eq', 'fixed_yc', or 'cfl'
+        alpha_values: List of alpha values corresponding to files
+        B4_values: List of B4 values corresponding to files
+        Delta0_values: List of Delta0 values (required for CFL, optional otherwise)
+
+    Returns:
+        EOSTableData with grids including alpha, B4, and Delta0 (for CFL) axes
+
+    Example (beta_eq):
+        >>> filepaths = ['eos_B135_a0.1.dat', 'eos_B165_a0.1.dat', ...]
+        >>> alpha_vals = [0.1, 0.1, 0.1]
+        >>> B4_vals = [135, 165, 180]
+        >>> table = load_eos_tables_multi(filepaths, 'beta_eq', alpha_vals, B4_vals)
+        >>> P = table.data['P_total']  # Shape: (n_nB, n_T, n_alpha, n_B4)
+
+    Example (CFL):
+        >>> filepaths = ['eos_B135_D80.dat', 'eos_B135_D120.dat', ...]
+        >>> table = load_eos_tables_multi(filepaths, 'cfl', alpha_vals, B4_vals, Delta0_vals)
+        >>> P = table.data['P_total']  # Shape: (n_nB, n_T, n_alpha, n_B4, n_Delta0)
+    """
+    if len(filepaths) != len(alpha_values) or len(filepaths) != len(B4_values):
+        raise ValueError("filepaths, alpha_values, and B4_values must have same length")
+
+    if eq_type == 'cfl' and Delta0_values is not None:
+        if len(filepaths) != len(Delta0_values):
+            raise ValueError("filepaths and Delta0_values must have same length for CFL")
+
+    # Get unique sorted values
+    alpha_arr = np.array(sorted(set(alpha_values)))
+    B4_arr = np.array(sorted(set(B4_values)))
+    Delta0_arr = np.array(sorted(set(Delta0_values))) if Delta0_values else None
+
+    # Load first table to get base grid structure
+    first_table = load_eos_table(filepaths[0], eq_type, alpha_values[0], B4_values[0])
+    data_keys = list(first_table.data.keys())
+
+    # For CFL with Delta0_values, use reduced base axes (n_B, T only)
+    # since Delta0 becomes an extra axis
+    if eq_type == 'cfl' and Delta0_values is not None:
+        base_axes = ['n_B', 'T']
+        base_grids = {k: first_table.grids[k] for k in base_axes}
+    else:
+        base_axes = GRID_AXES[eq_type]
+        base_grids = first_table.grids
+
+    # Extended grid with alpha, B4, and optionally Delta0
+    grids = dict(base_grids)
+    grids['alpha'] = alpha_arr
+    grids['B4'] = B4_arr
+    if Delta0_arr is not None:
+        grids['Delta0'] = Delta0_arr
+
+    # Extended shape
+    base_shape = tuple(len(base_grids[ax]) for ax in base_axes)
+    if Delta0_arr is not None:
+        ext_shape = base_shape + (len(alpha_arr), len(B4_arr), len(Delta0_arr))
+    else:
+        ext_shape = base_shape + (len(alpha_arr), len(B4_arr))
+
+    # Initialize data arrays
+    data = {key: np.full(ext_shape, np.nan) for key in data_keys}
+
+    # Fill in data from each file
+    if Delta0_values is not None:
+        for fpath, alpha, B4, Delta0 in zip(filepaths, alpha_values, B4_values, Delta0_values):
+            table = load_eos_table(fpath, eq_type, alpha, B4)
+
+            # Find indices
+            i_alpha = np.searchsorted(alpha_arr, alpha)
+            i_B4 = np.searchsorted(B4_arr, B4)
+            i_Delta0 = np.searchsorted(Delta0_arr, Delta0)
+
+            # Copy data (squeeze out the single Delta0 dimension from file)
+            for key in data_keys:
+                if key in table.data:
+                    # table.data[key] has shape (n_B, T, 1) for CFL files
+                    data[key][..., i_alpha, i_B4, i_Delta0] = table.data[key][:, :, 0]
+    else:
+        for fpath, alpha, B4 in zip(filepaths, alpha_values, B4_values):
+            table = load_eos_table(fpath, eq_type, alpha, B4)
+
+            # Find indices
+            i_alpha = np.searchsorted(alpha_arr, alpha)
+            i_B4 = np.searchsorted(B4_arr, B4)
+
+            # Copy data
+            for key in data_keys:
+                if key in table.data:
+                    data[key][..., i_alpha, i_B4] = table.data[key]
+
+    print(f"\nCombined {len(filepaths)} tables into multi-dimensional grid")
+    print(f"  alpha: {alpha_arr}")
+    print(f"  B4: {B4_arr}")
+    if Delta0_arr is not None:
+        print(f"  Delta0: {Delta0_arr}")
+
+    return EOSTableData(
+        eq_type=eq_type,
+        grids=grids,
+        data=data,
+        filepath=str(filepaths)
+    )
+
+
+def build_interpolators(table: EOSTableData,
+                        method: str = 'linear',
+                        bounds_error: bool = False,
+                        fill_value: float = np.nan) -> Dict[str, Any]:
+    """
+    Build interpolation functions from loaded AlphaBag EOS table data.
+
+    Parameters:
+        table: EOSTableData from load_eos_table() or load_eos_tables_multi()
+        method: Interpolation method ('linear', 'nearest', 'cubic', etc.)
+        bounds_error: If True, raise error for out-of-bounds queries
+        fill_value: Value to return for out-of-bounds queries
+
+    Returns:
+        Dict with:
+        - 'interpolators': dict of RegularGridInterpolator for each quantity
+        - 'grids': reference to the grid arrays
+        - 'axes': list of axis names in order
+        - Convenience functions for common quantities
+
+    Example (single table, beta_eq):
+        >>> table = load_eos_table('eos_quark.dat', 'beta_eq')
+        >>> interp = build_interpolators(table)
+        >>> P = interp['P'](0.5, 10.0)  # P(n_B, T)
+
+    Example (multi-table, beta_eq with alpha, B4):
+        >>> table = load_eos_tables_multi(files, 'beta_eq', alphas, B4s)
+        >>> interp = build_interpolators(table)
+        >>> P = interp['P'](0.5, 10.0, 0.3, 165)  # P(n_B, T, alpha, B4)
+    """
+    from scipy.interpolate import RegularGridInterpolator
+
+    # Determine axes order based on what's in grids
+    # For CFL with multi-table loading, Delta0 becomes an extra axis (not base)
+    if table.eq_type == 'cfl' and 'alpha' in table.grids and 'Delta0' in table.grids:
+        # CFL loaded via load_eos_tables_multi with Delta0_values
+        # Axes: (n_B, T, alpha, B4, Delta0)
+        base_axes = ['n_B', 'T']
+    else:
+        base_axes = GRID_AXES[table.eq_type]
+
+    axes = list(base_axes)
+    if 'alpha' in table.grids:
+        axes.append('alpha')
+    if 'B4' in table.grids:
+        axes.append('B4')
+    if 'Delta0' in table.grids and 'Delta0' not in base_axes:
+        axes.append('Delta0')
+
+    grid_tuple = tuple(table.grids[axis] for axis in axes)
+
+    interpolators = {}
+    for name, arr in table.data.items():
+        interpolators[name] = RegularGridInterpolator(
+            grid_tuple, arr,
+            method=method,
+            bounds_error=bounds_error,
+            fill_value=fill_value
+        )
+
+    result = {
+        'interpolators': interpolators,
+        'grids': table.grids,
+        'axes': axes,
+        'eq_type': table.eq_type,
+    }
+
+    # Add convenience functions based on equilibrium type and dimensionality
+    has_alpha_B4 = 'alpha' in table.grids and 'B4' in table.grids
+
+    if table.eq_type == 'beta_eq':
+        if has_alpha_B4:
+            # 4D: f(n_B, T, alpha, B4)
+            result['P'] = lambda nB, T, alpha, B4: interpolators['P_total']((nB, T, alpha, B4))
+            result['eps'] = lambda nB, T, alpha, B4: interpolators['e_total']((nB, T, alpha, B4))
+            result['s'] = lambda nB, T, alpha, B4: interpolators['s_total']((nB, T, alpha, B4))
+            result['f'] = lambda nB, T, alpha, B4: interpolators['f_total']((nB, T, alpha, B4))
+            result['mu_u'] = lambda nB, T, alpha, B4: interpolators['mu_u']((nB, T, alpha, B4))
+            result['mu_d'] = lambda nB, T, alpha, B4: interpolators['mu_d']((nB, T, alpha, B4))
+            result['mu_s'] = lambda nB, T, alpha, B4: interpolators['mu_s']((nB, T, alpha, B4))
+            result['mu_e'] = lambda nB, T, alpha, B4: interpolators['mu_e']((nB, T, alpha, B4))
+            result['Y_u'] = lambda nB, T, alpha, B4: interpolators['Y_u']((nB, T, alpha, B4))
+            result['Y_d'] = lambda nB, T, alpha, B4: interpolators['Y_d']((nB, T, alpha, B4))
+            result['Y_s'] = lambda nB, T, alpha, B4: interpolators['Y_s']((nB, T, alpha, B4))
+        else:
+            # 2D: f(n_B, T)
+            result['P'] = lambda nB, T: interpolators['P_total']((nB, T))
+            result['eps'] = lambda nB, T: interpolators['e_total']((nB, T))
+            result['s'] = lambda nB, T: interpolators['s_total']((nB, T))
+            result['f'] = lambda nB, T: interpolators['f_total']((nB, T))
+            result['mu_u'] = lambda nB, T: interpolators['mu_u']((nB, T))
+            result['mu_d'] = lambda nB, T: interpolators['mu_d']((nB, T))
+            result['mu_s'] = lambda nB, T: interpolators['mu_s']((nB, T))
+            result['mu_e'] = lambda nB, T: interpolators['mu_e']((nB, T))
+            result['Y_u'] = lambda nB, T: interpolators['Y_u']((nB, T))
+            result['Y_d'] = lambda nB, T: interpolators['Y_d']((nB, T))
+            result['Y_s'] = lambda nB, T: interpolators['Y_s']((nB, T))
+
+    elif table.eq_type == 'fixed_yc':
+        if has_alpha_B4:
+            # 5D: f(n_B, Y_C, T, alpha, B4)
+            result['P'] = lambda nB, YC, T, alpha, B4: interpolators['P_total']((nB, YC, T, alpha, B4))
+            result['eps'] = lambda nB, YC, T, alpha, B4: interpolators['e_total']((nB, YC, T, alpha, B4))
+            result['s'] = lambda nB, YC, T, alpha, B4: interpolators['s_total']((nB, YC, T, alpha, B4))
+            result['f'] = lambda nB, YC, T, alpha, B4: interpolators['f_total']((nB, YC, T, alpha, B4))
+        else:
+            # 3D: f(n_B, Y_C, T)
+            result['P'] = lambda nB, YC, T: interpolators['P_total']((nB, YC, T))
+            result['eps'] = lambda nB, YC, T: interpolators['e_total']((nB, YC, T))
+            result['s'] = lambda nB, YC, T: interpolators['s_total']((nB, YC, T))
+            result['f'] = lambda nB, YC, T: interpolators['f_total']((nB, YC, T))
+
+    elif table.eq_type == 'cfl':
+        # Check if Delta0 is an extra axis (from load_eos_tables_multi with Delta0_values)
+        delta0_is_extra = 'Delta0' in table.grids and 'alpha' in table.grids
+
+        if delta0_is_extra:
+            # 5D: f(n_B, T, alpha, B4, Delta0) - from load_eos_tables_multi
+            result['P'] = lambda nB, T, alpha, B4, Delta0: interpolators['P_total']((nB, T, alpha, B4, Delta0))
+            result['eps'] = lambda nB, T, alpha, B4, Delta0: interpolators['e_total']((nB, T, alpha, B4, Delta0))
+            result['s'] = lambda nB, T, alpha, B4, Delta0: interpolators['s_total']((nB, T, alpha, B4, Delta0))
+            result['f'] = lambda nB, T, alpha, B4, Delta0: interpolators['f_total']((nB, T, alpha, B4, Delta0))
+            result['Delta'] = lambda nB, T, alpha, B4, Delta0: interpolators['Delta']((nB, T, alpha, B4, Delta0))
+            result['mu_u'] = lambda nB, T, alpha, B4, Delta0: interpolators['mu_u']((nB, T, alpha, B4, Delta0))
+            result['mu_d'] = lambda nB, T, alpha, B4, Delta0: interpolators['mu_d']((nB, T, alpha, B4, Delta0))
+            result['mu_s'] = lambda nB, T, alpha, B4, Delta0: interpolators['mu_s']((nB, T, alpha, B4, Delta0))
+        elif has_alpha_B4:
+            # 5D: f(n_B, T, Delta0, alpha, B4) - old format (single Delta0 per file as base axis)
+            result['P'] = lambda nB, T, Delta0, alpha, B4: interpolators['P_total']((nB, T, Delta0, alpha, B4))
+            result['eps'] = lambda nB, T, Delta0, alpha, B4: interpolators['e_total']((nB, T, Delta0, alpha, B4))
+            result['s'] = lambda nB, T, Delta0, alpha, B4: interpolators['s_total']((nB, T, Delta0, alpha, B4))
+            result['f'] = lambda nB, T, Delta0, alpha, B4: interpolators['f_total']((nB, T, Delta0, alpha, B4))
+            result['Delta'] = lambda nB, T, Delta0, alpha, B4: interpolators['Delta']((nB, T, Delta0, alpha, B4))
+        else:
+            # 3D: f(n_B, T, Delta0) - single file
+            result['P'] = lambda nB, T, Delta0: interpolators['P_total']((nB, T, Delta0))
+            result['eps'] = lambda nB, T, Delta0: interpolators['e_total']((nB, T, Delta0))
+            result['s'] = lambda nB, T, Delta0: interpolators['s_total']((nB, T, Delta0))
+            result['f'] = lambda nB, T, Delta0: interpolators['f_total']((nB, T, Delta0))
+            result['Delta'] = lambda nB, T, Delta0: interpolators['Delta']((nB, T, Delta0))
+
+    return result
 
 
 # =============================================================================

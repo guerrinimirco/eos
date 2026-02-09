@@ -3,10 +3,15 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 
-A Python library for computing finite-temperature Equations of State (EOS) for dense nuclear and quark matter. Designed for astrophysical applications (including neutron star structure, core-collapse supernovae and compact binary mergers) and heavy-ion collisions.
+A Python library for computing finite-temperature Equations of State (EOS) for dense nuclear and quark matter. 
+Designed for astrophysical applications (including neutron star structure, core-collapse supernovae and compact binary mergers) and heavy-ion collisions.
+
+This is a recent (2026) Python rewrite of some of the code I wrote in Mathematica and Python during my PhD (2022-2026). It is mainly for personal use, but if you need help to use it, please contact me!
 
 **Author:** Mirco Guerrini (University of Ferrara)
+
 **Contact:** mirco.guerrini@unife.it
+
 **Publications:** [INSPIRE-HEP Profile](https://inspirehep.net/authors/2775420)
 
 ---
@@ -48,13 +53,8 @@ A Python library for computing finite-temperature Equations of State (EOS) for d
 
 ## Installation
 
-### From Source (Recommended)
+!pip install git+https://github.com/guerrinimirco/eos.git --quiet
 
-```bash
-git clone <repository-url>
-cd eos
-pip install -e .
-```
 
 ### Dependencies
 
@@ -551,9 +551,3 @@ Tables are saved as whitespace-separated `.dat` files:
 - **T. Zhao** (N3AS, Berkeley)
 - **S. Han** (Tsung-Dao Lee Institute, Shanghai)
 
-
-Final notes:
-
-This is a recent (2026) Python rewrite of some of the code I wrote in Mathematica and Python for my Master's thesis (2022) and during my PhD (2022-2026). For the moment, the documentation is poor and the usability is not very user-friendly, but please contact me if you want to use them and need help.
-
-mirco.guerrini@unife.it

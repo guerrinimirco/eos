@@ -57,7 +57,7 @@ STYLE = {
     'markersize': 5,
     
     # Grid properties
-    'grid_alpha': 0.3,
+    'grid_alpha': 0.5,
     'grid_style': '-',                  # Solid gridlines
     'grid_linewidth': 0.5,
 }
