@@ -802,6 +802,13 @@ def build_interpolators(table: EOSTableData,
             result['Y_u'] = lambda nB, T, alpha, B4: interpolators['Y_u']((nB, T, alpha, B4))
             result['Y_d'] = lambda nB, T, alpha, B4: interpolators['Y_d']((nB, T, alpha, B4))
             result['Y_s'] = lambda nB, T, alpha, B4: interpolators['Y_s']((nB, T, alpha, B4))
+            # Conserved charge chemical potentials
+            result['mu_B'] = lambda nB, T, alpha, B4: (
+                interpolators['mu_u']((nB, T, alpha, B4)) + 2*interpolators['mu_d']((nB, T, alpha, B4)))
+            result['mu_C'] = lambda nB, T, alpha, B4: (
+                interpolators['mu_u']((nB, T, alpha, B4)) - interpolators['mu_d']((nB, T, alpha, B4)))
+            result['mu_S'] = lambda nB, T, alpha, B4: (
+                interpolators['mu_s']((nB, T, alpha, B4)) - interpolators['mu_d']((nB, T, alpha, B4)))
         else:
             # 2D: f(n_B, T)
             result['P'] = lambda nB, T: interpolators['P_total']((nB, T))
@@ -815,6 +822,13 @@ def build_interpolators(table: EOSTableData,
             result['Y_u'] = lambda nB, T: interpolators['Y_u']((nB, T))
             result['Y_d'] = lambda nB, T: interpolators['Y_d']((nB, T))
             result['Y_s'] = lambda nB, T: interpolators['Y_s']((nB, T))
+            # Conserved charge chemical potentials
+            result['mu_B'] = lambda nB, T: (
+                interpolators['mu_u']((nB, T)) + 2*interpolators['mu_d']((nB, T)))
+            result['mu_C'] = lambda nB, T: (
+                interpolators['mu_u']((nB, T)) - interpolators['mu_d']((nB, T)))
+            result['mu_S'] = lambda nB, T: (
+                interpolators['mu_s']((nB, T)) - interpolators['mu_d']((nB, T)))
 
     elif table.eq_type == 'fixed_yc':
         if has_alpha_B4:
@@ -844,6 +858,13 @@ def build_interpolators(table: EOSTableData,
             result['mu_u'] = lambda nB, T, alpha, B4, Delta0: interpolators['mu_u']((nB, T, alpha, B4, Delta0))
             result['mu_d'] = lambda nB, T, alpha, B4, Delta0: interpolators['mu_d']((nB, T, alpha, B4, Delta0))
             result['mu_s'] = lambda nB, T, alpha, B4, Delta0: interpolators['mu_s']((nB, T, alpha, B4, Delta0))
+            # Conserved charge chemical potentials
+            result['mu_B'] = lambda nB, T, alpha, B4, Delta0: (
+                interpolators['mu_u']((nB, T, alpha, B4, Delta0)) + 2*interpolators['mu_d']((nB, T, alpha, B4, Delta0)))
+            result['mu_C'] = lambda nB, T, alpha, B4, Delta0: (
+                interpolators['mu_u']((nB, T, alpha, B4, Delta0)) - interpolators['mu_d']((nB, T, alpha, B4, Delta0)))
+            result['mu_S'] = lambda nB, T, alpha, B4, Delta0: (
+                interpolators['mu_s']((nB, T, alpha, B4, Delta0)) - interpolators['mu_d']((nB, T, alpha, B4, Delta0)))
         elif has_alpha_B4:
             # 5D: f(n_B, T, Delta0, alpha, B4) - old format (single Delta0 per file as base axis)
             result['P'] = lambda nB, T, Delta0, alpha, B4: interpolators['P_total']((nB, T, Delta0, alpha, B4))

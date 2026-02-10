@@ -20,6 +20,7 @@ Usage:
     add_panel_labels(axes)
 """
 import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator
 import numpy as np
 
 # =============================================================================
@@ -60,6 +61,13 @@ STYLE = {
     'grid_alpha': 0.5,
     'grid_style': '-',                  # Solid gridlines
     'grid_linewidth': 0.5,
+
+    # Minor ticks and grid
+    'minor_ticks': True,                # Enable minor ticks
+    'minor_grid': True,                 # Show grid for minor ticks
+    'minor_grid_alpha': 0.25,           # Lighter than major grid
+    'minor_grid_linewidth': 0.3,
+    'n_minor_ticks': 4,                 # Number of minor ticks between major ticks
 }
 
 # =============================================================================
@@ -272,19 +280,44 @@ def add_panel_labels(axes, labels=None, loc='upper left', fontsize=None):
                 fontweight='bold', ha=ha, va=va)
 
 
-def apply_style(ax, grid=True, legend=True):
-    """Apply consistent styling to a single axis."""
+def apply_style(ax, grid=True, legend=True, minor_ticks=None, minor_grid=None):
+    """Apply consistent styling to a single axis.
+
+    Parameters:
+        ax: matplotlib axis
+        grid: show major grid (default True)
+        legend: show legend if handles exist (default True)
+        minor_ticks: show minor ticks (default from STYLE['minor_ticks'])
+        minor_grid: show minor grid (default from STYLE['minor_grid'])
+    """
     ax.tick_params(labelsize=FONTS['tick'])
-    
+
+    # Major grid
     if grid:
-        ax.grid(True, alpha=STYLE['grid_alpha'], 
+        ax.grid(True, which='major', alpha=STYLE['grid_alpha'],
                 linestyle=STYLE['grid_style'],
                 linewidth=STYLE['grid_linewidth'])
-    
+
+    # Minor ticks
+    if minor_ticks is None:
+        minor_ticks = STYLE['minor_ticks']
+    if minor_ticks:
+        ax.xaxis.set_minor_locator(AutoMinorLocator(STYLE['n_minor_ticks']))
+        ax.yaxis.set_minor_locator(AutoMinorLocator(STYLE['n_minor_ticks']))
+        ax.tick_params(which='minor', length=3, width=0.5)
+
+    # Minor grid
+    if minor_grid is None:
+        minor_grid = STYLE['minor_grid']
+    if minor_grid and minor_ticks:
+        ax.grid(True, which='minor', alpha=STYLE['minor_grid_alpha'],
+                linestyle=STYLE['grid_style'],
+                linewidth=STYLE['minor_grid_linewidth'])
+
     if legend:
         handles, labels = ax.get_legend_handles_labels()
         if handles:
-            ax.legend(fontsize=FONTS['legend'], framealpha=0.9)
+            ax.legend(fontsize=FONTS['legend'], frameon=False)
 
 
 def get_T_color(T):

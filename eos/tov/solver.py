@@ -858,6 +858,105 @@ def generate_ec_logspace(e_min: float, e_max: float, n_points: int) -> np.ndarra
     return 10.0 ** np.linspace(np.log10(e_min), np.log10(e_max), n_points)
 
 
+def find_mmax_precise(results: np.ndarray, precision: float = 0.001) -> Tuple[int, float, float]:
+    """
+    Find maximum mass with given precision using cubic interpolation.
+
+    Parameters:
+        results: TOV results array (columns: e_c, n_c, P_c, R, M, M_b, ...)
+        precision: desired precision in M_sun (default 0.001)
+
+    Returns:
+        idx_max: index of last stable point (before or at M_max)
+        e_c_max: central energy density at M_max [MeV/fm³]
+        M_max: maximum mass value [M_sun]
+    """
+    e_c = results[:, 0]
+    M = results[:, 4]
+
+    # Find approximate maximum
+    idx_approx = np.argmax(M)
+
+    # Use a window of ±5 points around the approximate maximum
+    i_lo = max(0, idx_approx - 5)
+    i_hi = min(len(e_c), idx_approx + 6)
+
+    e_c_window = e_c[i_lo:i_hi]
+    M_window = M[i_lo:i_hi]
+
+    # Cubic interpolation
+    M_interp = PchipInterpolator(e_c_window, M_window)
+
+    # Find maximum on fine grid
+    e_c_fine = np.linspace(e_c_window[0], e_c_window[-1], 10000)
+    M_fine = M_interp(e_c_fine)
+    idx_fine_max = np.argmax(M_fine)
+
+    e_c_max = e_c_fine[idx_fine_max]
+    M_max = M_fine[idx_fine_max]
+
+    # Find index in original array: last point with e_c <= e_c_max
+    idx_max = np.searchsorted(e_c, e_c_max, side='right') - 1
+    if idx_max < 0:
+        idx_max = 0
+    if idx_max >= len(e_c):
+        idx_max = len(e_c) - 1
+
+    return idx_max, float(e_c_max), float(M_max)
+
+
+def truncate_to_stable_branch(
+    results: np.ndarray,
+    output_file: Optional[str] = None,
+    header_info: str = "",
+    precision: float = 0.001,
+    verbose: bool = True,
+) -> Tuple[np.ndarray, float, float]:
+    """
+    Truncate TOV results to stable branch (before M_max) and optionally save.
+
+    Parameters:
+        results: TOV results array (columns: e_c, n_c, P_c, R, M, M_b, ...)
+        output_file: path to save truncated results (optional)
+        header_info: additional info for file header
+        precision: precision for M_max search [M_sun]
+        verbose: print summary
+
+    Returns:
+        stable: truncated results (columns: e_c, P_c, n_Bc, R, M, Mb)
+        M_max: maximum mass [M_sun]
+        e_c_max: central energy density at M_max [MeV/fm³]
+    """
+    idx_max, e_c_max, M_max = find_mmax_precise(results, precision)
+
+    # Truncate to stable branch (including the point at/before M_max)
+    truncated = results[:idx_max + 1]
+
+    # Reorder columns: e_c, P_c, n_Bc, R, M, Mb
+    # Original: 0=e_c, 1=n_c, 2=P_c, 3=R, 4=M, 5=M_b
+    # New order: e_c, P_c, n_Bc, R, M, Mb
+    reordered = truncated[:, [0, 2, 1, 3, 4, 5]]
+
+    if verbose:
+        print(f"  M_max = {M_max:.4f} M_sun at e_c = {e_c_max:.2f} MeV/fm³")
+        print(f"  Stable branch: {len(reordered)} points")
+
+    # Save if requested
+    if output_file is not None:
+        header = f"""# TOV sequence (stable branch only)
+# {header_info}
+# M_max = {M_max:.4f} M_sun at e_c = {e_c_max:.2f} MeV/fm^3
+# Columns: e_c [MeV/fm^3], P_c [MeV/fm^3], n_Bc [fm^-3], R [km], M [M_sun], Mb [M_sun]
+"""
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        np.savetxt(output_file, reordered, header=header,
+                   fmt='%.6e', delimiter='\t', comments='')
+        if verbose:
+            print(f"  Saved to: {output_file}")
+
+    return reordered, M_max, e_c_max
+
+
 def _results_to_array(results: list, include_Mb: bool, include_tidal: bool) -> np.ndarray:
     """Convert list of TOVResult to numpy array."""
     n = len(results)
