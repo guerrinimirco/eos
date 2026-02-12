@@ -207,6 +207,8 @@ def _build_result(
     Y_e = thermo_e.n / n_B if n_B > 0 else 0.0
     Y_nu = n_nu / n_B if n_B > 0 else 0.0
     
+    f_total = e_total - T * s_total
+
     return AlphaBagEOSResult(
         converged=converged,
         error=error,
@@ -214,7 +216,7 @@ def _build_result(
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s, mu_e=mu_e, mu_nu=mu_nu,
         mu_B=quark.mu_B, mu_C=quark.mu_C, mu_S=quark.mu_S,
         n_u=quark.n_u, n_d=quark.n_d, n_s=quark.n_s, n_e=thermo_e.n, n_nu=n_nu,
-        P_total=P_total, e_total=e_total, s_total=s_total,
+        P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
         Y_u=Y_u, Y_d=Y_d, Y_s=Y_s, Y_e=Y_e, Y_nu=Y_nu
     )
 
