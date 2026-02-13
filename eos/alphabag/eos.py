@@ -537,7 +537,12 @@ class CFLEOSResult:
     mu_u: float = 0.0       # Up quark (MeV)
     mu_d: float = 0.0       # Down quark (MeV)
     mu_s: float = 0.0       # Strange quark (MeV)
-    
+    mu_e: float = 0.0       # Electron (MeV)
+    mu_nu: float = 0.0      # Neutrino (MeV)
+    mu_B: float = 0.0       # Baryon: mu_u + 2*mu_d (MeV)
+    mu_C: float = 0.0       # Charge: mu_u - mu_d (MeV)
+    mu_S: float = 0.0       # Strangeness: mu_s - mu_d (MeV)
+
     # Number densities
     n_u: float = 0.0        # Up quark (fm⁻³)
     n_d: float = 0.0        # Down quark (fm⁻³)
@@ -553,6 +558,84 @@ class CFLEOSResult:
     Y_u: float = 0.0
     Y_d: float = 0.0
     Y_s: float = 0.0
+    Y_e: float = 0.0
+    Y_nu: float = 0.0
+
+
+# =============================================================================
+# CFL RESULT BUILDER
+# =============================================================================
+def _build_cfl_result(
+    mu_u: float, mu_d: float, mu_s: float, mu_e: float,
+    T: float, Delta0: float, params: AlphaBagParams,
+    include_photons: bool = True,
+    include_gluons: bool = True,
+    include_thermal_neutrinos: bool = True,
+    mu_nu: float = 0.0,
+) -> CFLEOSResult:
+    """
+    Build complete CFL EOS result from solved chemical potentials.
+
+    Like _build_result but for CFL quark matter. Includes electrons
+    (needed for Q* with global charge neutrality).
+    """
+    cfl = compute_cfl_thermo_from_mu(mu_u, mu_d, mu_s, T, Delta0, params)
+    thermo_e = electron_thermo(mu_e, T)
+
+    P_total = cfl.P + thermo_e.P
+    e_total = cfl.e + thermo_e.e
+    s_total = cfl.s + thermo_e.s
+
+    n_nu = 0.0
+    if mu_nu != 0.0:
+        thermo_nu = neutrino_thermo(mu_nu, T)
+        n_nu = thermo_nu.n
+        P_total += thermo_nu.P
+        e_total += thermo_nu.e
+        s_total += thermo_nu.s
+
+    if include_photons:
+        thermo_gamma = photon_thermo(T)
+        P_total += thermo_gamma.P
+        e_total += thermo_gamma.e
+        s_total += thermo_gamma.s
+
+    if include_gluons:
+        thermo_g = gluon_thermo(T, params.alpha)
+        P_total += thermo_g.P
+        e_total += thermo_g.e
+        s_total += thermo_g.s
+
+    if include_thermal_neutrinos:
+        thermo_nu_th = neutrino_thermo(0.0, T)
+        n_thermal_flavors = 2.0 if mu_nu != 0.0 else 3.0
+        P_total += n_thermal_flavors * thermo_nu_th.P
+        e_total += n_thermal_flavors * thermo_nu_th.e
+        s_total += n_thermal_flavors * thermo_nu_th.s
+
+    n_B = cfl.n_B
+    n_C = (2.0 * cfl.n_u - cfl.n_d - cfl.n_s) / 3.0
+    Y_u = cfl.n_u / (n_B) if n_B > 0 else 0.0
+    Y_d = cfl.n_d / (n_B) if n_B > 0 else 0.0
+    Y_s = cfl.n_s / (n_B) if n_B > 0 else 0.0
+    Y_e = thermo_e.n / n_B if n_B > 0 else 0.0
+    Y_nu = n_nu / n_B if n_B > 0 else 0.0
+
+    f_total = e_total - T * s_total
+
+    return CFLEOSResult(
+        converged=True,
+        n_B=n_B, T=T, Delta0=Delta0, Delta=cfl.Delta,
+        Y_C=n_C / n_B if n_B > 0 else 0.0,
+        Y_S=cfl.n_s / n_B if n_B > 0 else 0.0,
+        mu_u=mu_u, mu_d=mu_d, mu_s=mu_s, mu_e=mu_e, mu_nu=mu_nu,
+        mu_B=mu_u + 2.0 * mu_d,
+        mu_C=mu_u - mu_d,
+        mu_S=mu_s - mu_d,
+        n_u=cfl.n_u, n_d=cfl.n_d, n_s=cfl.n_s,
+        P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
+        Y_u=Y_u, Y_d=Y_d, Y_s=Y_s, Y_e=Y_e, Y_nu=Y_nu,
+    )
 
 
 # =============================================================================
@@ -663,6 +746,9 @@ def solve_cfl(
         Y_C=(2.0/3.0*cfl_thermo.n_u - 1.0/3.0*cfl_thermo.n_d - 1.0/3.0*cfl_thermo.n_s) / cfl_thermo.n_B if cfl_thermo.n_B > 0 else 0.0,
         Y_S=cfl_thermo.n_s / cfl_thermo.n_B if cfl_thermo.n_B > 0 else 0.0,
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s,
+        mu_B=mu_u + 2.0 * mu_d,
+        mu_C=mu_u - mu_d,
+        mu_S=mu_s - mu_d,
         n_u=cfl_thermo.n_u, n_d=cfl_thermo.n_d, n_s=cfl_thermo.n_s,
         P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
         Y_u=cfl_thermo.Y_u, Y_d=cfl_thermo.Y_d, Y_s=cfl_thermo.Y_s
