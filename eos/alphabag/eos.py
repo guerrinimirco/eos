@@ -614,10 +614,6 @@ def _build_cfl_result(
         s_total += n_thermal_flavors * thermo_nu_th.s
 
     n_B = cfl.n_B
-    n_C = (2.0 * cfl.n_u - cfl.n_d - cfl.n_s) / 3.0
-    Y_u = cfl.n_u / (n_B) if n_B > 0 else 0.0
-    Y_d = cfl.n_d / (n_B) if n_B > 0 else 0.0
-    Y_s = cfl.n_s / (n_B) if n_B > 0 else 0.0
     Y_e = thermo_e.n / n_B if n_B > 0 else 0.0
     Y_nu = n_nu / n_B if n_B > 0 else 0.0
 
@@ -626,15 +622,12 @@ def _build_cfl_result(
     return CFLEOSResult(
         converged=True,
         n_B=n_B, T=T, Delta0=Delta0, Delta=cfl.Delta,
-        Y_C=n_C / n_B if n_B > 0 else 0.0,
-        Y_S=cfl.n_s / n_B if n_B > 0 else 0.0,
+        Y_C=cfl.Y_C, Y_S=cfl.Y_S,
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s, mu_e=mu_e, mu_nu=mu_nu,
-        mu_B=mu_u + 2.0 * mu_d,
-        mu_C=mu_u - mu_d,
-        mu_S=mu_s - mu_d,
+        mu_B=cfl.mu_B, mu_C=cfl.mu_C, mu_S=cfl.mu_S,
         n_u=cfl.n_u, n_d=cfl.n_d, n_s=cfl.n_s,
         P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
-        Y_u=Y_u, Y_d=Y_d, Y_s=Y_s, Y_e=Y_e, Y_nu=Y_nu,
+        Y_u=cfl.Y_u, Y_d=cfl.Y_d, Y_s=cfl.Y_s, Y_e=Y_e, Y_nu=Y_nu,
     )
 
 
@@ -743,12 +736,9 @@ def solve_cfl(
         converged=sol.success,
         error=np.max(np.abs(sol.fun)),
         n_B=cfl_thermo.n_B, T=T, Delta0=Delta0, Delta=cfl_thermo.Delta,
-        Y_C=(2.0/3.0*cfl_thermo.n_u - 1.0/3.0*cfl_thermo.n_d - 1.0/3.0*cfl_thermo.n_s) / cfl_thermo.n_B if cfl_thermo.n_B > 0 else 0.0,
-        Y_S=cfl_thermo.n_s / cfl_thermo.n_B if cfl_thermo.n_B > 0 else 0.0,
+        Y_C=cfl_thermo.Y_C, Y_S=cfl_thermo.Y_S,
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s,
-        mu_B=mu_u + 2.0 * mu_d,
-        mu_C=mu_u - mu_d,
-        mu_S=mu_s - mu_d,
+        mu_B=cfl_thermo.mu_B, mu_C=cfl_thermo.mu_C, mu_S=cfl_thermo.mu_S,
         n_u=cfl_thermo.n_u, n_d=cfl_thermo.n_d, n_s=cfl_thermo.n_s,
         P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
         Y_u=cfl_thermo.Y_u, Y_d=cfl_thermo.Y_d, Y_s=cfl_thermo.Y_s

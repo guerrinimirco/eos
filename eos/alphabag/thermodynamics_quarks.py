@@ -108,13 +108,23 @@ class CFLThermo:
     e: float = 0.0          # Energy density (MeV/fm³)
     s: float = 0.0          # Entropy density (fm⁻³)
     f: float = 0.0          # Free energy density (MeV/fm³)
-    # Quark fractions (all equal in CFL)
+    # Quark densities and fractions
     n_u: float = 0.0        # Up quark density (fm⁻³)
     n_d: float = 0.0        # Down quark density (fm⁻³)
     n_s: float = 0.0        # Strange quark density (fm⁻³)
+    n_C: float = 0.0        # Charge density (fm⁻³)
     Y_u: float = 1.0/3.0    # Up quark fraction per baryon
     Y_d: float = 1.0/3.0    # Down quark fraction per baryon
     Y_s: float = 1.0/3.0    # Strange quark fraction per baryon
+    Y_C: float = 0.0        # Charge fraction
+    Y_S: float = 0.0        # Strangeness fraction
+    # Conserved-charge chemical potentials
+    mu_u: float = 0.0       # Up quark chemical potential (MeV)
+    mu_d: float = 0.0       # Down quark chemical potential (MeV)
+    mu_s: float = 0.0       # Strange quark chemical potential (MeV)
+    mu_B: float = 0.0       # Baryon: mu_u + 2*mu_d (MeV)
+    mu_C: float = 0.0       # Charge: mu_u - mu_d (MeV)
+    mu_S: float = 0.0       # Strangeness: mu_s - mu_d (MeV)
 
 
 # =============================================================================
@@ -658,19 +668,26 @@ def compute_cfl_thermo_from_mu(
     # Baryon density
     n_B = (n_u + n_d + n_s) / 3.0
     
-    # Fractions
+    # Conserved charge densities and fractions
+    n_C = (2.0 * n_u - n_d - n_s) / 3.0
     Y_u = n_u / n_B if n_B > 0 else 1.0/3.0
     Y_d = n_d / n_B if n_B > 0 else 1.0/3.0
     Y_s = n_s / n_B if n_B > 0 else 1.0/3.0
-    
+    Y_C = n_C / n_B if n_B > 0 else 0.0
+    Y_S = n_s / n_B if n_B > 0 else 0.0
+
     # Common quark chemical potential (average)
     mu = (mu_u + mu_d + mu_s) / 3.0
-    
+
     return CFLThermo(
         n_B=n_B, T=T, mu=mu, Delta=Delta, Delta0=Delta0,
         P=P, e=e, s=s, f=f,
-        n_u=n_u, n_d=n_d, n_s=n_s,
-        Y_u=Y_u, Y_d=Y_d, Y_s=Y_s
+        n_u=n_u, n_d=n_d, n_s=n_s, n_C=n_C,
+        Y_u=Y_u, Y_d=Y_d, Y_s=Y_s, Y_C=Y_C, Y_S=Y_S,
+        mu_u=mu_u, mu_d=mu_d, mu_s=mu_s,
+        mu_B=mu_u + 2.0 * mu_d,
+        mu_C=mu_u - mu_d,
+        mu_S=mu_s - mu_d,
     )
 
 
