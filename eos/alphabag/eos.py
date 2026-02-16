@@ -135,7 +135,7 @@ def get_default_guess_fixed_yc(n_B: float, Y_C: float, T: float,
 # =============================================================================
 # HELPER: BUILD RESULT FROM SOLUTION
 # =============================================================================
-def _build_result(
+def compute_alphabag_total_thermo_from_mu(
     mu_u: float, mu_d: float, mu_s: float, mu_e: float,
     T: float, params: AlphaBagParams,
     include_photons: bool = True,
@@ -296,7 +296,7 @@ def solve_alphabag_beta_eq(
     
     mu_u, mu_d, mu_s, mu_e = sol.x
     
-    return _build_result(
+    return compute_alphabag_total_thermo_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, params,
         include_photons=include_photons,
         include_gluons=include_gluons,
@@ -398,7 +398,7 @@ def solve_alphabag_fixed_yc(
     else:
         mu_e = 0.0
     
-    return _build_result(
+    return compute_alphabag_total_thermo_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, params,
         include_photons=include_photons,
         include_gluons=include_gluons,
@@ -505,7 +505,7 @@ def solve_alphabag_fixed_yc_ys(
     else:
         mu_e = 0.0
     
-    return _build_result(
+    return compute_alphabag_total_thermo_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, params,
         include_photons=include_photons,
         include_gluons=include_gluons,
@@ -565,7 +565,7 @@ class CFLEOSResult:
 # =============================================================================
 # CFL RESULT BUILDER
 # =============================================================================
-def _build_cfl_result(
+def compute_cfl_total_thermo_from_mu(
     mu_u: float, mu_d: float, mu_s: float, mu_e: float,
     T: float, Delta0: float, params: AlphaBagParams,
     include_photons: bool = True,
@@ -576,7 +576,7 @@ def _build_cfl_result(
     """
     Build complete CFL EOS result from solved chemical potentials.
 
-    Like _build_result but for CFL quark matter. Includes electrons
+    Like compute_alphabag_total_thermo_from_mu but for CFL quark matter. Includes electrons
     (needed for Q* with global charge neutrality).
     """
     cfl = compute_cfl_thermo_from_mu(mu_u, mu_d, mu_s, T, Delta0, params)
