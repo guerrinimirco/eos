@@ -195,7 +195,7 @@ def set_global_style():
     plt.rcParams['legend.fontsize'] = FONTS['legend']
     
     # FIX MINUS SIGN: Use standard ASCII minus instead of Unicode
-    plt.rcParams['axes.unicode_minus'] = True  # Use proper minus sign
+    plt.rcParams['axes.unicode_minus'] = False  # ASCII minus (CMU Serif lacks U+2212)
     plt.rcParams['axes.formatter.use_mathtext'] = True
     
     # Figure defaults
