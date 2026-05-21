@@ -395,7 +395,8 @@ class PhaseBoundaries:
     """Collection of phase boundary tables for multiple eta values"""
 
     def __init__(self, base_path: str, eq_mode: str = 'betaeq',
-                 eta_values: list = None, Y_C_values: list = None, verbose: bool = True):
+                 eta_values: list = None, Y_C_values: list = None,
+                 B4: float = 180, a: float = 0.2, verbose: bool = True):
         """
         Initialize phase boundaries collection
 
@@ -409,6 +410,10 @@ class PhaseBoundaries:
             List of eta values to load (default: [0.0, 0.1, 0.3, 0.6, 1.0])
         Y_C_values : list, optional
             List of Y_C values to load for fixedyc mode (default: [0.5])
+        B4 : float
+            Bag constant B^(1/4) in MeV used in filenames (default: 180)
+        a : float
+            Vector coupling in fm² used in filenames (default: 0.2)
         verbose : bool
             Print loading messages
         """
@@ -416,6 +421,8 @@ class PhaseBoundaries:
         self.eq_mode = eq_mode
         self.eta_values = eta_values if eta_values is not None else [0.0, 0.1, 0.3, 0.6, 1.0]
         self.Y_C_values = Y_C_values if Y_C_values is not None else [0.5]
+        self.B4 = B4
+        self.a = a
         self.verbose = verbose
 
         self.boundaries = {}  # keyed by eta for betaeq, by (eta, Y_C) for fixedyc
@@ -424,11 +431,12 @@ class PhaseBoundaries:
 
     def _load_all(self):
         """Load all phase boundary tables"""
+        ba_str = f"B{int(self.B4)}_a{self.a}"
         for eta in self.eta_values:
             eta_str = f"eta{eta:.2f}"
 
             if self.eq_mode == 'betaeq':
-                boundary_file = self.base_path / f"phase_boundaries_{eta_str}_betaeq_B180_a0.2.dat"
+                boundary_file = self.base_path / f"phase_boundaries_{eta_str}_betaeq_{ba_str}.dat"
                 if boundary_file.exists():
                     self.boundaries[eta] = PhaseBoundarySingleEta(str(boundary_file), self.eq_mode)
                     if self.verbose:
@@ -437,7 +445,7 @@ class PhaseBoundaries:
                     print(f"✗ Warning: {boundary_file.name} not found")
             else:  # fixedyc - single file per eta contains all Y_C values
                 # New format: single file without Y_C in filename, all Y_C as column
-                boundary_file = self.base_path / f"phase_boundaries_{eta_str}_fixedYC_B180_a0.2.dat"
+                boundary_file = self.base_path / f"phase_boundaries_{eta_str}_fixedYC_{ba_str}.dat"
                 if boundary_file.exists():
                     # Load once, store for all Y_C values (filtering happens at query time)
                     table = PhaseBoundarySingleEta(str(boundary_file), self.eq_mode)
@@ -525,7 +533,8 @@ class EOSCollection:
     """Collection of EOS tables for multiple eta values"""
 
     def __init__(self, base_path: str, eq_mode: str = 'betaeq',
-                 eta_values: list = None, Y_C_values: list = None, verbose: bool = True):
+                 eta_values: list = None, Y_C_values: list = None,
+                 B4: float = 180, a: float = 0.2, verbose: bool = True):
         """
         Initialize EOS collection
 
@@ -539,6 +548,10 @@ class EOSCollection:
             List of eta values to load (default: [0.0, 0.1, 0.3, 0.6, 1.0])
         Y_C_values : list, optional
             List of Y_C values for fixedyc mode (default: [0.5])
+        B4 : float
+            Bag constant B^(1/4) in MeV used in filenames (default: 180)
+        a : float
+            Vector coupling in fm² used in filenames (default: 0.2)
         verbose : bool
             Print loading messages
         """
@@ -547,6 +560,8 @@ class EOSCollection:
         self.eq_mode = eq_mode
         self.eta_values = eta_values if eta_values is not None else [0.0, 0.1, 0.3, 0.6, 1.0]
         self.Y_C_values = Y_C_values if Y_C_values is not None else [0.5]
+        self.B4 = B4
+        self.a = a
         self.verbose = verbose
 
         self.eos_tables = {}
@@ -556,15 +571,16 @@ class EOSCollection:
 
     def _load_all(self):
         """Load all EOS tables and boundaries"""
+        ba_str = f"B{int(self.B4)}_a{self.a}"
         for eta in self.eta_values:
             # Format eta for filename
             eta_str = f"eta{eta:.2f}"
 
             # Determine filenames
             if self.eq_mode == 'betaeq':
-                eos_file = self.base_path / f"table_hybrid_betaeq_{eta_str}_B180_a0.2_complete.dat"
+                eos_file = self.base_path / f"table_hybrid_betaeq_{eta_str}_{ba_str}_complete.dat"
             else:  # fixedyc
-                eos_file = self.base_path / f"table_hybrid_fixedYC_{eta_str}_B180_a0.2_complete.dat"
+                eos_file = self.base_path / f"table_hybrid_fixedYC_{eta_str}_{ba_str}_complete.dat"
 
             # Load EOS table
             if eos_file.exists():
@@ -580,6 +596,8 @@ class EOSCollection:
             eq_mode=self.eq_mode,
             eta_values=self.eta_values,
             Y_C_values=self.Y_C_values,
+            B4=self.B4,
+            a=self.a,
             verbose=self.verbose
         )
 
