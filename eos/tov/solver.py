@@ -15,6 +15,7 @@ from scipy.interpolate import CubicSpline, PchipInterpolator
 from dataclasses import dataclass
 from typing import Optional, Tuple, Callable, Union
 import os
+from pathlib import Path
 
 # Import physical constants
 from eos.general.physics_constants import (
@@ -86,7 +87,8 @@ CRUST_PATHS = {
 
 
 def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
-                     YL: Optional[float] = None, S: Optional[float] = None) -> EOSTable_for_TOV:
+                     YL: Optional[float] = None, S: Optional[float] = None,
+                     T: Optional[float] = None, Y_C: Optional[float] = None) -> EOSTable_for_TOV:
     """
     Load a crust EOS table.
 
@@ -96,6 +98,8 @@ def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
         custom_path: Path to custom crust file (required if personalized)
         YL: Lepton fraction (required for 'compose_sfho_nYLS_trap')
         S: Entropy per baryon (required for 'compose_sfho_nYLS_trap')
+        T: Temperature [MeV] (required for 'compose_sfho_nYCT')
+        Y_C: Charge fraction (required for 'compose_sfho_nYCT')
 
     Returns:
         EOSTable_for_TOV with crust data
@@ -123,9 +127,11 @@ def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
         return EOSTable_for_TOV(P=P_mev, epsilon=e_mev, nB=nB)
 
     elif crust_name == 'compose_sfho_nYCT':
-        # Compose format
+        # Compose format — full 3D table (n_B, Y_C, T); needs T and Y_C
+        if T is None or Y_C is None:
+            raise ValueError("Must provide T and Y_C for 'compose_sfho_nYCT' crust")
         filepath = CRUST_PATHS['compose_sfho_nYCT']
-        return _load_compose_crust(filepath)
+        return _load_compose_crust(filepath, T=T, Y_C=Y_C)
 
     elif crust_name == 'compose_sfho_nT0_beta':
         # SFHO beta-equilibrium at T=0 - columns: P [MeV/fm³], epsilon [MeV/fm³], nB [fm⁻³]
@@ -151,12 +157,34 @@ def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
                          f"'compose_sfho_nT0_beta', 'compose_sfho_nYLS_trap', or 'personalized'")
 
 
-def _load_compose_crust(filepath: str) -> EOSTable_for_TOV:
+_SFHO_LOOKUP_CACHE: dict = {}
+
+
+def _load_compose_crust(filepath: str, T: float = 0.0, Y_C: float = 0.5) -> EOSTable_for_TOV:
+    """Load a (T, Y_C) slice of the SFHO CompOSE table as a crust.
+
+    The full 3-D CompOSE grid is loaded once per directory and cached, so
+    repeated calls for different (T, Y_C) reuse the same in-memory tables.
+
+    Args:
+        filepath: Path to ``eos.thermo.ns`` (or any file inside the CompOSE
+            directory). The directory is inferred from ``filepath``.
+        T: Temperature [MeV].
+        Y_C: Charge fraction.
+
+    Returns:
+        EOSTable_for_TOV with the subnuclear (n_B ≤ 0.16) slice at (T, Y_C).
     """
-    Load Compose format crust table.
-    """
-    ### TODO: Implement this function
-    return EOSTable_for_TOV(P=0, epsilon=0, nB=0)
+    # Lazy import to avoid a circular import (compose_loader pulls in
+    # EOSTable_for_TOV from this module).
+    from eos.sfho.compose_loader import SFHOComposeLookup
+
+    compose_dir = str(Path(filepath).parent)
+    if compose_dir not in _SFHO_LOOKUP_CACHE:
+        _SFHO_LOOKUP_CACHE[compose_dir] = SFHOComposeLookup(compose_dir)
+    # Trim to subnuclear range so the crust ↔ core blend in add_crust() stays
+    # on the side that's actually "crust".
+    return _SFHO_LOOKUP_CACHE[compose_dir].to_crust_table(T, Y_C, n_B_max=0.16)
 
 
 def add_crust(
@@ -169,6 +197,8 @@ def add_crust(
     custom_crust_path: Optional[str] = None,
     crust_YL: Optional[float] = None,
     crust_S: Optional[float] = None,
+    crust_T: Optional[float] = None,
+    crust_Y_C: Optional[float] = None,
     save_merged: bool = False,
     output_dir: Optional[str] = None,
     input_filename: Optional[str] = None,
@@ -189,6 +219,8 @@ def add_crust(
         custom_crust_path: Path to custom crust file
         crust_YL: Lepton fraction for 'compose_sfho_nYLS_trap' crust
         crust_S: Entropy per baryon for 'compose_sfho_nYLS_trap' crust
+        crust_T: Temperature [MeV] for 'compose_sfho_nYCT' crust
+        crust_Y_C: Charge fraction for 'compose_sfho_nYCT' crust
         save_merged: Whether to save merged table
         output_dir: Directory for output file
         input_filename: Base name for output file
@@ -201,7 +233,9 @@ def add_crust(
         return eos_table
 
     # Load crust
-    crust = load_crust_table(crust_name, custom_crust_path, YL=crust_YL, S=crust_S)
+    crust = load_crust_table(crust_name, custom_crust_path,
+                             YL=crust_YL, S=crust_S,
+                             T=crust_T, Y_C=crust_Y_C)
 
 
     if mode == 'attach':
@@ -224,11 +258,31 @@ def add_crust(
     return merged
 
 
+def _drop_nonfinite(table: EOSTable_for_TOV, n_B_min: float = 1e-8) -> EOSTable_for_TOV:
+    """Drop rows with non-finite P/ε/n_B, n_B ≤ 0, or n_B below ``n_B_min``.
+
+    The ``n_B_min`` cut prevents the lowest CompOSE rows (n_B ~ 10⁻¹²) from
+    inflating μ_B = (P + ε)/n_B to ~10¹² MeV, which can overflow during PCHIP
+    polynomial fitting and trigger
+    ``ValueError: 'y' must contain only finite values``.
+
+    The returned table is sorted by n_B so PchipInterpolator gets a strictly
+    increasing x.
+    """
+    m = (np.isfinite(table.P) & np.isfinite(table.epsilon)
+         & np.isfinite(table.nB) & (table.nB >= n_B_min))
+    P, eps, nB = table.P[m], table.epsilon[m], table.nB[m]
+    order = np.argsort(nB)
+    return EOSTable_for_TOV(P=P[order], epsilon=eps[order], nB=nB[order])
+
+
 def _attach_crust(eos: EOSTable_for_TOV, crust: EOSTable_for_TOV, n_transition: float) -> EOSTable_for_TOV:
     """Simple attachment at transition density."""
+    crust = _drop_nonfinite(crust)
+    eos = _drop_nonfinite(eos)
     # Use crust below transition, EOS above
-    crust_mask = crust.nB <= n_transition # generate a np list of bools 
-    eos_mask = eos.nB > n_transition # generate a np list of bools 
+    crust_mask = crust.nB <= n_transition # generate a np list of bools
+    eos_mask = eos.nB > n_transition # generate a np list of bools
     
     P = np.concatenate([crust.P[crust_mask], eos.P[eos_mask]])
     epsilon = np.concatenate([crust.epsilon[crust_mask], eos.epsilon[eos_mask]])
@@ -245,6 +299,14 @@ def _interpolate_crust(eos: EOSTable_for_TOV, crust: EOSTable_for_TOV, n_transit
     Interpolates P and μB = (P + ε) / n_B, then computes ε = μB * n_B - P.
     This ensures thermodynamic consistency in the transition region.
     """
+    crust = _drop_nonfinite(crust)
+    eos = _drop_nonfinite(eos)
+    if len(crust.nB) < 2 or len(eos.nB) < 2:
+        raise ValueError(
+            f"Cannot blend: crust has {len(crust.nB)} finite rows, "
+            f"EOS has {len(eos.nB)} finite rows (need ≥2 each)."
+        )
+
     n_low = n_transition - delta_n
     n_high = n_transition + delta_n
 
@@ -309,6 +371,14 @@ def _interpolate_crust_maxwell(eos: EOSTable_for_TOV, crust: EOSTable_for_TOV,
     Returns:
         Merged EOSTable_for_TOV with smooth (or sharp) transition
     """
+    crust = _drop_nonfinite(crust)
+    eos = _drop_nonfinite(eos)
+    if len(crust.nB) < 2 or len(eos.nB) < 2:
+        raise ValueError(
+            f"Cannot blend: crust has {len(crust.nB)} finite rows, "
+            f"EOS has {len(eos.nB)} finite rows (need ≥2 each)."
+        )
+
     # Compute μB = (P + ε) / n_B for both phases
     muB_crust = (crust.P + crust.epsilon) / crust.nB
     muB_eos = (eos.P + eos.epsilon) / eos.nB

@@ -3498,6 +3498,11 @@ def find_boundaries(T_values: np.ndarray, eta: float,
         eq_mode=eq_mode, Y_C=Y_C, Y_L=Y_L,
         T_start_default=T_start_default, verbose=verbose
     )
+    # Mirror onset: keep n_B_offset_init in sync with the found start density
+    # so the Strategy-3 fallback below has a valid estimate when
+    # estimate_boundary_n_B returns None.
+    if n_B_offset_est is not None:
+        n_B_offset_init = n_B_offset_est
     
     # If no working start found, all T values failed
     if T_0_offset is None:
