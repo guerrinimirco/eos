@@ -181,7 +181,13 @@ def setup_matplotlib_style():
     # produces "Font 'default' does not have a glyph for '−'" warnings on
     # log-scale tick labels (e.g. "10^{-3}").
     plt.rcParams['mathtext.fontset'] = 'dejavuserif'
-    plt.rcParams['axes.unicode_minus'] = False  # use ASCII '-' for regular tick labels
+    plt.rcParams['mathtext.default'] = 'regular'   # use the regular text font in math
+    plt.rcParams['axes.unicode_minus'] = False     # ASCII '-' in regular tick labels
+    # Safety net: silence the matplotlib mathtext "missing U+2212 glyph"
+    # warning if it still fires on this install.
+    import logging
+    logging.getLogger('matplotlib._mathtext').setLevel(logging.ERROR)
+    logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
     plt.rcParams['axes.labelsize'] = 25
     plt.rcParams['xtick.labelsize'] = 25
     plt.rcParams['ytick.labelsize'] = 25
