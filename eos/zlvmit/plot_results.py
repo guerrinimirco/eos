@@ -177,6 +177,7 @@ def setup_matplotlib_style():
     plt.rcParams['font.family'] = 'serif'
     plt.rcParams['font.serif'] = ['CMU Serif', 'Computer Modern Roman', 'DejaVu Serif']
     plt.rcParams['mathtext.fontset'] = 'cm'
+    plt.rcParams['axes.unicode_minus'] = False  # use ASCII '-' (CMU Serif lacks U+2212)
     plt.rcParams['axes.labelsize'] = 25
     plt.rcParams['xtick.labelsize'] = 25
     plt.rcParams['ytick.labelsize'] = 25
