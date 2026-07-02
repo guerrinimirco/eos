@@ -175,7 +175,10 @@ def setup_matplotlib_style():
         setup_matplotlib_style()
     """
     plt.rcParams['font.family'] = 'serif'
-    plt.rcParams['font.serif'] = ['CMU Serif', 'Computer Modern Roman', 'DejaVu Serif']
+    # DejaVu Serif first: it ships with matplotlib and has the full Unicode
+    # range we need (minus sign, superscripts, etc.). Some local installs of
+    # CMU Serif ship as a partial font and trigger "missing glyph" warnings.
+    plt.rcParams['font.serif'] = ['DejaVu Serif', 'CMU Serif', 'Computer Modern Roman']
     # 'dejavuserif' ships with matplotlib and includes U+2212 (the typographic
     # minus). The original 'cm' fontset on some installs lacks that glyph and
     # produces "Font 'default' does not have a glyph for '−'" warnings on
