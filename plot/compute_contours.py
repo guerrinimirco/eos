@@ -101,6 +101,7 @@ def _save_contour(name, paths, header):
 # 1. Mass-only Gaussian sources (no samples): 1σ / 2σ intervals.
 MASS_TARGETS = {                 # name: (mean, sigma)  [M_sun]
     "J0952-0607": (2.24, 0.17),  # rotation-corrected mass, Romani et al. 2022
+    "J0740":      (2.08, 0.07),  # Shapiro-delay mass, Fonseca et al. 2021 (NANOGrav)
     "GW190814":   (2.59, 0.05),  # secondary compact object, Abbott et al. 2020
 }
 
@@ -155,14 +156,14 @@ def compute_tidal_contour():
 
 
 # 3b. GW170817 mass-radius: header-less; cols 0=M1 1=M2 2=Λ1 3=Λ2 4=R1 5=R2
-#     (verified by column stats).  Stack BOTH NS components into one M–R set.
+#     (verified by column stats).  One contour per NS component (the two share
+#     the same EoS → same R(M) band, so they get the same colour downstream).
 def compute_gw170817_mr_contour():
     a = np.loadtxt(SAMPLES / "GW170817_MR.txt")
-    R = np.concatenate([a[:, 4], a[:, 5]])
-    M = np.concatenate([a[:, 0], a[:, 1]])
-    paths = extract_2d_contour(R, M)                  # x=R, y=M → save (R, M)
-    _save_contour("GW170817MR", paths, header="R_km,M_sun")
-    print(f"GW170817MR: {len(a)} events × 2 components → M-R contours")
+    for tag, cM, cR in (("GW170817MR_1", 0, 4), ("GW170817MR_2", 1, 5)):
+        paths = extract_2d_contour(a[:, cR], a[:, cM])   # x=R, y=M → save (R, M)
+        _save_contour(tag, paths, header="R_km,M_sun")
+    print(f"GW170817MR: {len(a)} events → 2 component M-R contours")
 
 
 # 4. Nuclear bands: local files are already (rho, lower, upper) — re-emit as csv.
