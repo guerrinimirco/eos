@@ -145,14 +145,28 @@ def _lambda_tilde(m1, m2, l1, l2):
     return (16.0 / 13.0) * ((m1 + 12 * m2) * m1**4 * l1 +
                             (m2 + 12 * m1) * m2**4 * l2) / (m1 + m2) ** 5
 
+# spec: name -> (file, cols=(cM1,cM2,cΛ1,cΛ2)).  gw170817.dat carries the tidal
+# params at cols 2..5; the GW190425 extract (from fetch_gw190425.py) is a plain
+# 4-column m1,m2,Λ1,Λ2 table, so its cols are 0..3.
+# Both from official LVK releases via fetch_gw1708NN.py: low-spin prior,
+# source-frame masses, layout m1,m2,Λ1,Λ2 → cols 0..3.
+TIDAL_SOURCES = {
+    "GW170817": ("gw170817_extracted_table.txt",  (0, 1, 2, 3)),
+    "GW190425": ("gw190425_extracted_table.txt",  (0, 1, 2, 3)),
+}
+
 def compute_tidal_contour():
-    a = np.loadtxt(SAMPLES / "gw170817.dat")
-    m1, m2, l1, l2 = a[:, 2], a[:, 3], a[:, 4], a[:, 5]
-    Mc = _chirp_mass(m1, m2)
-    Lt = _lambda_tilde(m1, m2, l1, l2)
-    paths = extract_2d_contour(Mc, Lt)                # x=Mchirp, y=Λ̃
-    _save_contour("GW170817", paths, header="Mchirp_Msun,LambdaTilde")
-    print(f"GW170817: {len(a)} samples → M-Λ̃ contours")
+    for name, (fname, (cM1, cM2, cL1, cL2)) in TIDAL_SOURCES.items():
+        if not (SAMPLES / fname).exists():
+            print(f"  {name}: {fname} missing — run fetch_gw190425.py; skipping")
+            continue
+        a = np.loadtxt(SAMPLES / fname)
+        m1, m2, l1, l2 = a[:, cM1], a[:, cM2], a[:, cL1], a[:, cL2]
+        Mc = _chirp_mass(m1, m2)
+        Lt = _lambda_tilde(m1, m2, l1, l2)
+        paths = extract_2d_contour(Mc, Lt)            # x=Mchirp, y=Λ̃
+        _save_contour(name, paths, header="Mchirp_Msun,LambdaTilde")
+        print(f"{name}: {len(a)} samples → M-Λ̃ contours")
 
 
 # 3b. GW170817 mass-radius: header-less; cols 0=M1 1=M2 2=Λ1 3=Λ2 4=R1 5=R2

@@ -28,8 +28,15 @@ URL = f"https://zenodo.org/records/6513631/files/{H5_NAME}?download=1"
 
 LOCAL_H5 = SAMPLES / "GW190425_nocosmo.h5"          # keep the short local name
 OUT_TABLE = SAMPLES / "gw190425_extracted_table.txt"
-PREFERRED_RUN = "C01:IMRPhenomPv2_NRTidal"
-PARAMS = ("mass_1", "mass_2", "lambda_1", "lambda_2")
+# Low-spin prior (|χ|<0.05): matches the low-spin analyses of the galactic BNS
+# population and of GW170817, so the two events are compared under the same
+# assumptions.  The HighSpin (|χ|<0.89) run is also in the file but allows the
+# extreme mass ratios / huge Λ tails that would make an apples-to-oranges plot.
+PREFERRED_RUN = "C01:IMRPhenomPv2_NRTidal:LowSpin"
+# Source-frame (redshift-corrected) masses — the physical NS masses to compare
+# against an EoS.  For GW190425 (z≈0.03) these run ~3% below the detector-frame
+# `mass_1`/`mass_2`.  Λ is dimensionless (frame-independent).
+PARAMS = ("mass_1_source", "mass_2_source", "lambda_1", "lambda_2")
 TIMEOUT = 120                                        # s, per network read
 
 
@@ -118,7 +125,8 @@ def main():
 
     table = np.column_stack([cols[p] for p in PARAMS])   # same orientation as gw170817.dat
     np.savetxt(OUT_TABLE, table, fmt="%.6e", delimiter="\t",
-               header="mass_1_msun\tmass_2_msun\tlambda_1\tlambda_2")
+               header="m1_source_msun\tm2_source_msun\tlambda_1\tlambda_2  "
+                      f"(run {run})")
     print(f"wrote {OUT_TABLE}  ({table.shape[0]} samples × {table.shape[1]} cols) from run '{run}'")
 
 

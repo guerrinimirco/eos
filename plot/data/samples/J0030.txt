@@ -1,3 +1,4 @@
+# R_km  M_sun
 # Radius and mass samples from a fit to NICER data on PSR J0030+0451
 # using a model with two potentially overlapping ovals.  See
 # Miller, Lamb, Dittmann et al. 2019 for a detailed description.
