@@ -28,6 +28,13 @@ model/run you intend.
   — arXiv:2211.07485
 - Lightest known compact object (M ≈ 0.77, R ≈ 10.4 km)
 - Columns: `R_km  M_sun`
+- Data: Zenodo 8232233. HESS.txt = `xray_only_carbatm.txt` (X-ray-only,
+  carbon-atmosphere spectral fit) → R=10.4 +0.86/-0.78, M=0.77 +0.20/-0.17,
+  the paper's headline posterior (tail down to ~8 km).
+- ⚠ Do NOT use `full_priors_carbatm_corr.txt` (kept here as
+  `HESS_full_priors_carbatm_corr.txt`): adding chiral-EFT/NICER/GW EoS priors
+  pulls R up ~0.8 km (median 11.2) and halves the width — that was the previous
+  (wrong) HESS.txt.
 
 ### `J0614.dat` — PSR J0614-3329 (NICER)  ⚠ confirm release
 - Mauviard, Watts et al. **2025**, "A NICER view of the 1.4 M⊙ edge-on pulsar
