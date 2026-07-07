@@ -541,9 +541,15 @@ def _detect_maxwell_construction(eos: EOSTable_for_TOV,
     end_idx = largest_group[-1] + 1  # +1 because diff reduces length by 1
     
     P_trans = np.mean(P_sorted[start_idx:end_idx+1])
-    e_low = eps_sorted[start_idx]      # Onset (lower ε, hadron side)
-    e_high = eps_sorted[end_idx]        # Offset (higher ε, quark side)
-    
+    # e_low/e_high = the density range spanned by the constant-P plateau. Take
+    # min/max explicitly: argsort(P) does NOT order equal-P (plateau) points by
+    # ε, so indexing the endpoints can return them swapped, which flips the sign
+    # of Δε = e_high - e_low (zeroing the tidal jump) and corrupts the
+    # post-transition hadron-branch mask.
+    plateau_eps = eps_sorted[start_idx:end_idx+1]
+    e_low = float(np.min(plateau_eps))   # onset  (lower ε, hadron side)
+    e_high = float(np.max(plateau_eps))  # offset (higher ε, quark side)
+
     return (P_trans, e_low, e_high)
 
 
