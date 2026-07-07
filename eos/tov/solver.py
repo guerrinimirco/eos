@@ -658,9 +658,19 @@ def solve_tov_single(
     p_grid = np.ascontiguousarray(eos.P[idx_p])
     e_interp_p = np.ascontiguousarray(eos.epsilon[idx_p])
 
-    # Initial conditions
+    # Tidal needs the sound speed cs² = dP/dε on the same P grid. Compute it
+    # once here (monotone finite difference) rather than per RHS evaluation.
+    if compute_tidal:
+        with np.errstate(divide='ignore', invalid='ignore'):
+            de_dP = np.gradient(e_interp_p, p_grid)
+            cs2_grid = np.where(de_dP > 0, 1.0 / de_dP, 1.0)
+        cs2_grid = np.clip(cs2_grid, 1e-6, 1.0)           # 0 < cs² ≤ c²
+        cs2_grid = np.ascontiguousarray(cs2_grid)
+
+    # Initial conditions: m0 from the uniform-core expansion; p=1 (=P/p0);
+    # Y(0)=2 is the regular l=2 tidal boundary value at the centre.
     m0 = e_c * 4.0 / 3.0 * np.pi * r_min**3 / M_sun_MeV
-    y0 = np.array([m0, 1.0])
+    y0 = np.array([m0, 1.0, 2.0]) if compute_tidal else np.array([m0, 1.0])
 
     # Surface detection event
     def surface_event(r, y):
@@ -668,8 +678,13 @@ def solve_tov_single(
     surface_event.terminal = True
     surface_event.direction = -1
 
-    def rhs_tov(r, y):
-        return _tov_rhs_scipy(r, y, p_grid, e_interp_p, p0, e_c, rho_sol)
+    if compute_tidal:
+        def rhs_tov(r, y):
+            return _tov_rhs_tidal(r, y, p_grid, e_interp_p, cs2_grid,
+                                  p0, e_c, rho_sol)
+    else:
+        def rhs_tov(r, y):
+            return _tov_rhs_scipy(r, y, p_grid, e_interp_p, p0, e_c, rho_sol)
 
     # Add phase transition event if specified
     events = [surface_event]
@@ -691,7 +706,8 @@ def solve_tov_single(
         
         P_trans, e_low, e_high = phase_transition
         r_trans = sol.t_events[1][0]
-        m_trans = sol.sol(r_trans)[0]
+        state_trans = sol.sol(r_trans)                    # [m, p] or [m, p, Y]
+        m_trans = state_trans[0]
 
         # For post-transition: use low-density (hadron) branch of EOS
         # Select only points with epsilon <= e_low (hadron phase)
@@ -707,11 +723,29 @@ def solve_tov_single(
             e_interp_p_post = e_interp_p.copy()
             e_interp_p_post[p_grid <= P_trans] = e_low
 
-        def rhs_post(r, y):
-            return _tov_rhs_scipy(r, y, p_grid_post, e_interp_p_post, p0, e_c, rho_sol)
+        if compute_tidal:
+            # Carry Y through the transition, applying the ΔY jump for the
+            # first-order (Maxwell) density discontinuity Δε = e_high - e_low
+            # at P_trans (Takátsy & Kovács 2020, arXiv:2007.01139).
+            de_dP_post = np.gradient(e_interp_p_post, p_grid_post)
+            cs2_post = np.clip(np.where(de_dP_post > 0, 1.0 / de_dP_post, 1.0),
+                               1e-6, 1.0)
+            cs2_post = np.ascontiguousarray(cs2_post)
+            Y_trans = state_trans[2] + _dY_discontinuity(
+                e_high - e_low, r_trans, m_trans, P_trans)
+            y_post0 = np.array([m_trans, P_trans / p0, Y_trans])
 
-        sol_post = solve_ivp(rhs_post, [r_trans, r_max], 
-                             np.array([m_trans, P_trans / p0]),
+            def rhs_post(r, y):
+                return _tov_rhs_tidal(r, y, p_grid_post, e_interp_p_post,
+                                      cs2_post, p0, e_c, rho_sol)
+        else:
+            y_post0 = np.array([m_trans, P_trans / p0])
+
+            def rhs_post(r, y):
+                return _tov_rhs_scipy(r, y, p_grid_post, e_interp_p_post,
+                                      p0, e_c, rho_sol)
+
+        sol_post = solve_ivp(rhs_post, [r_trans, r_max], y_post0,
                              method='DOP853', events=surface_event,
                              dense_output=True, rtol=1e-10, atol=1e-12)
 
@@ -719,7 +753,8 @@ def solve_tov_single(
 
     # Extract results
     r_surface = sol.t_events[0][0] if sol.t_events[0].size > 0 else sol.t[-1]
-    M_msun = sol.sol(r_surface)[0]
+    surf_state = sol.sol(r_surface)
+    M_msun = surf_state[0]
     R_km = r_surface * r_sun_km
 
     result = TOVResult(e_c=e_c, n_c=n_c, P_c=p0, R=R_km, M=M_msun)
@@ -728,8 +763,12 @@ def solve_tov_single(
         result.M_b = _compute_baryonic_mass(sol, r_surface, p0, n_of_P, M_sun_MeV)
 
     if compute_tidal:
-        result.k2, result.Lambda = _compute_tidal(
-            sol, r_surface, M_msun, R_km, p0, e_of_P, n_of_P, eos)
+        # Y at the surface, plus the self-bound ΔY jump (ε_s→0 at P=0; ~0 for
+        # ordinary crusts, important for bare quark stars).
+        eps_s = _surface_eps_s(eos)
+        y_R = float(surf_state[2]) + _dY_discontinuity(eps_s, r_surface, M_msun, 0.0)
+        C = M_msun / (2.0 * r_surface)                    # GM/(Rc²), dimensionless
+        result.k2, result.Lambda = _love_number(y_R, C)
 
     return result
 
@@ -800,11 +839,117 @@ def _compute_baryonic_mass(sol, r_surface: float, p0: float,
     return M_b_msun
 
 
-def _compute_tidal(sol, r_surface: float, M_msun: float, R_km: float,
-                   p0: float, e_of_P, n_of_P,
-                   eos: EOSTable_for_TOV) -> Tuple[float, float]:
-### TODO: implement tidal deformability
-    return 0.0, 0.0
+def _tov_rhs_tidal(r: float, y: np.ndarray,
+                   p_grid: np.ndarray, e_interp_p: np.ndarray, cs2_grid: np.ndarray,
+                   p0: float, e0: float, rho_s: float) -> np.ndarray:
+    """TOV + tidal RHS: state y = [m, p, Y], returns [dm/dr, dp/dr, dY/dr].
+
+    The first two components are identical to ``_tov_rhs_scipy`` (mass and
+    pressure). The third integrates the metric-perturbation variable
+    Y(r) = r H'(r)/H(r) of the l=2 static tidal perturbation (Hinderer 2008;
+    Damour & Nagar 2009; Postnikov, Prakash & Lattimer 2010):
+
+        r dY/dr + Y² + Y F(r) + r² Q(r) = 0 ,   Y(0) = 2 ,
+
+    F(r) = [1 - 4πr²(ε - P)] / (1 - 2m/r),
+    r²Q(r) = 4πr²[5ε + 9P + (ε+P)/(dP/dε)] / (1 - 2m/r)
+             - 6/(1 - 2m/r) - [(m + 4πr³P)/(r(1 - 2m/r))]² .
+
+    Everything is written in the module's dimensionless variables (r in r_s,
+    m in M_sun, p = P/p0), where 2Gm/rc² → m/r and 4πr²ε → 3(ε/ρ_s)r².
+    ``cs2_grid`` holds dP/dε (sound speed squared) tabulated on ``p_grid``.
+    """
+    m, p, Y = y[0], y[1], y[2]
+
+    if p <= 0.0 or r <= 0.0:
+        return np.array([0.0, 0.0, 0.0])
+
+    P_physical = p * p0
+    e = np.interp(P_physical, p_grid, e_interp_p)          # ε(P) [MeV/fm³]
+    cs2 = np.interp(P_physical, p_grid, cs2_grid)          # dP/dε (dimensionless)
+    if cs2 <= 0.0:
+        cs2 = 1e-6                                         # guard flat/soft patches
+
+    # --- mass & pressure (same as _tov_rhs_scipy) ---
+    e_dl = e / rho_s                                       # ε in ρ_s units
+    dmdr = 3.0 * e_dl * r * r
+    if abs(r - m) < 1e-30 or r < 1e-30:
+        dpdr = 0.0
+    else:
+        factor1 = 0.5 * (e / p0) * m
+        factor2 = 1.0 + (p * p0) / e if e > 0 else 1.0
+        factor3 = 1.0 + 3.0 * (p0 / rho_s) * (p * r**3) / m if m > 0 else 1.0
+        dpdr = -factor1 * factor2 * factor3 / (r * (r - m))
+
+    # --- tidal Y(r) ---
+    denom = r - m
+    if denom <= 1e-12 * r:
+        denom = 1e-12 * r
+    ratio_pe = (p * p0) / e if e > 0 else 0.0             # P/ε
+    metric_fac = r / denom                                # 1/(1 - m/r)
+    term_press = m + 3.0 * (p0 / rho_s) * r**3 * p        # (m + 4πr³P), scaled
+    F = (1.0 - 1.5 * e_dl * r * r * (1.0 - ratio_pe)) * metric_fac
+    Qbracket = 5.0 + 9.0 * ratio_pe + (1.0 + ratio_pe) / cs2
+    r2Q = (1.5 * e_dl * r * r * metric_fac * Qbracket
+           - 6.0 * metric_fac
+           - (term_press * term_press) / (denom * denom))
+    dYdr = -(Y * Y + Y * F + r2Q) / r
+
+    return np.array([dmdr, dpdr, dYdr])
+
+
+def _love_number(y_R: float, C: float) -> Tuple[float, float]:
+    """(k2, Λ) from the surface value Y(R) and compactness C = GM/(Rc²).
+
+    Standard quadrupole tidal Love number (Hinderer 2008, Eq. 23; Postnikov
+    2010, Eq. 20) and dimensionless deformability Λ = (2/3) k2 C⁻⁵. Returns
+    (0, 0) outside the physical compactness window where the closed form is
+    ill-conditioned.
+    """
+    if not (0.005 < C < 0.5):
+        return 0.0, 0.0
+    v = 1.0 - 2.0 * C                                      # (1 - 2C)
+    num = v * v * (2.0 - y_R + 2.0 * C * (y_R - 1.0))
+    d1 = 2.0 * C * (6.0 - 3.0 * y_R + 3.0 * C * (5.0 * y_R - 8.0))
+    d2 = 4.0 * C**3 * (13.0 - 11.0 * y_R + C * (3.0 * y_R - 2.0)
+                       + 2.0 * C**2 * (1.0 + y_R))
+    d3 = 3.0 * v * v * (2.0 - y_R + 2.0 * C * (y_R - 1.0)) * np.log(v)
+    den = d1 + d2 + d3
+    if abs(den) < 1e-30:
+        return 0.0, 0.0
+    k2 = (8.0 / 5.0) * C**5 * num / den
+    Lam = (2.0 / 3.0) * k2 / C**5
+    return float(k2), float(Lam)
+
+
+def _dY_discontinuity(delta_eps: float, r_dl: float, m_dl: float,
+                      P_jump: float) -> float:
+    """ΔY across a density discontinuity, in the module's dimensionless units.
+
+    At any first-order interface (the self-bound quark-star surface, or an
+    internal Maxwell / phase-transition boundary) the energy density jumps by
+    Δε = ε_inside − ε_outside while P is continuous, and the tidal variable Y
+    jumps by
+
+        ΔY = −4π r_d³ Δε / (m(r_d) + 4π r_d³ P(r_d))
+           = −(3 Δε/ρ_s) r_d³ / (m + 3 (P/ρ_s) r_d³)   [dimensionless].
+
+    The denominator is (m + 4π r³ P), NOT just m — this is the correction of
+    Takátsy & Kovács 2020 (arXiv:2007.01139, PRD 102 028501), which reduces to
+    the familiar −4πR³ε_s/M only at the surface where P = 0. Getting the
+    denominator wrong biases Λ for self-bound stars and hybrid stars with a
+    strong transition.
+    """
+    if m_dl <= 1e-12 or delta_eps <= 0.0:
+        return 0.0
+    denom = m_dl + 3.0 * (P_jump / rho_sol) * r_dl**3
+    return -(3.0 * delta_eps / rho_sol) * r_dl**3 / denom
+
+
+def _surface_eps_s(eos: EOSTable_for_TOV) -> float:
+    """Energy density at the lowest tabulated pressure (self-bound ε_s; ~0 crust)."""
+    pos = eos.epsilon > 0
+    return float(np.min(eos.epsilon[pos])) if np.any(pos) else 0.0
 
 
 # =============================================================================
@@ -827,6 +972,7 @@ def compute_tov_sequence(
     eos_columns: Tuple[int, int, int] = (0, 1, 2),
     skip_header: int = 0,
     verbose: bool = True,
+    backend: str = 'scipy',
 ) -> np.ndarray:
     """
     Compute TOV sequence for array of central energy densities.
@@ -848,18 +994,26 @@ def compute_tov_sequence(
         eos_columns: Column indices (P, epsilon, nB) - only used if eos_input is a file path
         skip_header: Header lines to skip - only used if eos_input is a file path
         verbose: Print progress
+        backend: 'scipy' (default; trusted adaptive DOP853 reference, robust for
+            strong phase transitions and edge cases) or 'fast' (numba
+            Dormand-Prince RK45, ~a few hundred× faster, for mass-production /
+            Bayesian / ML sweeps). Both return the SAME column layout; 'fast'
+            always computes M_b and tidal internally and trims to the flags.
 
     Returns:
         Structured array with columns:
         - e_c, n_c, P_c, R, M, [M_b], [k2], [Lambda]
     """
+    if backend not in ('scipy', 'fast'):
+        raise ValueError(f"backend must be 'scipy' or 'fast', got '{backend}'")
+
     # Load EOS from file or use provided object
     if isinstance(eos_input, str):
         eos = EOSTable_for_TOV.from_file(eos_input, columns=eos_columns, skip_header=skip_header)
     else:
         eos = eos_input
 
-    # Add crust
+    # Add crust (shared by both backends)
     eos = add_crust(
         eos,
         crust_name=add_crust_table,
@@ -870,7 +1024,25 @@ def compute_tov_sequence(
         crust_YL=crust_YL,
         crust_S=crust_S,
     )
-    
+
+    # --- fast backend: dispatch to the numba solver, trim to the flag layout ---
+    if backend == 'fast':
+        from eos.tov.solver_fast import compute_tov_sequence_fast
+        full = compute_tov_sequence_fast(eos, np.asarray(e_c_vec, float))
+        # full cols: 0=e_c 1=n_c 2=P_c 3=R 4=M 5=M_b 6=k2 7=Lambda
+        cols = [0, 1, 2, 3, 4]
+        if compute_baryonic_mass:
+            cols.append(5)
+        if compute_tidal:
+            cols += [6, 7]
+        output_data = full[:, cols]
+        if output_file is not None:
+            _save_tov_results(output_data, output_file,
+                              compute_baryonic_mass, compute_tidal)
+            if verbose:
+                print(f"Saved results to: {output_file}")
+        return output_data
+
     # Create interpolators
     P_of_e, e_of_P, n_of_P = _create_interpolators(eos)
     
