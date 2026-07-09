@@ -979,6 +979,7 @@ def compute_tov_sequence(
     skip_header: int = 0,
     verbose: bool = True,
     backend: str = 'scipy',
+    tov_parallel: bool = True,
 ) -> np.ndarray:
     """
     Compute TOV sequence for array of central energy densities.
@@ -1005,6 +1006,10 @@ def compute_tov_sequence(
             Dormand-Prince RK45, ~a few hundred× faster, for mass-production /
             Bayesian / ML sweeps). Both return the SAME column layout; 'fast'
             always computes M_b and tidal internally and trims to the flags.
+        tov_parallel: fast backend only. True (default) uses numba prange over
+            the sequence. Set False when this call is itself already inside a
+            parallel map (e.g. a joblib scan over EOS) to avoid oversubscribing
+            cores; the per-star kernel stays compiled either way.
 
     Returns:
         Structured array with columns:
@@ -1034,7 +1039,8 @@ def compute_tov_sequence(
     # --- fast backend: dispatch to the numba solver, trim to the flag layout ---
     if backend == 'fast':
         from eos.tov.solver_fast import compute_tov_sequence_fast
-        full = compute_tov_sequence_fast(eos, np.asarray(e_c_vec, float))
+        full = compute_tov_sequence_fast(eos, np.asarray(e_c_vec, float),
+                                         parallel=tov_parallel)
         # full cols: 0=e_c 1=n_c 2=P_c 3=R 4=M 5=M_b 6=k2 7=Lambda
         cols = [0, 1, 2, 3, 4]
         if compute_baryonic_mass:
@@ -1122,26 +1128,42 @@ def find_mmax_precise(results: np.ndarray, precision: float = 0.001) -> Tuple[in
     e_c = results[:, 0]
     M = results[:, 4]
 
-    # Find approximate maximum
-    idx_approx = np.argmax(M)
+    # Guard against failed TOV points (non-finite M): high-e_c central states past
+    # the EoS table's validity integrate to NaN mass, which would crash the
+    # PchipInterpolator below ("`y` must contain only finite values"). Locate the
+    # maximum on the finite subset only. e_c is monotone increasing, so mapping
+    # the peak back to the original array via searchsorted (below) is unaffected.
+    finite = np.isfinite(M) & np.isfinite(e_c)
+    if not finite.any():
+        raise ValueError("find_mmax_precise: no finite masses in TOV results")
+    e_c_f = e_c[finite]
+    M_f = M[finite]
+
+    # Find approximate maximum (index within the finite subset)
+    idx_approx = int(np.argmax(M_f))
 
     # Use a window of ±5 points around the approximate maximum
     i_lo = max(0, idx_approx - 5)
-    i_hi = min(len(e_c), idx_approx + 6)
+    i_hi = min(len(e_c_f), idx_approx + 6)
 
-    e_c_window = e_c[i_lo:i_hi]
-    M_window = M[i_lo:i_hi]
+    e_c_window = e_c_f[i_lo:i_hi]
+    M_window = M_f[i_lo:i_hi]
 
-    # Cubic interpolation
-    M_interp = PchipInterpolator(e_c_window, M_window)
+    # Cubic interpolation needs >= 2 strictly increasing nodes; if the finite
+    # window degenerates to a single point, take that point as the maximum.
+    if len(e_c_window) < 2:
+        e_c_max = float(e_c_window[0])
+        M_max = float(M_window[0])
+    else:
+        M_interp = PchipInterpolator(e_c_window, M_window)
 
-    # Find maximum on fine grid
-    e_c_fine = np.linspace(e_c_window[0], e_c_window[-1], 10000)
-    M_fine = M_interp(e_c_fine)
-    idx_fine_max = np.argmax(M_fine)
+        # Find maximum on fine grid
+        e_c_fine = np.linspace(e_c_window[0], e_c_window[-1], 10000)
+        M_fine = M_interp(e_c_fine)
+        idx_fine_max = np.argmax(M_fine)
 
-    e_c_max = e_c_fine[idx_fine_max]
-    M_max = M_fine[idx_fine_max]
+        e_c_max = e_c_fine[idx_fine_max]
+        M_max = M_fine[idx_fine_max]
 
     # Find index in original array: last point with e_c <= e_c_max
     idx_max = np.searchsorted(e_c, e_c_max, side='right') - 1

@@ -334,12 +334,34 @@ def solve_sequence(Pc_array, logP_min, dx_inv, logeps_g, cs2_g, logn_g, eps_s,
     return M, R, Mb, K2, Lam
 
 
+@njit(fastmath=True, cache=True)
+def solve_sequence_serial(Pc_array, logP_min, dx_inv, logeps_g, cs2_g, logn_g,
+                          eps_s, P_disc, deps_disc, n_disc, P_surf, rtol, atol,
+                          r_max):
+    """Serial (no-prange) twin of :func:`solve_sequence`.
+
+    Use this when the CALLER already parallelises (e.g. the sigma_crit engine's
+    joblib scan over grid cells): a prange region inside each joblib worker
+    would oversubscribe cores (numba threads × worker processes). Same compiled
+    per-star kernel, so still ~0.02 ms/star.
+    """
+    n = Pc_array.shape[0]
+    M = np.empty(n); R = np.empty(n); Mb = np.empty(n)
+    K2 = np.empty(n); Lam = np.empty(n)
+    for i in range(n):
+        m_, r_, mb_, k_, l_ = _solve_one(
+            Pc_array[i], logP_min, dx_inv, logeps_g, cs2_g, logn_g, eps_s,
+            P_disc, deps_disc, n_disc, P_surf, rtol, atol, r_max)
+        M[i] = m_; R[i] = r_; Mb[i] = mb_; K2[i] = k_; Lam[i] = l_
+    return M, R, Mb, K2, Lam
+
+
 # =============================================================================
 # Python driver (drop-in analogue of compute_tov_sequence)
 # =============================================================================
 def compute_tov_sequence_fast(eos, e_c_vec, rtol: float = 1e-6, atol: float = 1e-8,
                               r_max: float = 20.0, n_grid: int = 2000,
-                              P_surf_rel: float = 1e-10):
+                              P_surf_rel: float = 1e-10, parallel: bool = True):
     """Fast TOV sequence over central energy densities.
 
     Emits the SAME 8-column layout as ``solver.compute_tov_sequence`` with both
@@ -385,7 +407,8 @@ def compute_tov_sequence_fast(eos, e_c_vec, rtol: float = 1e-6, atol: float = 1e
                                        logn_g.size), logn_g)
 
     P_surf = P_surf_rel * P_min
-    M, R, Mb, K2, Lam = solve_sequence(
+    seq = solve_sequence if parallel else solve_sequence_serial
+    M, R, Mb, K2, Lam = seq(
         np.ascontiguousarray(Pc), logP_min, dx_inv, logeps_g, cs2_g, logn_g,
         eps_s, P_disc, deps_disc, n_disc, P_surf, rtol, atol, r_max)
 
