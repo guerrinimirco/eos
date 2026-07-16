@@ -76,9 +76,13 @@ def _psi_of_h(h):
     For bosons, ψ(h) ≤ 0 for all h ≥ 0.
     ψ(0) = 0 corresponds to μ = m (condensation threshold).
     """
-    if h < 1e-4:
-        # Small h expansion: ψ ≈ -h²/(2a) + h³/(3a^{3/2})
-        return -(h**2) / (2.0 * aBJEL) + (h**3) / (3.0 * aBJEL**1.5)
+    if h < 1e-3:
+        # Small-h series of ψ = x/(1+x) - ln(1+x),  x = h/√a:
+        #   ψ = -x²/2 + (2/3)x³ - (3/4)x⁴ + ...   general term (-1)^(n-1)(n-1)/n x^n
+        # Needed because the closed form below loses all digits to catastrophic
+        # cancellation for small h (both terms ~ x, difference ~ -x²/2).
+        x = h / _sqrt_a
+        return x * x * (-0.5 + x * (2.0 / 3.0 - 0.75 * x))
     
     term = _sqrt_a + h
     return h / term - np.log(term / _sqrt_a)
