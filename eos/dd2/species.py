@@ -33,12 +33,8 @@ class SpeciesFlags:
         unwired = []
         if self.sigma_star:
             unwired.append("sigma_star (later milestone)")
-        if self.include_pseudoscalars:
-            unwired.append("include_pseudoscalars (M7)")
-        if self.include_thermal_vectors:
-            unwired.append("include_thermal_vectors (M7)")
         if self.neutrinos:
-            unwired.append("neutrinos (M6)")
+            unwired.append("neutrinos (M6 remainder)")
         if unwired:
             raise NotImplementedError(
                 "SpeciesFlags: not yet wired at this milestone: "
