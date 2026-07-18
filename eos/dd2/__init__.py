@@ -9,7 +9,8 @@ from eos.dd2.species import SpeciesFlags, active_baryons
 from eos.dd2.solver import (
     EoSPoint, beta_warm_start, octet_warm_start,
     solve_beta_eq, solve_beta_eq_t0,
-    solve_beta_eq_octet, sweep_beta_eq_octet,
+    solve_octet, solve_beta_eq_octet, solve_fixed_yc_octet,
+    sweep_beta_eq_octet, sweep_octet,
     solve_composition, solve_composition_t0,
     solve_snm, solve_snm_t0,
 )
@@ -19,7 +20,8 @@ __all__ = [
     "Parametrization", "SpeciesFlags", "active_baryons",
     "EoSPoint", "beta_warm_start", "octet_warm_start",
     "solve_beta_eq", "solve_beta_eq_t0",
-    "solve_beta_eq_octet", "sweep_beta_eq_octet",
+    "solve_octet", "solve_beta_eq_octet", "solve_fixed_yc_octet",
+    "sweep_beta_eq_octet", "sweep_octet",
     "solve_composition", "solve_composition_t0",
     "solve_snm", "solve_snm_t0",
     "compute_nmp", "energy_per_baryon", "esym",

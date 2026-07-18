@@ -66,6 +66,7 @@ class EoSPoint:
     n_e: float = 0.0    # fm^-3 (net)
     n_mu: float = 0.0   # fm^-3 (net)
     mu_e: float = 0.0   # MeV
+    mu_S: float = 0.0   # MeV (strangeness potential; 0 unless strangeness fixed)
     phi0: float = 0.0   # MeV (hidden-strange vector; 0 without hyperons)
     composition: tuple = ()  # ((name, n_i [fm^-3]), ...) all active baryons
 
@@ -286,57 +287,67 @@ def solve_beta_eq_t0(par, n_B, x0=None, include_muons=True,
 # =============================================================================
 # OCTET (hyperonic) beta equilibrium — milestone M4
 # =============================================================================
-def _octet_x0(x, has_phi):
-    """Assemble the unknown vector [sigma, omega0, rho0, (phi0), muB~, muQ]."""
-    sigma, omega0, rho0, phi0, mutB, muQ = x
-    return [sigma, omega0, rho0, phi0, mutB, muQ] if has_phi \
-        else [sigma, omega0, rho0, mutB, muQ]
+def _octet_x0(fields, has_phi, has_muS):
+    """Pack [sigma, omega0, rho0, (phi0), muB~, muQ, (muS)] from a 7-tuple."""
+    sigma, omega0, rho0, phi0, mutB, muQ, muS = fields
+    x = [sigma, omega0, rho0]
+    if has_phi:
+        x.append(phi0)
+    x += [mutB, muQ]
+    if has_muS:
+        x.append(muS)
+    return x
 
 
-def octet_warm_start(point, has_phi):
+def octet_warm_start(point, has_phi, has_muS=False):
     """Unknown vector from a solved octet EoSPoint (for sweep continuation)."""
     return _octet_x0((point.sigma, point.omega0, point.rho0, point.phi0,
-                      point.mu_n - point.Sigma_R, -point.mu_e), has_phi)
+                      point.mu_n - point.Sigma_R, -point.mu_e, point.mu_S),
+                     has_phi, has_muS)
 
 
-def default_octet_guess(par, n_B, flags, T=0.0):
+def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False):
     """
     Seed the octet solve from the nucleon beta-eq solution (hyperons start at
     zero population and switch on as density rises). phi0 seeded slightly
-    negative to break the exact-zero symmetry.
+    negative to break the exact-zero symmetry; muS seeded at 0.
     """
     base = solve_beta_eq(par, n_B, T=T, include_muons=flags.muons,
                          include_photons=False, check_consistency=False)
     has_phi = flags.phi_field and flags.hyperons
     return _octet_x0((base.sigma, base.omega0, base.rho0, -1e-3,
-                      base.mu_n - base.Sigma_R, -base.mu_e), has_phi)
+                      base.mu_n - base.Sigma_R, -base.mu_e, 0.0),
+                     has_phi, has_muS)
 
 
-def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
-                        include_photons=True, check_consistency=True):
+def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
+                Y_C=0.0, strange_mode="eq", Y_S=0.0, include_photons=True,
+                check_consistency=True):
     """
-    Beta-equilibrium matter with the full active baryon set (report §1.7
-    mode 1; mu_S = mu_L = 0, charge neutrality) at density n_B [fm^-3] and
-    temperature T [MeV]. Hyperons/φ controlled by `flags` (SpeciesFlags).
+    General octet solve (report §1.7 unified scheme) at (n_B [fm^-3], T [MeV]).
 
-    Reduces to the nucleon problem when flags.hyperons is False (a consistency
-    cross-check against solve_beta_eq). Raises RuntimeError on non-convergence.
+    charge_mode='neutral' is beta equilibrium (leptons, charge-neutral);
+    'fixed' fixes the hadronic charge fraction to Y_C with no leptons (the
+    CompOSE general-purpose (nB,T,Yq) convention). strange_mode='fixed' adds
+    mu_S and fixes the strangeness fraction to Y_S. Raises RuntimeError on
+    non-convergence; asserts HVH (and, in beta mode, the beta condition).
     """
-    ctx = build_octet_ctx(par, n_B, flags, T=T)
+    ctx = build_octet_ctx(par, n_B, flags, T=T, charge_mode=charge_mode,
+                          Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S)
+    has_muS = ctx.has_muS
     guesses = [x0] if x0 is not None else []
-    guesses.append(default_octet_guess(par, n_B, flags, T=T))
+    guesses.append(default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS))
     sol = None
     for guess in guesses:
         sol = root(octet_residual, guess, args=(ctx,), method="hybr", tol=1e-13)
-        # Residual norm is the acceptance criterion (see solve_beta_eq).
         res_max = max(abs(r) for r in octet_residual(sol.x, ctx))
         if res_max <= RESIDUAL_TOL:
             break
     else:
         raise RuntimeError(
-            f"octet beta-equilibrium solve failed at n_B={n_B}, T={T}: "
-            f"{sol.message} (max residual {res_max:.2e}, "
-            f"tol {RESIDUAL_TOL:.0e})")
+            f"octet solve failed at n_B={n_B}, T={T} "
+            f"(charge={charge_mode}, strange={strange_mode}): {sol.message} "
+            f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
 
     st = assemble_octet(sol.x, ctx)
     if include_photons and T > 0.0:
@@ -344,19 +355,20 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
         st["eps"] += ph.e * hc3
         st["P"] += ph.P * hc3
         st["s"] += ph.s * hc3
-        st["mu_dot_n"] += 0.0
 
     hvh_rel = (st["eps"] + st["P"] - T * st["s"] - st["mu_dot_n"]) / st["eps"]
-    beta_res = st["mu_n"] - st["mu_p"] - st["mu_e"]
     if check_consistency:
         if abs(hvh_rel) > HVH_RTOL:
             raise ValueError(
                 f"Hugenholtz–Van Hove violated at n_B={n_B}, T={T} "
-                f"(octet): |{hvh_rel:.2e}| > {HVH_RTOL:.0e}")
-        if abs(beta_res) > 1e-6:
-            raise ValueError(
-                f"beta-equilibrium condition violated at n_B={n_B}, T={T}: "
-                f"mu_n - mu_p - mu_e = {beta_res:.2e} MeV")
+                f"(octet {charge_mode}/{strange_mode}): "
+                f"|{hvh_rel:.2e}| > {HVH_RTOL:.0e}")
+        if charge_mode == "neutral":
+            beta_res = st["mu_n"] - st["mu_p"] - st["mu_e"]
+            if abs(beta_res) > 1e-6:
+                raise ValueError(
+                    f"beta-equilibrium condition violated at n_B={n_B}, "
+                    f"T={T}: mu_n - mu_p - mu_e = {beta_res:.2e} MeV")
 
     dmap = st["densities"]
     return EoSPoint(
@@ -366,8 +378,34 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
         nu_n=st["nu_n"], nu_p=st["nu_p"], mu_n=st["mu_n"], mu_p=st["mu_p"],
         eps=st["eps"] / hc3, P=st["P"] / hc3, s=st["s"] / hc3,
         hvh_rel=float(hvh_rel), n_e=st["n_e"] / hc3, n_mu=st["n_mu"] / hc3,
-        mu_e=st["mu_e"], composition=tuple(sorted(dmap.items())),
+        mu_e=st["mu_e"], mu_S=st["mu_S"], composition=tuple(sorted(dmap.items())),
     )
+
+
+def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
+                        include_photons=True, check_consistency=True):
+    """
+    Beta-equilibrium matter with the full active baryon set (report §1.7
+    mode 1; mu_S = mu_L = 0, charge neutrality). Thin wrapper over solve_octet.
+    Reduces to the nucleon problem when flags.hyperons is False.
+    """
+    return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
+                       include_photons=include_photons,
+                       check_consistency=check_consistency)
+
+
+def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
+                         include_photons=True, check_consistency=True):
+    """
+    Fixed hadronic charge fraction Y_C (CompOSE general-purpose (nB,T,Yq)
+    convention: no leptons, mu_Q the Lagrange multiplier). Optionally also
+    fix the strangeness fraction Y_S (adds mu_S). Report §1.7 modes 2/3.
+    """
+    strange_mode = "fixed" if Y_S is not None else "eq"
+    return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="fixed",
+                       Y_C=Y_C, strange_mode=strange_mode, Y_S=(Y_S or 0.0),
+                       include_photons=include_photons,
+                       check_consistency=check_consistency)
 
 
 def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
@@ -385,11 +423,25 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
 
     Returns a list of EoSPoint in n_B_grid order.
     """
+    return sweep_octet(par, n_B_grid, flags, T=T, include_photons=include_photons,
+                       max_bisect=max_bisect, stop_at_boundary=stop_at_boundary)
+
+
+def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
+                strange_mode="eq", Y_S=0.0, include_photons=True,
+                max_bisect=6, stop_at_boundary=False):
+    """
+    Warm-started density sweep for any octet mode (report §3.4), with the same
+    step-bisection continuation and scalar-collapse boundary handling as the
+    beta-eq sweep. See solve_octet for the mode arguments.
+    """
     has_phi = flags.phi_field and flags.hyperons
+    has_muS = (strange_mode == "fixed")
 
     def solve_from(n_B, x0):
-        return solve_beta_eq_octet(par, n_B, flags, T=T, x0=x0,
-                                   include_photons=include_photons)
+        return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
+                           Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
+                           include_photons=include_photons)
 
     def step(n_prev, n_target, x0, depth):
         try:
@@ -399,8 +451,8 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
                 raise
             n_mid = 0.5 * (n_prev + n_target)
             p_mid = step(n_prev, n_mid, x0, depth + 1)
-            return step(n_mid, n_target, octet_warm_start(p_mid, has_phi),
-                        depth + 1)
+            return step(n_mid, n_target,
+                        octet_warm_start(p_mid, has_phi, has_muS), depth + 1)
 
     points, x0, n_prev = [], None, None
     for n_B in n_B_grid:
@@ -411,6 +463,6 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
                 break
             raise
         points.append(p)
-        x0 = octet_warm_start(p, has_phi)
+        x0 = octet_warm_start(p, has_phi, has_muS)
         n_prev = n_B
     return points
