@@ -35,6 +35,7 @@ COMPOSE_ROOT = os.path.expanduser("~/Desktop/Research/Compose")
 DD2_COMPOSE = os.path.join(COMPOSE_ROOT, "DD2_Compose")        # id 18, npe
 DD2_NOE_COMPOSE = os.path.join(COMPOSE_ROOT, "DD2_noe_Compose")  # id 17, np
 DD2Y_COMPOSE = os.path.join(COMPOSE_ROOT, "DD2Y_Compose")      # id 104, DD2Y
+DD2Y_NS = os.path.join(DD2Y_COMPOSE, "eos.thermo.ns")         # cold beta-eq 1D
 
 _CACHE = {}
 
@@ -127,3 +128,50 @@ def compare_slice(par, compose_dir=DD2_COMPOSE, T=5.0, Y_q=0.5,
         out[f"max_{key}"] = max(r[key] for r in rows)
     out["rows"] = rows
     return out
+
+
+def load_ns_table(ns_path=DD2Y_NS):
+    """
+    Cold catalyzed (beta-eq, T=0) 1D CompOSE NS table (eos.thermo.ns +
+    eos.nb.ns). Returns (n_B [fm^-3], P [MeV/fm^3], eps [MeV/fm^3],
+    mu_B [MeV], Y_q) sorted by n_B.
+    """
+    directory = os.path.dirname(ns_path)
+    nb = np.array([float(x) for x in
+                   open(os.path.join(directory, "eos.nb.ns")).read().split()[2:]])
+    lines = open(ns_path).read().splitlines()
+    m_n = float(lines[0].split()[0])
+    rows = np.array([[float(x) for x in ln.split()]
+                     for ln in lines[1:] if len(ln.split()) >= 10])
+    i_nb = rows[:, 1].astype(int) - 1
+    n_B = nb[i_nb]
+    # CompOSE eos.thermo columns (1-based, after the 3 index cols):
+    # Q1=p/nB, Q2=s/nB, Q3=muB/mn-1, ..., Q7=e/(nB mn)-1; trailing extra = Y_q.
+    P = rows[:, 3] * n_B
+    eps = (rows[:, 9] + 1.0) * m_n * n_B
+    mu_B = (rows[:, 5] + 1.0) * m_n
+    Y_q = rows[:, -2]
+    order = np.argsort(n_B)
+    return (n_B[order], P[order], eps[order], mu_B[order], Y_q[order])
+
+
+def compare_ns(points, ns_path=DD2Y_NS, nB_min=0.2, nB_max=1.2):
+    """
+    Compare a solved cold beta-eq sweep (list of EoSPoint) against the DD2Y
+    cold-NS CompOSE table over [nB_min, nB_max]. Returns max/median relative
+    errors on P, eps, mu_B. eps and mu_B are the robust indicators; P is a
+    small difference of large numbers and amplifies any composition/coupling
+    difference.
+    """
+    n_B, P, eps, mu_B, _ = load_ns_table(ns_path)
+    m = (n_B >= nB_min) & (n_B <= nB_max)
+    myN = np.array([p.n_B for p in points])
+    myP = np.array([p.P for p in points])
+    myE = np.array([p.eps for p in points])
+    myM = np.array([p.mu_n for p in points])
+    eP = np.abs(np.interp(n_B[m], myN, myP) / P[m] - 1.0)
+    eE = np.abs(np.interp(n_B[m], myN, myE) / eps[m] - 1.0)
+    eM = np.abs(np.interp(n_B[m], myN, myM) / mu_B[m] - 1.0)
+    return dict(n_points=int(m.sum()),
+                max_err_P=float(eP.max()), med_err_P=float(np.median(eP)),
+                max_err_eps=float(eE.max()), max_err_muB=float(eM.max()))

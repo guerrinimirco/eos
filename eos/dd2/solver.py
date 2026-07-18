@@ -32,6 +32,9 @@ from eos.dd2.physics.fields import vector_fields, rearrangement, field_eps_P
 from eos.dd2.physics.residual import (
     beta_eq_nucleon_nus, beta_eq_residual, make_beta_ctx,
 )
+from eos.dd2.physics.octet import (
+    assemble_octet, build_octet_ctx, octet_residual,
+)
 
 #: Hugenholtz–Van Hove residual gate, relative to eps (report §3.x).
 HVH_RTOL = 1.0e-8
@@ -63,10 +66,20 @@ class EoSPoint:
     n_e: float = 0.0    # fm^-3 (net)
     n_mu: float = 0.0   # fm^-3 (net)
     mu_e: float = 0.0   # MeV
+    phi0: float = 0.0   # MeV (hidden-strange vector; 0 without hyperons)
+    composition: tuple = ()  # ((name, n_i [fm^-3]), ...) all active baryons
 
     @property
     def Y_p(self):
         return self.n_p / self.n_B
+
+    @property
+    def composition_map(self):
+        return dict(self.composition)
+
+    def Y(self, name):
+        """Population fraction n_i / n_B of baryon `name` (0 if absent)."""
+        return self.composition_map.get(name, 0.0) / self.n_B
 
     @property
     def free_energy_density(self):
@@ -206,8 +219,11 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
     for guess in guesses:
         sol = root(beta_eq_residual, guess, args=(ctx,), method="hybr",
                    tol=1e-13)
+        # The residual norm is the real acceptance criterion: hybr can report
+        # success=False ("not making good progress") when it is already at the
+        # root but cannot improve past round-off.
         res_max = max(abs(r) for r in beta_eq_residual(sol.x, ctx))
-        if sol.success and res_max <= RESIDUAL_TOL:
+        if res_max <= RESIDUAL_TOL:
             break
     else:
         raise RuntimeError(
@@ -265,3 +281,105 @@ def solve_beta_eq_t0(par, n_B, x0=None, include_muons=True,
     """T=0 beta-equilibrium solve (M2 API)."""
     return solve_beta_eq(par, n_B, T=0.0, x0=x0, include_muons=include_muons,
                          check_consistency=check_consistency)
+
+
+# =============================================================================
+# OCTET (hyperonic) beta equilibrium — milestone M4
+# =============================================================================
+def _octet_x0(x, has_phi):
+    """Assemble the unknown vector [sigma, omega0, rho0, (phi0), muB~, muQ]."""
+    sigma, omega0, rho0, phi0, mutB, muQ = x
+    return [sigma, omega0, rho0, phi0, mutB, muQ] if has_phi \
+        else [sigma, omega0, rho0, mutB, muQ]
+
+
+def octet_warm_start(point, has_phi):
+    """Unknown vector from a solved octet EoSPoint (for sweep continuation)."""
+    return _octet_x0((point.sigma, point.omega0, point.rho0, point.phi0,
+                      point.mu_n - point.Sigma_R, -point.mu_e), has_phi)
+
+
+def default_octet_guess(par, n_B, flags, T=0.0):
+    """
+    Seed the octet solve from the nucleon beta-eq solution (hyperons start at
+    zero population and switch on as density rises). phi0 seeded slightly
+    negative to break the exact-zero symmetry.
+    """
+    base = solve_beta_eq(par, n_B, T=T, include_muons=flags.muons,
+                         include_photons=False, check_consistency=False)
+    has_phi = flags.phi_field and flags.hyperons
+    return _octet_x0((base.sigma, base.omega0, base.rho0, -1e-3,
+                      base.mu_n - base.Sigma_R, -base.mu_e), has_phi)
+
+
+def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
+                        include_photons=True, check_consistency=True):
+    """
+    Beta-equilibrium matter with the full active baryon set (report §1.7
+    mode 1; mu_S = mu_L = 0, charge neutrality) at density n_B [fm^-3] and
+    temperature T [MeV]. Hyperons/φ controlled by `flags` (SpeciesFlags).
+
+    Reduces to the nucleon problem when flags.hyperons is False (a consistency
+    cross-check against solve_beta_eq). Raises RuntimeError on non-convergence.
+    """
+    ctx = build_octet_ctx(par, n_B, flags, T=T)
+    guesses = [x0] if x0 is not None else []
+    guesses.append(default_octet_guess(par, n_B, flags, T=T))
+    sol = None
+    for guess in guesses:
+        sol = root(octet_residual, guess, args=(ctx,), method="hybr", tol=1e-13)
+        # Residual norm is the acceptance criterion (see solve_beta_eq).
+        res_max = max(abs(r) for r in octet_residual(sol.x, ctx))
+        if res_max <= RESIDUAL_TOL:
+            break
+    else:
+        raise RuntimeError(
+            f"octet beta-equilibrium solve failed at n_B={n_B}, T={T}: "
+            f"{sol.message} (max residual {res_max:.2e}, "
+            f"tol {RESIDUAL_TOL:.0e})")
+
+    st = assemble_octet(sol.x, ctx)
+    if include_photons and T > 0.0:
+        ph = photon_thermo(T)
+        st["eps"] += ph.e * hc3
+        st["P"] += ph.P * hc3
+        st["s"] += ph.s * hc3
+        st["mu_dot_n"] += 0.0
+
+    hvh_rel = (st["eps"] + st["P"] - T * st["s"] - st["mu_dot_n"]) / st["eps"]
+    beta_res = st["mu_n"] - st["mu_p"] - st["mu_e"]
+    if check_consistency:
+        if abs(hvh_rel) > HVH_RTOL:
+            raise ValueError(
+                f"Hugenholtz–Van Hove violated at n_B={n_B}, T={T} "
+                f"(octet): |{hvh_rel:.2e}| > {HVH_RTOL:.0e}")
+        if abs(beta_res) > 1e-6:
+            raise ValueError(
+                f"beta-equilibrium condition violated at n_B={n_B}, T={T}: "
+                f"mu_n - mu_p - mu_e = {beta_res:.2e} MeV")
+
+    dmap = st["densities"]
+    return EoSPoint(
+        n_B=n_B, T=T, n_n=dmap.get("n", 0.0), n_p=dmap.get("p", 0.0),
+        sigma=st["sigma"], omega0=st["omega0"], rho0=st["rho0"],
+        phi0=st["phi0"], m_eff=st["m_eff_n"], Sigma_R=st["Sigma_R"],
+        nu_n=st["nu_n"], nu_p=st["nu_p"], mu_n=st["mu_n"], mu_p=st["mu_p"],
+        eps=st["eps"] / hc3, P=st["P"] / hc3, s=st["s"] / hc3,
+        hvh_rel=float(hvh_rel), n_e=st["n_e"] / hc3, n_mu=st["n_mu"] / hc3,
+        mu_e=st["mu_e"], composition=tuple(sorted(dmap.items())),
+    )
+
+
+def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True):
+    """
+    Warm-started density sweep. Each point seeds the next through hyperon
+    onsets (report §3.4). Returns a list of EoSPoint in n_B_grid order.
+    """
+    has_phi = flags.phi_field and flags.hyperons
+    points, x0 = [], None
+    for n_B in n_B_grid:
+        p = solve_beta_eq_octet(par, n_B, flags, T=T, x0=x0,
+                                include_photons=include_photons)
+        points.append(p)
+        x0 = octet_warm_start(p, has_phi)
+    return points
