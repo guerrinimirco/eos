@@ -47,8 +47,26 @@ class Parametrization:
     d_omega: float
     gamma_rho: float             # Gamma_rho(n_sat)
     a_rho: float                 # exponential slope
+    #: Nucleon-mass convention of the uniform-matter kernel:
+    #: "average"  — both nucleons carry (m_n+m_p)/2. Convention of
+    #:              dd2_reference_validation.py; the §2.7 golden points and
+    #:              the M1/M2 gates are only reproducible in this mode.
+    #: "physical" — per-species m_n, m_p (HS(DD2)/CompOSE convention;
+    #:              needed for <0.1% isovector agreement with the tables).
+    nucleon_mass_mode: str = "average"
+
+    def kernel_masses(self):
+        """(m_kernel_n, m_kernel_p) per the nucleon_mass_mode convention."""
+        if self.nucleon_mass_mode == "average":
+            m = self.m_nucleon
+            return m, m
+        return self.m_n, self.m_p
 
     def __post_init__(self):
+        if self.nucleon_mass_mode not in ("average", "physical"):
+            raise ValueError(
+                f"nucleon_mass_mode must be 'average' or 'physical', "
+                f"got {self.nucleon_mass_mode!r}")
         for name in ("n_sat", "m_n", "m_p", "m_sigma", "m_omega", "m_rho",
                      "gamma_sigma", "gamma_omega", "gamma_rho",
                      "c_sigma", "c_omega"):

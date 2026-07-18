@@ -41,7 +41,9 @@ from eos.dd2.physics.thermo import kinetic_thermo
 
 class BetaCtx(NamedTuple):
     nB_nat: float        # target baryon density [MeV^3]
-    mbar: float          # average nucleon mass [MeV]
+    mbar: float          # average nucleon mass [MeV] (residual scaling)
+    m_kn: float          # kernel neutron mass [MeV] (par.kernel_masses)
+    m_kp: float          # kernel proton mass [MeV]
     m_sigma2: float      # [MeV^2]
     m_rho2: float        # [MeV^2]
     Gs: float            # Gamma_sigma(n_B target)
@@ -55,8 +57,9 @@ class BetaCtx(NamedTuple):
 
 def make_beta_ctx(par, n_B, T=0.0, include_muons=True):
     Gs, Gw, Gr, _, _, _ = par.couplings_at(n_B)
+    m_kn, m_kp = par.kernel_masses()
     return BetaCtx(
-        nB_nat=n_B * hc3, mbar=par.m_nucleon,
+        nB_nat=n_B * hc3, mbar=par.m_nucleon, m_kn=m_kn, m_kp=m_kp,
         m_sigma2=par.m_sigma ** 2, m_rho2=par.m_rho ** 2,
         Gs=Gs, Gw=Gw, Gr=Gr,
         m_e=Electron.mass, m_mu=Muon.mass, T=T, include_muons=include_muons,
@@ -64,11 +67,12 @@ def make_beta_ctx(par, n_B, T=0.0, include_muons=True):
 
 
 def beta_eq_nucleon_nus(x, ctx):
-    """Kinetic potentials (nu_n, nu_p) and m* from the unknown vector."""
+    """Kinetic potentials and effective masses from the unknown vector."""
     sigma, rho0, nu_n, muQ = x
-    ms = ctx.mbar - ctx.Gs * sigma
+    ms_n = ctx.m_kn - ctx.Gs * sigma
+    ms_p = ctx.m_kp - ctx.Gs * sigma
     nu_p = nu_n + muQ - (Proton.t3 - Neutron.t3) * ctx.Gr * rho0
-    return nu_n, nu_p, ms
+    return nu_n, nu_p, ms_n, ms_p
 
 
 def beta_eq_residual(x, ctx):
@@ -77,12 +81,12 @@ def beta_eq_residual(x, ctx):
     charge neutrality]. Zero exactly at the solved state.
     """
     sigma, rho0, _, muQ = x
-    nu_n, nu_p, ms = beta_eq_nucleon_nus(x, ctx)
-    if ms <= 0.0:
+    nu_n, nu_p, ms_n, ms_p = beta_eq_nucleon_nus(x, ctx)
+    if min(ms_n, ms_p) <= 0.0:
         return [1.0e6, 0.0, 0.0, 0.0]   # outside physical domain
 
-    n_n, _, _, _, ns_n = kinetic_thermo(nu_n, ms, 2.0, ctx.T)
-    n_p, _, _, _, ns_p = kinetic_thermo(nu_p, ms, 2.0, ctx.T)
+    n_n, _, _, _, ns_n = kinetic_thermo(nu_n, ms_n, 2.0, ctx.T)
+    n_p, _, _, _, ns_p = kinetic_thermo(nu_p, ms_p, 2.0, ctx.T)
     mu_e = -muQ
     n_e = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)[0]
     n_mu = (kinetic_thermo(mu_e, ctx.m_mu, 2.0, ctx.T)[0]

@@ -1,11 +1,10 @@
 """
 M3 gate: finite temperature (JEL integrals, entropy, free energy).
 
-Gate items testable without external data: the T -> 0 limit reproduces the
-M1/M2 (golden-checked) T = 0 states to the JEL accuracy floor, and the
-Hugenholtz–Van Hove identity with the Ts term holds at round-off across
-(n_B, T). The CompOSE DD2 finite-T slice (< 0.1%) is data-blocked: no DD2
-CompOSE table is present locally (only SFHO/SFHOY under Research/Compose).
+The T -> 0 limit reproduces the M1/M2 (golden-checked) T = 0 states to the
+JEL accuracy floor, and the Hugenholtz–Van Hove identity with the Ts term
+holds at round-off across (n_B, T). The CompOSE DD2 finite-T slice part of
+the gate lives in test_dd2_m3_compose.py (needs the downloaded table).
 
 Tolerances below are ~3x the measured JEL floor at T = 0.01 MeV.
 """

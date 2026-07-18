@@ -74,17 +74,17 @@ class EoSPoint:
         return self.eps - self.T * self.s
 
 
-def _nucleon_nus(n_n, n_p, ms, T):
-    """Kinetic potentials hitting the target densities [fm^-3] at mass ms."""
+def _nucleon_nus(n_n, n_p, ms_n, ms_p, T):
+    """Kinetic potentials hitting the target densities [fm^-3]."""
     if T == 0.0:
-        nu_n = float(xp.sqrt(kF_from_n(n_n * hc3, 2.0) ** 2 + ms ** 2)) \
+        nu_n = float(xp.sqrt(kF_from_n(n_n * hc3, 2.0) ** 2 + ms_n ** 2)) \
             if n_n > 0.0 else 0.0
-        nu_p = float(xp.sqrt(kF_from_n(n_p * hc3, 2.0) ** 2 + ms ** 2)) \
+        nu_p = float(xp.sqrt(kF_from_n(n_p * hc3, 2.0) ** 2 + ms_p ** 2)) \
             if n_p > 0.0 else 0.0
         return nu_n, nu_p
     from eos.general.fermi_integrals import invert_fermi_density
-    nu_n = invert_fermi_density(n_n, T, ms, 2.0) if n_n > 0.0 else 0.0
-    nu_p = invert_fermi_density(n_p, T, ms, 2.0) if n_p > 0.0 else 0.0
+    nu_n = invert_fermi_density(n_n, T, ms_n, 2.0) if n_n > 0.0 else 0.0
+    nu_p = invert_fermi_density(n_p, T, ms_p, 2.0) if n_p > 0.0 else 0.0
     return nu_n, nu_p
 
 
@@ -99,21 +99,21 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
     n_B = n_n + n_p
     if n_B <= 0.0:
         raise ValueError("solve_composition requires n_n + n_p > 0")
-    mbar = par.m_nucleon
+    m_kn, m_kp = par.kernel_masses()
     Gs, _, _, _, _, _ = par.couplings_at(n_B)
 
     def gap(sig):
-        ms = mbar - Gs * sig
-        nu_n, nu_p = _nucleon_nus(n_n, n_p, ms, T)
-        ns = (kinetic_thermo(nu_n, ms, 2.0, T)[4]
-              + kinetic_thermo(nu_p, ms, 2.0, T)[4])
+        ms_n, ms_p = m_kn - Gs * sig, m_kp - Gs * sig
+        nu_n, nu_p = _nucleon_nus(n_n, n_p, ms_n, ms_p, T)
+        ns = (kinetic_thermo(nu_n, ms_n, 2.0, T)[4]
+              + kinetic_thermo(nu_p, ms_p, 2.0, T)[4])
         return sig - Gs * ns / par.m_sigma ** 2
 
-    sigma = brentq(gap, 0.0, 0.999 * mbar / Gs, xtol=1e-12)
-    ms = mbar - Gs * sigma
-    nu_n, nu_p = _nucleon_nus(n_n, n_p, ms, T)
-    tn = kinetic_thermo(nu_n, ms, 2.0, T)
-    tp = kinetic_thermo(nu_p, ms, 2.0, T)
+    sigma = brentq(gap, 0.0, 0.999 * min(m_kn, m_kp) / Gs, xtol=1e-12)
+    ms_n, ms_p = m_kn - Gs * sigma, m_kp - Gs * sigma
+    nu_n, nu_p = _nucleon_nus(n_n, n_p, ms_n, ms_p, T)
+    tn = kinetic_thermo(nu_n, ms_n, 2.0, T)
+    tp = kinetic_thermo(nu_p, ms_p, 2.0, T)
 
     # Assemble everything from ONE consistent density set (the evaluated
     # densities; at T=0 they equal the targets, at T>0 to inversion tol).
@@ -148,7 +148,7 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
         n_B=float(nB_nat / hc3), T=T,
         n_n=float(nn_nat / hc3), n_p=float(np_nat / hc3),
         sigma=float(sigma), omega0=float(omega0), rho0=float(rho0),
-        m_eff=float(ms), Sigma_R=float(Sig_R),
+        m_eff=float(0.5 * (ms_n + ms_p)), Sigma_R=float(Sig_R),
         nu_n=float(nu_n), nu_p=float(nu_p),
         mu_n=float(mu_n), mu_p=float(mu_p),
         eps=float(eps_nat / hc3), P=float(P_nat / hc3),
@@ -217,9 +217,9 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
 
     # Converged composition -> assemble the hadronic sector through the same
     # path as the fixed-composition solve (one source of truth).
-    nu_n, nu_p, ms = beta_eq_nucleon_nus(sol.x, ctx)
-    n_n = kinetic_thermo(nu_n, ms, 2.0, T)[0] / hc3
-    n_p = kinetic_thermo(nu_p, ms, 2.0, T)[0] / hc3
+    nu_n, nu_p, ms_n, ms_p = beta_eq_nucleon_nus(sol.x, ctx)
+    n_n = kinetic_thermo(nu_n, ms_n, 2.0, T)[0] / hc3
+    n_p = kinetic_thermo(nu_p, ms_p, 2.0, T)[0] / hc3
     base = solve_composition(par, n_n, n_p, T=T,
                              check_consistency=check_consistency)
 
