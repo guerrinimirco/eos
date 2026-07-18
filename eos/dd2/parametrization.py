@@ -58,6 +58,13 @@ class Parametrization:
     #: (name, x_sigma, x_omega, x_rho, g_phi); empty for nucleon-only params.
     #: g_phi is the ABSOLUTE constant φ coupling (DD2Y: no density dependence).
     hyperon_couplings: tuple = ()
+    #: Δ-isobar coupling ratios x_iΔ = Γ_iΔ/Γ_iN (report §2.4; free params,
+    #: literature x_Δσ~1.0–1.3, x_Δω~1.0). Δ has S=0, so no φ coupling.
+    #: Inert unless SpeciesFlags.deltas is on. Defaults: Δ couples like the
+    #: nucleon to σ/ω/ρ (within the literature range; override per model).
+    x_Delta_sigma: float = 1.0
+    x_Delta_omega: float = 1.0
+    x_Delta_rho: float = 1.0
     #: Nucleon-mass convention of the uniform-matter kernel:
     #: "average"  — both nucleons carry (m_n+m_p)/2. Convention of
     #:              dd2_reference_validation.py; the §2.7 golden points and

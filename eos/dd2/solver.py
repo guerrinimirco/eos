@@ -370,16 +370,47 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
     )
 
 
-def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True):
+def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
+                        max_bisect=6, stop_at_boundary=False):
     """
-    Warm-started density sweep. Each point seeds the next through hyperon
-    onsets (report §3.4). Returns a list of EoSPoint in n_B_grid order.
+    Warm-started density sweep with step-bisection continuation (report §3.4).
+    Each point seeds the next; through a sharp onset where the warm start
+    would jump branches, the step to the next density is bisected (recursively,
+    up to max_bisect levels) so the predictor stays in the corrector's basin.
+
+    A Δ-matter model can hit a scalar-collapse feasibility boundary (m* -> 0)
+    at high density (report §2.6). With stop_at_boundary=True the sweep returns
+    the valid prefix instead of raising once every sub-step past the boundary
+    has failed; otherwise it raises (no silent truncation by default).
+
+    Returns a list of EoSPoint in n_B_grid order.
     """
     has_phi = flags.phi_field and flags.hyperons
-    points, x0 = [], None
+
+    def solve_from(n_B, x0):
+        return solve_beta_eq_octet(par, n_B, flags, T=T, x0=x0,
+                                   include_photons=include_photons)
+
+    def step(n_prev, n_target, x0, depth):
+        try:
+            return solve_from(n_target, x0)
+        except RuntimeError:
+            if depth >= max_bisect or n_prev is None:
+                raise
+            n_mid = 0.5 * (n_prev + n_target)
+            p_mid = step(n_prev, n_mid, x0, depth + 1)
+            return step(n_mid, n_target, octet_warm_start(p_mid, has_phi),
+                        depth + 1)
+
+    points, x0, n_prev = [], None, None
     for n_B in n_B_grid:
-        p = solve_beta_eq_octet(par, n_B, flags, T=T, x0=x0,
-                                include_photons=include_photons)
+        try:
+            p = step(n_prev, n_B, x0, 0)
+        except RuntimeError:
+            if stop_at_boundary and points:
+                break
+            raise
         points.append(p)
         x0 = octet_warm_start(p, has_phi)
+        n_prev = n_B
     return points

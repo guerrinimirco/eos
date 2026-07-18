@@ -238,32 +238,32 @@ XiM = Particle(
 
 # =============================================================================
 # BARYONS - DELTA RESONANCES (J = 3/2, S = 0)
-# Isospin quartet: I = 3/2
-# t3 left unset: the τ₃ normalization for the quartet is pinned at the DD2 M5
-# milestone (Δ onset gate) — arithmetic on t3=None fails loudly if used early.
+# Isospin quartet: I = 3/2. τ₃ = 2·I₃ (the report §1.4 rule extended to the
+# quartet), so t3 ∈ {+3,+1,-1,-3} and the ρ coupling ratio x_Δρ = g_ρΔ/g_ρN
+# multiplies these — consistent with the nucleon τ₃=±1 normalization.
 # =============================================================================
 DeltaPP = Particle(
     name="Delta++", mass=1232.0, spin=1.5,
     charge=+2.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=0.0, isospin_3=+1.5, g_degen=4.0
+    strangeness=0.0, isospin_3=+1.5, t3=+3.0, g_degen=4.0
 )
 
 DeltaP = Particle(
     name="Delta+", mass=1232.0, spin=1.5,
     charge=+1.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=0.0, isospin_3=+0.5, g_degen=4.0
+    strangeness=0.0, isospin_3=+0.5, t3=+1.0, g_degen=4.0
 )
 
 Delta0 = Particle(
     name="Delta0", mass=1232.0, spin=1.5,
     charge=0.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=0.0, isospin_3=-0.5, g_degen=4.0
+    strangeness=0.0, isospin_3=-0.5, t3=-1.0, g_degen=4.0
 )
 
 DeltaM = Particle(
     name="Delta-", mass=1232.0, spin=1.5,
     charge=-1.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=0.0, isospin_3=-1.5, g_degen=4.0
+    strangeness=0.0, isospin_3=-1.5, t3=-3.0, g_degen=4.0
 )
 
 

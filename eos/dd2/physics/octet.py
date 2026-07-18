@@ -65,15 +65,16 @@ def build_baryon_specs(par, flags):
     specs = []
     for b in active_baryons(flags):
         if b.name == "n":
-            mass = m_kn
+            mass, (xs, xw, xr, gphi) = m_kn, (1.0, 1.0, 1.0, 0.0)
         elif b.name == "p":
-            mass = m_kp
-        else:
+            mass, (xs, xw, xr, gphi) = m_kp, (1.0, 1.0, 1.0, 0.0)
+        elif b.name.startswith("Delta"):
+            # Δ: S=0 so no φ; ratio couplings from the parametrization.
             mass = b.mass
-        if b.name in ("n", "p"):
-            xs, xw, xr, gphi = 1.0, 1.0, 1.0, 0.0
+            xs, xw, xr, gphi = (par.x_Delta_sigma, par.x_Delta_omega,
+                                par.x_Delta_rho, 0.0)
         else:
-            xs, xw, xr, gphi = hyp[b.name]
+            mass, (xs, xw, xr, gphi) = b.mass, hyp[b.name]
         if b.t3 is None:
             raise ValueError(f"baryon {b.name} has no t3 set (needed for rho)")
         specs.append((mass, b.charge, b.t3, b.g_degen, xs, xw, xr, gphi))

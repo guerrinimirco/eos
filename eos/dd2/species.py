@@ -6,8 +6,8 @@ SpeciesFlags — every degree of freedom is an explicit named boolean
 by "its coupling happens to be zero".
 
 Milestone wiring status:
-    hyperons, muons, neutrinos-off, photons, phi_field  — M4 (this milestone)
-    deltas                                              — M5
+    hyperons, muons, neutrinos-off, photons, phi_field  — M4
+    deltas                                              — M5 (this milestone)
     sigma_star, include_pseudoscalars,
     include_thermal_vectors                             — later milestones
 Setting a not-yet-wired flag raises (no silent no-op).
@@ -20,7 +20,7 @@ from eos.general.particles import NUCLEONS, HYPERONS_OCTET, DELTAS
 @dataclass(frozen=True)
 class SpeciesFlags:
     hyperons: bool = False              # Λ, Σ, Ξ octet
-    deltas: bool = False                # Δ quartet (M5)
+    deltas: bool = False                # Δ quartet
     muons: bool = True                  # e always on; μ optional
     neutrinos: bool = False             # only trapped / fixed-Y_L modes
     photons: bool = True                # radiation (matters only at T>0)
@@ -31,8 +31,6 @@ class SpeciesFlags:
 
     def __post_init__(self):
         unwired = []
-        if self.deltas:
-            unwired.append("deltas (M5)")
         if self.sigma_star:
             unwired.append("sigma_star (later milestone)")
         if self.include_pseudoscalars:

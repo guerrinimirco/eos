@@ -29,7 +29,10 @@ def build_core_table(par, flags, n_lo=0.05, n_hi=1.25, n_points=150):
     geometric density grid and warm-started continuation through the onsets.
     """
     grid = np.geomspace(n_lo, n_hi, n_points)
-    points = sweep_beta_eq_octet(par, grid, flags, T=0.0, include_photons=False)
+    # stop_at_boundary: a Δ model may hit scalar collapse (m*->0) before n_hi;
+    # take the valid prefix as the core EoS (report §2.6 feasibility).
+    points = sweep_beta_eq_octet(par, grid, flags, T=0.0,
+                                 include_photons=False, stop_at_boundary=True)
     P = np.array([p.P for p in points])
     eps = np.array([p.eps for p in points])
     nB = np.array([p.n_B for p in points])
