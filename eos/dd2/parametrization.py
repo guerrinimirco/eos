@@ -1,0 +1,170 @@
+"""
+parametrization.py
+====================
+DD2 parametrization container and construction routes (report §3.2).
+
+Routes implemented:
+    from_dd2_defaults()   — published DD2 table (Typel et al. 2010, Tables II–III)
+    from_microscopic(...) — user-supplied coefficients; dependent a_i, d_i derived
+                            from the internal constraints when omitted
+    from_nmp(...)         — NMP inversion cascade, milestone M8 (not yet built)
+
+Every construction is validated in __post_init__ (the M0 ingest gate):
+positivity, f_i(1)=1 and d_i=1/sqrt(3 c_i) to INGEST_TOL.
+
+Units: n_sat in fm^-3, masses in MeV, couplings dimensionless.
+"""
+import math
+from dataclasses import dataclass
+
+from eos.general.physics_constants import hc3
+from eos.dd2.couplings import (
+    rational_f, rational_df, exponential_f, derived_a, derived_d,
+)
+
+#: Ingest-identity tolerance: the published table obeys the internal
+#: constraints to 6 significant digits (report §2.1).
+INGEST_TOL = 2.0e-6
+
+
+@dataclass(frozen=True)
+class Parametrization:
+    n_sat: float                 # fm^-3 (also the coupling reference density)
+    m_n: float                   # MeV
+    m_p: float                   # MeV
+    m_sigma: float               # MeV
+    m_omega: float               # MeV
+    m_rho: float                 # MeV
+    gamma_sigma: float           # Gamma_sigma(n_sat)
+    a_sigma: float
+    b_sigma: float
+    c_sigma: float
+    d_sigma: float
+    gamma_omega: float           # Gamma_omega(n_sat)
+    a_omega: float
+    b_omega: float
+    c_omega: float
+    d_omega: float
+    gamma_rho: float             # Gamma_rho(n_sat)
+    a_rho: float                 # exponential slope
+
+    def __post_init__(self):
+        for name in ("n_sat", "m_n", "m_p", "m_sigma", "m_omega", "m_rho",
+                     "gamma_sigma", "gamma_omega", "gamma_rho",
+                     "c_sigma", "c_omega"):
+            if getattr(self, name) <= 0.0:
+                raise ValueError(f"Parametrization: {name} must be > 0, "
+                                 f"got {getattr(self, name)}")
+        for meson in ("sigma", "omega"):
+            a = getattr(self, f"a_{meson}")
+            b = getattr(self, f"b_{meson}")
+            c = getattr(self, f"c_{meson}")
+            d = getattr(self, f"d_{meson}")
+            err_f1 = abs(rational_f(1.0, a, b, c, d) - 1.0)
+            if err_f1 > INGEST_TOL:
+                raise ValueError(
+                    f"Parametrization: f_{meson}(1) = 1 violated by {err_f1:.2e} "
+                    f"(constraint: a_{meson} is dependent on b, c, d)")
+            err_d = abs(d - derived_d(c))
+            if err_d > INGEST_TOL:
+                raise ValueError(
+                    f"Parametrization: d_{meson} = 1/sqrt(3 c_{meson}) violated "
+                    f"by {err_d:.2e} (constraint: f_{meson}''(0) = 0)")
+
+    # ------------------------------------------------------------- properties
+    @property
+    def m_nucleon(self):
+        """Average nucleon mass used by the uniform-matter kernel (MeV)."""
+        return 0.5 * (self.m_n + self.m_p)
+
+    # ------------------------------------------------------------- couplings
+    def couplings_at(self, n_B):
+        """
+        All couplings and their density derivatives at total baryon density
+        n_B [fm^-3].
+
+        Returns:
+            (G_sigma, G_omega, G_rho, dG_sigma, dG_omega, dG_rho)
+            with G_i dimensionless and dG_i = dGamma_i/dn_B in MeV^-3
+            (derivative w.r.t. the natural-unit density n_B * hc^3).
+        """
+        x = n_B / self.n_sat
+        nsat_nat = self.n_sat * hc3
+        Gs = self.gamma_sigma * rational_f(x, self.a_sigma, self.b_sigma,
+                                           self.c_sigma, self.d_sigma)
+        Gw = self.gamma_omega * rational_f(x, self.a_omega, self.b_omega,
+                                           self.c_omega, self.d_omega)
+        Gr = self.gamma_rho * exponential_f(x, self.a_rho)
+        dGs = self.gamma_sigma * rational_df(x, self.a_sigma, self.b_sigma,
+                                             self.c_sigma, self.d_sigma) / nsat_nat
+        dGw = self.gamma_omega * rational_df(x, self.a_omega, self.b_omega,
+                                             self.c_omega, self.d_omega) / nsat_nat
+        dGr = -self.a_rho * Gr / nsat_nat
+        return Gs, Gw, Gr, dGs, dGw, dGr
+
+    # ----------------------------------------------------------- constructors
+    @classmethod
+    def from_dd2_defaults(cls):
+        """Published DD2 table, transcribed verbatim (report §2.1)."""
+        return cls(
+            n_sat=0.149065,
+            m_n=939.56536, m_p=938.27203,
+            m_sigma=546.212459, m_omega=783.0, m_rho=763.0,
+            gamma_sigma=10.686681, a_sigma=1.357630, b_sigma=0.634442,
+            c_sigma=1.005358, d_sigma=0.575810,
+            gamma_omega=13.342362, a_omega=1.369718, b_omega=0.496475,
+            c_omega=0.817753, d_omega=0.638452,
+            gamma_rho=3.626940, a_rho=0.518903,
+        )
+
+    @classmethod
+    def from_microscopic(cls, *, n_sat, gamma_sigma, b_sigma, c_sigma,
+                         gamma_omega, b_omega, c_omega, gamma_rho, a_rho,
+                         a_sigma=None, d_sigma=None, a_omega=None, d_omega=None,
+                         m_n=939.56536, m_p=938.27203,
+                         m_sigma=546.212459, m_omega=783.0, m_rho=763.0):
+        """
+        User-supplied microscopic coefficients. Omitted a_i/d_i are derived
+        from the internal constraints; supplied ones are validated against them.
+        Masses default to the DD2 values.
+        """
+        if c_sigma <= 0.0 or c_omega <= 0.0:
+            raise ValueError("Parametrization: c_sigma and c_omega must be > 0 "
+                             f"(got {c_sigma}, {c_omega})")
+        if d_sigma is None:
+            d_sigma = float(derived_d(c_sigma))
+        if a_sigma is None:
+            a_sigma = float(derived_a(b_sigma, c_sigma, d_sigma))
+        if d_omega is None:
+            d_omega = float(derived_d(c_omega))
+        if a_omega is None:
+            a_omega = float(derived_a(b_omega, c_omega, d_omega))
+        return cls(
+            n_sat=n_sat, m_n=m_n, m_p=m_p,
+            m_sigma=m_sigma, m_omega=m_omega, m_rho=m_rho,
+            gamma_sigma=gamma_sigma, a_sigma=a_sigma, b_sigma=b_sigma,
+            c_sigma=c_sigma, d_sigma=d_sigma,
+            gamma_omega=gamma_omega, a_omega=a_omega, b_omega=b_omega,
+            c_omega=c_omega, d_omega=d_omega,
+            gamma_rho=gamma_rho, a_rho=a_rho,
+        )
+
+    @classmethod
+    def from_nmp(cls, *args, **kwargs):
+        """NMP -> couplings inversion cascade (report §2.5). Built at M8."""
+        raise NotImplementedError(
+            "Parametrization.from_nmp is milestone M8; "
+            "use from_dd2_defaults() or from_microscopic().")
+
+
+def _check_dd2_defaults():
+    """Standalone ingest check, mirrors the M0 gate."""
+    p = Parametrization.from_dd2_defaults()
+    for meson in ("sigma", "omega"):
+        a, b, c, d = (getattr(p, f"{k}_{meson}") for k in "abcd")
+        print(f"{meson}: |f(1)-1| = {abs(rational_f(1.0, a, b, c, d) - 1.0):.2e}, "
+              f"|d - 1/sqrt(3c)| = {abs(d - 1.0 / math.sqrt(3.0 * c)):.2e}")
+
+
+if __name__ == "__main__":
+    _check_dd2_defaults()

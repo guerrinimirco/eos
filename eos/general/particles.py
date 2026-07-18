@@ -43,18 +43,22 @@ class Particle:
         lepton_no: Lepton number L (+1 for leptons, 0 otherwise)
         mass: Rest mass in MeV (optional for generic particles)
         charge: Electric charge Q in units of e (optional)
-        strangeness: S = (# of s-quarks) - (# of anti-s quarks) with s→+1 
+        strangeness: S = (# of s-quarks) - (# of anti-s quarks) with s→+1
         isospin_3: Third component of isospin I₃ (optional)
+        t3: Isospin eigenvalue τ₃ in the RMF ρ-coupling convention
+            (p=+1, n=−1, Σ±=±1, Ξ0/Ξ−=±1, Λ=0). This is what density-dependent
+            couplings like DD2's Γ_ρ are tabulated against — NOT I₃=±½.
     """
     name: str
     spin: float                          # J
     g_degen: float                       # Degeneracy (2J+1) × color
     baryon_no: float = 0.0               # B
-    lepton_no: float = 0.0               # L  
+    lepton_no: float = 0.0               # L
     mass: Optional[float] = None         # MeV (None for generic)
     charge: Optional[float] = None       # Q in units of e
     strangeness: Optional[float] = None  # S (s-quark = +1)
     isospin_3: Optional[float] = None    # I₃
+    t3: Optional[float] = None           # τ₃ (RMF ρ-coupling convention, ±1)
     
     @property
     def is_boson(self) -> bool:
@@ -138,6 +142,7 @@ def create_antiparticle(p: Particle, name: Optional[str] = None) -> Particle:
         lepton_no=-p.lepton_no,
         strangeness=-p.strangeness,
         isospin_3=-p.isospin_3,
+        t3=-p.t3 if p.t3 is not None else None,
         g_degen=p.g_degen
     )
 
@@ -177,13 +182,13 @@ AntiNeutrino = create_antiparticle(Neutrino, "nu_bar")
 Proton = Particle(
     name="p", mass=938.2721, spin=0.5,
     charge=+1.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=0.0, isospin_3=+0.5, g_degen=2.0
+    strangeness=0.0, isospin_3=+0.5, t3=+1.0, g_degen=2.0
 )
 
 Neutron = Particle(
     name="n", mass=939.5654, spin=0.5,
     charge=0.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=0.0, isospin_3=-0.5, g_degen=2.0
+    strangeness=0.0, isospin_3=-0.5, t3=-1.0, g_degen=2.0
 )
 
 
@@ -195,45 +200,47 @@ Neutron = Particle(
 Lambda = Particle(
     name="Lambda", mass=1115.683, spin=0.5,
     charge=0.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=+1.0, isospin_3=0.0, g_degen=2.0
+    strangeness=+1.0, isospin_3=0.0, t3=0.0, g_degen=2.0
 )
 
 # --- Sigma: I = 1 triplet, S = +1 ---
 SigmaP = Particle(
     name="Sigma+", mass=1189.37, spin=0.5,
     charge=+1.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=+1.0, isospin_3=+1.0, g_degen=2.0
+    strangeness=+1.0, isospin_3=+1.0, t3=+1.0, g_degen=2.0
 )
 
 Sigma0 = Particle(
     name="Sigma0", mass=1192.642, spin=0.5,
     charge=0.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=+1.0, isospin_3=0.0, g_degen=2.0
+    strangeness=+1.0, isospin_3=0.0, t3=0.0, g_degen=2.0
 )
 
 SigmaM = Particle(
     name="Sigma-", mass=1197.449, spin=0.5,
     charge=-1.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=+1.0, isospin_3=-1.0, g_degen=2.0
+    strangeness=+1.0, isospin_3=-1.0, t3=-1.0, g_degen=2.0
 )
 
 # --- Xi (Cascade): I = 1/2 doublet, S = +2 ---
 Xi0 = Particle(
     name="Xi0", mass=1314.86, spin=0.5,
     charge=0.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=+2.0, isospin_3=+0.5, g_degen=2.0
+    strangeness=+2.0, isospin_3=+0.5, t3=+1.0, g_degen=2.0
 )
 
 XiM = Particle(
     name="Xi-", mass=1321.71, spin=0.5,
     charge=-1.0, baryon_no=1.0, lepton_no=0.0,
-    strangeness=+2.0, isospin_3=-0.5, g_degen=2.0
+    strangeness=+2.0, isospin_3=-0.5, t3=-1.0, g_degen=2.0
 )
 
 
 # =============================================================================
 # BARYONS - DELTA RESONANCES (J = 3/2, S = 0)
 # Isospin quartet: I = 3/2
+# t3 left unset: the τ₃ normalization for the quartet is pinned at the DD2 M5
+# milestone (Δ onset gate) — arithmetic on t3=None fails loudly if used early.
 # =============================================================================
 DeltaPP = Particle(
     name="Delta++", mass=1232.0, spin=1.5,
