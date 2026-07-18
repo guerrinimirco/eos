@@ -6,8 +6,9 @@ decision. Grouped by theme; each item notes **what I did**, **why**, and **what
 would change if we decide differently**. Nothing here blocks the current build —
 these are for review.
 
-Status at time of writing: M0–M5 complete, M6 partial (fixed-Y_C/Y_S), 71 tests
-green. Continuing M7→M10.
+Status: M0–M8 + M10 complete, M6 partial (fixed-Y_C/Y_S), 91 tests green,
+run_full_check passes all 5 checks. **Only M9 (JAX eos_fast) remains** — see
+§E4, the main open decision.
 
 ---
 
