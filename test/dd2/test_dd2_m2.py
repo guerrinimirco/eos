@@ -53,7 +53,7 @@ def test_warm_start_sweep(par):
     for n_B in NB_GRID:
         p = solve_beta_eq_t0(par, n_B, x0=x0)
         x0 = beta_warm_start(p)
-    assert p.n_B == NB_GRID[-1]
+    assert p.n_B == pytest.approx(NB_GRID[-1], rel=1e-12)
 
 
 def test_no_muons_flag(par):
