@@ -15,9 +15,11 @@ from eos.dd2.solver import (
     solve_snm, solve_snm_t0,
 )
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
+from eos.dd2.nmp_inverter import invert_nmp, InversionStatus
 
 __all__ = [
     "Parametrization", "SpeciesFlags", "active_baryons",
+    "invert_nmp", "InversionStatus",
     "EoSPoint", "beta_warm_start", "octet_warm_start",
     "solve_beta_eq", "solve_beta_eq_t0",
     "solve_octet", "solve_beta_eq_octet", "solve_fixed_yc_octet",

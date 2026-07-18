@@ -223,11 +223,20 @@ class Parametrization:
         return replace(base, hyperon_couplings=tuple(rows))
 
     @classmethod
-    def from_nmp(cls, *args, **kwargs):
-        """NMP -> couplings inversion cascade (report §2.5). Built at M8."""
-        raise NotImplementedError(
-            "Parametrization.from_nmp is milestone M8; "
-            "use from_dd2_defaults() or from_microscopic().")
+    def from_nmp(cls, nmp, m_sigma=546.212459, return_status=False):
+        """
+        Invert nuclear-matter parameters to DD2 nucleon couplings (report §2.5
+        cascade). nmp: dict with {n_sat, E_sat, m_eff_ratio, K_sat, Q_sat,
+        E_sym, L_sym}. Returns the Parametrization, or (Parametrization,
+        InversionStatus) if return_status.
+
+        Hyperon/Δ sectors attach on top (same SU(6)+U_Y recipe as
+        from_dd2y_defaults / the x_Delta_* fields) once the nucleon sector is
+        set; not folded in here.
+        """
+        from eos.dd2.nmp_inverter import invert_nmp
+        par, status = invert_nmp(nmp, m_sigma=m_sigma)
+        return (par, status) if return_status else par
 
 
 def _check_dd2_defaults():
