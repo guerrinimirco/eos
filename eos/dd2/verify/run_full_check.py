@@ -19,8 +19,7 @@ import os
 import numpy as np
 
 from eos.dd2 import (
-    Parametrization, SpeciesFlags, solve_snm, solve_beta_eq_octet,
-    sweep_beta_eq_octet,
+    Parametrization, SpeciesFlags, solve_snm, solve_beta_eq_octet, solve_octet,
 )
 from eos.dd2.coefficients import sound_speed_eq, thermal_index
 from eos.dd2.verify.tov import mass_radius
@@ -98,6 +97,21 @@ def _check_coefficients(par, flags, grid):
                        f"max c_s^2={worst_cs:.3f} Gamma_th={gth:.3f}")
 
 
+def _check_backend_parity(par, flags, grid):
+    """eos_fast (analytic Jacobian) vs eos_ref (numeric): same root (report
+    §3.7 check 4). Same math, different derivative path — agree to ~round-off."""
+    worst = 0.0
+    for n_B in grid:
+        a = solve_octet(par, n_B, flags, include_photons=False, analytic_jac=True)
+        r = solve_octet(par, n_B, flags, include_photons=False, analytic_jac=False)
+        for f in ("eps", "P", "mu_n", "sigma", "omega0"):
+            va, vr = getattr(a, f), getattr(r, f)
+            if abs(vr) > 1e-9:
+                worst = max(worst, abs(va / vr - 1.0))
+    return CheckResult("backend parity", worst < 1e-6, worst,
+                       "eos_fast (analytic J) vs eos_ref")
+
+
 def _check_compose(par):
     from eos.dd2.verify.compose import DD2_COMPOSE, compare_slice
     if not os.path.isfile(os.path.join(DD2_COMPOSE, "eos.thermo")):
@@ -120,6 +134,7 @@ def run_full_check(par=None, flags=None, grid=None, include_tov=True):
     report.results.append(_check_golden(par))
     report.results.append(_check_identities(par, flags, grid))
     report.results.append(_check_coefficients(par, flags, grid))
+    report.results.append(_check_backend_parity(par, flags, grid))
     report.results.append(_check_compose(par))
     if include_tov:
         report.results.append(_check_tov(par, flags))

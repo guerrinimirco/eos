@@ -17,6 +17,7 @@ from eos.dd2.solver import (
 from eos.dd2.table import (
     TableSpec, TableResult, build_table, solve_octet_at_entropy,
 )
+from eos.dd2.physics.jacobian import octet_jacobian, kinetic_derivs
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp_inverter import invert_nmp, InversionStatus
 from eos.dd2.coefficients import (
@@ -34,6 +35,7 @@ __all__ = [
     "solve_composition", "solve_composition_t0",
     "solve_snm", "solve_snm_t0",
     "TableSpec", "TableResult", "build_table", "solve_octet_at_entropy",
+    "octet_jacobian", "kinetic_derivs",
     "compute_nmp", "energy_per_baryon", "esym",
     "sound_speed_eq", "sound_speed_adiabatic", "adiabatic_index",
     "thermal_index", "heat_capacity_V", "snm_sound_speed",

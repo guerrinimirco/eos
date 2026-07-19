@@ -35,6 +35,7 @@ from eos.dd2.physics.residual import (
 from eos.dd2.physics.octet import (
     assemble_octet, build_octet_ctx, octet_residual,
 )
+from eos.dd2.physics.jacobian import octet_jacobian
 from eos.dd2.physics.mesons import thermal_meson_thermo
 
 #: Hugenholtz–Van Hove residual gate, relative to eps (report §3.x).
@@ -332,7 +333,8 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
 
 def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
-                Y_L=0.0, include_photons=True, check_consistency=True):
+                Y_L=0.0, include_photons=True, check_consistency=True,
+                analytic_jac=False):
     """
     General octet solve (report §1.7 unified scheme) at (n_B [fm^-3], T [MeV]).
 
@@ -349,9 +351,13 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     guesses = [x0] if x0 is not None else []
     guesses.append(default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
                                        has_muL=has_muL))
+    # eos_fast backend: supply the exact analytic Jacobian (MINPACK hybrj);
+    # eos_ref (default) uses the forward-difference Jacobian.
+    jac = octet_jacobian if analytic_jac else None
     sol = None
     for guess in guesses:
-        sol = root(octet_residual, guess, args=(ctx,), method="hybr", tol=1e-13)
+        sol = root(octet_residual, guess, args=(ctx,), jac=jac,
+                   method="hybr", tol=1e-13)
         res_max = max(abs(r) for r in octet_residual(sol.x, ctx))
         if res_max <= RESIDUAL_TOL:
             break
@@ -409,7 +415,8 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
 
 
 def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
-                        include_photons=True, check_consistency=True):
+                        include_photons=True, check_consistency=True,
+                        analytic_jac=False):
     """
     Beta-equilibrium matter with the full active baryon set (report §1.7
     mode 1; mu_S = mu_L = 0, charge neutrality). Thin wrapper over solve_octet.
@@ -417,7 +424,8 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
     """
     return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
                        include_photons=include_photons,
-                       check_consistency=check_consistency)
+                       check_consistency=check_consistency,
+                       analytic_jac=analytic_jac)
 
 
 def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
@@ -451,7 +459,8 @@ def solve_yl_octet(par, n_B, Y_L, flags, T=0.0, x0=None,
 
 
 def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
-                        max_bisect=6, stop_at_boundary=False):
+                        max_bisect=6, stop_at_boundary=False,
+                        analytic_jac=False):
     """
     Warm-started density sweep with step-bisection continuation (report §3.4).
     Each point seeds the next; through a sharp onset where the warm start
@@ -466,16 +475,19 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
     Returns a list of EoSPoint in n_B_grid order.
     """
     return sweep_octet(par, n_B_grid, flags, T=T, include_photons=include_photons,
-                       max_bisect=max_bisect, stop_at_boundary=stop_at_boundary)
+                       max_bisect=max_bisect, stop_at_boundary=stop_at_boundary,
+                       analytic_jac=analytic_jac)
 
 
 def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_L=0.0,
-                include_photons=True, max_bisect=6, stop_at_boundary=False):
+                include_photons=True, max_bisect=6, stop_at_boundary=False,
+                analytic_jac=False):
     """
     Warm-started density sweep for any octet mode (report §3.4), with the same
     step-bisection continuation and scalar-collapse boundary handling as the
-    beta-eq sweep. See solve_octet for the mode arguments.
+    beta-eq sweep. See solve_octet for the mode arguments. analytic_jac selects
+    the eos_fast (exact-Jacobian) backend.
     """
     has_phi = flags.phi_field and flags.hyperons
     has_muS = (strange_mode == "fixed")
@@ -485,7 +497,8 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
         return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
                            Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
                            lepton_mode=lepton_mode, Y_L=Y_L,
-                           include_photons=include_photons)
+                           include_photons=include_photons,
+                           analytic_jac=analytic_jac)
 
     def step(n_prev, n_target, x0, depth):
         try:
