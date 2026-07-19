@@ -6,11 +6,15 @@ decision. Grouped by theme; each item notes **what I did**, **why**, and **what
 would change if we decide differently**. Nothing here blocks the current build —
 these are for review.
 
-Status: M0–M8 + M10 complete, M6 partial (fixed-Y_C/Y_S), 93 tests green,
-run_full_check passes all 5 checks. **Report v8 resolved B1–B4** (exact DD2Y
-R-couplings, density-dependent φ, Marques masses, U_Ξ=−18): DD2Y now reproduces
-to <0.1% eps and M_max=2.038 (was a DD2Y-*class* 2.09). Remaining: M6 remainder
-(Y_L/entropy-axis/TableSpec) then M9 (Numba+analytic-Jacobian, JAX deferred).
+Status: **M0–M10 complete** (Phase 1 done). 109 tests green, run_full_check
+passes all 6 checks (incl. backend parity). **Report v8 resolved B1–B4** (exact
+DD2Y R-couplings, density-dependent φ, Marques masses, U_Ξ=−18): DD2Y reproduces
+to <0.1% eps, M_max=2.038 (was a DD2Y-*class* 2.09). M6 remainder done (Y_L
+neutrino-trapped, entropy-per-baryon axis, TableSpec). M9 done as the authorized
+**Numba+analytic-Jacobian fallback** (full JAX deferred to profiling phase 2;
+Numba jitting itself deferred — N≤14 scalar loop, premature without profiling).
+Open follow-ups: B5/B6 (DD2Δ ratios + scalar collapse, awaiting the DD2Δ ref);
+susceptibilities / J-based M10 coefficients (Jacobian in place, no consumer yet).
 
 ### RESOLVED in report v8 (2026-07-19)
 - **B1** exact DD2Y R-couplings hardcoded in `from_dd2y_defaults()` (Fortin 2017
