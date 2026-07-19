@@ -16,7 +16,7 @@ import pytest
 
 from eos.dd2 import (
     Parametrization, SpeciesFlags, solve_beta_eq, solve_beta_eq_octet,
-    sweep_beta_eq_octet, solve_snm,
+    sweep_beta_eq_octet,
 )
 
 
@@ -43,15 +43,27 @@ def test_octet_reduces_to_nucleon():
         assert o.phi0 == 0.0
 
 
-def test_scalar_coupling_roundtrip(par_y):
-    # U_Y = -Gamma_sigmaY sigma + Gamma_omegaY omega0 + Sigma^R at saturation.
-    sat = solve_snm(par_y, par_y.n_sat)
-    Gs, Gw, _, _, _, _ = par_y.couplings_at(par_y.n_sat)
-    targets = {"Lambda": -30.0, "Sigma-": 30.0, "Xi-": -14.0}
-    for name, U_target in targets.items():
-        xs, xw, xr, gphi = par_y.hyperon_coupling_map[name]
-        U = -xs * Gs * sat.sigma + xw * Gw * sat.omega0 + sat.Sigma_R
-        assert U == pytest.approx(U_target, abs=1e-6)
+def test_dd2y_coupling_table(par_y):
+    # Bit-exact DD2Y R-couplings (Fortin 2017 Table 1): R_sigma hardcoded,
+    # SU(6) vectors, DD2Y masses, density-dependent φ (x_phi = R_phi ratio).
+    _s2 = 1.4142135623730951
+    expect = {  # (mass, x_sigma, x_omega, x_rho, x_phi)
+        "Lambda": (1115.683, 0.62, 2 / 3, 0.0, -_s2 / 3),
+        "Sigma-": (1190.0, 0.48, 2 / 3, 2.0, -_s2 / 3),
+        "Xi-": (1321.68, 0.32, 1 / 3, 1.0, -2 * _s2 / 3),
+    }
+    for name, row in expect.items():
+        assert par_y.hyperon_coupling_map[name] == pytest.approx(row, rel=1e-12)
+
+
+def test_scalar_potential_inversion():
+    # The U_Y inversion (report §2.4b) regenerates the DD2Y R_sigma table when
+    # U_Xi = -18 (B2): the mechanism and the hardcoded table agree.
+    # (approximate: R_sigma is 2-digit-rounded and the inversion is sensitive
+    # to the saturation σ-solve — report §2.4 "sensitive to the φ solve".)
+    par = Parametrization.from_hyperon_potentials()   # U_Λ,Σ,Ξ = -30,30,-18
+    for name, R_sigma in (("Lambda", 0.62), ("Sigma-", 0.48), ("Xi-", 0.32)):
+        assert par.hyperon_coupling_map[name][1] == pytest.approx(R_sigma, abs=1e-2)
 
 
 def test_lambda_onset_and_order(par_y, flags_y):

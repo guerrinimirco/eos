@@ -81,25 +81,30 @@ class OctetCtx:
 
 
 def build_baryon_specs(par, flags):
-    """(mass, Q, t3, g, x_sigma, x_omega, x_rho, g_phi) per active baryon."""
+    """
+    (mass, Q, t3, g, x_sigma, x_omega, x_rho, x_phi, S) per active baryon.
+    x_phi = g_phiY/g_omegaN inherits f_omega, so Γ_phiY = x_phi·Γ_omegaN(n_B)
+    (DD2Y density-dependent φ). Hyperon masses are the DD2Y values from the
+    coupling map; nucleons use the kernel mass, Δ the PDG mass.
+    """
     m_kn, m_kp = par.kernel_masses()
     hyp = par.hyperon_coupling_map
     specs = []
     for b in active_baryons(flags):
         if b.name == "n":
-            mass, (xs, xw, xr, gphi) = m_kn, (1.0, 1.0, 1.0, 0.0)
+            mass, xs, xw, xr, xphi = m_kn, 1.0, 1.0, 1.0, 0.0
         elif b.name == "p":
-            mass, (xs, xw, xr, gphi) = m_kp, (1.0, 1.0, 1.0, 0.0)
+            mass, xs, xw, xr, xphi = m_kp, 1.0, 1.0, 1.0, 0.0
         elif b.name.startswith("Delta"):
             # Δ: S=0 so no φ; ratio couplings from the parametrization.
             mass = b.mass
-            xs, xw, xr, gphi = (par.x_Delta_sigma, par.x_Delta_omega,
+            xs, xw, xr, xphi = (par.x_Delta_sigma, par.x_Delta_omega,
                                 par.x_Delta_rho, 0.0)
         else:
-            mass, (xs, xw, xr, gphi) = b.mass, hyp[b.name]
+            mass, xs, xw, xr, xphi = hyp[b.name]
         if b.t3 is None:
             raise ValueError(f"baryon {b.name} has no t3 set (needed for rho)")
-        specs.append((mass, b.charge, b.t3, b.g_degen, xs, xw, xr, gphi,
+        specs.append((mass, b.charge, b.t3, b.g_degen, xs, xw, xr, xphi,
                       b.strangeness))
     return tuple(specs)
 
@@ -141,13 +146,14 @@ def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S):
     """
     out = []
     for spec in ctx.specs:
-        mass, Q, t3, g, xs, xw, xr, gphi, S = spec
+        mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         Gs, Gw, Gr = xs * ctx.Gs_N, xw * ctx.Gw_N, xr * ctx.Gr_N
+        Gphi = xphi * ctx.Gw_N          # φ inherits f_omega (DD2Y)
         ms = mass - Gs * sigma
         if ms <= 0.0:
             return None
         nu = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
-              - Gr * t3 * rho0 - gphi * phi0)
+              - Gr * t3 * rho0 - Gphi * phi0)
         n, P, eps, s, ns = kinetic_thermo(nu, ms, g, ctx.T)
         out.append((spec, nu, ms, n, ns, eps, P, s))
     return out
@@ -164,11 +170,11 @@ def octet_residual(x, ctx):
     src_s = src_w = src_r = src_phi = 0.0
     n_tot = charge = strangeness = 0.0
     for (spec, nu, ms, n, ns, eps, P, s) in kin:
-        mass, Q, t3, g, xs, xw, xr, gphi, S = spec
+        mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         src_s += xs * ctx.Gs_N * ns
         src_w += xw * ctx.Gw_N * n
         src_r += xr * ctx.Gr_N * t3 * n
-        src_phi += gphi * n
+        src_phi += xphi * ctx.Gw_N * n          # Γ_phiY = x_phi·Γ_omegaN
         n_tot += n
         charge += Q * n
         strangeness += S * n
@@ -210,7 +216,7 @@ def assemble_octet(x, ctx):
     m_eff_n = nu_n = nu_p = None
     densities = {}
     for (spec, nu, ms, n, ns, eps, P, s), b in zip(kin, ctx.baryons):
-        mass, Q, t3, g, xs, xw, xr, gphi, S = spec
+        mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         eps_b += eps
         P_b += P
         s_b += s
@@ -218,9 +224,10 @@ def assemble_octet(x, ctx):
         charge_had += Q * n
         strangeness += S * n
         densities[b.name] = n / hc3
-        # rearrangement (constant phi coupling -> no phi term)
+        # rearrangement; φ inherits f_omega so ∂Γ_phiY/∂n = x_phi·dGw_N
         Sig_R += (xw * ctx.dGw_N * omega0 * n
                   + xr * ctx.dGr_N * rho0 * t3 * n
+                  + xphi * ctx.dGw_N * phi0 * n
                   - xs * ctx.dGs_N * sigma * ns)
         if b.name == "n":
             m_eff_n, nu_n = ms, nu

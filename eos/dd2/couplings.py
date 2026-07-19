@@ -61,17 +61,35 @@ def derived_a(b, c, d):
 _SQRT2 = 1.4142135623730951
 
 #: SU(6) isoscalar-vector and isovector ratios x_iY = Gamma_iY / Gamma_iN,
-#: and the ABSOLUTE hidden-strange g_phiY as a multiple of g_omegaN(n_sat)
-#: (report §2.4a). φ is constant-coupled in DD2Y, so g_phi is stored as a
-#: multiple of the nucleon ω scale rather than a density-dependent ratio.
+#: and the hidden-strange ratio x_phiY = g_phiY / g_omegaN (report §2.4a; φ has
+#: no nucleon coupling, so it is normalised to g_omegaN). In DD2Y φ inherits the
+#: ω density dependence f_omega, so x_phiY multiplies Gamma_omegaN(n_B):
+#: Gamma_phiY(n_B) = x_phiY * Gamma_omegaN(n_B). These vector ratios ARE the
+#: Fortin et al. 2017 Table 1 R_omega, R_rho, R_phi columns (printed rounded:
+#: 0.33 = 1/3, -0.47 = -sqrt2/3, -0.94 = -2 sqrt2/3).
 SU6_HYPERON = {
-    #             x_omega  x_rho   g_phi/g_omegaN
+    #             x_omega  x_rho   x_phi = g_phi/g_omegaN
     "Lambda": dict(x_omega=2.0 / 3.0, x_rho=0.0, phi_over_omegaN=-_SQRT2 / 3.0),
     "Sigma+": dict(x_omega=2.0 / 3.0, x_rho=2.0, phi_over_omegaN=-_SQRT2 / 3.0),
     "Sigma0": dict(x_omega=2.0 / 3.0, x_rho=2.0, phi_over_omegaN=-_SQRT2 / 3.0),
     "Sigma-": dict(x_omega=2.0 / 3.0, x_rho=2.0, phi_over_omegaN=-_SQRT2 / 3.0),
     "Xi0": dict(x_omega=1.0 / 3.0, x_rho=1.0, phi_over_omegaN=-2.0 * _SQRT2 / 3.0),
     "Xi-": dict(x_omega=1.0 / 3.0, x_rho=1.0, phi_over_omegaN=-2.0 * _SQRT2 / 3.0),
+}
+
+#: DD2Y primary-source per-hyperon data (Fortin, Oertel & Providência 2017,
+#: Table 1; Marques et al., PRC 96, 045806 (2017)): the fitted scalar ratio
+#: R_sigma = g_sigmaY/g_sigmaN and the DD2Y hyperon masses [MeV]. The vector
+#: ratios come from SU6_HYPERON (the same table's R_omega,R_rho,R_phi). Hardcoded
+#: for bit-exact DD2Y; the U_Y-potential inversion below regenerates R_sigma
+#: (with U_Xi = -18 MeV) and is the route for non-DD2Y potentials.
+DD2Y_HYPERON = {
+    "Lambda": dict(mass=1115.683, R_sigma=0.62),
+    "Sigma+": dict(mass=1190.0, R_sigma=0.48),
+    "Sigma0": dict(mass=1190.0, R_sigma=0.48),
+    "Sigma-": dict(mass=1190.0, R_sigma=0.48),
+    "Xi0": dict(mass=1314.83, R_sigma=0.32),
+    "Xi-": dict(mass=1321.68, R_sigma=0.32),
 }
 
 #: Which measured potential each hyperon's scalar coupling is fitted to.

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from eos.general.physics_constants import hc3
 from eos.dd2.couplings import (
     rational_f, rational_df, exponential_f, derived_a, derived_d,
-    SU6_HYPERON, _POTENTIAL_KEY, scalar_ratio_from_potential,
+    SU6_HYPERON, DD2Y_HYPERON, _POTENTIAL_KEY, scalar_ratio_from_potential,
 )
 
 #: Ingest-identity tolerance: the published table obeys the internal
@@ -53,10 +53,12 @@ class Parametrization:
     #: §2.4b); the scalar hyperon couplings are inverted from these.
     U_Lambda: float = -30.0
     U_Sigma: float = 30.0
-    U_Xi: float = -14.0
-    #: Derived per-hyperon coupling ratios, hashable tuple of
-    #: (name, x_sigma, x_omega, x_rho, g_phi); empty for nucleon-only params.
-    #: g_phi is the ABSOLUTE constant φ coupling (DD2Y: no density dependence).
+    U_Xi: float = -18.0          # DD2Y (Marques 2017); -14 is SFHoY
+    #: Per-hyperon coupling data, hashable tuple of rows
+    #: (name, mass [MeV], x_sigma, x_omega, x_rho, x_phi); empty for
+    #: nucleon-only params. All x_i are ratios g_iY/g_iN inheriting the nucleon
+    #: density dependence f_i(x); x_phi = g_phiY/g_omegaN inherits f_omega, so
+    #: Gamma_phiY(n_B) = x_phi * Gamma_omegaN(n_B) (DD2Y: density-dependent φ).
     hyperon_couplings: tuple = ()
     #: Δ-isobar coupling ratios x_iΔ = Γ_iΔ/Γ_iN (report §2.4; free params,
     #: literature x_Δσ~1.0–1.3, x_Δω~1.0). Δ has S=0, so no φ coupling.
@@ -115,7 +117,7 @@ class Parametrization:
 
     @property
     def hyperon_coupling_map(self):
-        """{name: (x_sigma, x_omega, x_rho, g_phi)} from the hashable tuple."""
+        """{name: (mass, x_sigma, x_omega, x_rho, x_phi)} from the tuple."""
         return {row[0]: row[1:] for row in self.hyperon_couplings}
 
     # ------------------------------------------------------------- couplings
@@ -191,35 +193,51 @@ class Parametrization:
         )
 
     @classmethod
-    def from_dd2y_defaults(cls, U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-14.0):
+    def from_dd2y_defaults(cls):
         """
-        DD2Y (Marques et al. 2017): DD2 nucleon sector + hyperon octet with
-        SU(6) vector couplings and scalar couplings inverted from the hyperon
-        potentials U_Y in SNM at saturation (report §2.4).
+        DD2Y (Marques et al. 2017; Fortin et al. 2017 Table 1): DD2 nucleon
+        sector + hyperon octet with the published R-couplings hardcoded (report
+        §2.4). Scalar ratios R_sigma = {Λ:0.62, Σ:0.48, Ξ:0.32}; SU(6) vectors
+        R_omega, R_rho, R_phi; DD2Y hyperon masses. The φ coupling is
+        density-dependent, inheriting f_omega (B4): Γ_phiY(n_B) = x_phi ·
+        Γ_omegaN(n_B). This is the bit-exact DD2Y validation setting.
 
-        The φ coupling is constant (DD2Y default, phi_density_dependent=False):
-        g_phiY = (phi_over_omegaN) * Gamma_omegaN(n_sat).
+        For non-DD2Y potentials, use from_hyperon_potentials().
+        """
+        from dataclasses import replace
+        rows = []
+        for name, su6 in SU6_HYPERON.items():
+            dd2y = DD2Y_HYPERON[name]
+            rows.append((name, dd2y["mass"], dd2y["R_sigma"],
+                         su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
+        return replace(cls.from_dd2_defaults(),
+                       hyperon_couplings=tuple(rows))
+
+    @classmethod
+    def from_hyperon_potentials(cls, U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0):
+        """
+        DD2-nucleon + hyperon octet with SU(6) vector couplings and scalar
+        couplings *inverted* from the hyperon potentials U_Y in SNM at
+        saturation (report §2.4b). This is the mechanism that regenerates the
+        DD2Y R_sigma table (U_Xi = -18) and the route for non-DD2Y potentials.
+        Hyperon masses default to the DD2Y (Marques) values.
         """
         from dataclasses import replace
         from eos.dd2.solver import solve_snm  # local import breaks the cycle
 
-        base = cls.from_dd2_defaults()
-        base = replace(base, U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
-
-        # SNM saturation background for the potential inversion.
+        base = replace(cls.from_dd2_defaults(),
+                       U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
         sat = solve_snm(base, base.n_sat)
         Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
         U_map = {"U_Lambda": U_Lambda, "U_Sigma": U_Sigma, "U_Xi": U_Xi}
 
         rows = []
         for name, su6 in SU6_HYPERON.items():
-            x_omega = su6["x_omega"]
-            x_rho = su6["x_rho"]
-            g_phi = su6["phi_over_omegaN"] * base.gamma_omega
             x_sigma = scalar_ratio_from_potential(
-                U_map[_POTENTIAL_KEY[name]], x_omega, Gs_sat, Gw_sat,
+                U_map[_POTENTIAL_KEY[name]], su6["x_omega"], Gs_sat, Gw_sat,
                 sat.sigma, sat.omega0, sat.Sigma_R)
-            rows.append((name, x_sigma, x_omega, x_rho, g_phi))
+            rows.append((name, DD2Y_HYPERON[name]["mass"], x_sigma,
+                         su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
         return replace(base, hyperon_couplings=tuple(rows))
 
     @classmethod

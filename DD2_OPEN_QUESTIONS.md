@@ -6,9 +6,26 @@ decision. Grouped by theme; each item notes **what I did**, **why**, and **what
 would change if we decide differently**. Nothing here blocks the current build —
 these are for review.
 
-Status: M0–M8 + M10 complete, M6 partial (fixed-Y_C/Y_S), 91 tests green,
-run_full_check passes all 5 checks. **Only M9 (JAX eos_fast) remains** — see
-§E4, the main open decision.
+Status: M0–M8 + M10 complete, M6 partial (fixed-Y_C/Y_S), 93 tests green,
+run_full_check passes all 5 checks. **Report v8 resolved B1–B4** (exact DD2Y
+R-couplings, density-dependent φ, Marques masses, U_Ξ=−18): DD2Y now reproduces
+to <0.1% eps and M_max=2.038 (was a DD2Y-*class* 2.09). Remaining: M6 remainder
+(Y_L/entropy-axis/TableSpec) then M9 (Numba+analytic-Jacobian, JAX deferred).
+
+### RESOLVED in report v8 (2026-07-19)
+- **B1** exact DD2Y R-couplings hardcoded in `from_dd2y_defaults()` (Fortin 2017
+  Table 1: R_σ 0.62/0.48/0.32, SU(6) vectors). eps 4–8% → 0.02–0.09%.
+- **B2** U_Ξ = −18 (DD2Y), default fixed; the inversion path is now
+  `from_hyperon_potentials()` and regenerates R_σ to ~1%.
+- **B3** Marques hyperon masses (Λ=1115.683, Σ=1190, Ξ⁻=1321.68, Ξ⁰=1314.83),
+  carried in the coupling row.
+- **B4** φ density-dependent, inheriting f_ω: Γ_φY(n_B)=x_φ·Γ_ωN(n_B), with the
+  matching ∂Γ_φY/∂n rearrangement term.
+- **A2/A3/A4/C1/C3/D1/E2** confirmed as-built (Δ τ₃=±3,±1; m_φ=1019.45;
+  σ*=975 off-by-default; CompOSE only in uniform region n_B≳0.2 via both the
+  general-purpose fixed-Y_q and cold-NS gates; residual-norm acceptance; thermal
+  vectors off by default). **B5/B6** (DD2Δ ratios, scalar collapse) held as a
+  separate follow-up per the user (Δ at x_Δ=1.0 for now).
 
 ---
 

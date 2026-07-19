@@ -53,19 +53,26 @@ def _nearest(grid, x):
     return i, float(grid[i])
 
 
-def engine_point(par, n_B, Y_q, T, include_electrons=True):
+def engine_point(par, n_B, Y_q, T, include_electrons=True, flags=None):
     """
-    Uniform npe(+photon) matter at fixed (n_B, Y_q, T) matching the HS(DD2)
+    Uniform matter at fixed (n_B, Y_q, T) matching the CompOSE general-purpose
     table content: baryons + electrons(+positrons) at net n_e = Y_q n_B +
-    photons; no muons.
+    photons; no muons. flags=None (or flags.hyperons=False) solves nucleons
+    only (HS(DD2)); with flags.hyperons the full octet is solved in fixed-Y_C
+    mode (DD2Y general-purpose table).
 
     Returns dict with P, eps [MeV/fm^3], s_per_B, mu_B, mu_C [MeV].
-    Uses the "physical" nucleon-mass convention (the HS(DD2) one).
+    Uses the "physical" nucleon-mass convention (the CompOSE one).
     """
     from dataclasses import replace as _dc_replace
     if par.nucleon_mass_mode != "physical":
         par = _dc_replace(par, nucleon_mass_mode="physical")
-    base = solve_composition(par, (1.0 - Y_q) * n_B, Y_q * n_B, T=T)
+    if flags is not None and flags.hyperons:
+        from eos.dd2.solver import solve_fixed_yc_octet
+        base = solve_fixed_yc_octet(par, n_B, Y_q, flags, T=T,
+                                    include_photons=False)
+    else:
+        base = solve_composition(par, (1.0 - Y_q) * n_B, Y_q * n_B, T=T)
     P, eps, s = base.P, base.eps, base.s
     if include_electrons:
         n_e = Y_q * n_B
@@ -86,15 +93,18 @@ def engine_point(par, n_B, Y_q, T, include_electrons=True):
 
 
 def compare_slice(par, compose_dir=DD2_COMPOSE, T=5.0, Y_q=0.5,
-                  nB_min=0.14, nB_max=0.6, include_electrons=True):
+                  nB_min=0.14, nB_max=0.6, include_electrons=True,
+                  flags=None, name="DD2"):
     """
     Compare the engine against one native-(T, Y_q) CompOSE slice over
-    n_B in [nB_min, nB_max] (uniform-matter region).
+    n_B in [nB_min, nB_max] (uniform-matter region). flags=None compares the
+    nucleonic HS(DD2) table; pass a hyperonic SpeciesFlags to compare the DD2Y
+    general-purpose table in fixed-Y_C mode.
 
     Returns dict with the slice actually used and per-quantity max relative
     errors over the slice: P, eps, s, mu_B.
     """
-    data = load_table(compose_dir)
+    data = load_table(compose_dir, name=name)
     iT, T_use = _nearest(data.T_values, T)
     iY, Y_use = _nearest(data.Y_C_values, Y_q)
     sel = np.where((data.n_B_values >= nB_min)
@@ -110,7 +120,7 @@ def compare_slice(par, compose_dir=DD2_COMPOSE, T=5.0, Y_q=0.5,
         if not np.isfinite(tab_P):
             continue
         eng = engine_point(par, nB, Y_use, T_use,
-                           include_electrons=include_electrons)
+                           include_electrons=include_electrons, flags=flags)
         rows.append(dict(
             n_B=nB,
             err_P=abs(eng["P"] / tab_P - 1.0),

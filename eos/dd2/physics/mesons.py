@@ -56,7 +56,8 @@ def thermal_meson_thermo(par, n_B, mu_Q, mu_S, omega0, rho0, T,
         return dict(P=0.0, e=0.0, s=0.0, n_C=0.0, n_S=0.0, mu_dot_n=0.0)
 
     _, Gw, Gr, _, _, _ = par.couplings_at(n_B)
-    x_omega_L = par.hyperon_coupling_map.get("Lambda", (0, _X_OMEGA_LAMBDA))[1] \
+    # map row: (mass, x_sigma, x_omega, x_rho, x_phi) -> x_omega at [2]
+    x_omega_L = par.hyperon_coupling_map.get("Lambda", (0, 0, _X_OMEGA_LAMBDA))[2] \
         if par.hyperon_couplings else _X_OMEGA_LAMBDA
     dGw_KL = (1.0 - x_omega_L) * Gw          # (Gamma_omegaN - Gamma_omegaL)
 
