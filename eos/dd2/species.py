@@ -30,15 +30,10 @@ class SpeciesFlags:
     include_thermal_vectors: bool = False  # thermal ρ,ω,K*,φ Bose gas (M7)
 
     def __post_init__(self):
-        unwired = []
+        # neutrinos are wired (M6 trapped Y_L mode; use solve_yl_octet).
         if self.sigma_star:
-            unwired.append("sigma_star (later milestone)")
-        if self.neutrinos:
-            unwired.append("neutrinos (M6 remainder)")
-        if unwired:
             raise NotImplementedError(
-                "SpeciesFlags: not yet wired at this milestone: "
-                + ", ".join(unwired))
+                "SpeciesFlags: sigma_star not yet wired at this milestone")
 
     @property
     def has_strange_baryons(self):

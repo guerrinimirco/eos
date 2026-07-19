@@ -68,6 +68,8 @@ class EoSPoint:
     n_mu: float = 0.0   # fm^-3 (net)
     mu_e: float = 0.0   # MeV
     mu_S: float = 0.0   # MeV (strangeness potential; 0 unless strangeness fixed)
+    mu_L: float = 0.0   # MeV (lepton potential; 0 unless neutrino-trapped)
+    n_nu: float = 0.0   # fm^-3 (net electron-neutrino density; trapped only)
     phi0: float = 0.0   # MeV (hidden-strange vector; 0 without hyperons)
     composition: tuple = ()  # ((name, n_i [fm^-3]), ...) all active baryons
 
@@ -288,42 +290,49 @@ def solve_beta_eq_t0(par, n_B, x0=None, include_muons=True,
 # =============================================================================
 # OCTET (hyperonic) beta equilibrium — milestone M4
 # =============================================================================
-def _octet_x0(fields, has_phi, has_muS):
-    """Pack [sigma, omega0, rho0, (phi0), muB~, muQ, (muS)] from a 7-tuple."""
-    sigma, omega0, rho0, phi0, mutB, muQ, muS = fields
+def _octet_x0(fields, has_phi, has_muS, has_muL=False):
+    """Pack [sigma, omega0, rho0, (phi0), muB~, muQ, (muS), (muL)]."""
+    sigma, omega0, rho0, phi0, mutB, muQ, muS, muL = fields
     x = [sigma, omega0, rho0]
     if has_phi:
         x.append(phi0)
     x += [mutB, muQ]
     if has_muS:
         x.append(muS)
+    if has_muL:
+        x.append(muL)
     return x
 
 
-def octet_warm_start(point, has_phi, has_muS=False):
-    """Unknown vector from a solved octet EoSPoint (for sweep continuation)."""
+def octet_warm_start(point, has_phi, has_muS=False, has_muL=False):
+    """Unknown vector from a solved octet EoSPoint (for sweep continuation).
+
+    mu_Q is recovered as mu_p - mu_n (robust in trapped mode, where
+    mu_e = mu_L - mu_Q so -mu_e no longer equals mu_Q).
+    """
     return _octet_x0((point.sigma, point.omega0, point.rho0, point.phi0,
-                      point.mu_n - point.Sigma_R, -point.mu_e, point.mu_S),
-                     has_phi, has_muS)
+                      point.mu_n - point.Sigma_R, point.mu_p - point.mu_n,
+                      point.mu_S, point.mu_L),
+                     has_phi, has_muS, has_muL)
 
 
-def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False):
+def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
     """
     Seed the octet solve from the nucleon beta-eq solution (hyperons start at
     zero population and switch on as density rises). phi0 seeded slightly
-    negative to break the exact-zero symmetry; muS seeded at 0.
+    negative to break the exact-zero symmetry; muS/muL seeded at 0.
     """
     base = solve_beta_eq(par, n_B, T=T, include_muons=flags.muons,
                          include_photons=False, check_consistency=False)
     has_phi = flags.phi_field and flags.hyperons
     return _octet_x0((base.sigma, base.omega0, base.rho0, -1e-3,
-                      base.mu_n - base.Sigma_R, -base.mu_e, 0.0),
-                     has_phi, has_muS)
+                      base.mu_n - base.Sigma_R, base.mu_p - base.mu_n, 0.0, 0.0),
+                     has_phi, has_muS, has_muL)
 
 
 def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
-                Y_C=0.0, strange_mode="eq", Y_S=0.0, include_photons=True,
-                check_consistency=True):
+                Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
+                Y_L=0.0, include_photons=True, check_consistency=True):
     """
     General octet solve (report §1.7 unified scheme) at (n_B [fm^-3], T [MeV]).
 
@@ -334,10 +343,12 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     non-convergence; asserts HVH (and, in beta mode, the beta condition).
     """
     ctx = build_octet_ctx(par, n_B, flags, T=T, charge_mode=charge_mode,
-                          Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S)
-    has_muS = ctx.has_muS
+                          Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
+                          lepton_mode=lepton_mode, Y_L=Y_L)
+    has_muS, has_muL = ctx.has_muS, ctx.has_muL
     guesses = [x0] if x0 is not None else []
-    guesses.append(default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS))
+    guesses.append(default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
+                                       has_muL=has_muL))
     sol = None
     for guess in guesses:
         sol = root(octet_residual, guess, args=(ctx,), method="hybr", tol=1e-13)
@@ -377,11 +388,12 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 f"(octet {charge_mode}/{strange_mode}): "
                 f"|{hvh_rel:.2e}| > {HVH_RTOL:.0e}")
         if charge_mode == "neutral":
-            beta_res = st["mu_n"] - st["mu_p"] - st["mu_e"]
+            # transparent: mu_n - mu_p = mu_e; trapped: = mu_e - mu_nue.
+            beta_res = st["mu_n"] - st["mu_p"] - (st["mu_e"] - st["mu_nue"])
             if abs(beta_res) > 1e-6:
                 raise ValueError(
                     f"beta-equilibrium condition violated at n_B={n_B}, "
-                    f"T={T}: mu_n - mu_p - mu_e = {beta_res:.2e} MeV")
+                    f"T={T}: mu_n - mu_p - (mu_e - mu_nue) = {beta_res:.2e} MeV")
 
     dmap = st["densities"]
     return EoSPoint(
@@ -391,7 +403,8 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
         nu_n=st["nu_n"], nu_p=st["nu_p"], mu_n=st["mu_n"], mu_p=st["mu_p"],
         eps=st["eps"] / hc3, P=st["P"] / hc3, s=st["s"] / hc3,
         hvh_rel=float(hvh_rel), n_e=st["n_e"] / hc3, n_mu=st["n_mu"] / hc3,
-        mu_e=st["mu_e"], mu_S=st["mu_S"], composition=tuple(sorted(dmap.items())),
+        mu_e=st["mu_e"], mu_S=st["mu_S"], mu_L=st["mu_L"],
+        n_nu=st["n_nue"] / hc3, composition=tuple(sorted(dmap.items())),
     )
 
 
@@ -421,6 +434,22 @@ def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
                        check_consistency=check_consistency)
 
 
+def solve_yl_octet(par, n_B, Y_L, flags, T=0.0, x0=None,
+                   include_photons=True, check_consistency=True):
+    """
+    Neutrino-trapped matter at fixed electron lepton fraction
+    Y_L = (n_e + n_nue)/n_B (report §1.7 mode 4). Charge-neutral, mu_L unknown,
+    electron-neutrinos included (mu_nue = mu_L, mu_e = mu_L - mu_Q). The muon
+    family stays transparent. Requires SpeciesFlags(neutrinos=True).
+    """
+    if not flags.neutrinos:
+        raise ValueError("solve_yl_octet requires SpeciesFlags(neutrinos=True)")
+    return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
+                       lepton_mode="trapped", Y_L=Y_L,
+                       include_photons=include_photons,
+                       check_consistency=check_consistency)
+
+
 def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
                         max_bisect=6, stop_at_boundary=False):
     """
@@ -441,8 +470,8 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
 
 
 def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
-                strange_mode="eq", Y_S=0.0, include_photons=True,
-                max_bisect=6, stop_at_boundary=False):
+                strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_L=0.0,
+                include_photons=True, max_bisect=6, stop_at_boundary=False):
     """
     Warm-started density sweep for any octet mode (report §3.4), with the same
     step-bisection continuation and scalar-collapse boundary handling as the
@@ -450,10 +479,12 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
     """
     has_phi = flags.phi_field and flags.hyperons
     has_muS = (strange_mode == "fixed")
+    has_muL = (lepton_mode == "trapped")
 
     def solve_from(n_B, x0):
         return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
                            Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
+                           lepton_mode=lepton_mode, Y_L=Y_L,
                            include_photons=include_photons)
 
     def step(n_prev, n_target, x0, depth):
@@ -465,7 +496,8 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
             n_mid = 0.5 * (n_prev + n_target)
             p_mid = step(n_prev, n_mid, x0, depth + 1)
             return step(n_mid, n_target,
-                        octet_warm_start(p_mid, has_phi, has_muS), depth + 1)
+                        octet_warm_start(p_mid, has_phi, has_muS, has_muL),
+                        depth + 1)
 
     points, x0, n_prev = [], None, None
     for n_B in n_B_grid:
@@ -476,6 +508,6 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 break
             raise
         points.append(p)
-        x0 = octet_warm_start(p, has_phi, has_muS)
+        x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
         n_prev = n_B
     return points

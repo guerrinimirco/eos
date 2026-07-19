@@ -72,6 +72,11 @@ def kinetic_thermo(nu, m, g, T=0.0):
         if kF2 <= 0.0 or nu <= 0.0:
             return 0.0, 0.0, 0.0, 0.0, 0.0
         kF = xp.sqrt(kF2)
+        if m == 0.0:
+            # massless (neutrinos): the ms^4 log terms are 0*inf; use the
+            # ultra-relativistic closed forms (E=k, eps = g kF^4/8pi^2, P=eps/3).
+            eps = g * kF ** 4 / (8.0 * _PI2)
+            return number_density_t0(kF, g), eps / 3.0, eps, 0.0, 0.0
         return (number_density_t0(kF, g), P_kin_t0(kF, m, g),
                 eps_kin_t0(kF, m, g), 0.0, scalar_density_t0(kF, m, g))
     from eos.general.fermi_integrals import solve_fermi_jel

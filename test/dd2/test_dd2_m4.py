@@ -101,11 +101,9 @@ def test_phi_field_presence(par_y):
 
 
 def test_speciesflags_guards():
-    # deltas is wired at M5; sigma_star / neutrinos are not yet.
+    # sigma_star is not yet wired; deltas (M5) and neutrinos (M6) are.
     with pytest.raises(NotImplementedError, match="sigma_star"):
         SpeciesFlags(sigma_star=True)
-    with pytest.raises(NotImplementedError, match="neutrinos"):
-        SpeciesFlags(neutrinos=True)
 
 
 if __name__ == "__main__":
