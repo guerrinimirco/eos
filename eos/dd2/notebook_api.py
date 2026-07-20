@@ -325,12 +325,14 @@ def plot_p_vs_nb_snm(par, grid=None, T=0.0):
 # =============================================================================
 # 10. Chiral-EFT comparison in pure neutron matter
 # =============================================================================
-def plot_pnm_chiral(par, grid=None):
+def plot_pnm_chiral(par, grid=None, chiral_path=CHIRAL_EFT):
     """
-    Pure neutron matter energy per particle E/N vs the chiral-EFT band shipped
-    in ``chiral_eft.txt``. E/N = eps/n_B - m_N (kernel average mass).
+    Pure neutron matter energy per particle E/N vs the chiral-EFT band in
+    ``chiral_path`` (default: the repo copy; pass a repo-relative path when the
+    package is pip-installed and ``plot/`` isn't on the install). E/N = eps/n_B
+    - m_N (kernel average mass).
     """
-    band = np.loadtxt(CHIRAL_EFT)          # rho, E_low, E_up
+    band = np.loadtxt(chiral_path)         # rho, E_low, E_up
     rho, e_lo, e_hi = band[:, 0], band[:, 1], band[:, 2]
     grid = rho if grid is None else np.asarray(grid, float)
     EN = np.array([solve_composition(par, float(n), 0.0).eps / n - par.m_nucleon
@@ -399,29 +401,34 @@ def build_nmp_par(nmp=None):
 # =============================================================================
 # Speed test: SFHo vs DD2 on a matched β-eq sweep
 # =============================================================================
-def benchmark_dd2_vs_sfho(par, grid=None, flags=NUCLEONIC):
+def benchmark_dd2_vs_sfho(par, grid=None, flags=NUCLEONIC, T=0.0):
     """
     Time the DD2 fast path (``sweep_beta_eq_octet(..., analytic_jac=True)``, first
     call discarded for Numba compile) against the SFHo table generator on the
-    same β-eq density grid. Returns ms/point for each and the ratio.
+    same β-eq density grid, at temperature ``T`` [MeV]. Photons join both sides
+    at T>0. Returns ms/point for each and the ratio.
+
+    At T=0 the DD2 residual+Jacobian are Numba-jitted; at T>0 the analytic path
+    is NumPy (the JEL integrals don't jit), so the ms/pt is naturally larger.
     """
     from eos.sfho.compute_tables import compute_table, TableSettings
     grid = default_grid(n=100) if grid is None else np.asarray(grid, float)
     n = len(grid)
+    photons = T > 0.0
 
-    # DD2: discard the first (compile) call, then time.
-    sweep_beta_eq_octet(par, grid[:5], flags, include_photons=False,
+    # DD2: discard the first (compile) call at this T, then time.
+    sweep_beta_eq_octet(par, grid[:5], flags, T=T, include_photons=photons,
                         analytic_jac=True)
     t0 = time.perf_counter()
-    sweep_beta_eq_octet(par, grid, flags, include_photons=False,
+    sweep_beta_eq_octet(par, grid, flags, T=T, include_photons=photons,
                         analytic_jac=True)
     dd2_ms = 1e3 * (time.perf_counter() - t0) / n
 
-    # SFHo on the same grid (nucleonic β-eq, T=0).
+    # SFHo on the same grid (nucleonic β-eq).
     settings = TableSettings(
         parametrization="sfho", particle_content="nucleons",
-        equilibrium="beta_eq", n_B_values=grid, T_values=[0.0],
-        include_photons=False, include_muons=flags.muons,
+        equilibrium="beta_eq", n_B_values=grid, T_values=[T],
+        include_photons=photons, include_muons=flags.muons,
         print_results=False, print_timing=False, print_errors=False,
         save_to_file=False,
     )
@@ -429,5 +436,62 @@ def benchmark_dd2_vs_sfho(par, grid=None, flags=NUCLEONIC):
     compute_table(settings)
     sfho_ms = 1e3 * (time.perf_counter() - t0) / n
 
-    return dict(n_points=n, dd2_ms_per_pt=dd2_ms, sfho_ms_per_pt=sfho_ms,
+    return dict(T=T, n_points=n, dd2_ms_per_pt=dd2_ms, sfho_ms_per_pt=sfho_ms,
                 ratio=sfho_ms / dd2_ms)
+
+
+# =============================================================================
+# EoS table generation / export
+# =============================================================================
+#: Per-point scalar columns written by ``export_eos_table`` (composition
+#: fractions are appended per active baryon species).
+#: (per-species Y_<baryon> — including Y_n/Y_p — are appended after these.)
+_TABLE_COLS = ("n_B", "T", "P", "eps", "s", "mu_n", "mu_p", "mu_e",
+               "mu_S", "mu_L", "Y_e", "Y_mu")
+
+
+def export_eos_table(par, flags, mode="beta", nB=None, T=None, SnB=None,
+                     fixed=None, path=None, want_coeffs=False):
+    """
+    Build a DD2 EoS table for the requested species/mode/axes (``TableSpec`` +
+    ``build_table``) and, if ``path`` is given, write it to a text file.
+
+    mode    : 'beta','YC','YS','YC+YS','YL' (see table.py).
+    nB      : density grid [fm^-3]; defaults to ``default_grid()``.
+    T / SnB : the temperature axis — pass ONE. ``T`` is temperature [MeV]
+              (scalar or list); ``SnB`` is entropy per baryon (adds the outer
+              T-solve). Defaults to T=0.
+    fixed   : {'Y_C':..,'Y_S':..,'Y_L':..} for the constrained modes.
+
+    Returns (TableResult, path). Columns: the scalars in ``_TABLE_COLS`` plus one
+    ``Y_<species>`` per active baryon.
+    """
+    from eos.dd2 import TableSpec, build_table
+    nB = default_grid() if nB is None else np.asarray(nB, float)
+    if SnB is not None:
+        axes = {"nB": nB, "SnB": np.atleast_1d(SnB)}
+    else:
+        axes = {"nB": nB, "T": np.atleast_1d(0.0 if T is None else T)}
+    spec = TableSpec(parametrization=par, mode=mode, axes=axes, include=flags,
+                     fixed=(fixed or {}), want_coeffs=want_coeffs)
+    result = build_table(spec)
+    if path is not None:
+        _write_table(result, path)
+    return result, path
+
+
+def _write_table(result, path):
+    """Flatten a TableResult to a whitespace .dat with a header line."""
+    species = sorted({n for line in result.points for p in line
+                      for n, _ in p.composition})
+    cols = list(_TABLE_COLS) + [f"Y_{s}" for s in species]
+    with open(path, "w") as f:
+        f.write("# DD2 EoS table (mode=%s, %s axis)\n"
+                % (result.spec.mode, result.temp_key))
+        f.write("# " + " ".join(f"{c:>13}" for c in cols) + "\n")
+        for line in result.points:
+            for p in line:
+                row = [p.n_B, p.T, p.P, p.eps, p.s, p.mu_n, p.mu_p, p.mu_e,
+                       p.mu_S, p.mu_L, p.Y_e, p.Y_mu]
+                row += [p.Y(s) for s in species]
+                f.write("  " + " ".join(f"{v:13.6e}" for v in row) + "\n")

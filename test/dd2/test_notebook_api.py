@@ -58,6 +58,16 @@ def test_nmp_comparison():
     assert isinstance(api.format_nmp_comparison(PAR), str)
 
 
+def test_export_eos_table(tmp_path):
+    out = tmp_path / "dd2.dat"
+    result, path = api.export_eos_table(PAR, api.NUCLEONIC, mode="beta",
+                                        nB=GRID, T=0.0, path=str(out))
+    assert out.is_file()
+    rows = np.loadtxt(out, comments="#")
+    assert rows.shape[0] == len(GRID)
+    assert np.isfinite(rows).all()
+
+
 def test_nmp_inversion_pass():
     par2, status = api.build_nmp_par()
     assert status.ok, status.message
