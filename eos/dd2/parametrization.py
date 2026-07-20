@@ -214,18 +214,24 @@ class Parametrization:
                        hyperon_couplings=tuple(rows))
 
     @classmethod
-    def from_hyperon_potentials(cls, U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0):
+    def from_hyperon_potentials(cls, U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
+                                base=None):
         """
-        DD2-nucleon + hyperon octet with SU(6) vector couplings and scalar
-        couplings *inverted* from the hyperon potentials U_Y in SNM at
-        saturation (report §2.4b). This is the mechanism that regenerates the
-        DD2Y R_sigma table (U_Xi = -18) and the route for non-DD2Y potentials.
-        Hyperon masses default to the DD2Y (Marques) values.
+        Nucleon + hyperon octet with SU(6) vector couplings and scalar couplings
+        *inverted* from the hyperon potentials U_Y in SNM at saturation (report
+        §2.4b). This is the mechanism that regenerates the DD2Y R_sigma table
+        (U_Xi = -18) and the route for non-DD2Y potentials. Hyperon masses
+        default to the DD2Y (Marques) values.
+
+        base: an existing Parametrization to attach the hyperon sector to (e.g.
+        an NMP-inverted nucleon par, so NMP + hyperons compose); defaults to
+        nucleonic DD2. The scalar inversion re-solves SNM on ``base``, so it
+        adapts to that par's nucleon couplings automatically.
         """
         from dataclasses import replace
         from eos.dd2.solver import solve_snm  # local import breaks the cycle
 
-        base = replace(cls.from_dd2_defaults(),
+        base = replace(base if base is not None else cls.from_dd2_defaults(),
                        U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
         sat = solve_snm(base, base.n_sat)
         Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)

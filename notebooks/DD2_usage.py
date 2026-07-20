@@ -99,13 +99,15 @@ PAR = Parametrization.from_dd2y_defaults()        #   DD2Y (enables hyperons bel
 # PAR, _status = Parametrization.from_nmp(NMP, return_status=True)
 # assert _status.ok, f"NMP inversion did not converge: {_status.message}"
 
-# --- or custom hyperon potentials U_YN + Δ coupling ratios (uncomment) ---------
-# Defaults shown for reference (the DD2Y / universal-Δ values). U_YN are the
-# hyperon single-particle potentials in SNM at n_sat [MeV]; x_Delta_* = g_ΔM/g_NM
-# (the Δ-meson couplings relative to the nucleon; σ is the uncertain one, lit. 1.0–1.25).
+# --- custom hyperon potentials U_YN + Δ coupling ratios (uncomment) ------------
+# These COMPOSE: pick a nucleon base (default DD2 above, or the NMP par), then
+# attach hyperons on that base via `base=PAR`, then the Δ sector. Defaults shown
+# for reference (DD2Y / universal-Δ). U_YN = hyperon single-particle potentials
+# in SNM at n_sat [MeV]; x_Delta_* = g_ΔM/g_NM (σ is the uncertain one, lit. 1.0–1.25).
 # U_Lambda_N, U_Sigma_N, U_Xi_N = -30.0, +30.0, -18.0        # defaults [MeV]
 # x_Delta_sigma, x_Delta_omega, x_Delta_rho = 1.0, 1.0, 1.0  # defaults (universal SU(6))
-# PAR = Parametrization.from_hyperon_potentials(U_Lambda_N, U_Sigma_N, U_Xi_N)
+# PAR = Parametrization.from_hyperon_potentials(U_Lambda_N, U_Sigma_N, U_Xi_N,
+#                                               base=PAR)     # ← base=PAR keeps the NMP nucleon sector
 # PAR = replace(PAR, x_Delta_sigma=x_Delta_sigma,            # attach the Δ sector directly
 #               x_Delta_omega=x_Delta_omega, x_Delta_rho=x_Delta_rho)
 
@@ -117,7 +119,7 @@ FLAGS = SpeciesFlags(hyperons=True,               # ← Λ,Σ,Ξ octet (needs DD
 
 # ── axes ─────────────────────────────────────────────────────────────────────
 n_sat= 0.149065
-NB_GRID  = np.linspace(0.06, 1.2, 300)*n_sat             # β-eq density grid [fm^-3]
+NB_GRID  = np.linspace(0.06, 10, 300)*n_sat             # β-eq density grid [fm^-3]
 T_VALUES = np.concatenate([[0, 0.1], np.arange(2, 101., 2)])           # temperature axis [MeV] (bump for production)
 S_VALUES = (1.0, 2.0)                              # isentropic S = s/n_B (must be reachable)
 T_FIXED  = 10.0                                    # single T for T>0 diagnostics [MeV]
