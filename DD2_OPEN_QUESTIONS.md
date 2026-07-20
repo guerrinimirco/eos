@@ -6,15 +6,25 @@ decision. Grouped by theme; each item notes **what I did**, **why**, and **what
 would change if we decide differently**. Nothing here blocks the current build —
 these are for review.
 
-Status: **M0–M10 complete** (Phase 1 done). 109 tests green, run_full_check
-passes all 6 checks (incl. backend parity). **Report v8 resolved B1–B4** (exact
-DD2Y R-couplings, density-dependent φ, Marques masses, U_Ξ=−18): DD2Y reproduces
-to <0.1% eps, M_max=2.038 (was a DD2Y-*class* 2.09). M6 remainder done (Y_L
-neutrino-trapped, entropy-per-baryon axis, TableSpec). M9 done as the authorized
-**Numba+analytic-Jacobian fallback** (full JAX deferred to profiling phase 2;
-Numba jitting itself deferred — N≤14 scalar loop, premature without profiling).
-Open follow-ups: B5/B6 (DD2Δ ratios + scalar collapse, awaiting the DD2Δ ref);
-susceptibilities / J-based M10 coefficients (Jacobian in place, no consumer yet).
+Status: **M0–M10 complete + hardened** (Phase 1 done). 123 tests green,
+run_full_check 7/7 (golden, identities, coefficients, coeff-analytic-vs-FD,
+backend parity, CompOSE, TOV). DD2Y reproduces to <0.1% eps, M_max=2.038.
+
+### RESOLVED in report v11 + follow-ups (2026-07-20)
+- **Δ calibration (B5/B6)**: no canonical DD2Δ table; default universal
+  x_Δσ=x_Δω=x_Δρ=1, plus `from_delta_potential(U_Delta∈[-100,-50], x_wD, x_rD)`
+  inverting x_Δσ. M5 validated against a chosen (U_Δ, x_Δω) point.
+- **Numba (M9 "fast")**: `kernel_numba.py` jits the T=0 residual+Jacobian
+  (machine-identical to NumPy, ~1.9× on a hyperon sweep); `analytic_jac=True`
+  routes T=0 through it, T>0 stays NumPy-analytic (JEL doesn't trace).
+- **Coefficients from J (M10)**: `coefficients_jac.py` — susceptibilities χ_ab
+  (pure J, symmetric, matches grand-canonical FD 2e-3), c_s² (J tangent, matches
+  FD 1e-6), C_V/C_P per baryon (C_P≥C_V; C_V~1% vs FD, T>0 JEL floor).
+- **Fixed-Y_C flavor 2b** (neutralizing e+μ) added earlier (report v9).
+
+Deferred (confirmed): **full JAX** (revisit only if Numba profiles as the
+bottleneck); **σ*** (guarded slot — DD2Yσ* fails 2 M_⊙, not needed for NS EoS).
+On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming need).
 
 ### RESOLVED in report v8 (2026-07-19)
 - **B1** exact DD2Y R-couplings hardcoded in `from_dd2y_defaults()` (Fortin 2017
