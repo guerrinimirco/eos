@@ -241,6 +241,35 @@ class Parametrization:
         return replace(base, hyperon_couplings=tuple(rows))
 
     @classmethod
+    def from_delta_potential(cls, U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
+        """
+        Δ-isobar couplings from the Δ single-particle potential in SNM at
+        saturation (report v11 §2.4). There is no canonical DD2Δ coupling
+        table, so the default is universal coupling (x_Δσ = x_Δω = x_Δρ = 1);
+        this constructor instead fixes x_Δσ by inverting
+
+            U_Δ = -x_Δσ Γ_σN σ̄ + x_Δω Γ_ωN ω0 + Σ^R      (all at n_sat)
+
+        for a chosen Δ potential (literature U_Δ ∈ [-100, -50] MeV, default -50)
+        and vector ratios x_wD, x_rD. base: an existing Parametrization to attach
+        the Δ sector to (e.g. a DD2Y octet); defaults to nucleonic DD2.
+        """
+        from dataclasses import replace
+        from eos.dd2.solver import solve_snm  # local import breaks the cycle
+
+        if not (-100.0 <= U_Delta <= -50.0):
+            raise ValueError(
+                f"U_Delta = {U_Delta} MeV outside the literature range "
+                f"[-100, -50]; pass an explicit value in range or widen it")
+        base = base or cls.from_dd2_defaults()
+        sat = solve_snm(base, base.n_sat)
+        Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
+        x_Delta_sigma = scalar_ratio_from_potential(
+            U_Delta, x_wD, Gs_sat, Gw_sat, sat.sigma, sat.omega0, sat.Sigma_R)
+        return replace(base, x_Delta_sigma=x_Delta_sigma,
+                       x_Delta_omega=x_wD, x_Delta_rho=x_rD)
+
+    @classmethod
     def from_nmp(cls, nmp, m_sigma=546.212459, return_status=False):
         """
         Invert nuclear-matter parameters to DD2 nucleon couplings (report §2.5

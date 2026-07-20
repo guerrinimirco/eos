@@ -89,6 +89,31 @@ def _onset(par, flags, grid, name="Delta-"):
     return np.array([p.n_B for p in pts])[np.argmax(Y > 1e-4)]
 
 
+def test_delta_potential_constructor(par):
+    # report v11 §2.4: no canonical DD2Δ table -> calibrate x_Δσ from a chosen
+    # (U_Δ, x_Δω) point. Validate the potential round-trips and the onset is
+    # physical for that calibration.
+    from eos.dd2 import solve_snm
+    U_target, x_wD = -75.0, 1.0
+    pd = Parametrization.from_delta_potential(U_Delta=U_target, x_wD=x_wD)
+    sat = solve_snm(pd, pd.n_sat)
+    Gs, Gw, _, _, _, _ = pd.couplings_at(pd.n_sat)
+    U = (-pd.x_Delta_sigma * Gs * sat.sigma + pd.x_Delta_omega * Gw * sat.omega0
+         + sat.Sigma_R)
+    assert U == pytest.approx(U_target, abs=1e-6)     # round-trips
+    assert pd.x_Delta_omega == x_wD
+    # chosen-point onset is in the physical DD2Δ range
+    flags = SpeciesFlags(hyperons=False, deltas=True, phi_field=False)
+    onset = _onset(pd, flags, np.geomspace(0.15, 0.7, 50))
+    assert 1.8 * pd.n_sat < onset < 2.6 * pd.n_sat
+
+
+def test_delta_potential_range_guard():
+    # U_Δ outside the literature range is flagged, not silently extrapolated.
+    with pytest.raises(ValueError, match="range"):
+        Parametrization.from_delta_potential(U_Delta=-20.0)
+
+
 def test_delta_coupling_ratios_configurable():
     from dataclasses import replace
     par = Parametrization.from_dd2_defaults()
