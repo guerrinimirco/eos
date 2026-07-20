@@ -90,8 +90,8 @@ from eos.dd2 import notebook_api as api
 
 # %%
 # ── parametrization ──────────────────────────────────────────────────────────
-PAR = Parametrization.from_dd2_defaults()          # ← nucleonic DD2 (default)
-# PAR = Parametrization.from_dd2y_defaults()        #   DD2Y (enables hyperons below)
+#PAR = Parametrization.from_dd2_defaults()          # ← nucleonic DD2 (default)
+PAR = Parametrization.from_dd2y_defaults()        #   DD2Y (enables hyperons below)
 
 # --- or an explicit NMP set (uncomment; inverts to DD2 nucleon couplings) -----
 # NMP = dict(n_sat=0.149065, E_sat=-16.02, K_sat=242.7, Q_sat=169.0,
@@ -99,24 +99,40 @@ PAR = Parametrization.from_dd2_defaults()          # ← nucleonic DD2 (default)
 # PAR, _status = Parametrization.from_nmp(NMP, return_status=True)
 # assert _status.ok, f"NMP inversion did not converge: {_status.message}"
 
+# --- or custom hyperon potentials U_YN + Δ coupling ratios (uncomment) ---------
+# Defaults shown for reference (the DD2Y / universal-Δ values). U_YN are the
+# hyperon single-particle potentials in SNM at n_sat [MeV]; x_Delta_* = g_ΔM/g_NM
+# (the Δ-meson couplings relative to the nucleon; σ is the uncertain one, lit. 1.0–1.25).
+# U_Lambda_N, U_Sigma_N, U_Xi_N = -30.0, +30.0, -18.0        # defaults [MeV]
+# x_Delta_sigma, x_Delta_omega, x_Delta_rho = 1.0, 1.0, 1.0  # defaults (universal SU(6))
+# PAR = Parametrization.from_hyperon_potentials(U_Lambda_N, U_Sigma_N, U_Xi_N)
+# PAR = replace(PAR, x_Delta_sigma=x_Delta_sigma,            # attach the Δ sector directly
+#               x_Delta_omega=x_Delta_omega, x_Delta_rho=x_Delta_rho)
+
 # ── particle content ─────────────────────────────────────────────────────────
-FLAGS = SpeciesFlags(hyperons=False,               # ← Λ,Σ,Ξ octet (needs DD2Y)
-                     deltas=False,                 # ← Δ quartet (needs a Δ par)
+FLAGS = SpeciesFlags(hyperons=True,               # ← Λ,Σ,Ξ octet (needs DD2Y)
+                     deltas=True,                 # ← Δ quartet (needs a Δ par)
                      muons=True,                   #   e always on; μ optional
-                     phi_field=False)              #   hidden-strange φ (DD2Y default)
+                     phi_field=True)              #   hidden-strange φ (DD2Y default)
 
 # ── axes ─────────────────────────────────────────────────────────────────────
-NB_GRID  = np.geomspace(0.06, 1.2, 60)             # β-eq density grid [fm^-3]
-T_VALUES = np.array([0.0, 10.0, 30.0])             # temperature axis [MeV] (bump for production)
+n_sat= 0.149065
+NB_GRID  = np.linspace(0.06, 1.2, 300)*n_sat             # β-eq density grid [fm^-3]
+T_VALUES = np.concatenate([[0, 0.1], np.arange(2, 101., 2)])           # temperature axis [MeV] (bump for production)
 S_VALUES = (1.0, 2.0)                              # isentropic S = s/n_B (must be reachable)
 T_FIXED  = 10.0                                    # single T for T>0 diagnostics [MeV]
 
 # ── table knobs (Part II) ────────────────────────────────────────────────────
-TABLE_NB    = np.geomspace(0.06, 1.0, 50)          # density grid for the written tables
-Y_C_FIXED   = 0.3                                  # fixed charge fraction (fixed-Y_C table)
+TABLE_NB    = np.linspace(0.06, 1.2, 300)*n_sat            # density grid for the written tables
+Y_C_VALUES   = (0.1, 0.3, 0.5)                     # fixed charge fractions (one fixed-Y_C file each)
+YC_ELECTRONS = True                                # neutralise with electrons? (False = leptonless, 2a)
+YC_MUONS     = False                               # also add muons? (only when YC_ELECTRONS; 2b)
 Y_L_VALUES  = (0.3,)                               # trapped-ν lepton fractions (one file each)
 OUT_DIR     = "../output/tables_DD2/"              # written next to the SFHo convention
 os.makedirs(OUT_DIR, exist_ok=True)
+
+# Symmetric-matter plot (IV.5): Y_C=0.5, Y_S=0, no leptons, Δ active (vs FOPI/Danielewicz).
+FLAGS_SNM = SpeciesFlags(hyperons=False, deltas=True, muons=False, neutrinos=False)
 
 # ── reference data (repo-relative from notebooks/; NOT shipped in the pip package) ─
 DATA_DIR    = "../plot/data"
@@ -141,24 +157,29 @@ print("NB_GRID:", round(NB_GRID[0], 3), "→", round(NB_GRID[-1], 3),
 # `api.export_eos_table(PAR, flags, mode=…, nB=…, T|SnB=…, fixed=…, path=…)` →
 # `TableSpec` + `build_table` under the hood.
 #
-# Modes: `beta` (charge-neutral β-eq, transparent ν), `YC_e` (fixed hadronic charge
-# fraction + neutralising electrons, no μ/ν — report §1.7 mode 2b), `YL` (fixed lepton
-# fraction, trapped ν). Temperature axis is `T=[…]` **or** `SnB=[…]` (entropy per baryon,
-# adds the isentropic outer T-solve). The `fixed` dict is scalar, so the trapped tables
-# loop over `Y_L_VALUES` writing one file per value.
+# Modes: `beta` (charge-neutral β-eq, transparent ν); fixed-Y_C — either `YC` (leptonless,
+# report §1.7 mode 2a) or `YC_e` (+ neutralising electrons, +μ iff `YC_MUONS`, mode 2b),
+# selected by the `YC_ELECTRONS` / `YC_MUONS` knobs; `YL` (fixed lepton fraction, trapped ν).
+# Temperature axis is `T=[…]` **or** `SnB=[…]` (entropy per baryon, adds the isentropic
+# outer T-solve). The `fixed` dict is scalar, so the fixed-Y_C and trapped tables loop over
+# `Y_C_VALUES` / `Y_L_VALUES` writing one file per value.
 
 # %%
-# neutrino content per mode: transparent for beta/YC, trapped (ν on) for YL.
-FLAGS_YC   = replace(FLAGS, muons=False, neutrinos=False)   # electrons only
-FLAGS_TRAP = replace(FLAGS, neutrinos=True)                 # trapped ν
+# fixed-Y_C lepton content: electrons on/off (mode YC_e vs YC), muons via flags.
+YC_MODE  = "YC_e" if YC_ELECTRONS else "YC"        # YC_e = neutralising e (+μ iff flags); YC = leptonless
+FLAGS_YC = replace(FLAGS, muons=YC_MUONS, neutrinos=False)
+FLAGS_TRAP = replace(FLAGS, neutrinos=True)        # trapped ν
 
 # (label, mode, flags, temp-axis kwargs, fixed fractions, filename)
+_lep = ("e" + ("mu" if YC_MUONS else "")) if YC_ELECTRONS else "nolep"
 jobs = [
-    ("betaeq",     "beta", FLAGS,    dict(T=T_VALUES),   {}, "eos_dd2_betaeq.dat"),
-    ("iso_betaeq", "beta", FLAGS,    dict(SnB=S_VALUES), {}, "eos_dd2_betaeq_isentropic.dat"),
-    ("fixedYC",    "YC_e", FLAGS_YC, dict(T=T_VALUES),   {"Y_C": Y_C_FIXED},
-        "eos_dd2_fixedYC.dat"),
+    ("betaeq",     "beta", FLAGS, dict(T=T_VALUES),   {}, "eos_dd2_betaeq.dat"),
+    ("iso_betaeq", "beta", FLAGS, dict(SnB=S_VALUES), {}, "eos_dd2_betaeq_isentropic.dat"),
 ]
+for yc in Y_C_VALUES:                              # fixed-Y_C tables, one per Y_C
+    tag = f"YC{int(round(yc * 100))}_{_lep}"
+    jobs.append((f"fixed_{tag}", YC_MODE, FLAGS_YC, dict(T=T_VALUES),
+                 {"Y_C": yc}, f"eos_dd2_fixed{tag}.dat"))
 for yl in Y_L_VALUES:                              # trapped-ν tables, one per Y_L
     tag = f"YL{int(round(yl * 100))}"
     jobs.append((f"trapped_{tag}", "YL", FLAGS_TRAP, dict(T=T_VALUES),
@@ -166,23 +187,31 @@ for yl in Y_L_VALUES:                              # trapped-ν tables, one per 
     jobs.append((f"iso_trapped_{tag}", "YL", FLAGS_TRAP, dict(SnB=S_VALUES),
                  {"Y_L": yl}, f"eos_dd2_trapped_{tag}_isentropic.dat"))
 
+# skip_errors: drop points where the uniform solve doesn't converge (the low-T /
+# low-density liquid-gas spinodal for constrained Y_C/Y_L modes) instead of aborting.
 results_H = {}
 for label, mode, flags, temp_kw, fixed, fname in jobs:
     print(f"\n── computing DD2 table: {label}  (mode={mode}) ──")
     res, path = api.export_eos_table(PAR, flags, mode=mode, nB=TABLE_NB,
                                      fixed=fixed, path=os.path.join(OUT_DIR, fname),
-                                     **temp_kw)
+                                     skip_errors=True, **temp_kw)
     results_H[label] = res
     nrows = sum(len(line) for line in res.points)
-    print(f"   wrote {nrows} rows → {path}")
+    full = len(res.nB) * len(res.temp_values)
+    skipped = f" ({full - nrows} spinodal points skipped)" if nrows < full else ""
+    print(f"   wrote {nrows} rows → {path}{skipped}")
 
 # %% [markdown]
 # ## II.1 — Peek at a written table
-# First data line of the fixed-Y_C table (electrons, no μ, no ν): `Y_e ≈ Y_C`, `Y_mu = 0`.
+# First data line of the first fixed-Y_C table. With `YC_ELECTRONS=True` the
+# neutralising leptons show up as `Y_e ≈ Y_C` (and `Y_mu` if `YC_MUONS`); with it
+# off (leptonless mode `YC`) `Y_e = Y_mu = 0`.
 
 # %%
-with open(os.path.join(OUT_DIR, "eos_dd2_fixedYC.dat")) as f:
+_peek = f"eos_dd2_fixedYC{int(round(Y_C_VALUES[0] * 100))}_{_lep}.dat"
+with open(os.path.join(OUT_DIR, _peek)) as f:
     head = [next(f) for _ in range(3)]
+print(_peek)
 print("".join(head).rstrip())
 
 # %% [markdown]
@@ -232,7 +261,8 @@ api.plot_isentropic_T(PAR, flags=FLAGS, S_values=S_VALUES);
 # SNM pressure over the two heavy-ion flow constraints.
 
 # %%
-api.plot_p_vs_nb_snm(PAR, grid=NB_GRID, danielewicz=DANIELEWICZ, fopi=FOPI_PSM);
+api.plot_p_vs_nb_snm(PAR, flags=FLAGS_SNM, grid=NB_GRID,
+                     danielewicz=DANIELEWICZ, fopi=FOPI_PSM);
 
 # %% [markdown]
 # ## IV.6 — Pure neutron matter ($Y_C=0$, $Y_S=0$) vs chiral EFT
@@ -289,7 +319,7 @@ print(api.format_nmp_comparison(PAR))
 
 # %%
 for T in (0.0, T_FIXED):
-    b = api.benchmark_dd2_vs_sfho(PAR, T=T, Y_C=Y_C_FIXED)
+    b = api.benchmark_dd2_vs_sfho(PAR, T=T, Y_C=Y_C_VALUES[len(Y_C_VALUES) // 2])
     print(f"T = {T:>4} MeV | Y_C = {b['Y_C']} | {b['n_points']} pts | "
           f"DD2 {b['dd2_ms_per_pt']:.3f} ms/pt | "
           f"SFHo {b['sfho_ms_per_pt']:.3f} ms/pt | "

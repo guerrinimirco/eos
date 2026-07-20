@@ -112,34 +112,54 @@ def _cs2_along(points):
     return np.gradient(P, eps)
 
 
-def build_table(spec):
+def build_table(spec, skip_errors=False):
     """
     Solve the TableSpec grid. For each temperature-axis value an n_B sweep is
     warm-started along density (the stiff axis, report §3.4); the 'SnB' axis
     replaces each solve with the outer entropy T-solve. Returns a TableResult;
     with want_coeffs, equilibrium c_s^2 is attached per T-line.
+
+    skip_errors: if True, points where the octet solve doesn't converge are
+    dropped from their T-line instead of aborting the whole table (the warm
+    start resets on a skip). This is expected for constrained modes at low T /
+    low density inside the liquid-gas spinodal, where uniform matter has no
+    stable solution; the returned lines are then shorter than ``nB``.
     """
+    from eos.dd2.solver import octet_warm_start
     nB = np.asarray(spec.axes["nB"], dtype=float)
     temp = np.asarray(spec.axes[spec._temp_key], dtype=float)
     mode_kw = _mode_kwargs(spec.mode, spec.fixed)
     flags = spec.include
+    has_phi = flags.phi_field and flags.hyperons
+    has_muS = mode_kw.get("strange_mode") == "fixed"
+    has_muL = mode_kw.get("lepton_mode") == "trapped"
+
+    def solve_at(n, tv, x0):
+        if spec._temp_key == "T":
+            return solve_octet(spec.parametrization, float(n), flags,
+                               T=float(tv), x0=x0, **mode_kw)
+        return solve_octet_at_entropy(spec.parametrization, float(n),
+                                      float(tv), flags, x0=x0, **mode_kw)
 
     points = []
     for tv in temp:
-        if spec._temp_key == "T":
-            line = sweep_octet(spec.parametrization, nB, flags, T=float(tv),
-                               **mode_kw)
-        else:  # entropy per baryon: outer T-solve, warm-started along n_B
-            line, x0 = [], None
-            for n in nB:
-                p = solve_octet_at_entropy(spec.parametrization, float(n),
-                                           float(tv), flags, x0=x0, **mode_kw)
-                line.append(p)
-                from eos.dd2.solver import octet_warm_start
-                has_phi = flags.phi_field and flags.hyperons
-                x0 = octet_warm_start(p, has_phi,
-                                      mode_kw.get("strange_mode") == "fixed",
-                                      mode_kw.get("lepton_mode") == "trapped")
+        # Fast path: the whole line in one warm-started sweep (T axis only).
+        if spec._temp_key == "T" and not skip_errors:
+            points.append(sweep_octet(spec.parametrization, nB, flags,
+                                      T=float(tv), **mode_kw))
+            continue
+        # Tolerant / entropy path: per-point, warm-started, optionally skipping.
+        line, x0 = [], None
+        for n in nB:
+            try:
+                p = solve_at(n, tv, x0)
+            except RuntimeError:
+                if not skip_errors:
+                    raise
+                x0 = None          # reset the warm start past the gap
+                continue
+            line.append(p)
+            x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
         points.append(line)
 
     cs2 = [_cs2_along(line) for line in points] if spec.want_coeffs else None

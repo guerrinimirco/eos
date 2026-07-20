@@ -24,10 +24,11 @@ import matplotlib.pyplot as plt
 from eos import REPO_ROOT
 from eos.dd2 import (
     Parametrization, SpeciesFlags, compute_nmp,
-    solve_beta_eq_octet, sweep_beta_eq_octet, solve_composition, solve_snm,
+    solve_beta_eq_octet, sweep_beta_eq_octet, solve_composition,
     solve_octet_at_entropy, octet_warm_start,
     sound_speed_eq, sound_speed_adiabatic, heat_capacity_V,
 )
+from eos.dd2.solver import sweep_octet
 from eos.dd2.verify.tov import build_core_table, N_TRANSITION
 from eos.tov.solver import (
     compute_tov_sequence, find_mmax_precise, generate_ec_logspace, CRUST_PATHS,
@@ -69,7 +70,8 @@ def default_grid(n_lo=0.06, n_hi=1.2, n=60):
 def plot_p_vs_nb(par, flags=NUCLEONIC, grid=None, T=0.0):
     """P(n_B) along β-equilibrium (``sweep_beta_eq_octet``), log-y."""
     grid = default_grid() if grid is None else np.asarray(grid, float)
-    pts = sweep_beta_eq_octet(par, grid, flags, T=T, include_photons=False)
+    pts = sweep_beta_eq_octet(par, grid, flags, T=T, include_photons=False,
+                              stop_at_boundary=True)
     nB = np.array([p.n_B for p in pts])
     P = np.array([p.P for p in pts])
     fig, ax = plt.subplots()
@@ -93,7 +95,8 @@ def plot_composition(par, flags=NUCLEONIC, grid=None, T=0.0, y_floor=1e-4):
     hyperon onsets — the plain DD2 par carries no hyperon couplings.
     """
     grid = default_grid() if grid is None else np.asarray(grid, float)
-    pts = sweep_beta_eq_octet(par, grid, flags, T=T, include_photons=False)
+    pts = sweep_beta_eq_octet(par, grid, flags, T=T, include_photons=False,
+                              stop_at_boundary=True)
     nB = np.array([p.n_B for p in pts])
 
     # collect all baryon species that ever appear, plus leptons
@@ -129,12 +132,16 @@ def plot_isentropic_T(par, flags=NUCLEONIC, S_values=(1.0, 2.0, 4.0), grid=None)
     has_phi = flags.phi_field and flags.hyperons
     fig, ax = plt.subplots()
     for S in S_values:
-        Ts, x0 = [], None
+        ns, Ts, x0 = [], [], None
         for n in grid:
-            p = solve_octet_at_entropy(par, float(n), float(S), flags, x0=x0)
-            Ts.append(p.T)
+            # truncate at the entropy-bracket / Δ scalar-collapse boundary
+            try:
+                p = solve_octet_at_entropy(par, float(n), float(S), flags, x0=x0)
+            except RuntimeError:
+                break
+            ns.append(n); Ts.append(p.T)
             x0 = octet_warm_start(p, has_phi)
-        ax.plot(grid, Ts, "-", lw=1.8, label=f"S = {S:g}")
+        ax.plot(ns, Ts, "-", lw=1.8, label=f"S = {S:g}")
     ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
     ax.set_ylabel(r"$T$ [MeV]")
     ax.set_title("DD2 isentropic temperature")
@@ -155,11 +162,16 @@ def plot_sound_speed(par, flags=NUCLEONIC, grid=None, T=0.0):
     grid = default_grid(n=40) if grid is None else np.asarray(grid, float)
     nB, cad, ceq = [], [], []
     for n in grid:
-        Y_p = solve_beta_eq_octet(par, float(n), flags, T=T,
-                                  include_photons=False).Y_p
-        nB.append(n)
-        cad.append(sound_speed_adiabatic(par, float(n), Y_p, T=T))
-        ceq.append(sound_speed_eq(par, float(n), flags, T=T))
+        # A Δ model hits scalar collapse (m*->0) at high density (report §2.6);
+        # truncate the curve there instead of raising.
+        try:
+            Y_p = solve_beta_eq_octet(par, float(n), flags, T=T,
+                                      include_photons=False).Y_p
+            c_ad = sound_speed_adiabatic(par, float(n), Y_p, T=T)
+            c_eq = sound_speed_eq(par, float(n), flags, T=T)
+        except RuntimeError:
+            break
+        nB.append(n); cad.append(c_ad); ceq.append(c_eq)
     fig, ax = plt.subplots()
     ax.plot(nB, cad, "-", lw=1.8, label=r"frozen $c_{s,\mathrm{ad}}^2$")
     ax.plot(nB, ceq, "--", lw=1.8, label=r"equilibrium $c_{s,\mathrm{eq}}^2$")
@@ -335,16 +347,23 @@ def plot_mass_radius_comparison(curves, contour_dir=None):
 # =============================================================================
 # 9. P vs n_B — symmetric nuclear matter
 # =============================================================================
-def plot_p_vs_nb_snm(par, grid=None, T=0.0, danielewicz=DANIELEWICZ,
-                     fopi=FOPI_PSM):
+def plot_p_vs_nb_snm(par, flags=NUCLEONIC, grid=None, T=0.0,
+                     danielewicz=DANIELEWICZ, fopi=FOPI_PSM):
     """
-    P(n_B) of symmetric nuclear matter (Y_C=0.5), log-y, over the Danielewicz
-    (2002) and FOPI (2016) heavy-ion flow constraints. Both reference files are
-    (rho, P_low, P_up) bands drawn with ``fill_between``. Pass repo-relative
-    ``danielewicz`` / ``fopi`` paths when ``plot/`` isn't on the pip install.
+    P(n_B) of symmetric matter — fixed charge fraction Y_C=0.5, Y_S=0, **no
+    leptons** — log-y, over the Danielewicz (2002) and FOPI (2016) heavy-ion flow
+    constraints. Solved with ``sweep_octet(charge_mode='fixed', Y_C=0.5)`` so the
+    active species follow ``flags``: pass ``SpeciesFlags(deltas=True)`` to let the
+    Δ isobars populate (matches the flow-constraint regime), or the nucleonic
+    default to reproduce plain SNM. Both reference files are (rho, P_low, P_up)
+    bands; pass repo-relative ``danielewicz`` / ``fopi`` when ``plot/`` isn't on
+    the pip install.
     """
     grid = default_grid() if grid is None else np.asarray(grid, float)
-    P = np.array([solve_snm(par, float(n), T=T).P for n in grid])
+    pts = sweep_octet(par, grid, flags, T=T, charge_mode="fixed", Y_C=0.5,
+                      include_photons=False, stop_at_boundary=True)
+    nB = np.array([p.n_B for p in pts])
+    P = np.array([p.P for p in pts])
     # SNM pressure is negative below saturation; log-y needs the positive branch.
     pos = P > 0
     fig, ax = plt.subplots()
@@ -352,10 +371,11 @@ def plot_p_vs_nb_snm(par, grid=None, T=0.0, danielewicz=DANIELEWICZ,
                              (fopi, "C1", "FOPI (2016)")):
         b = np.loadtxt(path)
         ax.fill_between(b[:, 0], b[:, 1], b[:, 2], alpha=0.3, color=color, label=lab)
-    ax.semilogy(grid[pos], P[pos], "-", lw=2, color="C3", label="DD2 SNM")
+    ax.semilogy(nB[pos], P[pos], "-", lw=2, color="C3",
+                label="DD2 SNM" + (" + $\\Delta$" if flags.deltas else ""))
     ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
     ax.set_ylabel(r"$P$ [MeV fm$^{-3}$]")
-    ax.set_title("DD2 symmetric matter ($Y_C=0.5$) vs flow constraints")
+    ax.set_title("DD2 symmetric matter ($Y_C=0.5$, $Y_S=0$, no leptons) vs flow constraints")
     ax.legend()
     ax.grid(True, which="both", alpha=0.3)
     return fig
@@ -496,7 +516,7 @@ _TABLE_COLS = ("n_B", "T", "P", "eps", "s", "mu_n", "mu_p", "mu_e",
 
 
 def export_eos_table(par, flags, mode="beta", nB=None, T=None, SnB=None,
-                     fixed=None, path=None, want_coeffs=False):
+                     fixed=None, path=None, want_coeffs=False, skip_errors=False):
     """
     Build a DD2 EoS table for the requested species/mode/axes (``TableSpec`` +
     ``build_table``) and, if ``path`` is given, write it to a text file.
@@ -519,7 +539,7 @@ def export_eos_table(par, flags, mode="beta", nB=None, T=None, SnB=None,
         axes = {"nB": nB, "T": np.atleast_1d(0.0 if T is None else T)}
     spec = TableSpec(parametrization=par, mode=mode, axes=axes, include=flags,
                      fixed=(fixed or {}), want_coeffs=want_coeffs)
-    result = build_table(spec)
+    result = build_table(spec, skip_errors=skip_errors)
     if path is not None:
         _write_table(result, path)
     return result, path
