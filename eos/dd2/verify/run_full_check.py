@@ -97,6 +97,20 @@ def _check_coefficients(par, flags, grid):
                        f"max c_s^2={worst_cs:.3f} Gamma_th={gth:.3f}")
 
 
+def _check_coeff_cross(par, flags, grid):
+    """Analytic-from-Jacobian c_s^2 vs finite-difference (report §3.7 check 5):
+    independent-method agreement on the equilibrium sound speed."""
+    from eos.dd2 import coefficients_jac as _jc
+    from eos.dd2.coefficients import sound_speed_eq as _cs_fd
+    worst = 0.0
+    for n_B in grid:
+        cj = _jc.sound_speed_eq(par, float(n_B), flags)
+        cf = _cs_fd(par, float(n_B), flags)
+        worst = max(worst, abs(cj / cf - 1.0))
+    return CheckResult("coeff analytic~FD", worst < 1e-3, worst,
+                       "c_s^2 from Jacobian vs finite-difference")
+
+
 def _check_backend_parity(par, flags, grid):
     """eos_fast (analytic Jacobian) vs eos_ref (numeric): same root (report
     §3.7 check 4). Same math, different derivative path — agree to ~round-off."""
@@ -134,6 +148,7 @@ def run_full_check(par=None, flags=None, grid=None, include_tov=True):
     report.results.append(_check_golden(par))
     report.results.append(_check_identities(par, flags, grid))
     report.results.append(_check_coefficients(par, flags, grid))
+    report.results.append(_check_coeff_cross(par, flags, grid))
     report.results.append(_check_backend_parity(par, flags, grid))
     report.results.append(_check_compose(par))
     if include_tov:

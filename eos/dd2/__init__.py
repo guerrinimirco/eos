@@ -24,6 +24,7 @@ from eos.dd2.coefficients import (
     sound_speed_eq, sound_speed_adiabatic, adiabatic_index, thermal_index,
     heat_capacity_V, snm_sound_speed,
 )
+from eos.dd2.coefficients_jac import susceptibilities, SUSCEPT_LABELS
 
 __all__ = [
     "Parametrization", "SpeciesFlags", "active_baryons",
@@ -39,4 +40,5 @@ __all__ = [
     "compute_nmp", "energy_per_baryon", "esym",
     "sound_speed_eq", "sound_speed_adiabatic", "adiabatic_index",
     "thermal_index", "heat_capacity_V", "snm_sound_speed",
+    "susceptibilities", "SUSCEPT_LABELS",
 ]
