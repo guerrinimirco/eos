@@ -361,9 +361,16 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                           Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
                           lepton_mode=lepton_mode, Y_L=Y_L, yc_leptons=yc_leptons)
     has_muS, has_muL = ctx.has_muS, ctx.has_muL
-    guesses = [x0] if x0 is not None else []
-    guesses.append(default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
-                                       has_muL=has_muL))
+    # Lazy guess sequence: try the warm start x0 first and only build the
+    # (expensive, un-jitted beta-eq) default guess if x0 is missing or its solve
+    # doesn't converge. In a warm-started sweep the fallback is never evaluated,
+    # which is the hot-path win — default_octet_guess otherwise dominated the
+    # jitted solve (~0.9 -> ~0.3 ms/pt at T=0, fixed-Y_C).
+    def _guesses():
+        if x0 is not None:
+            yield x0
+        yield default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
+                                  has_muL=has_muL)
     # eos_fast backend (analytic_jac): exact analytic Jacobian via MINPACK
     # hybrj. At T=0 the residual AND Jacobian are Numba-jitted (kernel_numba,
     # machine-identical to the NumPy kernel); T>0 uses the NumPy analytic path
@@ -378,7 +385,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     else:
         res_fn, jac_fn = octet_residual, None
     sol = None
-    for guess in guesses:
+    for guess in _guesses():
         sol = root(res_fn, guess, args=(ctx,), jac=jac_fn,
                    method="hybr", tol=1e-13)
         res_max = max(abs(r) for r in res_fn(sol.x, ctx))

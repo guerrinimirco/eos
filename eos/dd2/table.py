@@ -24,6 +24,7 @@ from eos.dd2.solver import solve_octet, sweep_octet
 _MODES = {
     "beta": dict(charge_mode="neutral"),
     "YC": dict(charge_mode="fixed"),
+    "YC_e": dict(charge_mode="fixed", yc_leptons=True),   # 2b: + neutralising e (+mu iff flags.muons)
     "YS": dict(charge_mode="neutral", strange_mode="fixed"),
     "YC+YS": dict(charge_mode="fixed", strange_mode="fixed"),
     "YL": dict(charge_mode="neutral", lepton_mode="trapped"),
@@ -31,7 +32,7 @@ _MODES = {
 
 #: which TableSpec.fixed keys each mode consumes.
 _MODE_FIXED = {
-    "beta": (), "YC": ("Y_C",), "YS": ("Y_S",),
+    "beta": (), "YC": ("Y_C",), "YC_e": ("Y_C",), "YS": ("Y_S",),
     "YC+YS": ("Y_C", "Y_S"), "YL": ("Y_L",),
 }
 

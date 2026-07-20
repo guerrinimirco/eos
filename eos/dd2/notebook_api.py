@@ -38,10 +38,13 @@ NUCLEONIC = SpeciesFlags(hyperons=False, phi_field=False)
 #: Full baryon octet with the hidden-strange vector (composition plots).
 OCTET = SpeciesFlags(hyperons=True, phi_field=True)
 
-#: Shipped observational data (figs 8, 10).
+#: Shipped observational data (figs 8, 9, 10).
 _DATA = os.path.join(str(REPO_ROOT), "plot", "data")
 CONTOUR_DIR = os.path.join(_DATA, "contours")
 CHIRAL_EFT = os.path.join(_DATA, "samples", "chiral_eft.txt")
+#: SNM pressure flow constraints (rho, P_low, P_up), fig 9.
+DANIELEWICZ = os.path.join(_DATA, "samples", "DLL_2002_PSM.txt")
+FOPI_PSM = os.path.join(_DATA, "samples", "FOPI_2016_PSM.txt")
 
 #: DD2 reference NMPs (Typel et al. 2010), for the fig-11 comparison table.
 DD2_NMP_REFERENCE = {
@@ -304,20 +307,56 @@ def plot_mr_with_constraints(par, flags=NUCLEONIC, tov=None,
     return fig
 
 
+def plot_mass_radius_comparison(curves, contour_dir=None):
+    """
+    Overlay M-R sequences for several parametrizations on one axis. ``curves`` is
+    a list of ``(label, par, flags)``; each is solved with ``compute_tov`` (once)
+    and drawn with its M_max in the legend. Pass ``contour_dir`` to underlay the
+    observational posteriors (same lazy import as ``plot_mr_with_constraints``).
+    """
+    fig, ax = plt.subplots()
+    if contour_dir is not None:
+        from nucleation.analysis.figure import add_observational_constraints
+        add_observational_constraints(ax, contour_dir)
+    for label, par, flags in curves:
+        tov = compute_tov(par, flags)
+        ax.plot(tov["R"], tov["M"], "-", lw=2,
+                label=f"{label} ($M_{{max}}$={tov['M_max']:.2f})")
+    ax.set_xlim(9, 16)
+    ax.set_ylim(0, 2.8)
+    ax.set_xlabel(r"$R$ [km]")
+    ax.set_ylabel(r"$M$ [$M_\odot$]")
+    ax.set_title("DD2 mass-radius — parametrization comparison")
+    ax.legend(loc="lower left", fontsize=8)
+    ax.grid(True, alpha=0.3)
+    return fig
+
+
 # =============================================================================
 # 9. P vs n_B — symmetric nuclear matter
 # =============================================================================
-def plot_p_vs_nb_snm(par, grid=None, T=0.0):
-    """P(n_B) of symmetric nuclear matter (Y_p=0.5), log-y."""
+def plot_p_vs_nb_snm(par, grid=None, T=0.0, danielewicz=DANIELEWICZ,
+                     fopi=FOPI_PSM):
+    """
+    P(n_B) of symmetric nuclear matter (Y_C=0.5), log-y, over the Danielewicz
+    (2002) and FOPI (2016) heavy-ion flow constraints. Both reference files are
+    (rho, P_low, P_up) bands drawn with ``fill_between``. Pass repo-relative
+    ``danielewicz`` / ``fopi`` paths when ``plot/`` isn't on the pip install.
+    """
     grid = default_grid() if grid is None else np.asarray(grid, float)
     P = np.array([solve_snm(par, float(n), T=T).P for n in grid])
     # SNM pressure is negative below saturation; log-y needs the positive branch.
     pos = P > 0
     fig, ax = plt.subplots()
-    ax.semilogy(grid[pos], P[pos], "-", lw=2)
+    for path, color, lab in ((danielewicz, "C0", "Danielewicz (2002)"),
+                             (fopi, "C1", "FOPI (2016)")):
+        b = np.loadtxt(path)
+        ax.fill_between(b[:, 0], b[:, 1], b[:, 2], alpha=0.3, color=color, label=lab)
+    ax.semilogy(grid[pos], P[pos], "-", lw=2, color="C3", label="DD2 SNM")
     ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
     ax.set_ylabel(r"$P$ [MeV fm$^{-3}$]")
-    ax.set_title("DD2 symmetric nuclear matter pressure")
+    ax.set_title("DD2 symmetric matter ($Y_C=0.5$) vs flow constraints")
+    ax.legend()
     ax.grid(True, which="both", alpha=0.3)
     return fig
 
@@ -401,34 +440,40 @@ def build_nmp_par(nmp=None):
 # =============================================================================
 # Speed test: SFHo vs DD2 on a matched β-eq sweep
 # =============================================================================
-def benchmark_dd2_vs_sfho(par, grid=None, flags=NUCLEONIC, T=0.0):
+def benchmark_dd2_vs_sfho(par, grid=None, T=0.0, Y_C=0.3):
     """
-    Time the DD2 fast path (``sweep_beta_eq_octet(..., analytic_jac=True)``, first
-    call discarded for Numba compile) against the SFHo table generator on the
-    same β-eq density grid, at temperature ``T`` [MeV]. Photons join both sides
-    at T>0. Returns ms/point for each and the ratio.
+    Time DD2 vs the SFHo table generator on a matched **fixed-Y_C** density sweep
+    with electrons, no muons, no neutrinos (report §1.7 mode 2b). DD2 uses the
+    fast path (``sweep_octet(charge_mode='fixed', yc_leptons=True,
+    analytic_jac=True)``, first call discarded for the Numba compile); SFHo uses
+    ``equilibrium='fixed_yc'`` with the same lepton content. Returns ms/point for
+    each and the ratio (>1 means DD2 is faster).
 
-    At T=0 the DD2 residual+Jacobian are Numba-jitted; at T>0 the analytic path
-    is NumPy (the JEL integrals don't jit), so the ms/pt is naturally larger.
+    At T=0 the DD2 residual+Jacobian are Numba-jitted; at T>0 the analytic path is
+    NumPy (the JEL integrals don't jit), so the ms/pt is naturally larger.
     """
+    from eos.dd2.solver import sweep_octet
     from eos.sfho.compute_tables import compute_table, TableSettings
     grid = default_grid(n=100) if grid is None else np.asarray(grid, float)
     n = len(grid)
     photons = T > 0.0
+    flags = SpeciesFlags(muons=False, neutrinos=False)
 
-    # DD2: discard the first (compile) call at this T, then time.
-    sweep_beta_eq_octet(par, grid[:5], flags, T=T, include_photons=photons,
-                        analytic_jac=True)
+    def dd2_sweep(g):
+        return sweep_octet(par, g, flags, T=T, charge_mode="fixed", Y_C=Y_C,
+                           yc_leptons=True, include_photons=photons,
+                           analytic_jac=True)
+
+    dd2_sweep(grid[:5])                    # discard the compile call at this T
     t0 = time.perf_counter()
-    sweep_beta_eq_octet(par, grid, flags, T=T, include_photons=photons,
-                        analytic_jac=True)
+    dd2_sweep(grid)
     dd2_ms = 1e3 * (time.perf_counter() - t0) / n
 
-    # SFHo on the same grid (nucleonic β-eq).
     settings = TableSettings(
         parametrization="sfho", particle_content="nucleons",
-        equilibrium="beta_eq", n_B_values=grid, T_values=[T],
-        include_photons=photons, include_muons=flags.muons,
+        equilibrium="fixed_yc", Y_C_values=[Y_C], n_B_values=grid, T_values=[T],
+        include_electrons=True, include_muons=False,
+        include_thermal_neutrinos=False, include_photons=photons,
         print_results=False, print_timing=False, print_errors=False,
         save_to_file=False,
     )
@@ -436,8 +481,8 @@ def benchmark_dd2_vs_sfho(par, grid=None, flags=NUCLEONIC, T=0.0):
     compute_table(settings)
     sfho_ms = 1e3 * (time.perf_counter() - t0) / n
 
-    return dict(T=T, n_points=n, dd2_ms_per_pt=dd2_ms, sfho_ms_per_pt=sfho_ms,
-                ratio=sfho_ms / dd2_ms)
+    return dict(T=T, Y_C=Y_C, n_points=n, dd2_ms_per_pt=dd2_ms,
+                sfho_ms_per_pt=sfho_ms, ratio=sfho_ms / dd2_ms)
 
 
 # =============================================================================
@@ -495,3 +540,22 @@ def _write_table(result, path):
                        p.mu_S, p.mu_L, p.Y_e, p.Y_mu]
                 row += [p.Y(s) for s in species]
                 f.write("  " + " ".join(f"{v:13.6e}" for v in row) + "\n")
+
+
+if __name__ == "__main__":
+    # Smallest self-check for the touched plot helpers: the new SNM overlay and
+    # the multi-par M-R comparison must return a Figure and load their data.
+    import matplotlib
+    matplotlib.use("Agg")
+    # REPO_ROOT points at the pip install (no plot/); resolve data from cwd when
+    # run from the repo root as a dev check.
+    dll = DANIELEWICZ if os.path.isfile(DANIELEWICZ) else "plot/data/samples/DLL_2002_PSM.txt"
+    fopi = FOPI_PSM if os.path.isfile(FOPI_PSM) else "plot/data/samples/FOPI_2016_PSM.txt"
+    par = Parametrization.from_dd2_defaults()
+    g = default_grid(n=10)
+    assert plot_p_vs_nb_snm(par, grid=g, danielewicz=dll, fopi=fopi) is not None
+    assert np.loadtxt(dll).shape[1] == 3
+    assert np.loadtxt(fopi).shape[1] == 3
+    fig = plot_mass_radius_comparison([("DD2", par, NUCLEONIC)])
+    assert fig is not None
+    print("notebook_api self-check OK")

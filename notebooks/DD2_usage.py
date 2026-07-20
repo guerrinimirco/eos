@@ -16,34 +16,44 @@
 # %% [markdown]
 # # DD2 EoS engine — usage notebook
 #
-# A guided tour of the `eos.dd2` density-dependent RMF engine. The heavy code
-# lives in the installed `eos` package; every non-trivial plotting/analysis
-# routine lives in **`eos/dd2/notebook_api.py`** (imported here as `api`), so
-# this notebook stays thin and diff-able.
+# Production-style tour of the `eos.dd2` density-dependent RMF engine, laid out like
+# the SFHo workflow: **one knobs cell → a job-loop that computes & writes the EoS
+# tables → TOV → physics plots → a speed test**. The heavy code lives in the installed
+# `eos` package; every non-trivial plotting/analysis routine lives in
+# **`eos/dd2/notebook_api.py`** (imported here as `api`), so this notebook stays thin.
 #
-# **This notebook is paired to `DD2_usage.py` via jupytext** (`formats:
-# ipynb,py:percent`): edit *either* file and the other updates on save. The `.py`
-# is the review-friendly source of truth.
+# **Paired to `DD2_usage.py` via jupytext** (`formats: ipynb,py:percent`): edit either
+# file and the other updates on save. The `.py` is the review-friendly source of truth.
 #
 # Layout:
-# - **Part I — Setup & knobs.** Imports and *every* tunable (parametrization,
-#   particle content, grids, table mode). Edit here, then Run-All. *Always run.*
-# - **Part II — Physics plots.** The 11-figure set for the selected parametrization.
-# - **Part III — Second parametrization.** The same set for an NMP-built par.
-# - **Part IV — Generate & export a table.** Pick species/mode/axes, write a file.
-# - **Part V — Speed test.** DD2 vs SFHo at T=0 and T>0.
+# - **Part I — Setup & knobs.** Imports and *every* tunable (parametrization, particles,
+#   grids, table axes). Edit here, then Run-All. *Always run.*
+# - **Part II — Compute & write the EoS tables** (β-eq, isentropic β-eq, fixed-Y_C,
+#   trapped-ν, isentropic trapped) in one loop.
+# - **Part III — TOV structure** for the selected parametrization.
+# - **Part IV — Physics plots** (P–n_B, composition, sound speed, isentropic T,
+#   symmetric matter vs Danielewicz+FOPI, PNM vs chiral EFT, M–R comparison, NMPs).
+# - **Part V — Speed test** DD2 vs SFHo at fixed-Y_C.
 
 # %% [markdown]
 # # Part I — Setup & knobs
 # ## I.1 — Imports & installs
 #
 # Run once from a fresh kernel. Keep the GitHub-install lines active for a clean
-# environment (Colab); switch to the commented local-editable block when
-# developing the `eos` package (repo edits then take effect after a kernel
-# restart only).
+# environment (Colab); switch to the commented local-editable block when developing
+# the `eos` package (repo edits then take effect after a kernel restart only).
 
 # %%
+import os
 import sys
+
+# ─── Prefer the local repo when developing next to it ────────────────────────
+# On Colab this repo isn't present, so we fall through to the pip install below;
+# locally, the parent dir (which contains ./eos) takes precedence over any stale
+# pip copy, so edits to the package take effect on a kernel restart.
+_repo = os.path.abspath("..")
+if os.path.isdir(os.path.join(_repo, "eos")) and _repo not in sys.path:
+    sys.path.insert(0, _repo)
 
 # ─── Install the packages from GitHub (latest commit) ────────────────────────
 # !{sys.executable} -m pip install --no-deps --force-reinstall git+https://github.com/guerrinimirco/eos.git --quiet
@@ -56,6 +66,9 @@ print("nucleation package loaded successfully!")
 # # !{sys.executable} -m pip install -e ../../metastability-nucleation --quiet
 
 # ─── Scientific Python ───────────────────────────────────────────────────────
+import os
+from dataclasses import replace
+
 import numpy as np
 
 # ─── DD2 engine (plotting helpers live in eos/dd2/notebook_api.py) ───────────
@@ -65,242 +78,219 @@ from eos.dd2 import notebook_api as api
 # %% [markdown]
 # ## I.2 — Knobs — **EDIT THIS CELL**
 #
-# Everything you'd normally change lives here. Downstream cells only *read* these.
+# Everything you'd normally change lives here; downstream cells only *read* these.
 #
-# - `PAR` — the parametrization. `from_dd2_defaults()` (nucleonic DD2),
-#   `from_dd2y_defaults()` (DD2Y, needed for hyperons), or an NMP-built one
-#   (Part III).
-# - `FLAGS` — particle content. Hyperons/Δ need a par that carries their
-#   couplings (DD2Y / a Δ-calibrated par); the plain DD2 par is nucleonic only.
-# - grids / temperatures — the axes of the plots.
-# - `TABLE_*` — what Part IV exports.
+# - `PAR` — the parametrization. Default `from_dd2_defaults()` (nucleonic DD2). For
+#   hyperons use `from_dd2y_defaults()`. To drive it from an explicit **NMP set**,
+#   uncomment the `from_nmp` block (it inverts the NMPs to DD2 couplings; check `.ok`).
+# - `FLAGS` — particle content. Hyperons/Δ need a par that carries their couplings
+#   (DD2Y / a Δ-calibrated par); the plain DD2 par is nucleonic only.
+# - grids — the axes of the tables and plots.
+# - `TABLE_*` — fixed fractions and the output folder for Part II.
 
 # %%
 # ── parametrization ──────────────────────────────────────────────────────────
-PAR = Parametrization.from_dd2_defaults()      # ← nucleonic DD2 (default)
-# PAR = Parametrization.from_dd2y_defaults()   #   DD2Y (enables hyperons below)
+PAR = Parametrization.from_dd2_defaults()          # ← nucleonic DD2 (default)
+# PAR = Parametrization.from_dd2y_defaults()        #   DD2Y (enables hyperons below)
+
+# --- or an explicit NMP set (uncomment; inverts to DD2 nucleon couplings) -----
+# NMP = dict(n_sat=0.149065, E_sat=-16.02, K_sat=242.7, Q_sat=169.0,
+#            E_sym=31.67, L_sym=70.0, m_eff_ratio=0.5625)   # L_sym nudged 55→70 (stiffer sym energy)
+# PAR, _status = Parametrization.from_nmp(NMP, return_status=True)
+# assert _status.ok, f"NMP inversion did not converge: {_status.message}"
 
 # ── particle content ─────────────────────────────────────────────────────────
-FLAGS = SpeciesFlags(hyperons=False,           # ← Λ,Σ,Ξ octet (needs DD2Y)
-                     deltas=False,             # ← Δ quartet (needs a Δ par)
-                     muons=True,               #   e always on; μ optional
-                     phi_field=False)          #   hidden-strange φ (DD2Y default)
+FLAGS = SpeciesFlags(hyperons=False,               # ← Λ,Σ,Ξ octet (needs DD2Y)
+                     deltas=False,                 # ← Δ quartet (needs a Δ par)
+                     muons=True,                   #   e always on; μ optional
+                     phi_field=False)              #   hidden-strange φ (DD2Y default)
 
 # ── axes ─────────────────────────────────────────────────────────────────────
-NB_GRID   = np.geomspace(0.06, 1.2, 60)        # ← β-eq density grid [fm^-3]
-T_FIXED   = 10.0                               # ← T for the heat-capacity plot [MeV]
-S_VALUES  = (1.0, 2.0, 4.0)                    # ← isentropic S = s/n_B values
+NB_GRID  = np.geomspace(0.06, 1.2, 60)             # β-eq density grid [fm^-3]
+T_VALUES = np.array([0.0, 10.0, 30.0])             # temperature axis [MeV] (bump for production)
+S_VALUES = (1.0, 2.0)                              # isentropic S = s/n_B (must be reachable)
+T_FIXED  = 10.0                                    # single T for T>0 diagnostics [MeV]
 
-# ── observational / reference data (repo-relative from notebooks/) ───────────
-# These live in the repo under plot/data, NOT in the pip-installed package, so
-# reference them by path relative to this notebook (as the 2fam notebook does).
+# ── table knobs (Part II) ────────────────────────────────────────────────────
+TABLE_NB    = np.geomspace(0.06, 1.0, 50)          # density grid for the written tables
+Y_C_FIXED   = 0.3                                  # fixed charge fraction (fixed-Y_C table)
+Y_L_VALUES  = (0.3,)                               # trapped-ν lepton fractions (one file each)
+OUT_DIR     = "../output/tables_DD2/"              # written next to the SFHo convention
+os.makedirs(OUT_DIR, exist_ok=True)
+
+# ── reference data (repo-relative from notebooks/; NOT shipped in the pip package) ─
 DATA_DIR    = "../plot/data"
-CONTOUR_DIR = DATA_DIR + "/contours"                 # fig II.8 M-R overlays
-CHIRAL_EFT  = DATA_DIR + "/samples/chiral_eft.txt"   # fig II.10 chiral band
+SAMPLES     = DATA_DIR + "/samples"
+CONTOUR_DIR = DATA_DIR + "/contours"
+CHIRAL_EFT  = SAMPLES + "/chiral_eft.txt"          # PNM E/N band (Y_C=0)
+DANIELEWICZ = SAMPLES + "/DLL_2002_PSM.txt"        # SNM P flow constraint
+FOPI_PSM    = SAMPLES + "/FOPI_2016_PSM.txt"       # SNM P flow constraint
 
-# ── Part IV: table to export ─────────────────────────────────────────────────
-TABLE_MODE = "beta"                # 'beta','YC','YS','YC+YS','YL'
-TABLE_FIXED = {}                   # e.g. {"Y_C": 0.1} for YC, {"Y_L": 0.4} for YL
-TABLE_TEMP = {"T": [0.0]}          # temperature axis: {"T":[...]} or {"SnB":[1,2]}
-TABLE_NB = np.geomspace(0.05, 1.2, 80)
-TABLE_PATH = "DD2_table_beta_T0.dat"
+# NS-structure flags: a hyperonic core needs a DD2Y PAR, otherwise go nucleonic.
+FLAGS_TOV = FLAGS if FLAGS.hyperons else api.NUCLEONIC
 
 print("PAR    :", PAR.__class__.__name__, "| n_sat =", round(PAR.n_sat, 4))
 print("FLAGS  :", FLAGS)
-print("NB_GRID:", NB_GRID[0], "→", NB_GRID[-1], "fm^-3,", len(NB_GRID), "points")
+print("NB_GRID:", round(NB_GRID[0], 3), "→", round(NB_GRID[-1], 3),
+      "fm^-3,", len(NB_GRID), "points")
 
 # %% [markdown]
-# # Part II — Physics plots
+# # Part II — Compute & write the EoS tables
 #
-# The 11-figure set for the selected `PAR` / `FLAGS`. Cold / T=0 unless the plot
-# is about temperature. To regenerate for a different parametrization, change
-# `PAR` in I.2 and Run-All-Below — or just read Part III.
-
-# %% [markdown]
-# ## II.1 — Pressure vs $n_B$ (β-equilibrium)
-# Neutrino-transparent npeμ matter along β-equilibrium (`sweep_beta_eq_octet`),
-# log-y.
-
-# %%
-api.plot_p_vs_nb(PAR, flags=FLAGS, grid=NB_GRID)
-
-# %% [markdown]
-# ## II.2 — Composition $Y_i$ vs $n_B$
-# Particle fractions along β-eq. With a nucleonic `PAR` this is n, p, e, μ; with a
-# DD2Y `PAR` + `hyperons=True` the hyperon onsets appear (see II.2b).
+# One loop, one row per table (the SFHo `jobs` pattern). Each job is
+# `api.export_eos_table(PAR, flags, mode=…, nB=…, T|SnB=…, fixed=…, path=…)` →
+# `TableSpec` + `build_table` under the hood.
+#
+# Modes: `beta` (charge-neutral β-eq, transparent ν), `YC_e` (fixed hadronic charge
+# fraction + neutralising electrons, no μ/ν — report §1.7 mode 2b), `YL` (fixed lepton
+# fraction, trapped ν). Temperature axis is `T=[…]` **or** `SnB=[…]` (entropy per baryon,
+# adds the isentropic outer T-solve). The `fixed` dict is scalar, so the trapped tables
+# loop over `Y_L_VALUES` writing one file per value.
 
 # %%
-api.plot_composition(PAR, flags=FLAGS, grid=NB_GRID)
+# neutrino content per mode: transparent for beta/YC, trapped (ν on) for YL.
+FLAGS_YC   = replace(FLAGS, muons=False, neutrinos=False)   # electrons only
+FLAGS_TRAP = replace(FLAGS, neutrinos=True)                 # trapped ν
+
+# (label, mode, flags, temp-axis kwargs, fixed fractions, filename)
+jobs = [
+    ("betaeq",     "beta", FLAGS,    dict(T=T_VALUES),   {}, "eos_dd2_betaeq.dat"),
+    ("iso_betaeq", "beta", FLAGS,    dict(SnB=S_VALUES), {}, "eos_dd2_betaeq_isentropic.dat"),
+    ("fixedYC",    "YC_e", FLAGS_YC, dict(T=T_VALUES),   {"Y_C": Y_C_FIXED},
+        "eos_dd2_fixedYC.dat"),
+]
+for yl in Y_L_VALUES:                              # trapped-ν tables, one per Y_L
+    tag = f"YL{int(round(yl * 100))}"
+    jobs.append((f"trapped_{tag}", "YL", FLAGS_TRAP, dict(T=T_VALUES),
+                 {"Y_L": yl}, f"eos_dd2_trapped_{tag}.dat"))
+    jobs.append((f"iso_trapped_{tag}", "YL", FLAGS_TRAP, dict(SnB=S_VALUES),
+                 {"Y_L": yl}, f"eos_dd2_trapped_{tag}_isentropic.dat"))
+
+results_H = {}
+for label, mode, flags, temp_kw, fixed, fname in jobs:
+    print(f"\n── computing DD2 table: {label}  (mode={mode}) ──")
+    res, path = api.export_eos_table(PAR, flags, mode=mode, nB=TABLE_NB,
+                                     fixed=fixed, path=os.path.join(OUT_DIR, fname),
+                                     **temp_kw)
+    results_H[label] = res
+    nrows = sum(len(line) for line in res.points)
+    print(f"   wrote {nrows} rows → {path}")
 
 # %% [markdown]
-# ## II.2b — Hyperon onsets (DD2Y)
-# The plain DD2 par carries no hyperon couplings, so hyperons need the DD2Y par.
-# This cell is self-contained (it builds DD2Y locally) regardless of the I.2 knob.
+# ## II.1 — Peek at a written table
+# First data line of the fixed-Y_C table (electrons, no μ, no ν): `Y_e ≈ Y_C`, `Y_mu = 0`.
 
 # %%
-api.plot_composition(Parametrization.from_dd2y_defaults(), flags=api.OCTET,
-                     grid=NB_GRID)
+with open(os.path.join(OUT_DIR, "eos_dd2_fixedYC.dat")) as f:
+    head = [next(f) for _ in range(3)]
+print("".join(head).rstrip())
 
 # %% [markdown]
-# ## II.3 — Isentropic temperature
-# Temperature along constant entropy-per-baryon paths S = s/n_B.
+# # Part III — TOV structure (selected parametrization)
+#
+# Cold β-eq core + BPS crust. Solved once and reused by the M–R / Λ–M figures.
 
 # %%
-api.plot_isentropic_T(PAR, flags=FLAGS, S_values=S_VALUES)
+tov = api.compute_tov(PAR, FLAGS_TOV)
+print(f"M_max = {tov['M_max']:.3f} M_sun | R_1.4 = {tov['R_1p4']:.2f} km | "
+      f"Lambda_1.4 = {tov['Lambda_1p4']:.0f}")
 
 # %% [markdown]
-# ## II.4 — Speed of sound $c_s^2$
+# # Part IV — Physics plots
+#
+# All for the selected `PAR` / `FLAGS`. Cold / T=0 unless the plot is about temperature.
+
+# %% [markdown]
+# ## IV.1 — Pressure vs $n_B$ (β-equilibrium)
+
+# %%
+api.plot_p_vs_nb(PAR, flags=FLAGS, grid=NB_GRID);
+
+# %% [markdown]
+# ## IV.2 — Composition $Y_i$ vs $n_B$ (β-equilibrium)
+# n, p, e, μ for a nucleonic par; hyperon onsets appear with a DD2Y par + `hyperons=True`.
+
+# %%
+api.plot_composition(PAR, flags=FLAGS, grid=NB_GRID);
+
+# %% [markdown]
+# ## IV.3 — Speed of sound $c_s^2$
 # Frozen (fixed-composition) and equilibrium $c_s^2$, with the causal limit.
 
 # %%
-api.plot_sound_speed(PAR, flags=FLAGS)
+api.plot_sound_speed(PAR, flags=FLAGS);
 
 # %% [markdown]
-# ## II.5 — Heat capacities $C_V$, $C_P$ (needs T>0)
-# Per-baryon $C_V$ and $C_P$ at fixed `T_FIXED`.
+# ## IV.4 — Isentropic temperature
+# Temperature along constant entropy-per-baryon paths S = s/n_B.
 
 # %%
-api.plot_heat_capacity(PAR, flags=FLAGS, T=T_FIXED)
+api.plot_isentropic_T(PAR, flags=FLAGS, S_values=S_VALUES);
 
 # %% [markdown]
-# ## II.6–8 — TOV structure (M-R, Λ-M, constraints)
-# Cold β-eq core + BPS crust. The TOV sequence is solved **once** here and reused
-# by the three figures. NS structure uses nucleonic flags (a hyperonic core needs
-# a DD2Y `PAR`).
+# ## IV.5 — Symmetric matter ($Y_C=0.5$, $Y_S=0$) vs Danielewicz + FOPI
+# SNM pressure over the two heavy-ion flow constraints.
 
 # %%
-FLAGS_TOV = api.NUCLEONIC if not FLAGS.hyperons else FLAGS
-tov = api.compute_tov(PAR, FLAGS_TOV)
-print(f"M_max={tov['M_max']:.3f} M_sun | R_1.4={tov['R_1p4']:.2f} km | "
-      f"Lambda_1.4={tov['Lambda_1p4']:.0f}")
+api.plot_p_vs_nb_snm(PAR, grid=NB_GRID, danielewicz=DANIELEWICZ, fopi=FOPI_PSM);
 
 # %% [markdown]
-# ## II.6 — Mass-radius
+# ## IV.6 — Pure neutron matter ($Y_C=0$, $Y_S=0$) vs chiral EFT
+# PNM energy per particle E/N against the chiral-EFT band.
 
 # %%
-api.plot_mass_radius(PAR, flags=FLAGS_TOV, tov=tov)
+api.plot_pnm_chiral(PAR, chiral_path=CHIRAL_EFT);
 
 # %% [markdown]
-# ## II.7 — Tidal deformability Λ-M
+# ## IV.7 — Mass–radius: parametrization comparison
+# The selected `PAR` against the three reference DD2 variants (default couplings):
+# nucleons-only, DD2Y (hyperons), DD2YΔ (hyperons + Δ). Each solved once; $M_{max}$ in
+# the legend.
 
 # %%
-api.plot_lambda_mass(PAR, flags=FLAGS_TOV, tov=tov)
+curves = [
+    ("selected",     PAR,                                                 FLAGS_TOV),
+    ("DD2 nucleons", Parametrization.from_dd2_defaults(),                 api.NUCLEONIC),
+    ("DD2Y",         Parametrization.from_dd2y_defaults(),                api.OCTET),
+    ("DD2YΔ",        Parametrization.from_delta_potential(
+                         base=Parametrization.from_dd2y_defaults()),
+                     SpeciesFlags(hyperons=True, deltas=True, phi_field=True)),
+]
+api.plot_mass_radius_comparison(curves);
 
 # %% [markdown]
-# ## II.8 — M-R vs observational constraints
-# The curve over the shipped J0030 / J0740 / HESS / GW170817 / GW190425 posteriors
-# (`add_observational_constraints` from the `nucleation` figure utilities).
+# ## IV.8 — Λ–M and M–R vs observational constraints (selected par)
 
 # %%
-api.plot_mr_with_constraints(PAR, flags=FLAGS_TOV, tov=tov, contour_dir=CONTOUR_DIR)
-
-# %% [markdown]
-# ## II.9 — Pressure vs $n_B$ (symmetric matter)
-# Symmetric nuclear matter (Y_p = 0.5), log-y (positive branch above saturation).
+api.plot_lambda_mass(PAR, flags=FLAGS_TOV, tov=tov);
 
 # %%
-api.plot_p_vs_nb_snm(PAR, grid=NB_GRID)
+api.plot_mr_with_constraints(PAR, flags=FLAGS_TOV, tov=tov, contour_dir=CONTOUR_DIR);
 
 # %% [markdown]
-# ## II.10 — Pure neutron matter vs chiral EFT
-# PNM energy per particle against the shipped chiral-EFT band.
-
-# %%
-api.plot_pnm_chiral(PAR, chiral_path=CHIRAL_EFT)
-
-# %% [markdown]
-# ## II.11 — Nuclear-matter parameters
+# ## IV.9 — Nuclear-matter parameters
 # `compute_nmp(PAR)` next to the DD2 reference values.
 
 # %%
 print(api.format_nmp_comparison(PAR))
 
 # %% [markdown]
-# # Part III — Second parametrization (NMP-built)
+# # Part V — Speed test: DD2 vs SFHo (fixed-$Y_C$)
 #
-# `Parametrization.from_nmp` inverts a target NMP set to DD2 couplings. Here we
-# nudge `L_sym` 55 → 70 MeV (a stiffer symmetry energy) so the two passes visibly
-# differ. We check the inverter converged before plotting.
-
-# %%
-PAR_NMP, nmp_status = api.build_nmp_par()
-print("NMP inversion:", nmp_status.message, "| ok =", nmp_status.ok)
-assert nmp_status.ok, "inverter did not converge — inspect nmp_status, do not plot"
-print(api.format_nmp_comparison(PAR_NMP))
-
-# %% [markdown]
-# ## III.1 — Pressure, composition, sound speed (NMP par)
-
-# %%
-api.plot_p_vs_nb(PAR_NMP, grid=NB_GRID)
-
-# %%
-api.plot_composition(PAR_NMP, grid=NB_GRID)
-
-# %%
-api.plot_sound_speed(PAR_NMP)
-
-# %% [markdown]
-# ## III.2 — PNM vs chiral EFT (NMP par)
-# The clearest visual difference from the `L_sym` nudge.
-
-# %%
-api.plot_pnm_chiral(PAR_NMP, chiral_path=CHIRAL_EFT)
-
-# %% [markdown]
-# ## III.3 — TOV structure (NMP par)
-# Stiffer `L_sym` ⇒ larger $R_{1.4}$ and $\Lambda_{1.4}$.
-
-# %%
-tov_nmp = api.compute_tov(PAR_NMP, api.NUCLEONIC)
-print(f"NMP: M_max={tov_nmp['M_max']:.3f} | R_1.4={tov_nmp['R_1p4']:.2f} km | "
-      f"Lambda_1.4={tov_nmp['Lambda_1p4']:.0f}")
-api.plot_mass_radius(PAR_NMP, tov=tov_nmp)
-
-# %%
-api.plot_lambda_mass(PAR_NMP, tov=tov_nmp)
-
-# %% [markdown]
-# # Part IV — Generate & export a table
+# Matched fixed-$Y_C$ density sweep with electrons, no muons, no neutrinos. DD2 fast
+# path (`sweep_octet(charge_mode='fixed', yc_leptons=True, analytic_jac=True)`, first
+# call discarded for the Numba compile) vs the SFHo `fixed_yc` table generator, at T=0
+# and T>0. `ratio > 1` means DD2 is faster.
 #
-# Build a table for the species / mode / axes you need (via `TableSpec` +
-# `build_table`) and write it to disk. The knobs come from I.2 (`TABLE_MODE`,
-# `TABLE_FIXED`, `TABLE_TEMP`, `TABLE_NB`, `TABLE_PATH`) — edit them there.
-#
-# Modes: `beta` (charge-neutral β-eq), `YC` (fixed charge fraction),
-# `YS` (fixed strangeness), `YC+YS`, `YL` (fixed lepton fraction, trapped ν).
-# Temperature axis is either `{"T":[...]}` or `{"SnB":[...]}` (entropy per baryon).
+# *Bottleneck note:* profiling this sweep found `solve_octet` was eagerly building the
+# un-jitted beta-eq fallback guess on **every** point (~77% of the time) even though the
+# warm start already converged. Making that fallback lazy dropped DD2 T=0 from ~0.9 to
+# ~0.15 ms/pt (~3× faster than SFHo; ~parity at T>0 where the JEL integrals aren't jitted).
 
 # %%
-result, path = api.export_eos_table(
-    PAR, FLAGS,
-    mode=TABLE_MODE,
-    nB=TABLE_NB,
-    T=TABLE_TEMP.get("T"),
-    SnB=TABLE_TEMP.get("SnB"),
-    fixed=TABLE_FIXED,
-    path=TABLE_PATH,
-)
-n_rows = sum(len(line) for line in result.points)
-print(f"wrote {n_rows} rows to {path}")
-print("first data line:")
-print(open(path).read().splitlines()[2])
-
-# %% [markdown]
-# # Part V — Speed test: DD2 vs SFHo
-#
-# Matched β-equilibrium density sweep. DD2 fast path
-# (`sweep_beta_eq_octet(..., analytic_jac=True)`, first call discarded for the
-# Numba compile) vs the SFHo table generator, at **T=0 and T>0**.
-#
-# Anchor (dev machine): a 100-pt nucleonic DD2 sweep is ~35 ms (~0.35 ms/pt) at
-# T=0. At T>0 the DD2 analytic path is NumPy (the JEL integrals don't jit), so its
-# ms/pt is naturally larger — treat these as sanity values, not targets.
-
-# %%
-for T in (0.0, 10.0):
-    b = api.benchmark_dd2_vs_sfho(PAR, T=T)
-    print(f"T = {T:>4} MeV | {b['n_points']} pts | "
+for T in (0.0, T_FIXED):
+    b = api.benchmark_dd2_vs_sfho(PAR, T=T, Y_C=Y_C_FIXED)
+    print(f"T = {T:>4} MeV | Y_C = {b['Y_C']} | {b['n_points']} pts | "
           f"DD2 {b['dd2_ms_per_pt']:.3f} ms/pt | "
           f"SFHo {b['sfho_ms_per_pt']:.3f} ms/pt | "
           f"ratio SFHo/DD2 = {b['ratio']:.2f}")
