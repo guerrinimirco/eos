@@ -36,6 +36,9 @@ from eos.dd2.physics.octet import (
     assemble_octet, build_octet_ctx, octet_residual,
 )
 from eos.dd2.physics.jacobian import octet_jacobian
+from eos.dd2.physics.kernel_numba import (
+    residual_t0_jit, jacobian_t0_jit, build_numba_arrays, _NUMBA_OK,
+)
 from eos.dd2.physics.mesons import thermal_meson_thermo
 
 #: Hugenholtz–Van Hove residual gate, relative to eps (report §3.x).
@@ -361,14 +364,24 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     guesses = [x0] if x0 is not None else []
     guesses.append(default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
                                        has_muL=has_muL))
-    # eos_fast backend: supply the exact analytic Jacobian (MINPACK hybrj);
-    # eos_ref (default) uses the forward-difference Jacobian.
-    jac = octet_jacobian if analytic_jac else None
+    # eos_fast backend (analytic_jac): exact analytic Jacobian via MINPACK
+    # hybrj. At T=0 the residual AND Jacobian are Numba-jitted (kernel_numba,
+    # machine-identical to the NumPy kernel); T>0 uses the NumPy analytic path
+    # (the JEL integrals don't jit). eos_ref (default) uses the forward-
+    # difference Jacobian.
+    if analytic_jac and T == 0.0 and _NUMBA_OK:
+        _spec, _prm, _flg = build_numba_arrays(ctx)
+        res_fn = lambda xx, _c: residual_t0_jit(xx, _spec, _prm, _flg)
+        jac_fn = lambda xx, _c: jacobian_t0_jit(xx, _spec, _prm, _flg)
+    elif analytic_jac:
+        res_fn, jac_fn = octet_residual, octet_jacobian
+    else:
+        res_fn, jac_fn = octet_residual, None
     sol = None
     for guess in guesses:
-        sol = root(octet_residual, guess, args=(ctx,), jac=jac,
+        sol = root(res_fn, guess, args=(ctx,), jac=jac_fn,
                    method="hybr", tol=1e-13)
-        res_max = max(abs(r) for r in octet_residual(sol.x, ctx))
+        res_max = max(abs(r) for r in res_fn(sol.x, ctx))
         if res_max <= RESIDUAL_TOL:
             break
     else:

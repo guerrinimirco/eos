@@ -21,6 +21,9 @@ from eos.dd2 import (
 )
 from eos.dd2.physics.octet import build_octet_ctx, octet_residual
 from eos.dd2.physics.jacobian import octet_jacobian, kinetic_derivs
+from eos.dd2.physics.kernel_numba import (
+    residual_t0_jit, jacobian_t0_jit, build_numba_arrays,
+)
 from eos.dd2.physics.thermo import kinetic_thermo
 
 
@@ -82,6 +85,33 @@ def test_analytic_jac_matches_fd(par, T):
         Jf = _fd_jac(x, ctx)
         scale = max(np.max(np.abs(Jf)), 1e-30)
         assert np.max(np.abs(Ja - Jf)) / scale < tol
+
+
+def test_numba_kernel_parity(par):
+    # the jitted T=0 residual/Jacobian are machine-identical to the NumPy
+    # kernel across every mode (this is what solve_octet routes T=0 through).
+    fY = SpeciesFlags(hyperons=True, phi_field=True)
+    fNu = SpeciesFlags(hyperons=True, phi_field=True, neutrinos=True)
+    cases = [
+        (build_octet_ctx(par, 0.5, fY),
+         octet_warm_start(solve_beta_eq_octet(par, 0.5, fY,
+                                              include_photons=False),
+                          True, False, False)),
+        (build_octet_ctx(par, 0.6, fY, charge_mode="fixed", Y_C=0.1,
+                         strange_mode="fixed", Y_S=0.05),
+         octet_warm_start(solve_fixed_yc_octet(par, 0.6, 0.1, fY, Y_S=0.05),
+                          True, True, False)),
+        (build_octet_ctx(par, 0.5, fNu, lepton_mode="trapped", Y_L=0.3),
+         octet_warm_start(solve_yl_octet(par, 0.5, 0.3, fNu),
+                          True, False, True)),
+    ]
+    for ctx, x in cases:
+        x = np.asarray(x, float)
+        spec, prm, flg = build_numba_arrays(ctx)
+        assert np.max(np.abs(np.array(octet_residual(x, ctx))
+                             - residual_t0_jit(x, spec, prm, flg))) < 1e-12
+        assert np.max(np.abs(octet_jacobian(x, ctx)
+                             - jacobian_t0_jit(x, spec, prm, flg))) < 1e-12
 
 
 @pytest.mark.parametrize("T", [0.0, 20.0])
