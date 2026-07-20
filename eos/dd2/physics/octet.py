@@ -35,6 +35,8 @@ Residuals dimensionless: field eqs scaled by m_nucleon, densities by n_B.
 """
 from dataclasses import dataclass
 
+from scipy.optimize import brentq
+
 from eos.general.particles import Electron, Muon
 from eos.general.physics_constants import hc3
 from eos.dd2.physics.thermo import kinetic_thermo
@@ -45,6 +47,36 @@ _BaryonSpec = tuple
 
 #: Neutrino degeneracy (one helicity; antineutrino handled by kinetic_thermo).
 _G_NU = 1.0
+
+
+def _yc_neutralizing_leptons(target_nat, m_e, m_mu, include_muons, T):
+    """
+    Fixed-Y_C flavor 2b (report §1.7): populate leptons so the total system is
+    charge-neutral, n_e(+n_mu) = target (= hadronic charge, natural units).
+    Muons (if on) are in leptonic equilibrium mu_mu = mu_e, so a single common
+    mu closes n_e(mu) [+ n_mu(mu)] = target. Since leptons don't source the
+    mean fields this is exact post-hoc (the hadronic solve is flavor 2a).
+
+    Returns (mu_e, (n,P,eps,s)_e, (n,P,eps,s)_mu), all natural units.
+    """
+    zero = (0.0, 0.0, 0.0, 0.0)
+    if target_nat <= 0.0:                       # no positive charge to neutralize
+        return 0.0, zero, zero
+
+    def f(mu):
+        ne = kinetic_thermo(mu, m_e, 2.0, T)[0]
+        nmu = kinetic_thermo(mu, m_mu, 2.0, T)[0] if include_muons else 0.0
+        return ne + nmu - target_nat
+
+    hi = 200.0
+    while f(hi) < 0.0:
+        hi *= 2.0
+    mu_e = brentq(f, 0.0, hi, xtol=1e-10)
+    ne, Pe, ee, se, _ = kinetic_thermo(mu_e, m_e, 2.0, T)
+    if include_muons:
+        nmu, Pmu, emu, smu, _ = kinetic_thermo(mu_e, m_mu, 2.0, T)
+        return mu_e, (ne, Pe, ee, se), (nmu, Pmu, emu, smu)
+    return mu_e, (ne, Pe, ee, se), zero
 
 
 @dataclass
@@ -75,6 +107,7 @@ class OctetCtx:
     Y_S: float = 0.0               # target strangeness fraction (fixed mode)
     lepton_mode: str = "transparent"  # 'transparent' (mu_L=0) | 'trapped' (Y_L)
     Y_L: float = 0.0               # target electron lepton fraction (trapped)
+    yc_leptons: bool = False       # fixed-Y_C: 2a leptonless (F) | 2b neutralizing (T)
 
     @property
     def leptons(self):
@@ -120,10 +153,12 @@ def build_baryon_specs(par, flags):
 
 def build_octet_ctx(par, n_B, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                     strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
-                    Y_L=0.0):
+                    Y_L=0.0, yc_leptons=False):
     if lepton_mode == "trapped" and charge_mode != "neutral":
         raise ValueError("trapped lepton_mode requires charge_mode='neutral' "
                          "(Y_L trapping implies leptons present, charge-neutral)")
+    if yc_leptons and charge_mode != "fixed":
+        raise ValueError("yc_leptons (flavor 2b) requires charge_mode='fixed'")
     Gs, Gw, Gr, dGs, dGw, dGr = par.couplings_at(n_B)
     has_phi = flags.phi_field and flags.hyperons
     # sigma,omega,rho,(phi),muB~,muQ,(muS),(muL)
@@ -139,7 +174,7 @@ def build_octet_ctx(par, n_B, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
         m_e=Electron.mass, m_mu=Muon.mass, T=T,
         include_muons=flags.muons, has_phi=has_phi, n_unknowns=n_unknowns,
         charge_mode=charge_mode, Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
-        lepton_mode=lepton_mode, Y_L=Y_L,
+        lepton_mode=lepton_mode, Y_L=Y_L, yc_leptons=yc_leptons,
     )
 
 
@@ -267,9 +302,11 @@ def assemble_octet(x, ctx):
     eps_fields = 0.5 * (s2 + w2 + r2 + p2)
     P_fields = 0.5 * (-s2 + w2 + r2 + p2)
 
-    mu_e = mu_L - mu_Q       # electron potential (+mu_L when trapped)
-    mu_mu = -mu_Q            # muon family transparent
-    if ctx.leptons:
+    nnue = Pnue = enue = snue = 0.0
+    if ctx.charge_mode == "neutral":
+        # beta / trapped: electron carries +mu_L, muon family transparent
+        mu_e = mu_L - mu_Q
+        mu_mu = -mu_Q
         ne, Pe, ee, se, _ = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)
         if ctx.include_muons:
             nmu, Pmu, emu, smu, _ = kinetic_thermo(mu_mu, ctx.m_mu, 2.0, ctx.T)
@@ -277,11 +314,19 @@ def assemble_octet(x, ctx):
             nmu = Pmu = emu = smu = 0.0
         if ctx.has_muL:      # trapped electron-neutrinos (mu_nue = mu_L)
             nnue, Pnue, enue, snue, _ = kinetic_thermo(mu_L, 0.0, _G_NU, ctx.T)
-        else:
-            nnue = Pnue = enue = snue = 0.0
+        lepton_dot_n = mu_e * ne + mu_mu * nmu + mu_L * nnue
+    elif ctx.yc_leptons:
+        # fixed-Y_C flavor 2b: neutralizing leptons (mu_mu = mu_e), n_e+n_mu =
+        # hadronic charge so the total is neutral.
+        mu_e, (ne, Pe, ee, se), (nmu, Pmu, emu, smu) = _yc_neutralizing_leptons(
+            charge_had, ctx.m_e, ctx.m_mu, ctx.include_muons, ctx.T)
+        mu_mu = mu_e
+        lepton_dot_n = mu_e * (ne + nmu)
     else:
+        # fixed-Y_C flavor 2a: leptonless (CompOSE Y_Q slicing)
+        mu_e = -mu_Q
         ne = Pe = ee = se = nmu = Pmu = emu = smu = 0.0
-        nnue = Pnue = enue = snue = 0.0
+        lepton_dot_n = 0.0
 
     mu_B = mu_tilde_B + Sig_R
     eps = eps_b + eps_fields + ee + emu + enue
@@ -290,7 +335,6 @@ def assemble_octet(x, ctx):
 
     # baryon chemical-potential sum: mu_i = mu_B + Q_i mu_Q + S_i mu_S
     mu_dot_n = mu_B * n_tot + mu_Q * charge_had + mu_S * strangeness
-    lepton_dot_n = mu_e * ne + mu_mu * nmu + mu_L * nnue
 
     return dict(
         sigma=sigma, omega0=omega0, rho0=rho0, phi0=phi0,

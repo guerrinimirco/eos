@@ -15,8 +15,13 @@ import pytest
 
 from eos.dd2 import (
     Parametrization, SpeciesFlags, solve_yl_octet, solve_beta_eq_octet,
-    solve_octet_at_entropy, TableSpec, build_table,
+    solve_octet_at_entropy, solve_fixed_yc_octet, TableSpec, build_table,
 )
+from eos.general.particles import get_particle
+
+
+def _hadronic_YC(p):
+    return sum(get_particle(n).charge * d for n, d in p.composition) / p.n_B
 
 
 @pytest.fixture(scope="module")
@@ -95,3 +100,42 @@ def test_tablespec_entropy_axis_and_yc(par_y):
     for p in line:
         assert p.s / p.n_B == pytest.approx(1.0, rel=1e-4)
         assert p.T > 0.0
+
+
+# --- fixed-Y_C flavor 2b: neutralizing leptons (report §1.7 mode 2b) ---------
+def test_yc_2b_hadronic_matches_2a(par_y):
+    # leptons don't source the mean fields: the 2b hadronic solve == 2a.
+    fY = SpeciesFlags(hyperons=True, phi_field=True)
+    a = solve_fixed_yc_octet(par_y, 0.6, 0.15, fY)                 # 2a leptonless
+    b = solve_fixed_yc_octet(par_y, 0.6, 0.15, fY, leptons=True)   # 2b
+    assert dict(b.composition) == pytest.approx(dict(a.composition), rel=1e-9)
+    assert b.P > a.P                       # 2b adds lepton pressure
+    assert a.n_e == 0.0                    # 2a carries no leptons
+
+
+def test_yc_2b_electron_only(par_y):
+    f = SpeciesFlags(hyperons=True, phi_field=True, muons=False)
+    p = solve_fixed_yc_octet(par_y, 0.6, 0.15, f, leptons=True)
+    assert p.Y_e == pytest.approx(0.15, rel=1e-6)     # n_e = Y_C n_B
+    assert p.Y_mu == 0.0
+    assert _hadronic_YC(p) - p.Y_e - p.Y_mu == pytest.approx(0.0, abs=1e-9)  # neutral
+    assert abs(p.hvh_rel) < 1e-10
+
+
+def test_yc_2b_electrons_and_muons(par_y):
+    f = SpeciesFlags(hyperons=True, phi_field=True)     # muons on
+    p = solve_fixed_yc_octet(par_y, 0.6, 0.15, f, leptons=True)
+    assert p.Y_e + p.Y_mu == pytest.approx(0.15, rel=1e-6)   # Y_C = Y_e + Y_mu
+    assert p.Y_mu > 0.0                                       # muons populated
+    assert _hadronic_YC(p) - p.Y_e - p.Y_mu == pytest.approx(0.0, abs=1e-9)
+    assert abs(p.hvh_rel) < 1e-10
+
+
+def test_yc_2b_composes_with_ys(par_y):
+    f = SpeciesFlags(hyperons=True, phi_field=True)
+    p = solve_fixed_yc_octet(par_y, 0.7, 0.1, f, leptons=True, Y_S=0.05)
+    S = sum(get_particle(n).strangeness * d for n, d in p.composition) / p.n_B
+    assert S == pytest.approx(0.05, abs=1e-9)
+    assert p.Y_e + p.Y_mu == pytest.approx(0.1, rel=1e-6)
+    assert p.mu_S != 0.0
+    assert abs(p.hvh_rel) < 1e-10

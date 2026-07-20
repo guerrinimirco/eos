@@ -79,6 +79,16 @@ class EoSPoint:
         return self.n_p / self.n_B
 
     @property
+    def Y_e(self):
+        """Electron fraction n_e / n_B."""
+        return self.n_e / self.n_B
+
+    @property
+    def Y_mu(self):
+        """Muon fraction n_mu / n_B."""
+        return self.n_mu / self.n_B
+
+    @property
     def composition_map(self):
         return dict(self.composition)
 
@@ -333,8 +343,8 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
 
 def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
-                Y_L=0.0, include_photons=True, check_consistency=True,
-                analytic_jac=False):
+                Y_L=0.0, yc_leptons=False, include_photons=True,
+                check_consistency=True, analytic_jac=False):
     """
     General octet solve (report §1.7 unified scheme) at (n_B [fm^-3], T [MeV]).
 
@@ -346,7 +356,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     """
     ctx = build_octet_ctx(par, n_B, flags, T=T, charge_mode=charge_mode,
                           Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
-                          lepton_mode=lepton_mode, Y_L=Y_L)
+                          lepton_mode=lepton_mode, Y_L=Y_L, yc_leptons=yc_leptons)
     has_muS, has_muL = ctx.has_muS, ctx.has_muL
     guesses = [x0] if x0 is not None else []
     guesses.append(default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
@@ -429,16 +439,25 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
 
 
 def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
-                         include_photons=True, check_consistency=True):
+                         leptons=False, include_photons=True,
+                         check_consistency=True):
     """
-    Fixed hadronic charge fraction Y_C (CompOSE general-purpose (nB,T,Yq)
-    convention: no leptons, mu_Q the Lagrange multiplier). Optionally also
-    fix the strangeness fraction Y_S (adds mu_S). Report §1.7 modes 2/3.
+    Fixed hadronic charge fraction Y_C (report §1.7 mode 2). Two flavors:
+
+    - leptons=False (2a, default): leptonless — the CompOSE general-purpose
+      (nB,T,Yq) slicing; mu_Q is the Lagrange multiplier for Y_C.
+    - leptons=True (2b): populate electrons (+muons iff flags.muons) so the
+      TOTAL is charge-neutral (n_e+n_mu = Y_C n_B, mu_e=mu_mu). The hadronic
+      solve is identical to 2a; the leptons are a post-hoc neutraliser. Read
+      Y_e / Y_mu off the result.
+
+    Optionally also fix the strangeness fraction Y_S (adds mu_S; §1.7 mode 3),
+    composing with either flavor.
     """
     strange_mode = "fixed" if Y_S is not None else "eq"
     return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="fixed",
                        Y_C=Y_C, strange_mode=strange_mode, Y_S=(Y_S or 0.0),
-                       include_photons=include_photons,
+                       yc_leptons=leptons, include_photons=include_photons,
                        check_consistency=check_consistency)
 
 
@@ -481,8 +500,8 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
 
 def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_L=0.0,
-                include_photons=True, max_bisect=6, stop_at_boundary=False,
-                analytic_jac=False):
+                yc_leptons=False, include_photons=True, max_bisect=6,
+                stop_at_boundary=False, analytic_jac=False):
     """
     Warm-started density sweep for any octet mode (report §3.4), with the same
     step-bisection continuation and scalar-collapse boundary handling as the
@@ -496,7 +515,7 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
     def solve_from(n_B, x0):
         return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
                            Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
-                           lepton_mode=lepton_mode, Y_L=Y_L,
+                           lepton_mode=lepton_mode, Y_L=Y_L, yc_leptons=yc_leptons,
                            include_photons=include_photons,
                            analytic_jac=analytic_jac)
 
