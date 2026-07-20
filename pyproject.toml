@@ -16,3 +16,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["eos*"]
+
+[tool.pytest.ini_options]
+markers = ["slow: long-running (excluded with -m 'not slow')"]
