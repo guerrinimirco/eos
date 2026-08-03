@@ -45,7 +45,7 @@ def mode_C(Y_C, *, yc_leptons=False):
                       yc_leptons=yc_leptons)
 
 
-def mode_D(Y_C, Y_S):
+def mode_D(Y_C, Y_S, *, yc_leptons=False):
     """Fixed Y_C and Y_S, with strangeness GLOBAL (D-global, spec §2).
 
     D-global is the default per audit §2: strangeness is globally conserved
@@ -53,6 +53,7 @@ def mode_D(Y_C, Y_S):
     tabulated-EoS convention. The per-phase reading (D-local, the combined
     (A.93) baryon relation) is deferred behind a future flag driven by the same
     regime mechanism — set S=Regime.LOCAL on a ChargeSpec once it is wired.
+    `yc_leptons` selects the §1.6 charge flavor exactly as mode_C.
     """
     return ChargeSpec(C=Regime.GLOBAL, S=Regime.GLOBAL,
-                      targets={"Y_C": Y_C, "Y_S": Y_S})
+                      targets={"Y_C": Y_C, "Y_S": Y_S}, yc_leptons=yc_leptons)
