@@ -377,3 +377,14 @@ if __name__ == "__main__":
         "eta=1 table has no detectable Maxwell plateau (tidal jump would be missed)"
     print(f"OK  Gibbs onset={t0.onset:.3f} offset={t0.offset:.3f} fm^-3; "
           f"Maxwell P_trans={t1.P_trans:.2f} MeV/fm^3")
+
+    # Multi-axis driver: every mode goes through build_mixed_table. Check the
+    # 'beta' (n_B x T) and 'YC' (n_B x Y_C) paths produce the right axis columns.
+    g = np.round(np.arange(0.45, 0.81, 0.05), 3)
+    beta = build_mixed_table(MixedTableSpec(par, flags, "beta",
+                             axes={"nB": g, "T": [0.0, 20.0]}))
+    assert {r["T"] for r in beta} == {0.0, 20.0} and beta[0]["Y_C"] is not None
+    yc = build_mixed_table(MixedTableSpec(par, flags, "YC",
+                           axes={"nB": g, "T": [0.0], "Y_C": [0.05, 0.10]}))
+    assert {round(r["Y_C"], 3) for r in yc} == {0.05, 0.10}
+    print(f"OK  build_mixed_table: beta rows={len(beta)}, YC rows={len(yc)}")
