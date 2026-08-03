@@ -90,20 +90,48 @@ def _default_guess(ctx):
     return [seed[name] for name in ctx.slots]
 
 
+def _analytic_jac(ctx):
+    """hybr `jac` wrapping mixed_jacobian, with a numeric-FD fallback at trial
+    points where a phase solve fails (so a bad outer step still gets a usable
+    Jacobian and hybr backs off, matching the residual's penalty contract)."""
+    from eos.mixed.jacobian import mixed_jacobian
+    import numpy as np
+
+    def jac(x, ctx_):
+        try:
+            return mixed_jacobian(x, ctx_)
+        except (RuntimeError, np.linalg.LinAlgError):
+            n = len(ctx_.slots)
+            J = np.zeros((len(mixed_residual(x, ctx_)), n))
+            for i in range(n):
+                h = max(1e-4, 1e-6 * abs(x[i]))
+                xp, xm = list(x), list(x)
+                xp[i] += h; xm[i] -= h
+                J[:, i] = (np.array(mixed_residual(xp, ctx_))
+                           - np.array(mixed_residual(xm, ctx_))) / (2.0 * h)
+            return J
+    return jac
+
+
 def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
-                x0=None, n_B_guess=None, check_consistency=True):
+                x0=None, n_B_guess=None, check_consistency=True, analytic_jac=False):
     """Solve the mixed phase at (n_B, T, eta) for regime assignment `spec`.
 
     Returns a MixedResult. Raises RuntimeError if the residual gate is not met
     from any guess (no silent non-convergence). `x0` is an optional warm-start
     vector (slot order of residual.mixed_slots(spec, eta)); otherwise the pure
     hadronic beta-eq seed is used.
+
+    `analytic_jac=True` supplies the hand-assembled Jacobian (eos/mixed/jacobian.py)
+    to hybr instead of its numeric one (P7); the default numeric path is the
+    correctness oracle (CLAUDE.md §4).
     """
     if vmit_params is None:
         from eos.vmit.parameters import get_vmit_default
         vmit_params = get_vmit_default()
     ctx = build_mixed_ctx(spec, eta, n_B, par, flags, vmit_params, T=T,
                           n_B_guess=n_B_guess)
+    jac = _analytic_jac(ctx) if analytic_jac else None
 
     guesses = []
     if x0 is not None:
@@ -112,7 +140,8 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
 
     sol = None
     for guess in guesses:
-        sol = root(mixed_residual, guess, args=(ctx,), method="hybr", tol=1e-12)
+        sol = root(mixed_residual, guess, args=(ctx,), method="hybr", tol=1e-12,
+                   jac=jac)
         res_max = max(abs(r) for r in mixed_residual(sol.x, ctx))
         if res_max <= RESIDUAL_TOL:
             break

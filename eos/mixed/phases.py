@@ -162,7 +162,7 @@ def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S):
 
 
 def hadronic_phase(par, flags, mu_tilde_B, mu_Q, mu_S=0.0, T=0.0,
-                   n_B_guess=0.2, x0=None):
+                   n_B_guess=0.2, x0=None, return_state=False):
     """DD2 hadronic phase at fixed kinetic charge potentials (spec §3.2).
 
     Inputs are the KINETIC baryon potential `mu_tilde_B = mu_B - Sigma^R` (the
@@ -175,6 +175,11 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_Q, mu_S=0.0, T=0.0,
 
     Reuses eos/dd2 octet kinetics + `assemble_octet` (charge_mode='fixed',
     leptonless), so the block is the DD2 hadronic sector to round-off.
+
+    `return_state=True` additionally returns a dict with the converged internal
+    unknown vector `x_phase` (fields + nB_nat), `strange_mode`, and `ctx` — the
+    pieces the analytic Jacobian (eos/mixed/jacobian.py) needs to differentiate
+    the phase without re-solving it.
     """
     strange_mode = "fixed" if mu_S != 0.0 else "eq"
     ctx = build_octet_ctx(par, n_B_guess, flags, T=T, charge_mode="fixed",
@@ -222,9 +227,12 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_Q, mu_S=0.0, T=0.0,
     mu_B, mu_C = st["mu_B"], st["mu_Q"]
     mu_i = {b.name: mu_B * b.baryon_no + mu_C * b.charge + mu_S * b.strangeness
             for b in ctx.baryons}
-    return PhaseThermo(
+    th = PhaseThermo(
         densities=densities,
         n_B=n_B, n_C=st["Y_C"] * n_B, n_S=st["Y_S"] * n_B,
         P=st["P"] / hc3, eps=st["eps"] / hc3, s=st["s"] / hc3,
         mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, mu_i=mu_i,
     )
+    if return_state:
+        return th, dict(x_phase=list(sol.x), strange_mode=strange_mode, ctx=ctx)
+    return th
