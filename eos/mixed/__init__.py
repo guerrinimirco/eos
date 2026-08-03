@@ -23,3 +23,19 @@ __all__ = [
     "MixedState", "charge_potential_slots",
     "PhaseThermo", "quark_phase", "hadronic_phase",
 ]
+
+
+# Solver / table surface (P1+). Imported lazily-friendly at module load; these
+# pull in scipy + the DD2/vMIT engines, which the P0 names above do not.
+from eos.mixed.solver import solve_mixed, MixedResult
+from eos.mixed.continuation import sweep_mixed, find_mixed_window
+from eos.mixed.table import (
+    MixedEoSTable, build_mixed_eos_table, mass_radius_mixed,
+    composition_table, MixedTableSpec, build_mixed_table,
+)
+
+__all__ += [
+    "solve_mixed", "MixedResult", "sweep_mixed", "find_mixed_window",
+    "MixedEoSTable", "build_mixed_eos_table", "mass_radius_mixed",
+    "composition_table", "MixedTableSpec", "build_mixed_table",
+]
