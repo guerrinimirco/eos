@@ -1,16 +1,16 @@
 """
 species.py
 ====================
-SpeciesFlags — every degree of freedom is an explicit named boolean
-(report §3.6, prompt ground rule 2). No sector is switched on/off implicitly
-by "its coupling happens to be zero".
+SpeciesFlags — every degree of freedom is an explicit named boolean.
 
-Milestone wiring status:
-    hyperons, muons, neutrinos-off, photons, phi_field  — M4
-    deltas                                              — M5 (this milestone)
-    sigma_star, include_pseudoscalars,
-    include_thermal_vectors                             — later milestones
-Setting a not-yet-wired flag raises (no silent no-op).
+No sector is ever switched on or off implicitly by "its coupling happens to be
+zero": if a species is absent, its flag is False. Setting a flag that is not
+yet wired raises rather than silently doing nothing, so a table can never
+quietly omit a sector the caller asked for.
+
+Currently wired: hyperons, Delta isobars, muons, trapped neutrinos, photons,
+the hidden-strange vector phi, and the thermal pseudoscalar / vector meson
+gases. The hidden-strange scalar sigma* is not.
 """
 from dataclasses import dataclass
 
@@ -33,7 +33,7 @@ class SpeciesFlags:
         # neutrinos are wired (M6 trapped Y_L mode; use solve_yl_octet).
         if self.sigma_star:
             raise NotImplementedError(
-                "SpeciesFlags: sigma_star not yet wired at this milestone")
+                "SpeciesFlags: sigma_star (hidden-strange scalar) is not wired")
 
     @property
     def has_strange_baryons(self):

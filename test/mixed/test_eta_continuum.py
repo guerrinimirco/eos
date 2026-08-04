@@ -1,25 +1,26 @@
 """
-P2 gate: continuous eta (docs/phase2/SPECIFICATION_AND_PLAN.md §4 milestone P2).
+Continuity in eta: the two limiting constructions are the ends of one family.
 
-The same regime-driven residual that gives the eta endpoints must give smooth,
-monotone behaviour in between — with NO new code (spec §1.5). Checks:
+The same residual that produces Gibbs at eta=0 and Maxwell at eta=1 must give
+smooth, monotone behaviour in between — with no new code, since eta enters as a
+weight rather than as a branch. Checks:
 
-  - at a fixed density in the mixed phase, P(eta) and chi(eta) are continuous
-    and monotone (P rises Gibbs->Maxwell, chi falls);
-  - the mixed-phase pressure spread collapses monotonically with eta, reaching
-    the flat Maxwell plateau at eta=1;
-  - the mixed-phase density window does not grow with eta (it shrinks: the
-    Maxwell window is the narrowest).
+  - at a fixed density inside the mixed phase, P(eta) and chi(eta) are
+    continuous and monotone (pressure rises Gibbs -> Maxwell, chi falls);
+  - the spread of pressure across the mixed phase collapses monotonically with
+    eta, reaching the flat Maxwell plateau exactly at eta=1;
+  - the density width of the mixed window does not grow with eta — it shrinks,
+    with Maxwell the narrowest.
 
-Nucleons + electrons only (muons off), T=0, Mode A — as P1.
+Nucleons and electrons only, T=0, beta equilibrium.
 """
 import numpy as np
 import pytest
 
 from eos.dd2 import Parametrization, SpeciesFlags
-from eos.mixed import mode_A
-from eos.mixed.solver import solve_mixed
-from eos.mixed.continuation import sweep_mixed
+from eos.mixed import beta_eq_neutrinoless
+from eos.mixed.solvers.point import solve_mixed
+from eos.mixed.solvers.sweep import sweep_mixed
 
 
 @pytest.fixture(scope="module")
@@ -38,7 +39,7 @@ def test_continuity_and_monotonicity_in_eta(par, flags):
     etas = np.linspace(0.0, 1.0, 6)
     P, chi = [], []
     for eta in etas:
-        r = solve_mixed(par, flags, n_B, eta, mode_A())
+        r = solve_mixed(par, flags, n_B, eta, beta_eq_neutrinoless())
         assert r.in_mixed_phase
         P.append(r.P)
         chi.append(r.chi)
@@ -54,7 +55,7 @@ def test_pressure_spread_collapses_with_eta(par, flags):
     grid = np.arange(0.40, 0.90, 0.05)
 
     def spread(eta):
-        mixed = [r for r in sweep_mixed(par, flags, grid, eta, mode_A())
+        mixed = [r for r in sweep_mixed(par, flags, grid, eta, beta_eq_neutrinoless())
                  if r.in_mixed_phase]
         assert len(mixed) >= 3
         Ps = [r.P for r in mixed]
@@ -70,7 +71,7 @@ def test_mixed_window_does_not_grow_with_eta(par, flags):
     grid = np.arange(0.40, 0.90, 0.05)
 
     def width(eta):
-        nBs = [r.n_B for r in sweep_mixed(par, flags, grid, eta, mode_A())
+        nBs = [r.n_B for r in sweep_mixed(par, flags, grid, eta, beta_eq_neutrinoless())
                if r.in_mixed_phase]
         return max(nBs) - min(nBs)
 

@@ -9,7 +9,7 @@ Each function takes a ``Parametrization`` as its first argument, so the whole se
 can be regenerated for a second parametrization (e.g. one built from NMPs) just by
 passing a different ``par``.
 
-Conventions (report §3.x): every figure is built with ``fig, ax = plt.subplots()``
+Conventions: every figure is built with ``fig, ax = plt.subplots()``
 and drawn through ``ax.*`` — never bare ``plt.*``. Cold/T=0 unless the plot is
 about temperature. Nucleonic NS-structure plots use
 ``SpeciesFlags(hyperons=False, phi_field=False)``; composition plots use the full
@@ -162,7 +162,7 @@ def plot_sound_speed(par, flags=NUCLEONIC, grid=None, T=0.0):
     grid = default_grid(n=40) if grid is None else np.asarray(grid, float)
     nB, cad, ceq = [], [], []
     for n in grid:
-        # A Δ model hits scalar collapse (m*->0) at high density (report §2.6);
+        # A Δ model hits scalar collapse (m*->0) at high density;
         # truncate the curve there instead of raising.
         try:
             Y_p = solve_beta_eq_octet(par, float(n), flags, T=T,
@@ -413,7 +413,7 @@ def plot_pnm_chiral(par, grid=None, chiral_path=CHIRAL_EFT):
 # =============================================================================
 def nmp_comparison(par):
     """
-    NMPs of ``par`` next to the DD2 reference (report §2.1). Returns a dict
+    NMPs of ``par`` next to the DD2 reference. Returns a dict
     ``{key: (computed, reference, abs_diff)}`` over n_sat, E_sat, K_sat, Q_sat,
     E_sym, L_sym, m*/m — all finite floats.
     """
@@ -463,7 +463,7 @@ def build_nmp_par(nmp=None):
 def benchmark_dd2_vs_sfho(par, grid=None, T=0.0, Y_C=0.3):
     """
     Time DD2 vs the SFHo table generator on a matched **fixed-Y_C** density sweep
-    with electrons, no muons, no neutrinos (report §1.7 mode 2b). DD2 uses the
+    with electrons, no muons, no neutrinos. DD2 uses the
     fast path (``sweep_octet(charge_mode='fixed', yc_leptons=True,
     analytic_jac=True)``, first call discarded for the Numba compile); SFHo uses
     ``equilibrium='fixed_yc'`` with the same lepton content. Returns ms/point for
@@ -515,13 +515,15 @@ _TABLE_COLS = ("n_B", "T", "P", "eps", "s", "mu_n", "mu_p", "mu_e",
                "mu_S", "mu_L", "Y_e", "Y_mu")
 
 
-def export_eos_table(par, flags, mode="beta", nB=None, T=None, SnB=None,
+def export_eos_table(par, flags, mode="beta_eq_neutrinoless", nB=None, T=None, SnB=None,
                      fixed=None, path=None, want_coeffs=False, skip_errors=False):
     """
     Build a DD2 EoS table for the requested species/mode/axes (``TableSpec`` +
     ``build_table``) and, if ``path`` is given, write it to a text file.
 
-    mode    : 'beta','YC','YS','YC+YS','YL' (see table.py).
+    mode    : one of the names in table.py's `_MODES`, e.g.
+              'beta_eq_neutrinoless', 'fixed_YC', 'fixed_YC_YS',
+              'beta_eq_neutrino_trapped'.
     nB      : density grid [fm^-3]; defaults to ``default_grid()``.
     T / SnB : the temperature axis — pass ONE. ``T`` is temperature [MeV]
               (scalar or list); ``SnB`` is entropy per baryon (adds the outer

@@ -1,7 +1,7 @@
 """
 coefficients_jac.py
 ====================
-Thermodynamic coefficients wired onto the analytic Jacobian (report §3.5),
+Thermodynamic coefficients wired onto the analytic Jacobian,
 the "analytic" half of the M10 cross-check (§3.7 check 5). The finite-
 difference versions in coefficients.py are the independent oracle.
 
@@ -13,7 +13,7 @@ Two Jacobian products:
 
 - **c_s^2, C_V, C_P** come from Jacobian *tangent* sensitivities along the
   sequence: at the converged x0 the neighbour at a perturbed parameter is
-  predicted by one Newton step dx = -J^-1 R_perturbed(x0) (report §3.4 tangent
+  predicted by one Newton step dx = -J^-1 R_perturbed(x0) (the tangent
   predictor) instead of a full re-solve, then assembled. Central differences in
   n_B and T give d(P,eps,s)/d(n_B,T), and the standard thermodynamic
   combinations give the three coefficients.

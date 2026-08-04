@@ -1,11 +1,11 @@
 """
 physics/mesons.py
 ====================
-Thermal meson gas on top of the baryonic mean field (report §A, Lavagno 2010).
+Thermal meson gas on top of the baryonic mean field (Lavagno 2010).
 
 Pseudoscalar and vector nonets treated as one-body ideal Bose gases with
 effective chemical potentials tied to the SAME meson mean fields that generate
-the baryon interactions (report §A.3), using DD2's DENSITY-DEPENDENT couplings
+the baryon interactions, using DD2's DENSITY-DEPENDENT couplings
 Gamma_iN(n_B) in place of the constant SFHo ones:
 
     mu*_pi+ = mu*_rho+ = mu_Q - Gamma_rhoN(n_B) rho0
@@ -17,12 +17,12 @@ Gamma_iN(n_B) in place of the constant SFHo ones:
                                        rho0, omega, phi).
 
 No rearrangement term enters mu*_j — the thermal mesons are spectators to
-Sigma^R (report §A.3). Bose integrals use the |mu*| <= m clamp built into
-bose_integrals. Off by default for cold NS (report §A.4); the thermal
+Sigma^R. Bose integrals use the |mu*| <= m clamp built into
+bose_integrals. Off by default for cold NS; the thermal
 rho/omega/phi are the incoherent k!=0 quanta on top of the mean field, a
 modelling choice kept switchable.
 
-Masses (report §A.4 / PDG, MeV).
+Masses (PDG, MeV).
 """
 from eos.general.bose_integrals import solve_bose_jel
 

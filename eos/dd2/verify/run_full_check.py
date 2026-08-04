@@ -1,11 +1,11 @@
 """
 verify/run_full_check.py
 ====================
-Single entry point orchestrating the DD2 verification suite (report §3.7).
+Single entry point orchestrating the DD2 verification suite.
 Each check returns a structured pass/fail + max error, never a bare print.
 
 Checks (those with data/deps available in eos_ref):
-  1. golden points (report §2.7) — the day-one smoke test;
+  1. golden points — the day-one smoke test;
   2. thermodynamic identities — HVH, beta-eq residual across a grid;
   3. TOV cross-check — M_max >= 2 M_sun for the cold beta-eq EoS;
   4. coefficient sanity — causality 0 <= c_s^2 <= 1, thermal index > 1;
@@ -50,7 +50,7 @@ class FullCheckReport:
         return "\n".join(lines)
 
 
-# report §2.7 (b) golden SNM row at n_B = 0.16
+# (b) golden SNM row at n_B = 0.16
 _GOLDEN_SNM_016 = dict(mstar_m=0.54247, eps=147.6750, P=0.34289, mu_B=925.112)
 
 
@@ -64,7 +64,7 @@ def _check_golden(par):
     }
     m = max(errs.values())
     return CheckResult("golden points", m < 1e-4, m,
-                       f"SNM(0.16) vs report §2.7(b)")
+                       f"SNM(0.16) vs(b)")
 
 
 def _check_identities(par, flags, grid):
@@ -98,7 +98,7 @@ def _check_coefficients(par, flags, grid):
 
 
 def _check_coeff_cross(par, flags, grid):
-    """Analytic-from-Jacobian c_s^2 vs finite-difference (report §3.7 check 5):
+    """Analytic-from-Jacobian c_s^2 vs finite-difference:
     independent-method agreement on the equilibrium sound speed."""
     from eos.dd2 import coefficients_jac as _jc
     from eos.dd2.coefficients import sound_speed_eq as _cs_fd

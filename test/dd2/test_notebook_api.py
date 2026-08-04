@@ -60,7 +60,7 @@ def test_nmp_comparison():
 
 def test_export_eos_table(tmp_path):
     out = tmp_path / "dd2.dat"
-    result, path = api.export_eos_table(PAR, api.NUCLEONIC, mode="beta",
+    result, path = api.export_eos_table(PAR, api.NUCLEONIC, mode="beta_eq_neutrinoless",
                                         nB=GRID, T=0.0, path=str(out))
     assert out.is_file()
     rows = np.loadtxt(out, comments="#")

@@ -1,7 +1,7 @@
 """
 M8 gate: NMP inverter (from_nmp cascade + feasibility flags).
 
-Gate (report §3.y M8): from_nmp(DD2 NMPs) recovers the §2.1 couplings < 1e-3;
+Gate: from_nmp(DD2 NMPs) recovers the §2.1 couplings < 1e-3;
 round-trip idempotent. Inversion is seeded from the published DD2 couplings
 (DD2-class NMPs sit near them; a generic seed can fall into a spurious basin
 where the cross-constraint is satisfied but Q_sat is wrong).

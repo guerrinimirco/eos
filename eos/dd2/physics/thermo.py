@@ -6,11 +6,10 @@ Kinetic (ideal Fermi gas) thermodynamics for a single species.
 Natural units throughout this module: energies, masses and momenta in MeV,
 densities in MeV^3, energy density / pressure in MeV^4.
 
-T = 0: exact closed forms (identical to dd2_reference_validation.py, the
-executable specification for milestones M0–M2).
-T > 0: JEL Fermi integrals from eos.general.fermi_integrals, converted from
-fm-based units to natural units (this is the M0 "JEL wrapper"; exercised
-from milestone M3 on).
+T = 0: exact closed forms.
+T > 0: Johns-Ellis-Lattimer Fermi integrals from eos.general.fermi_integrals,
+converted from their fm-based units to natural units here so that no call site
+has to. Use this rather than calling the JEL routines directly.
 """
 from eos.dd2.xp import xp
 from eos.general.physics_constants import hc3

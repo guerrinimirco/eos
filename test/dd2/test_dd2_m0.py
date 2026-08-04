@@ -72,7 +72,7 @@ def test_inconsistent_coefficients_raise():
 
 
 def test_particle_registry_t3():
-    # tau_3 = ±1 convention (report §1.4) — the load-bearing isospin choice.
+    # tau_3 = ±1 convention — the load-bearing isospin choice.
     assert Proton.t3 == +1.0
     assert Neutron.t3 == -1.0
     assert Lambda.t3 == 0.0

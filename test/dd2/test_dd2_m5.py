@@ -1,7 +1,7 @@
 """
 M5 gate: Δ isobars (ratio couplings, τ₃ = 2 I₃ quartet).
 
-Gate (report §3.y M5): Δ onset vs published DD2Δ; stability preserved.
+Gate: Δ onset vs published DD2Δ; stability preserved.
 - Δ⁻ appears first (neutron-rich matter favors the negative isobar), near the
   DD2Δ literature onset ~2 n_sat for x_Δσ = x_Δω = 1;
 - the EoS stays causal (0 < c_s² < 1) and mechanically stable (dP/dn > 0)
@@ -29,7 +29,7 @@ def flags_d():
 
 
 def test_delta_t3_quartet():
-    # τ₃ = 2 I₃ (report §1.4 rule): {+3, +1, -1, -3}.
+    # τ₃ = 2 I₃: {+3, +1, -1, -3}.
     assert (DeltaPP.t3, DeltaP.t3, Delta0.t3, DeltaM.t3) == (3.0, 1.0, -1.0, -3.0)
 
 

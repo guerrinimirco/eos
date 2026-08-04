@@ -1,12 +1,12 @@
 """
 coefficients.py
 ====================
-Thermodynamic coefficients (report §3.5), eos_ref flavor: computed by
+Thermodynamic coefficients, eos_ref flavor: computed by
 finite-difference along solved sequences, with an independent cross-check per
 quantity. (The M9 JAX backend replaces the FD with autodiff on the same
 kernel; the values must agree — that is the M10 gate.)
 
-Two speed-of-sound flavors (report §3.5):
+Two speed-of-sound flavors:
   * equilibrium c_s,eq^2 = dP/deps along the beta-eq / fixed-Y sequence
     (composition follows equilibrium);
   * adiabatic/frozen c_s,ad^2 = (dP/deps) at fixed composition (equals the

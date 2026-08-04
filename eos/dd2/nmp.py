@@ -2,10 +2,10 @@
 nmp.py
 ====================
 Forward extraction of nuclear-matter parameters from a DD2 parametrization
-(report §2.1–§2.2). Finite-difference stencils and step mirror
-dd2_reference_validation.py, the executable specification.
+. Finite-difference stencils and step mirror
+the closed-form mean-field expressions.
 
-The inverse map (NMPs -> couplings) is milestone M8, not here.
+The inverse map (NMPs -> couplings) lives in nmp_inverter.py.
 """
 from scipy.optimize import brentq
 
@@ -23,7 +23,7 @@ def energy_per_baryon(par, n_B):
 
 def esym(par, n_B):
     """
-    Symmetry energy E_sym(n_B) [MeV], mean-field closed form (report §2.2):
+    Symmetry energy E_sym(n_B) [MeV], mean-field closed form:
     kinetic/Dirac term + rho term in the tau_3 = ±1 convention.
     """
     p = solve_snm_t0(par, n_B)

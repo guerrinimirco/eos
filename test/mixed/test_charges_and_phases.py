@@ -1,15 +1,19 @@
 """
-P0 gate (scaffolding): eos/mixed regime data structures + the two engine
-adapters (docs/phase2/SPECIFICATION_AND_PLAN.md §3, milestone P0).
+Foundations: the charge-regime declaration, the unknown-vector layout it
+implies, and the two per-phase engine adapters.
 
-The gate: the adapters reproduce, to round-off, the values obtained by calling
-eos/dd2 and eos/vmit directly at a set of golden points. Plus:
-  - the four mode factories carry the spec §2 regime assignment;
-  - ChargeSpec enforces its invariants (B GLOBAL; targets iff fixed);
-  - MixedState pack/unpack round-trips for every mode's charge-potential layout;
-  - adapter output is fm-based (no natural-unit leak, CLAUDE.md §3).
+  - the phase adapters reproduce, to round-off, what calling eos/dd2 and
+    eos/vmit directly gives at the same potentials;
+  - each named mode carries the regime assignment its physics implies;
+  - ChargeSpec enforces its invariants (B always GLOBAL, a fixed fraction iff
+    the charge is actually conserved);
+  - the unknown-vector slots are DERIVED from the regimes and from eta, so the
+    modes share one layout rather than each declaring its own;
+  - a regime combination that is not wired raises instead of assembling a wrong
+    system (CLAUDE.md §5);
+  - adapter output is fm-based, with no natural-unit leak (CLAUDE.md §3).
 
-No equilibrium/eta physics is exercised here — that is P1+.
+No equilibrium or eta physics is exercised here; that is the other modules.
 """
 import numpy as np
 import pytest
@@ -20,10 +24,11 @@ from eos.vmit.eos import solve_vmit_beta_eq
 from eos.vmit.thermodynamics_quarks import compute_quark_matter_thermo_from_mu
 
 from eos.mixed import (
-    ChargeSpec, Regime, mode_A, mode_B, mode_C, mode_D,
-    MixedState, charge_potential_slots, quark_charges, hadronic_charges,
+    ChargeSpec, Regime, beta_eq_neutrinoless, beta_eq_neutrino_trapped,
+    fixed_YC, fixed_YC_YS, quark_charges, hadronic_charges,
     quark_phase, hadronic_phase,
 )
+from eos.mixed.equilibrium.residual import mixed_slots
 
 
 # =============================================================================
@@ -121,19 +126,19 @@ def test_hadronic_adapter_reproduces_dd2_hyperons(par_y, flags_y):
 
 
 # =============================================================================
-# 3. Regime assignment: the four modes carry the spec §2 table
+# 3. Each named mode carries the regime assignment its physics implies
 # =============================================================================
 def test_modes_regime_assignment():
-    a = mode_A()
+    a = beta_eq_neutrinoless()
     assert (a.B, a.C, a.S, a.L_e) == (Regime.GLOBAL, Regime.NOT_CONSERVED,
                                       Regime.NOT_CONSERVED, Regime.NOT_CONSERVED)
-    b = mode_B(Y_L=0.4)
+    b = beta_eq_neutrino_trapped(Y_L=0.4)
     assert b.L_e is Regime.GLOBAL and b.targets["Y_L"] == 0.4
     assert b.C is Regime.NOT_CONSERVED and b.S is Regime.NOT_CONSERVED
-    c = mode_C(Y_C=0.3)
+    c = fixed_YC(Y_C=0.3)
     assert c.C is Regime.GLOBAL and c.targets["Y_C"] == 0.3
     assert c.S is Regime.NOT_CONSERVED and c.L_e is Regime.NOT_CONSERVED
-    d = mode_D(Y_C=0.3, Y_S=0.1)
+    d = fixed_YC_YS(Y_C=0.3, Y_S=0.1)
     assert d.C is Regime.GLOBAL and d.S is Regime.GLOBAL      # D-global default
     assert d.targets["Y_C"] == 0.3 and d.targets["Y_S"] == 0.1
 
@@ -147,35 +152,48 @@ def test_chargespec_invariants():
         ChargeSpec(targets={"Y_C": 0.3})
     with pytest.raises(ValueError):                 # yc_leptons needs C GLOBAL
         ChargeSpec(yc_leptons=True)
-    # an unnamed combination is constructible directly (spec §1.5)
+    # an unnamed combination is constructible directly
     spec = ChargeSpec(S=Regime.LOCAL, targets={"Y_S": 0.1})
     assert spec.S is Regime.LOCAL
 
 
 # =============================================================================
-# 4. MixedState owns the layout: pack/unpack round-trips
+# 4. The unknown-vector layout is derived from the regimes, not enumerated
 # =============================================================================
-def test_charge_potential_slots():
-    assert charge_potential_slots(mode_A()) == ("chi", "mu_B")
-    assert charge_potential_slots(mode_C(0.3)) == ("chi", "mu_B", "mu_C")
-    assert charge_potential_slots(mode_D(0.3, 0.1)) == (
-        "chi", "mu_B", "mu_S", "mu_C")
-    # LOCAL charge -> per-phase pair
-    assert charge_potential_slots(
-        ChargeSpec(S=Regime.LOCAL, targets={"Y_S": 0.1})) == (
-        "chi", "mu_B", "mu_S_H", "mu_S_Q")
+def test_slots_follow_the_regimes():
+    """Each conserved charge contributes exactly the potentials its regime
+    implies, and nothing else."""
+    base = ("mu_tilde_B_H", "mu_B_Q", "chi")
+    # Beta equilibrium at eta=0: no charge potential (the beta condition
+    # eliminates it) and a single global electron potential.
+    assert mixed_slots(beta_eq_neutrinoless(), 0.0) == base + ("mu_eG",)
+    # Fixed Y_C, leptonless: one shared charge potential, no electrons at all.
+    assert mixed_slots(fixed_YC(0.3), 0.0) == base + ("mu_C",)
+    # Fixed Y_C with neutralizing leptons: per-phase charge potentials.
+    assert mixed_slots(fixed_YC(0.3, leptons=True), 0.0) == (
+        base + ("mu_C_H", "mu_C_Q", "mu_eG"))
+    # Adding fixed Y_S adds exactly mu_S; trapped neutrinos add exactly mu_L.
+    assert mixed_slots(fixed_YC_YS(0.3, 0.1), 0.0) == base + ("mu_C", "mu_S")
+    assert mixed_slots(beta_eq_neutrino_trapped(0.4), 0.0) == (
+        base + ("mu_L", "mu_eG"))
 
 
-@pytest.mark.parametrize("spec", [mode_A(), mode_B(0.4), mode_C(0.3),
-                                  mode_D(0.3, 0.1)])
-def test_mixedstate_roundtrip(spec):
-    st = MixedState.for_charges(spec)
-    x = np.arange(len(st), dtype=float) + 1.0
-    assert st.pack(st.unpack(x)) == pytest.approx(x)
-    d = {name: float(i) for i, name in enumerate(st.slots)}
-    assert st.unpack(st.pack(d)) == d
-    with pytest.raises(ValueError):                 # length mismatch is caught
-        st.unpack(np.zeros(len(st) + 1))
+def test_eta_activates_the_lepton_populations():
+    """eta decides which neutrality domains exist: only the global one at
+    eta=0, only the local ones at eta=1, both in between."""
+    spec = beta_eq_neutrinoless()
+    assert mixed_slots(spec, 0.0)[-1:] == ("mu_eG",)
+    assert mixed_slots(spec, 1.0)[-2:] == ("mu_eL_H", "mu_eL_Q")
+    assert mixed_slots(spec, 0.5)[-3:] == ("mu_eL_H", "mu_eL_Q", "mu_eG")
+
+
+def test_unwired_regimes_raise_rather_than_mis_assemble():
+    """A regime combination the residual cannot assemble must raise, never
+    silently produce a wrong system (CLAUDE.md §5)."""
+    with pytest.raises(NotImplementedError):        # per-phase strangeness
+        mixed_slots(ChargeSpec(S=Regime.LOCAL, targets={"Y_S": 0.1}), 0.5)
+    with pytest.raises(NotImplementedError):        # localized neutrinos
+        mixed_slots(ChargeSpec(L_e=Regime.LOCAL, targets={"Y_L": 0.4}), 0.5)
 
 
 # =============================================================================

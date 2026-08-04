@@ -1,7 +1,7 @@
 """
 verify/compose.py
 ====================
-CompOSE table comparison for the DD2 engine (report §3.7 check 1).
+CompOSE table comparison for the DD2 engine.
 
 Nucleonic reference: HS(DD2) (CompOSE ids 17/18, Hempel & Schaffner-Bielich
 statistical model with DD2 interactions; Typel et al. 2010). Content of the

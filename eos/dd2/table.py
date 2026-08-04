@@ -1,13 +1,13 @@
 """
 table.py
 ====================
-Table driver (report §3.6): a TableSpec describing the parametrization, the
+Table driver: a TableSpec describing the parametrization, the
 equilibrium mode, the axes (n_B and either T or entropy-per-baryon S=s/n_B),
 the fixed fractions, and the active species — plus build_table() that solves
 the grid with warm-started continuation along n_B.
 
 The temperature axis may be given directly as 'T' or as entropy per baryon
-'SnB'; the latter adds an outer 1-D solve for T at each point (report §3.6),
+'SnB'; the latter adds an outer 1-D solve for T at each point,
 a thin wrapper around the same octet solve.
 """
 from dataclasses import dataclass, field
@@ -19,21 +19,36 @@ from eos.dd2.species import SpeciesFlags
 from eos.dd2.solver import solve_octet, sweep_octet
 
 
-#: mode name -> solve_octet keyword args template. The fixed fractions are
-#: filled in from TableSpec.fixed at build time.
+#: Equilibrium mode -> the `solve_octet` configuration it means. The fixed
+#: fractions are filled in from `TableSpec.fixed` at build time.
+#:
+#: The names say what the matter is, and they match the modes `eos.mixed`
+#: offers, so a purely hadronic table and a hybrid table are requested the
+#: same way:
+#:
+#:   beta_eq_neutrinoless      charge-neutral beta equilibrium, neutrinos escape
+#:   beta_eq_neutrino_trapped  ... with neutrinos trapped at fixed Y_L
+#:   fixed_YC                  fixed non-leptonic charge fraction, no leptons
+#:                             (the CompOSE general-purpose (nB, T, Y_q) slice)
+#:   fixed_YC_neutral          ... plus neutralizing leptons, so the total
+#:                             system is electrically neutral
+#:   fixed_YS                  charge-neutral, strangeness fraction fixed
+#:   fixed_YC_YS               both fractions fixed
 _MODES = {
-    "beta": dict(charge_mode="neutral"),
-    "YC": dict(charge_mode="fixed"),
-    "YC_e": dict(charge_mode="fixed", yc_leptons=True),   # 2b: + neutralising e (+mu iff flags.muons)
-    "YS": dict(charge_mode="neutral", strange_mode="fixed"),
-    "YC+YS": dict(charge_mode="fixed", strange_mode="fixed"),
-    "YL": dict(charge_mode="neutral", lepton_mode="trapped"),
+    "beta_eq_neutrinoless": dict(charge_mode="neutral"),
+    "fixed_YC": dict(charge_mode="fixed"),
+    "fixed_YC_neutral": dict(charge_mode="fixed", yc_leptons=True),
+    "fixed_YS": dict(charge_mode="neutral", strange_mode="fixed"),
+    "fixed_YC_YS": dict(charge_mode="fixed", strange_mode="fixed"),
+    "beta_eq_neutrino_trapped": dict(charge_mode="neutral",
+                                     lepton_mode="trapped"),
 }
 
-#: which TableSpec.fixed keys each mode consumes.
+#: Which `TableSpec.fixed` keys each mode consumes.
 _MODE_FIXED = {
-    "beta": (), "YC": ("Y_C",), "YC_e": ("Y_C",), "YS": ("Y_S",),
-    "YC+YS": ("Y_C", "Y_S"), "YL": ("Y_L",),
+    "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",),
+    "fixed_YC_neutral": ("Y_C",), "fixed_YS": ("Y_S",),
+    "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_L",),
 }
 
 
@@ -52,7 +67,7 @@ def solve_octet_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
                            T_hi=80.0, T_cap=400.0, xtol=1e-5, **mode_kwargs):
     """
     Solve at fixed entropy per baryon S=s/n_B by an outer 1-D root on T
-    (report §3.6). s(T) is monotone increasing at fixed n_B, so the bracket is
+. s(T) is monotone increasing at fixed n_B, so the bracket is
     well-posed; T_hi is doubled up to T_cap if the target is not yet bracketed.
     Returns the converged EoSPoint (at the solved T).
     """
@@ -77,9 +92,9 @@ def solve_octet_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
 
 @dataclass
 class TableSpec:
-    """One table request (report §3.6)."""
+    """One table request."""
     parametrization: object
-    mode: str                             # 'beta','YC','YS','YC+YS','YL'
+    mode: str                             # a key of _MODES, above
     axes: dict                            # {'nB': grid, 'T'|'SnB': grid}
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)   # Y_C / Y_S / Y_L targets
@@ -106,7 +121,7 @@ class TableResult:
 
 
 def _cs2_along(points):
-    """Equilibrium c_s^2 = dP/deps along one n_B line (report §3.5)."""
+    """Equilibrium c_s^2 = dP/deps along one n_B line."""
     P = np.array([p.P for p in points])
     eps = np.array([p.eps for p in points])
     return np.gradient(P, eps)
@@ -115,7 +130,7 @@ def _cs2_along(points):
 def build_table(spec, skip_errors=False):
     """
     Solve the TableSpec grid. For each temperature-axis value an n_B sweep is
-    warm-started along density (the stiff axis, report §3.4); the 'SnB' axis
+    warm-started along density (the stiff axis); the 'SnB' axis
     replaces each solve with the outer entropy T-solve. Returns a TableResult;
     with want_coeffs, equilibrium c_s^2 is attached per T-line.
 
@@ -171,7 +186,7 @@ if __name__ == "__main__":
     from eos.dd2 import Parametrization
     spec = TableSpec(
         parametrization=Parametrization.from_dd2y_defaults(),
-        mode="beta",
+        mode="beta_eq_neutrinoless",
         axes={"nB": np.linspace(0.1, 0.8, 8), "SnB": [1.0, 2.0]},
         include=SpeciesFlags(hyperons=True, phi_field=True),
         want_coeffs=True,

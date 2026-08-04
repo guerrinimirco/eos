@@ -1,8 +1,11 @@
 """
-DD2 density-dependent RMF equation-of-state engine (Phase 1).
+DD2 density-dependent relativistic mean-field equation-of-state engine.
 
-Physics specification: DD2_EoS_Physics_Report.md; executable specification
-for M0–M2: dd2_reference_validation.py.
+Nucleons, hyperons and Delta isobars in a density-dependent RMF, with leptons,
+photons and an optional thermal meson gas, at zero and finite temperature.
+Which degrees of freedom are active is declared explicitly through
+`SpeciesFlags`; the equilibrium condition is chosen through the mode names in
+`table.py`. See `eos.mixed` for the hybrid hadron-quark extension.
 """
 from eos.dd2.parametrization import Parametrization
 from eos.dd2.species import SpeciesFlags, active_baryons

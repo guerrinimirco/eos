@@ -56,12 +56,12 @@ def derived_a(b, c, d):
 
 
 # =============================================================================
-# HYPERON COUPLINGS (report §2.4)
+# HYPERON COUPLINGS
 # =============================================================================
 _SQRT2 = 1.4142135623730951
 
 #: SU(6) isoscalar-vector and isovector ratios x_iY = Gamma_iY / Gamma_iN,
-#: and the hidden-strange ratio x_phiY = g_phiY / g_omegaN (report §2.4a; φ has
+#: and the hidden-strange ratio x_phiY = g_phiY / g_omegaN (; φ has
 #: no nucleon coupling, so it is normalised to g_omegaN). In DD2Y φ inherits the
 #: ω density dependence f_omega, so x_phiY multiplies Gamma_omegaN(n_B):
 #: Gamma_phiY(n_B) = x_phiY * Gamma_omegaN(n_B). These vector ratios ARE the
@@ -103,7 +103,7 @@ def scalar_ratio_from_potential(U_Y, x_omega, Gs_N_sat, Gw_N_sat,
                                 sigma_sat, omega0_sat, SigmaR_sat):
     """
     x_sigmaY = Gamma_sigmaY / Gamma_sigmaN(n_sat) from the hyperon potential in
-    SNM at saturation (report §2.4b):
+    SNM at saturation:
 
         U_Y = -Gamma_sigmaY sigma + Gamma_omegaY omega0 + Sigma^R   (all at n_sat)
 

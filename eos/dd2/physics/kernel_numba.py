@@ -2,7 +2,7 @@
 physics/kernel_numba.py
 ====================
 Numba-jitted T=0 octet residual and analytic Jacobian — the eos_fast hot path
-(report §3.0 "numerics twice", M9). Mirrors octet_residual / octet_jacobian
+. Mirrors octet_residual / octet_jacobian
 exactly at T=0, where the kinetic thermodynamics are closed form and jittable.
 
 T>0 is NOT jitted: the kinetic densities come from the scipy JEL integrals,

@@ -1,7 +1,7 @@
 """
 M10 gate: thermodynamic coefficients + full verification suite.
 
-Gate (report §3.y M10): analytic-vs-numeric coefficient agreement; all verify
+Gate: analytic-vs-numeric coefficient agreement; all verify
 checks green on eos_ref. Backend parity (eos_ref vs eos_fast) is the M9 check.
 
 Here the "numeric" cross-check is a second, independent finite-difference of

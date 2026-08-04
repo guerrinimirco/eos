@@ -6,7 +6,7 @@ the golden-point "average" convention costs up to ~4e-3 on P in asymmetric
 matter). Compared in the uniform-matter region: the density cut rises with
 T because HS light clusters survive to higher density when hot.
 
-Gate: < 1e-3 relative on P, eps, s (report §3.x). Skipped when the CompOSE
+Gate: < 1e-3 relative on P, eps, s. Skipped when the CompOSE
 tables are not present.
 """
 import os

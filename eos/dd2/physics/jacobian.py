@@ -1,7 +1,7 @@
 """
 physics/jacobian.py
 ====================
-Hand-coded analytic Jacobian of the octet residual (report §3.0/§3.5, M9).
+Hand-coded analytic Jacobian of the octet residual.
 
 This is the "second backend" derivative engine: the report's JAX autodiff path
 is deferred (the JEL/Bose core and the T=0 threshold kink do not trace cleanly,

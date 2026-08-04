@@ -1,7 +1,7 @@
 """
 physics/residual.py
 ====================
-Backend-agnostic residual for the potential-driven DD2 solve (report §1.7, §3.3).
+Backend-agnostic residual for the potential-driven DD2 solve.
 
 Unknown vector for beta-equilibrium npemu (the two-charge case):
     x = [sigma, rho0, nu_n, mu_Q]

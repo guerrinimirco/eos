@@ -1,6 +1,6 @@
 """
 M10 (Jacobian) gate: thermodynamic coefficients wired onto octet_jacobian
-(report §3.5, §3.7 check 5). The analytic-from-J values must agree with the
+. The analytic-from-J values must agree with the
 independent finite-difference oracle (coefficients.py).
 
 - equilibrium c_s^2 from Jacobian tangent steps vs FD-of-resolves;

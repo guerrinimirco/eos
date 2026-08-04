@@ -1,7 +1,7 @@
 """
-M7 gate: thermal meson gas (pseudoscalar + vector nonets, report §A).
+M7 gate: thermal meson gas (pseudoscalar + vector nonets).
 
-Gate (report §3.y M7): T->0 contribution -> 0; HVH still holds with the meson
+Gate: T->0 contribution -> 0; HVH still holds with the meson
 terms. The mesons are an additive ideal Bose gas on top of the mean field with
 effective chemical potentials tied to the DD2 density-dependent couplings; the
 Bose-gas Euler relation e + P = T s + mu* n makes mu*_j n_j the right HVH term.

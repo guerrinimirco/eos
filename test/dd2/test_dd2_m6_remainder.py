@@ -1,6 +1,6 @@
 """
 M6 remainder gate: Y_L / neutrino-trapped mode, entropy-per-baryon (S=s/n_B)
-axis, and the TableSpec driver (report §1.7 mode 4, §3.6).
+axis, and the TableSpec driver.
 
 Validated:
 - trapped Y_L hits the target electron lepton fraction (n_e+n_nue)/n_B exactly,
@@ -75,7 +75,7 @@ def test_entropy_axis_recovers_T(par_y):
 
 def test_tablespec_T_axis(par_y):
     spec = TableSpec(
-        parametrization=par_y, mode="beta",
+        parametrization=par_y, mode="beta_eq_neutrinoless",
         axes={"nB": np.linspace(0.15, 0.6, 5), "T": [0.0, 20.0]},
         include=SpeciesFlags(hyperons=True, phi_field=True),
         want_coeffs=True,
@@ -89,7 +89,7 @@ def test_tablespec_T_axis(par_y):
 
 def test_tablespec_entropy_axis_and_yc(par_y):
     spec = TableSpec(
-        parametrization=par_y, mode="YC",
+        parametrization=par_y, mode="fixed_YC",
         axes={"nB": np.linspace(0.2, 0.6, 4), "SnB": [1.0]},
         include=SpeciesFlags(hyperons=True, phi_field=True),
         fixed={"Y_C": 0.2},
@@ -102,7 +102,7 @@ def test_tablespec_entropy_axis_and_yc(par_y):
         assert p.T > 0.0
 
 
-# --- fixed-Y_C flavor 2b: neutralizing leptons (report §1.7 mode 2b) ---------
+# --- fixed-Y_C flavor 2b: neutralizing leptons ---------
 def test_yc_2b_hadronic_matches_2a(par_y):
     # leptons don't source the mean fields: the 2b hadronic solve == 2a.
     fY = SpeciesFlags(hyperons=True, phi_field=True)

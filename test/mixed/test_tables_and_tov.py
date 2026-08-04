@@ -1,28 +1,24 @@
 """
-P8 gate: full EoS table across the transition + TOV M(R) / tidal
-(docs/phase2/SPECIFICATION_AND_PLAN.md §4 milestone P8).
+The stitched core equation of state and its TOV integration.
 
-  - build_mixed_eos_table stitches pure-hadronic + eta-mixed + pure-quark into
-    one monotone (P, eps, n_B) core EoS with no interior holes; chi spans 0..1
-    and the pure wings are cut at the mixed pressure range (no P double-back);
-  - eta=1 (Maxwell) leaves a constant-P plateau that eos/tov detects
-    (_detect_maxwell_construction) -> the Takatsy-Kovacs tidal Delta-Y jump is
-    applied automatically at the density discontinuity; eta=0 (Gibbs) has no
-    plateau (P rises through the window) so there is nothing to correct;
-  - eos/tov integrates the table: M_max is physical (~2 Msun), radii physical,
-    and the construction softens the EoS smoothly (Gibbs M_max <= Maxwell);
-  - tidal Lambda(M) is produced -- the discontinuity correction needs no flag
-    on our side, it rides on the plateau the table already carries.
-
-Nucleons + electrons, default vMIT (B4=180): a mixed window ~0.44-1.0 fm^-3.
-TOV uses the fast numba backend for test speed (both backends apply the jump).
+  - build_mixed_eos_table joins pure hadronic, eta-mixed and pure quark
+    segments into one monotone (P, eps, n_B) table with no interior holes; chi
+    spans 0 to 1 and the pure wings are cut at the transition boundaries, so
+    the pressure never doubles back;
+  - eta=1 (Maxwell) leaves a constant-pressure plateau that eos/tov detects on
+    its own, applying the Takatsy-Kovacs tidal correction at the density
+    discontinuity; eta=0 (Gibbs) has no plateau — pressure rises through the
+    window — so there is nothing to correct;
+  - eos/tov integrates the table to a physical maximum mass and radii, and the
+    construction softens the equation of state smoothly;
+  - the tidal deformability Lambda(M) comes out without any special flag.
 """
 import numpy as np
 import pytest
 
 from eos.dd2 import Parametrization, SpeciesFlags
-from eos.mixed import mode_A
-from eos.mixed.table import build_mixed_eos_table, mass_radius_mixed
+from eos.mixed import beta_eq_neutrinoless
+from eos.mixed.tables.core_eos import build_mixed_eos_table, mass_radius_mixed
 from eos.tov.solver import _detect_maxwell_construction
 
 
@@ -43,7 +39,7 @@ def grid():
 
 @pytest.fixture(scope="module")
 def tables(par, flags, grid):
-    return {eta: build_mixed_eos_table(par, flags, grid, eta, mode_A())
+    return {eta: build_mixed_eos_table(par, flags, grid, eta, beta_eq_neutrinoless())
             for eta in (0.0, 0.5, 1.0)}
 
 
@@ -57,7 +53,7 @@ def test_table_monotone_and_spans_transition(tables, eta):
     assert np.all(np.diff(t.eps) > -1e-6), "eps not monotone"
     assert t.chi.min() < 0.05 and t.chi.max() > 0.95, "chi does not span 0..1"
     assert (t.phase == "mix").sum() >= 3, "no resolved mixed window"
-    assert t.onset < t.offset, "onset/offset not ordered"
+    assert t.n_onset < t.n_offset, "onset/offset not ordered"
 
 
 def test_no_interior_holes_in_mixed_window(tables, grid):
@@ -66,7 +62,7 @@ def test_no_interior_holes_in_mixed_window(tables, grid):
     for eta in (0.0, 0.5, 1.0):
         t = tables[eta]
         present = set(np.round(t.n_B, 3))
-        interior = [g for g in grid if t.onset < g < t.offset]
+        interior = [g for g in grid if t.n_onset < g < t.n_offset]
         missing = [g for g in interior if g not in present]
         assert not missing, f"eta={eta}: holes inside window at {missing}"
 
@@ -83,7 +79,7 @@ def test_maxwell_plateau_detected_only_at_eta1(tables):
 # ------------------------------------------------------------------- TOV M(R)
 @pytest.fixture(scope="module")
 def mr(par, flags, grid):
-    return {eta: mass_radius_mixed(par, flags, grid, eta, mode_A(),
+    return {eta: mass_radius_mixed(par, flags, grid, eta, beta_eq_neutrinoless(),
                                    n_ec=40, backend="fast")
             for eta in (0.0, 1.0)}
 

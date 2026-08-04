@@ -2,10 +2,10 @@
 physics/octet.py
 ====================
 General potential-driven mean-field residual for the full baryon octet
-(report §1.4, §1.7, §3.3). Generalizes the nucleon beta_eq of residual.py to
+. Generalizes the nucleon beta_eq of residual.py to
 Λ, Σ, Ξ with the φ field.
 
-Unknown vector (report §1.7 unified scheme):
+Unknown vector (the unified charge/strangeness scheme):
     x = [sigma, omega0, rho0, (phi0), mu_tilde_B, mu_Q, (mu_S)]
 
 phi0 is present iff phi_field is on AND hyperons are active. mu_S is present
@@ -14,14 +14,14 @@ carried as unknowns with their field equations as residuals (their sources
 are composition-dependent once the couplings differ per species, so they can
 no longer be eliminated at the target density as in the nucleon-only case).
 
-Equilibrium modes (the charge/strange sector switches, report §1.7):
+Equilibrium modes (the charge/strange sector switches):
     charge = 'neutral' : beta equilibrium, leptons present, charge-neutral;
              'fixed'   : hadronic charge fraction fixed to Y_C, NO leptons
                          (the CompOSE general-purpose (nB,T,Yq) convention).
     strange= 'eq'      : mu_S = 0 (strangeness-changing weak reactions fast);
              'fixed'   : strangeness fraction fixed to Y_S, mu_S unknown.
 Beta equilibrium is charge='neutral', strange='eq'; mu_L / neutrinos (fixed
-Y_L) are a later milestone.
+Y_L) are handled by the trapped lepton mode.
 
 mu_tilde_B = mu_B - Sigma^R absorbs the species-independent rearrangement term
 (and its density circularity) out of the iteration; the baryon kinetic
@@ -51,7 +51,7 @@ _G_NU = 1.0
 
 def _yc_neutralizing_leptons(target_nat, m_e, m_mu, include_muons, T):
     """
-    Fixed-Y_C flavor 2b (report §1.7): populate leptons so the total system is
+    Fixed-Y_C flavor 2b: populate leptons so the total system is
     charge-neutral, n_e(+n_mu) = target (= hadronic charge, natural units).
     Muons (if on) are in leptonic equilibrium mu_mu = mu_e, so a single common
     mu closes n_e(mu) [+ n_mu(mu)] = target. Since leptons don't source the
@@ -213,7 +213,7 @@ def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S):
 
 
 def octet_residual(x, ctx):
-    """Dimensionless residual vector (report §1.7 unified scheme)."""
+    """Dimensionless residual vector (the unified charge/strangeness scheme)."""
     sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S, mu_L = _unpack(x, ctx)
     kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
                            mu_tilde_B, mu_Q, mu_S)

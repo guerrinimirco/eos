@@ -1,5 +1,5 @@
 """
-M9 gate: the eos_fast backend = hand-coded analytic Jacobian (report §3.y M9).
+M9 gate: the eos_fast backend = hand-coded analytic Jacobian.
 
 The report's JAX autodiff path is deferred (the JEL/Bose core and T=0 threshold
 kink do not trace cleanly, report D3); the authorized fallback is the exact

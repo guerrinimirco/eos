@@ -1,9 +1,8 @@
 # CLAUDE.md — conventions for the `eos` repository
 
 Durable project conventions. Read this before editing anything. These are not
-suggestions: they are the invariants that the existing 123-test suite and the
-Phase-1 physics report encode. If a change appears to require breaking one,
-stop and ask rather than working around it.
+suggestions: they are the invariants the test suite encodes. If a change
+appears to require breaking one, stop and ask rather than working around it.
 
 ---
 
@@ -18,21 +17,20 @@ is *additive*: new modules that consume these as libraries.
 is a reference for behaviour, not a template for structure — its per-mode
 branch duplication is the thing Phase 2 exists to replace.
 
-`dd2_reference_validation.py` is the executable specification for the
-T=0 nucleonic sector. It is ground truth. If a new implementation disagrees
-with it, the new implementation is wrong.
+The golden reference values embedded in `test/dd2/` pin the T=0 nucleonic
+sector. They are ground truth: if a new implementation disagrees with them,
+the new implementation is wrong.
 
 ## 2. Sign and naming conventions (non-negotiable)
 
 - **Strangeness**: `S = +1` per *s*-quark. So `Λ` has `S = +1`, `Ξ` has
   `S = +2`, and the *s* quark itself has `S = +1`. This is the opposite of
-  the PDG convention; it is used consistently throughout this repo and in the
-  physics report. Never silently flip it.
+  the PDG convention; it is used consistently throughout this repo. Never
+  silently flip it.
 - **Charge `C` excludes leptons.** `n_C` is the *non-leptonic* electric charge
   density (`n_C = n_p` for nucleonic matter). `Y_C = n_C / n_B`. Total
   electric charge neutrality is a separate, additional condition. Conflating
-  these two is the single most common error in this domain — the report has a
-  dedicated section on it.
+  these two is the single most common error in this domain.
 - **`Y_S`, `Y_L`** are likewise ratios to `n_B`, not to total particle number.
 - Chemical potentials follow the conserved-charge decomposition
   `mu_i = B_i mu_B + Q_i mu_Q + S_i mu_S + L_i mu_L`. The species potentials
@@ -61,8 +59,8 @@ Every solver exists in two flavors and this pattern must be preserved:
   hand-rolled algebra. This is what correctness is judged against.
 - `*_fast` — the optimized path (Numba kernels, analytic Jacobians).
 
-**Rule**: `_fast` must agree with `_ref` to the tolerances in the report. When
-they disagree, `_ref` is right. Never delete or bypass a `_ref` path to make a
+**Rule**: `_fast` must agree with `_ref` to the tolerances the tests state.
+When they disagree, `_ref` is right. Never delete or bypass a `_ref` path to make a
 `_fast` path pass, and never make `_fast` the only implementation.
 
 Analytic Jacobians are hand-coded (see `eos/dd2/physics/jacobian.py`,
@@ -73,23 +71,20 @@ finite-difference agreement test.
 *deferred, not adopted*, and this was a deliberate Phase-1 decision with a
 physics reason, not an unfinished task:
 
-- The report's JAX autodiff path was abandoned because the JEL Fermi/Bose core
-  and the T=0 threshold kink **do not trace cleanly** (report D3). See the
-  docstrings of `eos/dd2/physics/jacobian.py` and `test/dd2/test_dd2_m9.py`.
-- The authorized fallback, and what M9 actually shipped, is the **hand-coded
-  exact analytic Jacobian** supplied to the same MINPACK solver
+- The JAX autodiff path was abandoned because the JEL Fermi/Bose core and the
+  T=0 threshold kink **do not trace cleanly**. See the docstrings of
+  `eos/dd2/physics/jacobian.py` and `test/dd2/test_dd2_m9.py`.
+- What actually shipped is the **hand-coded exact analytic Jacobian**
+  supplied to the same MINPACK solver
   (`eos/dd2/physics/jacobian.py`). `eos_fast` means analytic-Jacobian, not JAX.
 - `eos/dd2/xp.py` is a *prepared seam only* — it currently imports numpy, and
   `jax` is not a dependency of this project. Physics modules import `xp` from
   it so a Numba/JAX wrapper could drop in later; that is an option kept open,
   not a shipped backend.
-- Known stale docstring: the module docstring of `eos/dd2/coefficients.py`
-  claims "the M9 JAX backend replaces the FD with autodiff." That sentence
-  describes the abandoned plan, not the code. `test_dd2_m9.py` and
-  `jacobian.py` are correct. Do not "restore" a JAX path on the strength of
-  that sentence; if you touch the file, fix the docstring instead.
+- Do not "restore" a JAX path on the strength of a stray comment; the
+  analytic Jacobian is the shipped design.
 
-The Phase-2 mixed-phase solver follows the same pattern: hand-coded analytic
+The mixed-phase solver in `eos/mixed/` follows the same pattern: hand-coded analytic
 Jacobians, finite-difference-verified.
 
 ## 5. Species flags
@@ -123,29 +118,35 @@ them. They are the fastest way to catch a wrong implementation:
 
 ## 8. Testing
 
-- Tests live in `test/dd2/` etc., named by milestone (`test_dd2_m4.py`).
+- Tests live in `test/dd2/`, `test/mixed/` etc. Name a test file after the
+  physics it checks (`test_fixed_yc.py`), not after a development milestone.
 - New physics gets a test in the same style *and* an entry in the
   verification suite (`eos/dd2/verify/`) where it is a physics invariant
   rather than a unit behaviour.
 - The full suite must pass before any commit that touches solver internals.
-- Numerical tolerances are specified in the physics report; use those, do not
-  invent looser ones to make a test pass.
+- Do not loosen a numerical tolerance to make a test pass. If a tolerance
+  genuinely needs to change, say why in the test.
 
 ## 9. Style
 
 - Python only. No compiled-language ports.
 - NumPy/SciPy + Numba for the fast paths. No new heavy dependencies without
   asking.
-- Every module gets a docstring that states the physics it implements and
-  cites the relevant report section. Follow the existing docstrings — they
-  are unusually informative by design and that is deliberate.
+- Every module gets a docstring that states the physics it implements and is
+  self-contained (see §10). Follow the existing docstrings — they are
+  unusually informative by design and that is deliberate.
 - Prefer adding a module over growing an existing one past ~600 lines.
 
 ## 10. When in doubt
 
-The physics report (`DD2_EoS_Physics_Report.md`) and, for Phase 2,
-`docs/phase2/` are authoritative for physics. `DD2_OPEN_QUESTIONS.md` records
-choices that were pinned to make progress — check it before re-deciding
-something. If the physics is genuinely ambiguous, ask rather than picking a
-convention silently; an undocumented convention choice is a bug that surfaces
-months later.
+**Docstrings must stand on their own.** This is a public repository, so a
+comment may not depend on a document that is not in it. Working notes under
+`docs/` and the drafting material that produced a module are not part of the
+published code: state the physics, name the equation, give the literature
+citation — never "see spec §3.27" or a milestone number. `eos/` and `test/`
+are currently free of such references and should stay that way.
+
+`DD2_OPEN_QUESTIONS.md` records choices that were pinned to make progress —
+check it before re-deciding something. If the physics is genuinely ambiguous,
+ask rather than picking a convention silently; an undocumented convention
+choice is a bug that surfaces months later.

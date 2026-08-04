@@ -1,5 +1,5 @@
 """
-M6 gate (partial): fixed-Y_C and fixed-Y_C+Y_S modes (report §1.7 modes 2/3).
+M6 gate (partial): fixed-Y_C and fixed-Y_C+Y_S modes.
 
 The unified charge-vector residual now switches the charge sector between
 'neutral' (beta eq, leptons) and 'fixed' (hadronic Y_C, no leptons — the

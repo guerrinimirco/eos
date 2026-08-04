@@ -90,3 +90,4 @@ test/zlvmit/table_hybrid_betaeq_eta0.90_B165_a0.2_complete.dat
 test/zlvmit/table_hybrid_betaeq_eta0.90_B165_a0.2_result.dat
 test/zlvmit/table_hybrid_betaeq_eta1.00_B165_a0.2_complete.dat
 test/zlvmit/table_hybrid_betaeq_eta1.00_B165_a0.2_result.dat
+notebooks/eos_tables_DD2vMIT/

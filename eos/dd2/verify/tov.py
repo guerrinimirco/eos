@@ -1,7 +1,7 @@
 """
 verify/tov.py
 ====================
-TOV cross-check for the DD2 engine (report §3.7 check 3): feed the cold
+TOV cross-check for the DD2 engine: feed the cold
 beta-equilibrium EoS to the repo's TOV solver and verify M_max >= 2 M_sun,
 plus report R_1.4.
 
@@ -30,7 +30,7 @@ def build_core_table(par, flags, n_lo=0.05, n_hi=1.25, n_points=150):
     """
     grid = np.geomspace(n_lo, n_hi, n_points)
     # stop_at_boundary: a Δ model may hit scalar collapse (m*->0) before n_hi;
-    # take the valid prefix as the core EoS (report §2.6 feasibility).
+    # take the valid prefix as the core EoS.
     points = sweep_beta_eq_octet(par, grid, flags, T=0.0,
                                  include_photons=False, stop_at_boundary=True)
     P = np.array([p.P for p in points])

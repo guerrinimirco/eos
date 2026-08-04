@@ -57,10 +57,10 @@ def test_dd2y_coupling_table(par_y):
 
 
 def test_scalar_potential_inversion():
-    # The U_Y inversion (report §2.4b) regenerates the DD2Y R_sigma table when
+    # The U_Y inversion regenerates the DD2Y R_sigma table when
     # U_Xi = -18 (B2): the mechanism and the hardcoded table agree.
     # (approximate: R_sigma is 2-digit-rounded and the inversion is sensitive
-    # to the saturation σ-solve — report §2.4 "sensitive to the φ solve".)
+    # to the saturation σ-solve "sensitive to the φ solve".)
     par = Parametrization.from_hyperon_potentials()   # U_Λ,Σ,Ξ = -30,30,-18
     for name, R_sigma in (("Lambda", 0.62), ("Sigma-", 0.48), ("Xi-", 0.32)):
         assert par.hyperon_coupling_map[name][1] == pytest.approx(R_sigma, abs=1e-2)

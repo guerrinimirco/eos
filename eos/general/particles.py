@@ -238,7 +238,7 @@ XiM = Particle(
 
 # =============================================================================
 # BARYONS - DELTA RESONANCES (J = 3/2, S = 0)
-# Isospin quartet: I = 3/2. τ₃ = 2·I₃ (the report §1.4 rule extended to the
+# Isospin quartet: I = 3/2. τ₃ = 2·I₃ (the rule extended to the
 # quartet), so t3 ∈ {+3,+1,-1,-3} and the ρ coupling ratio x_Δρ = g_ρΔ/g_ρN
 # multiplies these — consistent with the nucleon τ₃=±1 normalization.
 # =============================================================================

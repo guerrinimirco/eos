@@ -168,15 +168,15 @@ print("NB_GRID:", round(NB_GRID[0], 3), "→", round(NB_GRID[-1], 3),
 
 # %%
 # fixed-Y_C lepton content: electrons on/off (mode YC_e vs YC), muons via flags.
-YC_MODE  = "YC_e" if YC_ELECTRONS else "YC"        # YC_e = neutralising e (+μ iff flags); YC = leptonless
+YC_MODE  = "fixed_YC_neutral" if YC_ELECTRONS else "fixed_YC"        # YC_e = neutralising e (+μ iff flags); YC = leptonless
 FLAGS_YC = replace(FLAGS, muons=YC_MUONS, neutrinos=False)
 FLAGS_TRAP = replace(FLAGS, neutrinos=True)        # trapped ν
 
 # (label, mode, flags, temp-axis kwargs, fixed fractions, filename)
 _lep = ("e" + ("mu" if YC_MUONS else "")) if YC_ELECTRONS else "nolep"
 jobs = [
-    ("betaeq",     "beta", FLAGS, dict(T=T_VALUES),   {}, "eos_dd2_betaeq.dat"),
-    ("iso_betaeq", "beta", FLAGS, dict(SnB=S_VALUES), {}, "eos_dd2_betaeq_isentropic.dat"),
+    ("betaeq",     "beta_eq_neutrinoless", FLAGS, dict(T=T_VALUES),   {}, "eos_dd2_betaeq.dat"),
+    ("iso_betaeq", "beta_eq_neutrinoless", FLAGS, dict(SnB=S_VALUES), {}, "eos_dd2_betaeq_isentropic.dat"),
 ]
 for yc in Y_C_VALUES:                              # fixed-Y_C tables, one per Y_C
     tag = f"YC{int(round(yc * 100))}_{_lep}"
@@ -184,9 +184,9 @@ for yc in Y_C_VALUES:                              # fixed-Y_C tables, one per Y
                  {"Y_C": yc}, f"eos_dd2_fixed{tag}.dat"))
 for yl in Y_L_VALUES:                              # trapped-ν tables, one per Y_L
     tag = f"YL{int(round(yl * 100))}"
-    jobs.append((f"trapped_{tag}", "YL", FLAGS_TRAP, dict(T=T_VALUES),
+    jobs.append((f"trapped_{tag}", "beta_eq_neutrino_trapped", FLAGS_TRAP, dict(T=T_VALUES),
                  {"Y_L": yl}, f"eos_dd2_trapped_{tag}.dat"))
-    jobs.append((f"iso_trapped_{tag}", "YL", FLAGS_TRAP, dict(SnB=S_VALUES),
+    jobs.append((f"iso_trapped_{tag}", "beta_eq_neutrino_trapped", FLAGS_TRAP, dict(SnB=S_VALUES),
                  {"Y_L": yl}, f"eos_dd2_trapped_{tag}_isentropic.dat"))
 
 # skip_errors: drop points where the uniform solve doesn't converge (the low-T /

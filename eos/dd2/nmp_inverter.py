@@ -1,7 +1,7 @@
 """
 nmp_inverter.py
 ====================
-Inverse map NMPs -> DD2 couplings (report §2.5 cascade), milestone M8.
+Inverse map: nuclear-matter parameters -> DD2 couplings.
 
 The forward map (nmp.compute_nmp) extracts {n_sat, E_sat, m*/m, K_sat, Q_sat,
 E_sym, L_sym} from a Parametrization. This inverts it:
@@ -9,12 +9,12 @@ E_sym, L_sym} from a Parametrization. This inverts it:
   1. Isoscalar (6x6 root at FIXED n_sat, so no P=0 bracket search in the loop):
      free {Gamma_sigma, Gamma_omega, b_sigma, c_sigma, b_omega, c_omega} matched to
      {P(n_sat)=0, E_sat, m*/m, K_sat, Q_sat, and the closing cross-constraint
-     f_sigma''(1)=f_omega''(1) (report §1.3 constraint 3)}. m_sigma is fixed
-     (report §2.3: with m_sigma fixed the 5 isoscalar NMPs + the cross-constraint
+     f_sigma''(1)=f_omega''(1)}. m_sigma is fixed: with it fixed, the five
+     isoscalar NMPs plus the cross-constraint
      close the sector). a_i, d_i are derived internally (from_microscopic).
   2. Isovector (near-analytic): Gamma_rho(n_sat) from E_sym in closed form, then
      a_rho from L_sym by a 1-D root.
-  3. Feasibility flags (report §2.6): m*/m too small, no real isoscalar solution,
+  3. Feasibility flags: m*/m too small, no real isoscalar solution,
      a_rho driving Gamma_rho non-monotonic / negative.
 
 The isoscalar cross-constraint is DD2's own (it holds on the published table to
@@ -75,7 +75,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None):
     infeasibility; a soft failure is reported via status.ok=False.
     """
     n_sat = nmp["n_sat"]
-    # Feasibility (report §2.6): m*/m too small drives Gamma_sigma sigma -> m_N
+    # Feasibility: m*/m too small drives Gamma_sigma sigma -> m_N
     # (scalar collapse); outside a physical RMF window there is no DD2-form fit.
     if not (0.35 < nmp["m_eff_ratio"] < 0.95):
         raise ValueError(

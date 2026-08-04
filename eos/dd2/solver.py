@@ -1,17 +1,19 @@
 """
 solver.py
 ====================
-DD2 nucleonic solves (milestones M1–M3): fixed-composition and
-beta-equilibrium matter at T = 0 and T > 0.
+DD2 nucleonic solves: fixed-composition and beta-equilibrium matter at
+T = 0 and T > 0, plus the general octet solve that all equilibrium modes go
+through.
 
 Fixed composition (n_n, n_p): one scalar sigma gap solve; at T > 0 the
 kinetic potentials are recovered per species by inverting the JEL density
 (eos.general.fermi_integrals.invert_fermi_density). Beta equilibrium: the
 potential-driven charge-vector system of physics/residual.py.
 
-Golden-point convention (dd2_reference_validation.py, the executable spec):
-the uniform-matter kernel uses the AVERAGE nucleon mass (m_n + m_p)/2 for
-both species; m_n, m_p enter only through that average.
+Nucleon-mass convention: by default the uniform-matter kernel uses the
+AVERAGE nucleon mass (m_n + m_p)/2 for both species, so m_n and m_p enter only
+through that average. `Parametrization.nucleon_mass_mode` selects the
+per-species alternative.
 
 User-facing units: densities fm^-3, fields/potentials MeV, eps/P MeV/fm^3,
 entropy density fm^-3. Internally natural units (MeV powers), converted at
@@ -41,16 +43,16 @@ from eos.dd2.physics.kernel_numba import (
 )
 from eos.dd2.physics.mesons import thermal_meson_thermo
 
-#: Hugenholtz–Van Hove residual gate, relative to eps (report §3.x).
+#: Hugenholtz–Van Hove residual gate, relative to eps.
 HVH_RTOL = 1.0e-8
 
-#: Post-solve gate on the (dimensionless) equilibrium residuals (report §3.x).
+#: Post-solve gate on the (dimensionless) equilibrium residuals.
 RESIDUAL_TOL = 1.0e-10
 
 
 @dataclass(frozen=True)
 class EoSPoint:
-    """One solved thermodynamic state (lite version of report §3.3)."""
+    """One solved thermodynamic state (lite version of)."""
     n_B: float          # fm^-3
     T: float            # MeV
     n_n: float          # fm^-3
@@ -222,7 +224,7 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
                   include_photons=True, check_consistency=True):
     """
     Neutrino-transparent beta-equilibrium npemu matter at density n_B
-    [fm^-3] and temperature T [MeV] (report §1.7 mode 1: mu_S = mu_L = 0,
+    [fm^-3] and temperature T [MeV] ( mode 1: mu_S = mu_L = 0,
     charge neutrality). Photons contribute at T > 0 when include_photons.
 
     x0: optional warm-start vector [sigma, rho0, nu_n, mu_Q], e.g. from
@@ -302,7 +304,7 @@ def solve_beta_eq_t0(par, n_B, x0=None, include_muons=True,
 
 
 # =============================================================================
-# OCTET (hyperonic) beta equilibrium — milestone M4
+# OCTET: the general solve over all active baryons
 # =============================================================================
 def _octet_x0(fields, has_phi, has_muS, has_muL=False):
     """Pack [sigma, omega0, rho0, (phi0), muB~, muQ, (muS), (muL)]."""
@@ -349,7 +351,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_L=0.0, yc_leptons=False, include_photons=True,
                 check_consistency=True, analytic_jac=False):
     """
-    General octet solve (report §1.7 unified scheme) at (n_B [fm^-3], T [MeV]).
+    General octet solve (the unified charge/strangeness scheme) at (n_B [fm^-3], T [MeV]).
 
     charge_mode='neutral' is beta equilibrium (leptons, charge-neutral);
     'fixed' fixes the hadronic charge fraction to Y_C with no leptons (the
@@ -403,7 +405,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
         st["eps"] += ph.e * hc3
         st["P"] += ph.P * hc3
         st["s"] += ph.s * hc3
-    # Thermal meson gas (report §A): additive Bose gas on top of the mean
+    # Thermal meson gas: additive Bose gas on top of the mean
     # field, evaluated at the converged charge/strange potentials and vector
     # fields. mu*_j n_j joins the HVH sum (the gas satisfies e+P = Ts+mu* n).
     if (flags.include_pseudoscalars or flags.include_thermal_vectors) and T > 0:
@@ -448,7 +450,7 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
                         include_photons=True, check_consistency=True,
                         analytic_jac=False):
     """
-    Beta-equilibrium matter with the full active baryon set (report §1.7
+    Beta-equilibrium matter with the full active baryon set (
     mode 1; mu_S = mu_L = 0, charge neutrality). Thin wrapper over solve_octet.
     Reduces to the nucleon problem when flags.hyperons is False.
     """
@@ -462,7 +464,7 @@ def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
                          leptons=False, include_photons=True,
                          check_consistency=True):
     """
-    Fixed hadronic charge fraction Y_C (report §1.7 mode 2). Two flavors:
+    Fixed hadronic charge fraction Y_C. Two flavors:
 
     - leptons=False (2a, default): leptonless — the CompOSE general-purpose
       (nB,T,Yq) slicing; mu_Q is the Lagrange multiplier for Y_C.
@@ -485,7 +487,7 @@ def solve_yl_octet(par, n_B, Y_L, flags, T=0.0, x0=None,
                    include_photons=True, check_consistency=True):
     """
     Neutrino-trapped matter at fixed electron lepton fraction
-    Y_L = (n_e + n_nue)/n_B (report §1.7 mode 4). Charge-neutral, mu_L unknown,
+    Y_L = (n_e + n_nue)/n_B. Charge-neutral, mu_L unknown,
     electron-neutrinos included (mu_nue = mu_L, mu_e = mu_L - mu_Q). The muon
     family stays transparent. Requires SpeciesFlags(neutrinos=True).
     """
@@ -501,13 +503,13 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
                         max_bisect=6, stop_at_boundary=False,
                         analytic_jac=False):
     """
-    Warm-started density sweep with step-bisection continuation (report §3.4).
+    Warm-started density sweep with step-bisection continuation.
     Each point seeds the next; through a sharp onset where the warm start
     would jump branches, the step to the next density is bisected (recursively,
     up to max_bisect levels) so the predictor stays in the corrector's basin.
 
     A Δ-matter model can hit a scalar-collapse feasibility boundary (m* -> 0)
-    at high density (report §2.6). With stop_at_boundary=True the sweep returns
+    at high density. With stop_at_boundary=True the sweep returns
     the valid prefix instead of raising once every sub-step past the boundary
     has failed; otherwise it raises (no silent truncation by default).
 
@@ -523,7 +525,7 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 yc_leptons=False, include_photons=True, max_bisect=6,
                 stop_at_boundary=False, analytic_jac=False):
     """
-    Warm-started density sweep for any octet mode (report §3.4), with the same
+    Warm-started density sweep for any octet mode, with the same
     step-bisection continuation and scalar-collapse boundary handling as the
     beta-eq sweep. See solve_octet for the mode arguments. analytic_jac selects
     the eos_fast (exact-Jacobian) backend.

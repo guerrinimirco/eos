@@ -1,7 +1,7 @@
 """
 physics/fields.py
 ====================
-Mean-field sector of the DD2 model (report §1.4, §1.6): algebraic vector-field
+Mean-field sector of the DD2 model: algebraic vector-field
 elimination, rearrangement self-energy, and the field contributions to the
 energy density and pressure.
 
@@ -31,7 +31,7 @@ def rearrangement(dGs, dGw, dGr, sigma, omega0, rho0, nB_nat, n3_nat, ns_nat):
 def field_eps_P(par, sigma, omega0, rho0):
     """
     Meson mean-field contributions (eps_field, P_field) [MeV^4].
-    Scalar enters P with minus, vectors with plus (report §1.6).
+    Scalar enters P with minus, vectors with plus.
     """
     s2 = par.m_sigma ** 2 * sigma ** 2
     w2 = par.m_omega ** 2 * omega0 ** 2

@@ -1,13 +1,13 @@
 """
 parametrization.py
 ====================
-DD2 parametrization container and construction routes (report §3.2).
+DD2 parametrization container and construction routes.
 
 Routes implemented:
     from_dd2_defaults()   — published DD2 table (Typel et al. 2010, Tables II–III)
     from_microscopic(...) — user-supplied coefficients; dependent a_i, d_i derived
                             from the internal constraints when omitted
-    from_nmp(...)         — NMP inversion cascade, milestone M8 (not yet built)
+    from_nmp(...)         — NMP inversion cascade (see nmp_inverter.py)
 
 Every construction is validated in __post_init__ (the M0 ingest gate):
 positivity, f_i(1)=1 and d_i=1/sqrt(3 c_i) to INGEST_TOL.
@@ -24,7 +24,7 @@ from eos.dd2.couplings import (
 )
 
 #: Ingest-identity tolerance: the published table obeys the internal
-#: constraints to 6 significant digits (report §2.1).
+#: constraints to 6 significant digits.
 INGEST_TOL = 2.0e-6
 
 
@@ -60,7 +60,7 @@ class Parametrization:
     #: density dependence f_i(x); x_phi = g_phiY/g_omegaN inherits f_omega, so
     #: Gamma_phiY(n_B) = x_phi * Gamma_omegaN(n_B) (DD2Y: density-dependent φ).
     hyperon_couplings: tuple = ()
-    #: Δ-isobar coupling ratios x_iΔ = Γ_iΔ/Γ_iN (report §2.4; free params,
+    #: Δ-isobar coupling ratios x_iΔ = Γ_iΔ/Γ_iN (; free params,
     #: literature x_Δσ~1.0–1.3, x_Δω~1.0). Δ has S=0, so no φ coupling.
     #: Inert unless SpeciesFlags.deltas is on. Defaults: Δ couples like the
     #: nucleon to σ/ω/ρ (within the literature range; override per model).
@@ -69,8 +69,8 @@ class Parametrization:
     x_Delta_rho: float = 1.0
     #: Nucleon-mass convention of the uniform-matter kernel:
     #: "average"  — both nucleons carry (m_n+m_p)/2. Convention of
-    #:              dd2_reference_validation.py; the §2.7 golden points and
-    #:              the M1/M2 gates are only reproducible in this mode.
+    #:              the published-table convention, and the one the
+    #:              regression gates are stated against.
     #: "physical" — per-species m_n, m_p (HS(DD2)/CompOSE convention;
     #:              needed for <0.1% isovector agreement with the tables).
     nucleon_mass_mode: str = "average"
@@ -148,7 +148,7 @@ class Parametrization:
     # ----------------------------------------------------------- constructors
     @classmethod
     def from_dd2_defaults(cls):
-        """Published DD2 table, transcribed verbatim (report §2.1)."""
+        """Published DD2 table, transcribed verbatim."""
         return cls(
             n_sat=0.149065,
             m_n=939.56536, m_p=938.27203,
@@ -278,7 +278,7 @@ class Parametrization:
     @classmethod
     def from_nmp(cls, nmp, m_sigma=546.212459, return_status=False):
         """
-        Invert nuclear-matter parameters to DD2 nucleon couplings (report §2.5
+        Invert nuclear-matter parameters to DD2 nucleon couplings (
         cascade). nmp: dict with {n_sat, E_sat, m_eff_ratio, K_sat, Q_sat,
         E_sym, L_sym}. Returns the Parametrization, or (Parametrization,
         InversionStatus) if return_status.
