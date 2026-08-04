@@ -299,6 +299,33 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
   than leaving every downstream consumer to check. Not attempted here because
   it changes solver behaviour that the whole `test/mixed` suite is pinned to.
 
+### E11. chi runs BACKWARDS in density for vMIT a >= 0.25 fm^2
+
+- **Where:** `eos/mixed`, quark vector coupling `a` at or above ~0.25 fm^2.
+- **Symptom:** the mixed solve converges and the mixed branch is energetically
+  favoured (lower eps than pure hadronic at the same n_B), but chi *decreases*
+  with density instead of rising. Measured at B^1/4 = 150 MeV, a = 0.25,
+  m_s = 150, hyperons + Deltas: chi = 0.586 / 0.477 / 0.208 at
+  n_B = 0.4 / 0.6 / 0.8 fm^-3, against eps_mix - eps_had = -9.0 / -6.9 / -1.1
+  MeV/fm^3. At a = 0.20 the same parameters give chi = 0.870 / 1.013 / 1.265,
+  which is the expected direction.
+- **Consequence:** `MixedWindow.exists` requires n_offset > n_onset, so these
+  samples are reported `no_window`. A scan over a therefore shows a hard edge
+  at a = 0.20 that is really "no *ordered* window", not "no transition". This
+  was checked against the obvious alternative explanation — that the onset had
+  simply moved above the grid — and it is not that: a corner scan over
+  B^1/4 in [120, 200] MeV at a in {0.25, 0.30, 0.40} returned `no_window` for
+  all 576 samples, so lowering the bag constant does not recover an ordered
+  window.
+- **Pinned:** the empirical viable range is quoted as 0.05 <= a <= 0.20 fm^2,
+  with the a >= 0.25 edge flagged as an unexplained solver/physics boundary
+  rather than an established bound on the vMIT vector coupling.
+- **Open:** whether the retreating-chi branch is a genuine feature of vMIT at
+  strong vector repulsion or the same branch-selection pathology as [E10] seen
+  from the other side. Both show the solver settling on a chi that the pure
+  phases do not support; E10's mitigation (`eos_is_physical`) does not catch
+  this one, because these tables are rejected earlier, at the window stage.
+
 ---
 
 ## F. Things that are settled (no action needed) — for the record

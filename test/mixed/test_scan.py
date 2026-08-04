@@ -216,6 +216,39 @@ def test_L_sym_is_free(dd2_nmp):
         assert st.isovector_residual < 1e-6
 
 
+def test_sector_potentials_ride_in_the_sample(dd2_nmp):
+    """The hyperon and Delta potentials must be scannable the same way an NMP
+    is — carried in the sample dict — or a grid over them needs a separate loop
+    outside the scan, which is exactly what the scan exists to avoid."""
+    from eos.dd2 import SpeciesFlags
+    from eos.mixed import build_parametrization
+
+    flags = SpeciesFlags(hyperons=True, deltas=True, muons=True,
+                         phi_field=True)
+    sample = dict(dd2_nmp, U_Xi=-5.0, U_Delta=-80.0, x_wD=1.1)
+
+    par, stage, msg = build_parametrization(sample, flags)
+    assert stage == "ok", msg
+    assert par.U_Xi == -5.0
+    assert par.x_Delta_omega == 1.1
+    # U_Delta enters only through the inverted scalar ratio, so the proof that
+    # it was used is that x_Delta_sigma moved off its default.
+    default, _, _ = build_parametrization(dict(dd2_nmp), flags)
+    assert par.x_Delta_sigma != default.x_Delta_sigma
+
+    # ...and the values reach the row, so a scan table is self-describing.
+    row = scan_point(sample, {"B4": 180.0}, flags, GRID)
+    assert (row["U_Xi"], row["U_Delta"], row["x_wD"]) == (-5.0, -80.0, 1.1)
+    assert row["U_Lambda"] == -30.0             # untouched default
+
+
+def test_sector_columns_are_nan_when_the_flag_is_off(dd2_nmp):
+    """A U_Delta column on a run with no Deltas would claim a value the model
+    never used."""
+    row = scan_point(dd2_nmp, {"B4": 180.0}, FLAGS, GRID)   # no hyperons/Deltas
+    assert np.isnan(row["U_Delta"]) and np.isnan(row["U_Lambda"])
+
+
 def test_grid_samples_is_a_product():
     out = grid_samples(B4=[150.0, 180.0], a=[0.0, 0.2, 0.4])
     assert len(out) == 6

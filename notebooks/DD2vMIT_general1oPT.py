@@ -139,20 +139,29 @@ print("eos imported from:", Path(eos.__file__).parent)
 
 # %%
 # ---- hadronic parametrization -------------------------------------------
-# from_dd2_defaults()   nucleonic DD2
-# from_dd2y_defaults()  DD2Y, with the hyperon couplings (required for hyperons)
-# from_nmp(NMP)         pin the nuclear-matter parameters yourself
-PAR = Parametrization.from_dd2y_defaults()
+# The default below is a *validated* nucleons + hyperons + Delta parametrization:
+# it has a complete mixed phase and M_max > 2 M_sun. See the block below for what
+# it is and what happens when you move off it.
+#
+# Other starting points:
+#   from_dd2_defaults()   nucleonic DD2, no hyperon couplings
+#   from_dd2y_defaults()  DD2Y (hyperons, no Delta sector) — with the vMIT
+#                         defaults this has NO transition at all
+#   from_nmp(NMP)         pin the nuclear-matter parameters yourself
+PAR = Parametrization.from_delta_potential(
+    U_Delta=-100.0, x_wD=1.2,
+    base=Parametrization.from_hyperon_potentials(
+        U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0))
 
 # ---- which degrees of freedom exist --------------------------------------
 # Every species is an explicit flag; nothing is switched on implicitly, and a
 # flag that is not wired raises rather than being quietly ignored.
 FLAGS = SpeciesFlags(
-    hyperons=False,      # Lambda, Sigma, Xi          (needs from_dd2y_defaults)
-    deltas=False,        # Delta quartet
-    muons=False,         # electrons are always present; muons optional
-    phi_field=True,      # hidden-strange vector, required with hyperons
-    photons=True,        # matters only at T > 0
+    hyperons=True,      # Lambda, Sigma, Xi        (needs hyperon couplings)
+    deltas=True,        # Delta quartet
+    muons=True,         # electrons are always present; muons optional
+    phi_field=True,     # hidden-strange vector, required with hyperons
+    photons=True,       # matters only at T > 0
 )
 
 # ---- quark parametrization ------------------------------------------------
@@ -160,32 +169,57 @@ FLAGS = SpeciesFlags(
 # get_vmit_custom(B4=..., a=..., m_s=...) to change any of them. B4 sets how
 # costly quark matter is (higher -> later transition, or none at all) and a is
 # the vector coupling (higher -> stiffer quark matter -> larger M_max).
-VMIT = get_vmit_default()
+VMIT = get_vmit_custom(B4=180.0, a=0.15, m_s=150.0)
 
-# ---- STRANGE / RESONANT HADRONIC MATTER -----------------------------------
-# To switch hyperons and Delta isobars on, replace the three settings above
-# with:
+# ---- WHY THIS PARAMETRIZATION ---------------------------------------------
+# It is one of 605 combinations (out of 5904 scanned with I.4's machinery) that
+# satisfy BOTH requirements at once: a complete mixed phase — chi crosses 0 and
+# 1, in that order — and M_max > 2 M_sun with hyperons and Deltas active.
 #
-#     PAR   = Parametrization.from_dd2y_defaults()
-#     FLAGS = SpeciesFlags(hyperons=True, deltas=True, muons=False,
-#                          phi_field=True, photons=True)
-#     VMIT  = get_vmit_custom(B4=150.0)
+#   nuclear matter   DD2's own NMP, unchanged (L_sym = 55.03 MeV). The isoscalar
+#                    cross-constraint locks K_sat to ~243 anyway, so there is
+#                    little to gain by moving them;
+#   hyperons         the DD2Y potentials, unchanged: U_Lambda = -30,
+#                    U_Sigma = +30, U_Xi = -18 MeV. The scan found these make
+#                    almost no difference to whether a hybrid star exists,
+#                    because the transition sits at or below the hyperon
+#                    threshold — so there is no reason not to use the
+#                    literature values;
+#   Delta isobars    U_Delta = -100 MeV with x_omegaDelta = 1.2. This is the
+#                    only setting that departs from the published tables, and it
+#                    is the one that matters: x_omegaDelta = 1.0 at this U_Delta
+#                    drives the effective mass to zero (scalar collapse) near
+#                    0.9 fm^-3, and across the whole scan x_omegaDelta = 1.2 was
+#                    about four times more likely to give a viable star;
+#   quarks           B^1/4 = 180 MeV, a = 0.15 fm^2, m_s = 150 MeV.
 #
-# and expect to have to tune B4. Hyperons and Deltas both soften the hadronic
-# equation of state, which moves the transition and can remove it entirely:
+# At eta = 0 it gives a complete window at 0.93-1.23 fm^-3 (6.2-8.2 n_sat),
+# M_max = 2.05 M_sun, R(1.4) = 12.90 km, max c_s^2 = 0.505.
 #
-#   B4 = 180  the hadronic phase never becomes unfavourable — no transition;
-#   B4 = 160  chi rises to about 0.3 and falls back to zero without ever
-#             reaching 1, so the transition starts but never completes. The
-#             window locator reports no window, which is the correct answer;
-#   B4 = 150  a complete transition at eta <= 0.3 (2.3-3.9 n_sat at eta = 0),
-#             but at higher eta the window moves below saturation density,
-#             where uniform matter is not the ground state anyway.
+# It was chosen over the other viable combinations for one practical reason:
+# it is one of the few that completes at EVERY eta in ETA_LIST, and the windows
+# nest monotonically as eta rises — [0.93, 1.23] at eta = 0 shrinking to
+# [1.00, 1.17] at eta = 1 — which is the textbook Gibbs-to-Maxwell picture and
+# what every eta-family figure in Part III is drawing. Combinations that are
+# heavier but drop the window at one or two intermediate eta (B^1/4 = 160,
+# a = 0.20 reaches 2.07 M_sun but has no window at eta = 0.6) leave holes in
+# those figures.
 #
-# In other words, whether a hybrid star exists at all is a physics question
-# about (B4, a, the hyperon couplings), not something the solver can decide.
-# The nucleonic defaults above complete at every eta and are a good place to
-# start before opening the strange sector.
+# Moving off it, in rough order of how much it costs you:
+#
+#   a          THE binding constraint. Only 0.05 <= a <= 0.20 fm^2 works at all:
+#              a = 0 leaves the quark phase too soft to reach 2 M_sun, and from
+#              a = 0.25 upward there is no ordered window for ANY B^1/4 in
+#              [120, 200] MeV — chi comes back decreasing in density instead of
+#              rising, which is an unexplained boundary rather than a physical
+#              one, so do not read it as a bound on the vMIT vector coupling;
+#   B^1/4      trades off against a: both raise the onset density, so they move
+#              in OPPOSITE directions. a = 0.20 wants B^1/4 ~ 150-190;
+#              a = 0.10 wants ~190-200. Raise B^1/4 alone and the transition
+#              leaves the grid;
+#   x_wD       1.2 works far more often than 1.0 (see above);
+#   L_sym      free over 30-100 MeV, and it barely moves the result;
+#   U_Y, m_s   no measurable effect on viability.
 
 # ---- equilibrium mode -----------------------------------------------------
 # 'beta_eq_neutrinoless'      independent variables (nB, T)
@@ -215,8 +249,8 @@ TOV_ETAS = [0.0, 0.1, 0.3, 0.6, 1.0]      # TOV is beta-equilibrium, T = 0 only
 # ---- parameter scan (II.4) ------------------------------------------------
 # The map of where a hybrid star exists at all. Kept coarse by default; each
 # (B4, a) pair costs roughly a second with TOV on.
-SCAN_B4 = [150.0, 165.0, 180.0, 195.0, 210.0]     # MeV
-SCAN_A = [0.0, 0.1, 0.2, 0.3]                     # fm^2
+SCAN_B4 = [150.0, 160.0, 170.0, 180.0, 190.0]     # MeV
+SCAN_A = [0.05, 0.10, 0.15, 0.20]                 # fm^2 (>= 0.25 has no window)
 SCAN_GRID = np.linspace(0.05, 1.6, 120)           # coarser than NB: a probe
 SCAN_TOV = True                                   # also record M_max, R_1.4
 
@@ -224,9 +258,9 @@ SCAN_TOV = True                                   # also record M_max, R_1.4
 # Lambda — so `hyperons=True` on `from_dd2_defaults()` fails deep in the
 # coupling lookup with a bare KeyError. Catch the mismatch here instead.
 if FLAGS.hyperons and not PAR.hyperon_coupling_map:
-    raise ValueError("FLAGS.hyperons=True needs "
-                     "Parametrization.from_dd2y_defaults(); the DD2 defaults "
-                     "carry no hyperon couplings")
+    raise ValueError("FLAGS.hyperons=True needs a parametrization that carries "
+                     "hyperon couplings — from_dd2y_defaults() or "
+                     "from_hyperon_potentials(); the DD2 defaults carry none")
 
 print(f"n_sat = {N_SAT:.6f} fm^-3")
 print(f"n_B  : {NB[0]:.4f} .. {NB[-1]:.4f} fm^-3  ({len(NB)} points, "
@@ -299,6 +333,17 @@ else:
 # | `sweep_ok` | the β-eq sweep does not reach `n_sweep_min` before scalar collapse |
 # | `M_max_had` | the hadronic branch alone misses 2 M_sun |
 #
+# **The hadronic sector potentials are scan axes too.** `U_Lambda`, `U_Sigma`, `U_Xi`,
+# `U_Delta` and the Δ vector ratios `x_wD` / `x_rD` may be put in the *same* sample
+# dicts as the nuclear-matter parameters; the scan splits them out and inverts each
+# sector on top of the nucleon base. They matter far more than the NMP do, because they
+# set how soft the hadronic branch becomes: `x_wD` alone moves the viable fraction by
+# a factor of ~4, while `U_Lambda` and `U_Xi` barely move it at all once the transition
+# sits below the hyperon threshold. `U_Delta` is restricted to the literature range
+# [-100, -50] MeV by `from_delta_potential`, and `U_Delta = -100` with `x_wD = 1.0` is
+# soft enough to hit scalar collapse near 0.9 fm⁻³ — reported as `sweep_truncated`,
+# which is *not* disqualifying (see the stage-1 filter note below).
+#
 # **Read this before choosing NMP axes.** `L_sym` is free — the isovector inversion is
 # near-analytic and converges across 30–100 MeV. **`K_sat` is not**: the isoscalar
 # system is closed by a cross-constraint that ties `K_sat` to `Q_sat`, so moving
@@ -326,45 +371,70 @@ else:
 
 # %%
 # ---- stage-1 axes ---------------------------------------------------------
+# The hadronic sector potentials go in the SAME sample dicts as the NMP: the
+# scan splits them out and inverts each on top of the nucleon base, so one
+# grid_samples call crosses nuclear-matter parameters with hyperon and Delta
+# potentials.
 SCAN_FLAGS = SpeciesFlags(hyperons=True, deltas=True, muons=True,
                           phi_field=True, photons=True)
-SCAN_K_SAT = [230.0, 242.7, 255.0]      # see the note above: only ~242.7 inverts
-SCAN_L_SYM = [30.0, 45.0, 55.0, 70.0, 85.0]
+SCAN_K_SAT = [230.0, 242.7]             # see the note above: only ~242.7 inverts
+SCAN_L_SYM = [30.0, 55.0, 85.0]
+SCAN_U_LAMBDA = [-30.0, -10.0]          # MeV, hyperon potentials in SNM at n_sat
+SCAN_U_XI = [-18.0, 10.0]
+SCAN_U_DELTA = [-50.0, -100.0]          # MeV, from_delta_potential range limit
+SCAN_X_WD = [1.0, 1.2]                  # Delta vector ratio x_omegaDelta
 SCAN_NMP_GRID = np.linspace(0.05, 1.6, 80)   # a probe grid, coarser than NB
 
 # ---- stage-2 axes (crossed with whatever survives stage 1) -----------------
-# Hyperons and Deltas soften the hadronic branch, so the transition needs a
-# lower bag constant than the nucleonic default of 180 MeV.
-SCAN2_B4 = [145.0, 155.0, 165.0]        # MeV
-SCAN2_A = [0.0, 0.2]                    # fm^2
+# a and B^1/4 both raise the onset density, so the viable combinations sit on
+# an anticorrelated ridge: a = 0.20 wants B^1/4 ~ 160-180, a = 0.10 wants
+# ~190-200. Outside 0.05 <= a <= 0.20 nothing survives — a = 0 leaves the quark
+# phase too soft to reach 2 M_sun, and by a = 0.25 the ordered window is gone
+# for every bag constant from 120 to 200 MeV.
+SCAN2_B4 = [170.0, 180.0, 190.0]        # MeV
+SCAN2_A = [0.10, 0.15, 0.20]            # fm^2
 SCAN2_MS = [100.0, 150.0]               # MeV
-SCAN_N_JOBS = 1                         # -1 to spread over cores with joblib
+SCAN_N_JOBS = -1                        # 1 to keep it serial and debuggable
 
 BASE_NMP = compute_nmp(Parametrization.from_dd2_defaults())
-nmp_samples = [dict(BASE_NMP, K_sat=k, L_sym=l)
-               for k in SCAN_K_SAT for l in SCAN_L_SYM]
+_scan_axes = {k: v for k, v in BASE_NMP.items()
+              if k not in ("K_sat", "L_sym")}      # these two go on axes below
+nmp_samples = grid_samples(**_scan_axes, K_sat=SCAN_K_SAT, L_sym=SCAN_L_SYM,
+                           U_Lambda=SCAN_U_LAMBDA, U_Xi=SCAN_U_XI,
+                           U_Delta=SCAN_U_DELTA, x_wD=SCAN_X_WD)
 
-print(f"STAGE 1 — {len(nmp_samples)} NMP samples, hyperons+deltas, "
-      f"U_Delta={DEFAULT_U_DELTA:.0f} MeV")
+print(f"STAGE 1 — {len(nmp_samples)} hadronic samples, hyperons+deltas")
 t0 = time.time()
 had_rows = scan_hadronic(nmp_samples, SCAN_FLAGS, SCAN_NMP_GRID, tov=True,
                          n_jobs=SCAN_N_JOBS)
-print(f"  K_sat  L_sym | inv sec swp  n_max  M_max_had  R_1.4 | status")
+print(f"  K_sat  L_sym    U_L   U_Xi    U_D  x_wD | inv sec swp  n_max  "
+      f"M_max_had | status")
 for r in had_rows:
-    print(f"  {r['K_sat']:6.1f} {r['L_sym']:5.1f} |  {r['inversion_ok']:.0f}   "
-          f"{r['sectors_ok']:.0f}   {r['sweep_ok']:.0f}  {r['n_sweep_max']:5.2f}  "
-          f"{r['M_max_had']:8.3f}  {r['R_1p4_had']:6.2f} | {r['status']}")
+    print(f"  {r['K_sat']:6.1f} {r['L_sym']:5.1f} {r['U_Lambda']:6.1f} "
+          f"{r['U_Xi']:6.1f} {r['U_Delta']:6.1f} {r['x_wD']:5.2f} |  "
+          f"{r['inversion_ok']:.0f}   {r['sectors_ok']:.0f}   "
+          f"{r['sweep_ok']:.0f}  {r['n_sweep_max']:5.2f}  "
+          f"{r['M_max_had']:9.3f} | {r['status']}")
 
-had_ok = [r for r in had_rows if r["status"] == "ok"]
-print(f"\n-> {len(had_ok)}/{len(had_rows)} NMP work for DD2 + hyperons + deltas "
-      f"({time.time()-t0:.1f} s)")
+# Everything whose couplings exist goes through to stage 2 — NOT only
+# status == 'ok'. Both of the other outcomes are survivable:
+#   'hadronic_M_max_low' — the hadronic branch alone misses 2 M_sun, which
+#       quark matter can and does fix;
+#   'sweep_truncated'    — the beta-eq sweep hit scalar collapse before the top
+#       of the grid, but the hadronic branch only has to reach the transition
+#       ONSET, not the top. Filtering these out drops real hybrid stars.
+had_ok = [(s, r) for s, r in zip(nmp_samples, had_rows)
+          if r["sectors_ok"] == 1.0]
+print(f"\n-> {len(had_ok)}/{len(had_rows)} hadronic samples have couplings "
+      f"({time.time()-t0:.1f} s); "
+      f"{sum(1 for _, r in had_ok if r['status'] == 'ok')} pass every check")
 if not had_ok:
     print("   None. Stage 2 has nothing to cross; widen SCAN_L_SYM or relax "
           "the M_max target.")
 
 # %%
 # ---- STAGE 2: the working NMP crossed with the quark parameters -----------
-good_nmp = [dict(BASE_NMP, K_sat=r["K_sat"], L_sym=r["L_sym"]) for r in had_ok]
+good_nmp = [s for s, _ in had_ok]
 vmit_samples = grid_samples(B4=SCAN2_B4, a=SCAN2_A, m_s=SCAN2_MS)
 
 print(f"STAGE 2 — {len(good_nmp)} NMP x {len(vmit_samples)} vMIT "
@@ -388,14 +458,19 @@ print(f"  {len(_heavy):3d}/{len(hyb_rows)} reach M_max > 2.0 Msun")
 print(f"  {len(_both):3d}/{len(hyb_rows)} do BOTH  <- the viable hybrid stars")
 print(f"\n  status breakdown: {dict(Counter(r['status'] for r in hyb_rows))}")
 
-print(f"\n  L_sym    B4     a    m_s | transition          M_max   R_1.4  cs2max")
+print(f"\n  L_sym    U_L   U_Xi    U_D  x_wD |    B4     a    m_s | "
+      f"transition          M_max   R_1.4  cs2max")
 for r in sorted(_both, key=lambda r: -r["M_max"])[:25]:
-    print(f"  {r['L_sym']:5.1f} {r['B4']:5.1f}  {r['a']:.2f} {r['m_s']:5.1f} | "
+    print(f"  {r['L_sym']:5.1f} {r['U_Lambda']:6.1f} {r['U_Xi']:6.1f} "
+          f"{r['U_Delta']:6.1f} {r['x_wD']:5.2f} | {r['B4']:5.1f}  "
+          f"{r['a']:.2f} {r['m_s']:5.1f} | "
           f"[{r['n_onset']:.3f},{r['n_offset']:.3f}] fm^-3  "
           f"{r['M_max']:6.3f}  {r['R_1p4']:5.2f}  {r['cs2_max']:.3f}")
 if not _both:
-    print("  (none in this grid — widen SCAN2_A upward, which stiffens the")
-    print("   quark phase, or raise SCAN2_B4 to push the onset to higher density)")
+    print("  (none in this grid — a and B^1/4 both raise the onset, so move")
+    print("   them in OPPOSITE directions: lower SCAN2_B4 if a is at 0.20,")
+    print("   raise it towards 200 if a is at 0.10. Going above a = 0.20 does")
+    print("   not help; the ordered window is gone there for any B^1/4.)")
 elif _heavy and not _both:
     print("  (none — every heavy-enough combination is a pure hyperonic star)")
 print("\n  Note: an onset below ~2 n_sat is formally allowed by these checks but")

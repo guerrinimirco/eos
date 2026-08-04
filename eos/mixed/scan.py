@@ -50,6 +50,15 @@ The practical consequence: a two-dimensional map is best drawn over L_sym and
 a quark parameter. Include K_sat if you want to *see* the constraint — the
 scan reports it honestly — but do not expect it to move.
 
+The hadronic *sector* knobs, by contrast, are all free: the hyperon potentials
+U_Lambda / U_Sigma / U_Xi and the Delta potential U_Delta with its vector
+ratios x_wD / x_rD (`SECTOR_KEYS`) each invert independently on top of the
+nucleon base, and they move the transition far more than the NMPs do because
+they set how soft the hadronic branch gets. Put them in the sample dicts
+alongside the NMPs and `grid_samples` will cross them like any other axis.
+`from_delta_potential` restricts U_Delta to the literature range [-100, -50]
+MeV and reports anything outside as 'sectors_failed'.
+
 Failures are recorded as rows, never raised: a scan that aborts on the first
 pathological sample is useless for mapping a boundary, and the pathological
 samples are exactly the boundary one is trying to map.
@@ -87,9 +96,48 @@ DEFAULT_HYPERON_POTENTIALS = {"U_Lambda": -30.0, "U_Sigma": 30.0,
 #: outside the literature range [-100, -50].
 DEFAULT_U_DELTA = -50.0
 
+#: Hadronic-sector coupling knobs that may be carried *inside* an NMP sample
+#: dict, alongside the `NMP_KEYS`, so that `grid_samples` can put them on a scan
+#: axis like any other parameter. `x_wD`/`x_rD` are the Delta vector coupling
+#: ratios x_omegaDelta / x_rhoDelta; x_sigmaDelta is not free, being fixed by
+#: inverting U_Delta.
+SECTOR_KEYS = ("U_Lambda", "U_Sigma", "U_Xi", "U_Delta", "x_wD", "x_rD")
+
+
+def _split_sample(sample, hyperon_potentials=None, U_Delta=DEFAULT_U_DELTA):
+    """Separate an NMP sample into (nmp, sector kwargs).
+
+    A sample dict may carry any of the `SECTOR_KEYS` next to the `NMP_KEYS`;
+    those override the corresponding keyword defaults. This is what lets one
+    `grid_samples(...)` call put L_sym, U_Xi and U_Delta on axes together —
+    they are all "hadronic parameters" to the caller even though the inversion
+    treats them in separate stages.
+    """
+    nmp = {k: v for k, v in sample.items() if k not in SECTOR_KEYS}
+    pots = dict(DEFAULT_HYPERON_POTENTIALS)
+    pots.update(hyperon_potentials or {})
+    pots.update({k: float(sample[k]) for k in ("U_Lambda", "U_Sigma", "U_Xi")
+                 if k in sample})
+    sector = {"hyperon_potentials": pots,
+              "U_Delta": float(sample.get("U_Delta", U_Delta)),
+              "x_wD": float(sample.get("x_wD", 1.0)),
+              "x_rD": float(sample.get("x_rD", 1.0))}
+    return nmp, sector
+
+
+def _sector_columns(sector, flags):
+    """The sector knobs as flat row columns, nan where the flag is off so a
+    column never claims a value the model did not use."""
+    had = sector["hyperon_potentials"]
+    cols = {k: (had[k] if flags.hyperons else np.nan)
+            for k in ("U_Lambda", "U_Sigma", "U_Xi")}
+    cols.update({k: (sector[k] if flags.deltas else np.nan)
+                 for k in ("U_Delta", "x_wD", "x_rD")})
+    return cols
+
 
 def build_parametrization(nmp, flags, hyperon_potentials=None,
-                          U_Delta=DEFAULT_U_DELTA):
+                          U_Delta=DEFAULT_U_DELTA, x_wD=1.0, x_rD=1.0):
     """Nuclear-matter parameters to a `Parametrization` with the strange and
     resonant sectors attached, as `flags` requires.
 
@@ -100,23 +148,29 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     saturation *on the inverted base*, so they adapt to that base's nucleon
     couplings rather than assuming DD2's.
 
+    `nmp` may also carry any of the `SECTOR_KEYS` (U_Lambda, U_Sigma, U_Xi,
+    U_Delta, x_wD, x_rD); those take precedence over the keyword arguments, so
+    a single `grid_samples` call can put nuclear-matter parameters and sector
+    potentials on axes together.
+
     Returns `(par, stage, message)`. `stage` is 'ok', 'inversion_failed' when
     the NMPs have no DD-RMF realisation at all, or 'sectors_failed' when they
     do but the hyperon/Delta scalar inversion does not converge on them — the
     second can happen even when the first succeeded, which is why they are
     reported separately. `par` is None unless `stage` is 'ok'.
     """
-    par, status = Parametrization.from_nmp(dict(nmp), return_status=True)
+    nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta)
+    par, status = Parametrization.from_nmp(nmp, return_status=True)
     if not status.ok:
         return None, "inversion_failed", status.message
     try:
         if flags.hyperons:
-            pots = dict(DEFAULT_HYPERON_POTENTIALS)
-            pots.update(hyperon_potentials or {})
-            par = Parametrization.from_hyperon_potentials(base=par, **pots)
+            par = Parametrization.from_hyperon_potentials(
+                base=par, **sector["hyperon_potentials"])
         if flags.deltas:
-            par = Parametrization.from_delta_potential(U_Delta=float(U_Delta),
-                                                       base=par)
+            par = Parametrization.from_delta_potential(
+                U_Delta=sector["U_Delta"], x_wD=sector["x_wD"],
+                x_rD=sector["x_rD"], base=par)
     except Exception as exc:
         return None, "sectors_failed", f"{type(exc).__name__}: {exc}"
     return par, "ok", ""
@@ -189,9 +243,10 @@ def scan_hadronic_point(nmp, flags, n_B_grid, hyperon_potentials=None,
         raise ValueError(f"nmp is missing {missing}; needs all of {NMP_KEYS}")
 
     grid = np.asarray(n_B_grid, float)
+    _, sector = _split_sample(nmp, hyperon_potentials, U_Delta)
     row = {k: float(nmp[k]) for k in NMP_KEYS}
-    row.update(U_Delta=float(U_Delta) if flags.deltas else np.nan,
-               inversion_ok=0.0, sectors_ok=0.0, sweep_ok=0.0,
+    row.update(_sector_columns(sector, flags))
+    row.update(inversion_ok=0.0, sectors_ok=0.0, sweep_ok=0.0,
                n_sweep_max=np.nan, M_max_had=np.nan, R_Mmax_had=np.nan,
                R_1p4_had=np.nan, seconds=0.0, status="", message="")
 
@@ -274,13 +329,16 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
                hyperon_potentials=None, U_Delta=DEFAULT_U_DELTA):
     """One (nmp, vmit) sample: invert, then look for a transition window.
 
-    nmp   : dict with the `NMP_KEYS`
+    nmp   : dict with the `NMP_KEYS`, optionally carrying any of the
+            `SECTOR_KEYS` as well, which is how hyperon and Delta potentials go
+            on a scan axis
     vmit  : dict with any of the `VMIT_KEYS`; the rest take vMIT defaults
     flags : `SpeciesFlags`. Hyperons and Deltas are supported: their sectors
             are attached on top of the NMP inversion by `build_parametrization`,
             since `from_nmp` inverts the nucleon sector only
     hyperon_potentials, U_Delta : the potentials those sectors are inverted
-            from; default to the DD2Y values and -50 MeV
+            from when the sample does not name them; default to the DD2Y values
+            and -50 MeV
     spec  : `ChargeSpec`; defaults to neutrino-transparent beta equilibrium,
             the cold-star condition
 
@@ -304,7 +362,9 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
     if missing:
         raise ValueError(f"nmp is missing {missing}; needs all of {NMP_KEYS}")
 
+    _, sector = _split_sample(nmp, hyperon_potentials, U_Delta)
     row = {k: float(nmp[k]) for k in NMP_KEYS}
+    row.update(_sector_columns(sector, flags))
     vmit_full = {k: float(vmit[k]) for k in VMIT_KEYS if k in vmit}
     params = get_vmit_custom(**vmit_full)
     row.update(B4=params.B4, a=params.a, m_s=params.m_s, eta=float(eta),
