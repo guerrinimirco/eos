@@ -24,7 +24,10 @@ by physics, not by agreement with any earlier implementation:
   5. the analytic Jacobian agrees with a finite difference, and solving with it
      reaches the same root as solving without it;
   6. causality: 0 <= c_s^2 <= 1 and P monotone along the stitched core EoS;
-  7. TOV: the mixed core gives a physical maximum mass (optional, slow).
+  7. the two sound speeds behave as a first-order transition demands: across a
+     Maxwell plateau the equilibrium c_eq collapses to zero while the frozen
+     c_ad, which holds the phase fraction fixed, stays finite;
+  8. TOV: the mixed core gives a physical maximum mass (optional, slow).
 """
 from dataclasses import dataclass, field
 
@@ -179,12 +182,45 @@ def _check_backend_parity(par, flags, vp, n_B=0.6):
 
 
 def _check_causality(par, flags, vp, grid):
+    from eos.mixed.coefficients import sound_speed_eq
     t = build_mixed_eos_table(par, flags, grid, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
-    cs2 = np.gradient(t.P, t.eps)
+    cs2 = sound_speed_eq(t.P, t.eps)
     mono = np.all(np.diff(t.P) > -1e-6)
     ok = mono and np.all(cs2 >= -1e-6) and np.all(cs2 <= 1.0 + 1e-6)
     return CheckResult("causality", ok, float(np.max(cs2)),
                        f"0<=c_s^2<=1, P monotone (max c_s^2={np.max(cs2):.3f})")
+
+
+def _check_sound_speeds(par, flags, vp, grid):
+    """Frozen vs equilibrium through a Maxwell window.
+
+    At eta = 1 the pressure is constant across the mixed phase, so c_eq must
+    collapse to zero while c_ad — which holds chi fixed and so cannot slide
+    along the plateau — stays finite. Getting this the wrong way round means
+    the freeze is not actually freezing anything.
+    """
+    from eos.mixed.coefficients import sound_speed_eq, frozen_along
+    from eos.mixed.solvers.sweep import locate_window, sweep_mixed
+
+    spec = beta_eq_neutrinoless()
+    window = locate_window(par, flags, grid, 1.0, spec, vmit_params=vp)
+    if not window.exists:
+        return CheckResult("sound speeds", False, float("nan"),
+                           "no eta=1 window on this grid")
+    inside = grid[(grid >= window.n_onset) & (grid <= window.n_offset)]
+    rs = sweep_mixed(par, flags, inside, 1.0, spec, vmit_params=vp)
+    P = np.array([r.P for r in rs])
+    eps = np.array([r.eps for r in rs])
+    c_eq = sound_speed_eq(P, eps)
+    c_ad = frozen_along(par, flags, rs, vmit_params=vp)
+    good = np.isfinite(c_eq) & np.isfinite(c_ad)
+    ok = bool(good.any()
+              and np.all(c_ad[good] > c_eq[good])
+              and np.all(np.abs(c_eq[good]) < 1e-3)      # plateau: c_eq ~ 0
+              and np.all(c_ad[good] > 0.0) and np.all(c_ad[good] <= 1.0))
+    return CheckResult("sound speeds", ok, float(np.max(np.abs(c_eq[good]))),
+                       f"eta=1 plateau: c_eq={np.mean(c_eq[good]):.2e}, "
+                       f"c_ad={np.mean(c_ad[good]):.3f}")
 
 
 def _check_tov(par, flags, vp, grid):
@@ -214,6 +250,7 @@ def run_full_check(par=None, flags=None, vmit_params=None, grid=None,
     report.results.append(_check_jacobian(par, flags, vp))
     report.results.append(_check_backend_parity(par, flags, vp))
     report.results.append(_check_causality(par, flags, vp, full))
+    report.results.append(_check_sound_speeds(par, flags, vp, full))
     if include_tov:
         report.results.append(_check_tov(par, flags, vp, full))
     return report

@@ -239,6 +239,27 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
 - **Open:** whether the 0.2% matters depends on the inference's M_max
   likelihood width. Revisit if a Maxwell-dominated posterior is the target.
 
+### E8. What "frozen" means in the mixed-phase sound speed (convention, pinned)
+- **The choice:** `eos/mixed/coefficients.py:sound_speed_frozen` holds **chi**
+  fixed, compresses both phases by the same factor, and holds each phase's
+  **Y_C and Y_S** fixed while re-neutralising with leptons.
+- **Why chi is the part that matters:** freezing only the charge fractions
+  would let the solve readjust chi and slide back along a Maxwell plateau, so
+  c_ad would collapse with c_eq and the two definitions would carry no extra
+  information. With chi frozen, c_eq -> 0 at eta = 1 while c_ad stays ~0.55.
+- **Where it is weaker than a full freeze:** with hyperons or Deltas active the
+  individual species still re-equilibrate among themselves at fixed total Y_C
+  and Y_S. For nucleonic matter the two coincide, and the chi = 0, leptons-off
+  limit reproduces `eos.dd2.coefficients.sound_speed_adiabatic` to 1e-13
+  (pinned by `test/mixed/test_coefficients.py`).
+- **Leptons are not a detail:** including them changes c_ad by several percent.
+  They are on by default (stellar matter is neutral); `leptons=False` exists so
+  the DD2 nucleonic limit is directly comparable.
+- **Open:** a strictly frozen per-species composition would need a "hadronic
+  thermo at given densities" entry point that `eos/dd2` does not have
+  (`solve_composition` is nucleons only). Add it if a hyperonic frozen sound
+  speed is ever needed quantitatively.
+
 ---
 
 ## F. Things that are settled (no action needed) — for the record

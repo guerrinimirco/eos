@@ -79,6 +79,27 @@ def test_missing_nmp_key_raises(dd2_nmp):
                    {"B4": 180.0}, FLAGS, GRID)
 
 
+def test_tov_columns_appear_and_are_physical(dd2_nmp):
+    row = scan_point(dd2_nmp, {"B4": 180.0}, FLAGS, GRID, tov=True)
+    assert row["status"] == "ok", row["status"]
+    assert 1.5 < row["M_max"] < 3.0, row["M_max"]
+    assert 9.0 < row["R_Mmax"] < 16.0, row["R_Mmax"]
+    assert 0.0 < row["cs2_max"] <= 1.0, row["cs2_max"]
+
+
+def test_tov_columns_are_nan_without_a_window(dd2_nmp):
+    """No window means no hybrid core to integrate. The columns must be present
+    and nan, not absent — a ragged table is worse than an empty cell."""
+    row = scan_point(dd2_nmp, {"B4": 400.0}, FLAGS, GRID, tov=True)
+    assert row["window_exists"] == 0.0
+    assert np.isnan(row["M_max"]) and np.isnan(row["R_1p4"])
+
+
+def test_tov_off_by_default(dd2_nmp):
+    row = scan_point(dd2_nmp, {"B4": 180.0}, FLAGS, GRID)
+    assert "M_max" not in row
+
+
 def test_grid_samples_is_a_product():
     out = grid_samples(B4=[150.0, 180.0], a=[0.0, 0.2, 0.4])
     assert len(out) == 6

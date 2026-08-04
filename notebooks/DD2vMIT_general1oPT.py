@@ -36,11 +36,27 @@
 # The table builder locates the two χ crossings first and then solves the expensive
 # mixed system only between them.
 #
+# **The two sound speeds.** A first-order transition has two, and the gap between
+# them is the clearest single picture of what η does:
+#
+# | | what is free | behaviour in the window |
+# |---|---|---|
+# | **c_eq² = dP/dε** | χ readjusts | dips at η=0, **collapses to 0** at η=1 |
+# | **c_ad² (frozen)** | χ held fixed | stays finite at every η |
+#
+# c_eq is what enters the TOV equations; c_ad is what a fast disturbance sees.
+# Section III.4 plots both.
+#
 # ---
 # **Layout**
-# - **Part I** — imports, and every knob in one cell.
-# - **Part II** — pure phases, then the mixed tables, then TOV.
+# - **Part I** — imports, every knob in one cell, and a fast pre-flight check.
+# - **Part II** — pure phases, the mixed tables, TOV, and a parameter scan.
 # - **Part III** — plots, all defined here in the notebook.
+#
+# **Start here if you are choosing parameters:** run Part I only. Section I.3
+# tells you in under a second whether your (parametrization, B4, a) has a
+# transition at all, before Part II spends minutes finding out the hard way.
+# Section II.4 then maps the region where it does.
 
 # %% [markdown]
 # # Part I — setup
@@ -85,16 +101,18 @@ except ImportError:      # not inside a clone (Colab, say) — fetch the package
 import numpy as np
 import matplotlib.pyplot as plt
 
-from eos.dd2 import Parametrization, SpeciesFlags, hadronic_row
+from eos.dd2 import Parametrization, SpeciesFlags, hadronic_row, compute_nmp
 from eos.dd2.solver import sweep_beta_eq_octet
 from eos.vmit.parameters import get_vmit_default, get_vmit_custom
 from eos.vmit.eos import solve_vmit_beta_eq
+from eos.tov.solver import find_mmax_precise
 from eos.mixed import (
-    beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
+    beta_eq_neutrinoless,
     MixedTableSpec, build_mixed_table, build_mixed_eos_table,
     mass_radius_mixed, save_table, load_table, export_csv,
-    locate_window, sweep_mixed, make_charge_spec, composition_row,
-    seed_across_eta,
+    locate_window, sweep_mixed,
+    sound_speed_eq, frozen_along,
+    scan_parameters, grid_samples,
 )
 
 OUT = Path("eos_tables_DD2vMIT")
@@ -126,15 +144,11 @@ FLAGS = SpeciesFlags(
 )
 
 # ---- quark parametrization ------------------------------------------------
+# get_vmit_default() is B^1/4 = 180 MeV, a = 0.2 fm^2, m_s = 150 MeV.
+# get_vmit_custom(B4=..., a=..., m_s=...) to change any of them. B4 sets how
+# costly quark matter is (higher -> later transition, or none at all) and a is
+# the vector coupling (higher -> stiffer quark matter -> larger M_max).
 VMIT = get_vmit_default()
-# The hyperon couplings live in DD2Y and nowhere else — DD2 has no entry for
-# Lambda — so `hyperons=True` on `from_dd2_defaults()` fails deep in the
-# coupling lookup with a bare KeyError. Catch the mismatch here instead.
-if FLAGS.hyperons and not PAR.hyperon_coupling_map:
-    raise ValueError("FLAGS.hyperons=True needs "
-                     "Parametrization.from_dd2y_defaults(); the DD2 defaults "
-                     "carry no hyperon couplings")
-          # B^1/4 = 180 MeV, a = 0.2 fm^2, m_s = 150 MeV
 
 # ---- STRANGE / RESONANT HADRONIC MATTER -----------------------------------
 # To switch hyperons and Delta isobars on, replace the three settings above
@@ -177,11 +191,30 @@ Y_C_LIST = [0.05, 0.1, 0.3]     # the Y_C axis, for the fixed-Y_C modes
 # ---- grids ----------------------------------------------------------------
 N_SAT = PAR.n_sat                                     # fm^-3
 NB = np.linspace(0.1 * N_SAT, 12.0 * N_SAT, 300)      # baryon density [fm^-3]
+# T_LIST x ETA_LIST is what Part II.2 costs: one window search plus one window
+# sweep per pair. The 12 x 5 default is a full production run (minutes); for a
+# first look cut T_LIST to [0.0, 10.0, 30.0] and ETA_LIST to [0.0, 1.0].
 T_LIST = [0.0, 0.1, 2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0]
 ETA_LIST = [0.0, 0.1, 0.3, 0.6, 1.0]
 
 # ---- what to run ----------------------------------------------------------
 TOV_ETAS = [0.0, 0.1, 0.3, 0.6, 1.0]      # TOV is beta-equilibrium, T = 0 only
+
+# ---- parameter scan (II.4) ------------------------------------------------
+# The map of where a hybrid star exists at all. Kept coarse by default; each
+# (B4, a) pair costs roughly a second with TOV on.
+SCAN_B4 = [150.0, 165.0, 180.0, 195.0, 210.0]     # MeV
+SCAN_A = [0.0, 0.1, 0.2, 0.3]                     # fm^2
+SCAN_GRID = np.linspace(0.05, 1.6, 120)           # coarser than NB: a probe
+SCAN_TOV = True                                   # also record M_max, R_1.4
+
+# The hyperon couplings live in DD2Y and nowhere else — DD2 has no entry for
+# Lambda — so `hyperons=True` on `from_dd2_defaults()` fails deep in the
+# coupling lookup with a bare KeyError. Catch the mismatch here instead.
+if FLAGS.hyperons and not PAR.hyperon_coupling_map:
+    raise ValueError("FLAGS.hyperons=True needs "
+                     "Parametrization.from_dd2y_defaults(); the DD2 defaults "
+                     "carry no hyperon couplings")
 
 print(f"n_sat = {N_SAT:.6f} fm^-3")
 print(f"n_B  : {NB[0]:.4f} .. {NB[-1]:.4f} fm^-3  ({len(NB)} points, "
@@ -194,6 +227,47 @@ print(f"mode : {MODE};  species: "
 print(f"vMIT : B^1/4={VMIT.B4} MeV, a={VMIT.a} fm^2, m_s={VMIT.m_s} MeV")
 print(f"\nNote: below ~0.5 n_sat and at low T, uniform matter sits inside the")
 print(f"liquid-gas spinodal and has no stable solution; those points are skipped.")
+
+
+# %% [markdown]
+# ## I.3 Pre-flight — does this combination have a transition?
+#
+# Under a second, and it answers the question Part II would otherwise take minutes
+# to answer. The quark volume fraction χ is not clamped, so the window locator
+# simply reads off where χ crosses 0 and 1:
+#
+# - **a window** → the parameters give a complete transition, go on to Part II;
+# - **no window** → χ never reaches 1. Either the hadronic phase never becomes
+#   unfavourable (lower `B4`) or the transition starts and stalls. This is a
+#   statement about the physics of your parameters, not a solver failure.
+#
+# η=1 (Maxwell) is checked alongside η=0 (Gibbs) because the window narrows with η,
+# and a combination that transitions under Gibbs can fail to under Maxwell.
+
+# %%
+print(f"pre-flight  B4={VMIT.B4:.0f} MeV  a={VMIT.a} fm^2  m_s={VMIT.m_s:.0f} MeV")
+_ok = []
+for _eta in (0.0, 1.0):
+    _t0 = time.time()
+    _w = locate_window(PAR, FLAGS, NB, _eta, beta_eq_neutrinoless(),
+                       vmit_params=VMIT, T=0.0)
+    _ok.append(_w.exists)
+    if _w.exists:
+        print(f"  eta={_eta}: window [{_w.n_onset:.4f}, {_w.n_offset:.4f}] fm^-3 "
+              f"= [{_w.n_onset/N_SAT:.2f}, {_w.n_offset/N_SAT:.2f}] n_sat "
+              f"({time.time()-_t0:.2f} s)")
+    else:
+        print(f"  eta={_eta}: NO TRANSITION on this grid ({time.time()-_t0:.2f} s)")
+
+if not any(_ok):
+    print("\n-> No transition at either eta. Part II will produce a pure hadronic")
+    print("   equation of state, which is a valid answer but not a hybrid one.")
+    print("   Lower B4 (try 160-165 MeV) or run II.4 to see where the window is.")
+elif not all(_ok):
+    print("\n-> Gibbs transitions but Maxwell does not (or vice versa). The eta")
+    print("   sweep in Part II will show empty tables for the eta that fails.")
+else:
+    print("\n-> Complete transition at both eta. Part II is worth running.")
 
 
 # %% [markdown]
@@ -218,8 +292,8 @@ print(f"liquid-gas spinodal and has no stable solution; those points are skipped
 def _columns(rows):
     """A list of flat dicts to a {name: array} table.
 
-    The string label columns (`phase`) are dropped: everything below plots or
-    slices numerically, and carrying them would only force a dtype check at
+    String label columns (`phase`) are dropped — everything below slices and
+    plots numerically, so carrying them would only force a dtype check at
     every use.
     """
     return {k: np.array([r[k] for r in rows], dtype=float) for k in rows[0]
@@ -227,8 +301,9 @@ def _columns(rows):
 
 
 def _quark_row(q):
-    """One pure-quark point, keyed like `hadronic_row` / `composition_row`.
-    chi = 1: no hadronic matter left."""
+    """One pure-quark point, keyed like `hadronic_row` / `composition_row`, so
+    the pure wings and the mixed window concatenate in Part III without
+    renaming anything. chi = 1: no hadronic matter left."""
     return dict(n_B=q.n_B, T=q.T, chi=1.0, P=q.P_total, eps=q.e_total,
                 s=q.s_total, S_per_B=(q.s_total / q.n_B if q.n_B else 0.0),
                 mu_B=q.mu_B, Y_C=q.Y_C, Y_S=q.Y_S,
@@ -241,10 +316,9 @@ for T in T_LIST:
     pts = sweep_beta_eq_octet(PAR, NB, FLAGS, T=T, stop_at_boundary=True)
     if pts:
         # `hadronic_row` keys a pure-hadronic point exactly the way
-        # `composition_row` keys a mixed one, so the wings and the window
-        # concatenate in Part III without renaming anything. It also sums Y_C
-        # and Y_S over every active baryon, which matters the moment hyperons
-        # are switched on.
+        # `composition_row` keys a mixed one. It also sums Y_C and Y_S over
+        # every active baryon rather than reading them off the proton, which
+        # matters the moment hyperons are switched on.
         pure_hadronic[T] = _columns([hadronic_row(p, FLAGS) for p in pts])
     print(f"  hadronic T={T:5.1f} MeV : {len(pts):3d}/{len(NB)} points", flush=True)
 print(f"pure hadronic: {time.time()-t0:.1f} s\n")
@@ -312,10 +386,17 @@ print(f"\nTOTAL: {time.time()-grand_total:.1f} s for "
 #
 # The stitched core equation of state — pure hadronic below the onset, mixed through
 # the window, pure quark above the offset — integrated to a mass-radius sequence.
-# Beta equilibrium at T = 0, which is the cold neutron-star condition.
+#
+# **This is always cold beta equilibrium, whatever `MODE` is set to.** A neutron-star
+# core is neutrino-transparent and cold; the fixed-Y_C and trapped modes describe
+# snapshot conditions, not a cold star, so running TOV on them would answer a
+# different question than the one the tables above answer. The mass-radius curve
+# below therefore does *not* change when you change `MODE`.
 #
 # A Maxwell (η=1) table carries a constant-pressure plateau, and `eos.tov` detects it
 # and applies the tidal correction across the density discontinuity by itself.
+# The integration uses the Numba backend by default (`backend="fast"`), which agrees
+# with the scipy reference to ~1e-4 M_sun on M_max; pass `backend="scipy"` to check.
 
 # %%
 tov = {}
@@ -331,6 +412,56 @@ for eta in TOV_ETAS:
     print(f"eta={eta}: {trans} | M_max={res['M_max']:.3f} Msun "
           f"R(M_max)={res['R_Mmax']:.2f} km R(1.4)={res['R_1p4']:.2f} km "
           f"| {time.time()-t0:.1f} s", flush=True)
+
+# %% [markdown]
+# ## II.4 Parameter scan — where does a hybrid star exist?
+#
+# The pre-flight answers the question for *one* combination; this maps a whole plane
+# of them. For each (B^1/4, a) the scan runs two checks in the order that fails
+# cheapest, and records the outcome rather than raising — the failures are the
+# boundary being mapped:
+#
+# 1. **is the hadronic model representable?** The nuclear-matter parameters are
+#    inverted back to DD2 couplings, and not every combination has a solution;
+# 2. **is there a window?** χ must cross both 0 and 1 on the grid.
+#
+# With `SCAN_TOV` on it also records M_max, R(1.4) and max c_s², so the map answers
+# the question that actually matters when choosing parameters: not just "is there a
+# transition" but "is the resulting star heavy enough to be allowed".
+#
+# The nuclear-matter parameters are held at the current `PAR`'s own values here, so
+# the plane is purely the quark sector. Add entries to the `nmp_samples` list to
+# open the hadronic axes as well — that is the full Bayesian-prior reconnaissance
+# and costs the product of the two grids.
+
+# %%
+BASE_NMP = compute_nmp(PAR)
+
+
+def scan_progress(r):
+    win = (f"[{r['n_onset']:.3f}, {r['n_offset']:.3f}]"
+           if r["window_exists"] else "—")
+    extra = (f" M_max={r['M_max']:5.3f} R_1.4={r['R_1p4']:5.2f}"
+             if "M_max" in r and np.isfinite(r["M_max"]) else "")
+    print(f"  B4={r['B4']:5.1f} a={r['a']:.2f} | {r['status']:16s} "
+          f"{win:20s}{extra} | {r['seconds']:5.2f} s", flush=True)
+
+
+t0 = time.time()
+scan_rows = scan_parameters(
+    [BASE_NMP], grid_samples(B4=SCAN_B4, a=SCAN_A), FLAGS, SCAN_GRID,
+    eta=0.0, T=0.0, tov=SCAN_TOV, n_jobs=1, progress=scan_progress)
+
+_n_ok = sum(r["status"] == "ok" for r in scan_rows)
+print(f"\n{_n_ok}/{len(scan_rows)} combinations give a complete transition "
+      f"({time.time()-t0:.1f} s)")
+if SCAN_TOV:
+    _heavy = [r for r in scan_rows
+              if np.isfinite(r.get("M_max", np.nan)) and r["M_max"] >= 2.0]
+    print(f"{len(_heavy)}/{len(scan_rows)} also reach M_max >= 2.0 Msun")
+
+save_table(scan_rows, OUT / "scan_B4_a.h5", meta=dict(flags=FLAGS, eta=0.0))
+export_csv(scan_rows, OUT / "scan_B4_a.csv")
 
 # %% [markdown]
 # # Part III — plots
@@ -423,67 +554,56 @@ def full_eos(eta, T):
 #
 
 # %%
-T_SHOW = 0.0
+def plot_eos_panels(T, show_pure=True):
+    """P, S/n_B and chi against density at one temperature, one colour per eta.
 
-fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
-for eta in sorted(loaded):
-    d = full_eos(eta, T_SHOW)
-    if not d:
-        continue
-    c = COLOR_OF[eta]
-    axes[0].plot(d["n_B"], d["P"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
-    axes[1].plot(d["n_B"], d["S_per_B"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
-    axes[2].plot(d["n_B"], d["chi"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
+    The pure branches are drawn dotted underneath and continued past the
+    transition, where they are metastable, so the gain from the transition is
+    visible rather than implied.
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
+    for eta in sorted(loaded):
+        d = full_eos(eta, T)
+        if not d:
+            continue
+        c = COLOR_OF[eta]
+        for ax, key in zip(axes, ("P", "S_per_B", "chi")):
+            ax.plot(d["n_B"], d[key], "-", lw=2, color=c, label=rf"$\eta={eta}$")
 
-for pure, lab in ((pure_hadronic.get(T_SHOW), "pure hadronic"),
-                  (pure_quark.get(T_SHOW), "pure quark")):
-    if pure is None or not pure["n_B"].size:
-        continue
-    axes[0].plot(pure["n_B"], pure["P"], ":", lw=1.4, color="0.45", label=lab)
-    axes[1].plot(pure["n_B"], pure["S_per_B"], ":", lw=1.4, color="0.45")
+    if show_pure:
+        for pure, lab in ((pure_hadronic.get(T), "pure hadronic"),
+                          (pure_quark.get(T), "pure quark")):
+            if pure is None or not pure["n_B"].size:
+                continue
+            axes[0].plot(pure["n_B"], pure["P"], ":", lw=1.4, color="0.45",
+                         label=lab)
+            axes[1].plot(pure["n_B"], pure["S_per_B"], ":", lw=1.4, color="0.45")
 
-axes[0].set_ylabel(r"$P$  [MeV fm$^{-3}$]")
-axes[1].set_ylabel(r"$S = s/n_B$  [$k_B$ / baryon]")
-axes[2].set_ylabel(r"quark volume fraction  $\chi$")
-axes[2].set_ylim(-0.02, 1.02)
-axes[2].axhline(0.0, color="0.7", lw=0.8)
-axes[2].axhline(1.0, color="0.7", lw=0.8)
-for ax in axes:
-    ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
-    ax.grid(alpha=0.3)
-    ax.legend(fontsize=9)
-fig.suptitle(rf"DD2+vMIT, {MODE}, $T = {T_SHOW:g}$ MeV", y=1.02)
-fig.tight_layout()
-plt.show()
+    axes[0].set_ylabel(r"$P$  [MeV fm$^{-3}$]")
+    axes[1].set_ylabel(r"$S = s/n_B$  [$k_B$ / baryon]")
+    axes[2].set_ylabel(r"quark volume fraction  $\chi$")
+    axes[2].set_ylim(-0.02, 1.02)
+    axes[2].axhline(0.0, color="0.7", lw=0.8)
+    axes[2].axhline(1.0, color="0.7", lw=0.8)
+    for ax in axes:
+        ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=9)
+    fig.suptitle(rf"DD2+vMIT, {MODE}, $T = {T:g}$ MeV", y=1.02)
+    fig.tight_layout()
+    plt.show()
+    return fig
+
+
+plot_eos_panels(0.0)
 
 
 # %% [markdown]
-# Reading the middle panel: at T = 0 the entropy is identically zero, so run the cell
-# again with `T_SHOW` set to one of the finite temperatures in `T_LIST` to see it.
+# At T = 0 the entropy panel is identically zero. The same three panels at a finite
+# temperature from `T_LIST`:
 
 # %%
-T_SHOW_HOT = 20.0
-
-fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
-for eta in sorted(loaded):
-    d = full_eos(eta, T_SHOW_HOT)
-    if not d:
-        continue
-    c = COLOR_OF[eta]
-    axes[0].plot(d["n_B"], d["P"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
-    axes[1].plot(d["n_B"], d["S_per_B"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
-    axes[2].plot(d["n_B"], d["chi"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
-axes[0].set_ylabel(r"$P$  [MeV fm$^{-3}$]")
-axes[1].set_ylabel(r"$S = s/n_B$  [$k_B$ / baryon]")
-axes[2].set_ylabel(r"quark volume fraction  $\chi$")
-axes[2].set_ylim(-0.02, 1.02)
-for ax in axes:
-    ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
-    ax.grid(alpha=0.3)
-    ax.legend(fontsize=9)
-fig.suptitle(rf"DD2+vMIT, {MODE}, $T = {T_SHOW_HOT:g}$ MeV", y=1.02)
-fig.tight_layout()
-plt.show()
+plot_eos_panels(20.0, show_pure=False)
 
 
 # %% [markdown]
@@ -527,8 +647,6 @@ plt.show()
 # Cold, beta-equilibrium stars built on the stitched core equation of state.
 
 # %%
-from eos.tov.solver import find_mmax_precise
-
 fig, axes = plt.subplots(1, 2, figsize=(12.5, 5))
 for eta, res in tov.items():
     r = res["results"]
@@ -551,7 +669,118 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## III.4 Composition through the transition
+# ## III.4 The two sound speeds
+#
+# The clearest single picture of what η does.
+#
+# **c_eq² = dP/dε** is taken along the equilibrium sequence, where the quark fraction χ
+# is free to readjust. A compression is then answered by converting hadrons into
+# quarks instead of by raising the pressure, so c_eq **dips** through a Gibbs window
+# and **collapses to zero** through a Maxwell one, where the pressure is flat by
+# construction. This is the sound speed that enters the TOV equations.
+#
+# **c_ad² (frozen)** holds χ fixed — the mixture is compressed faster than one phase
+# can convert into the other — so the pressure has to rise and c_ad does *not*
+# collapse. Freezing χ is the part that matters; freezing only the charge fractions
+# would let the solve slide back onto the plateau.
+#
+# The grey band is the causal bound c² ≤ 1. Both curves respect it; the interesting
+# feature is the gap between them, which widens with η.
+#
+# `sound_speed_frozen` re-solves each phase twice per point, so this cell costs a few
+# seconds per η — it is the only expensive plot in Part III.
+
+# %%
+CS_ETAS = [e for e in (0.0, 0.3, 1.0) if e in ETA_LIST]
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
+for eta in CS_ETAS:
+    c = COLOR_OF.get(eta, "k")
+    w = locate_window(PAR, FLAGS, NB, eta, beta_eq_neutrinoless(),
+                      vmit_params=VMIT, T=0.0)
+    if not w.exists:
+        print(f"eta={eta}: no window, skipped")
+        continue
+    # Equilibrium: read straight off the stitched table, which already spans the
+    # hadronic wing, the window and the quark wing.
+    core = build_mixed_eos_table(PAR, FLAGS, NB, eta, beta_eq_neutrinoless(),
+                                 vmit_params=VMIT, T=0.0, window=w)
+    axes[0].plot(core.n_B, sound_speed_eq(core.P, core.eps), "-", lw=2, color=c,
+                 label=rf"$\eta={eta}$")
+
+    # Frozen: only defined where there are two phases, so it is drawn across the
+    # window and its two endpoints.
+    inside = NB[(NB >= w.n_onset) & (NB <= w.n_offset)]
+    rs = sweep_mixed(PAR, FLAGS, inside, eta, beta_eq_neutrinoless(),
+                     vmit_params=VMIT, T=0.0)
+    n_mix = np.array([r.n_B for r in rs])
+    axes[1].plot(n_mix, frozen_along(PAR, FLAGS, rs, vmit_params=VMIT),
+                 "-", lw=2, color=c, label=rf"$\eta={eta}$")
+    axes[1].plot(n_mix, sound_speed_eq(np.array([r.P for r in rs]),
+                                       np.array([r.eps for r in rs])),
+                 "--", lw=1.4, color=c, alpha=0.7)
+    for ax in axes:
+        ax.axvspan(w.n_onset, w.n_offset, color=c, alpha=0.07, zorder=0)
+
+for ax, title in zip(axes, ("equilibrium  $c_{\\rm eq}^2$  (full EoS)",
+                            "frozen  $c_{\\rm ad}^2$  (solid) vs "
+                            "$c_{\\rm eq}^2$ (dashed), window only")):
+    ax.axhline(1.0, color="0.5", lw=0.9, ls="-.")
+    ax.axhline(0.0, color="0.7", lw=0.8)
+    ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
+    ax.set_title(title)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=9)
+axes[0].set_ylabel(r"$c_s^2$  [$c^2$]")
+axes[0].set_ylim(-0.05, 1.05)
+fig.suptitle(rf"Sound speeds — DD2+vMIT, $T = 0$ MeV", y=1.01)
+fig.tight_layout()
+plt.show()
+
+
+# %% [markdown]
+# ## III.5 Parameter map — where the hybrid star lives
+#
+# The II.4 scan as a picture. Colour is the onset density where a complete transition
+# exists; hatched cells have none. With `SCAN_TOV` on, the contour marks
+# M_max = 2.0 M_sun, so the region that is both hybrid *and* heavy enough to be
+# allowed is the coloured area on the heavy side of that line.
+
+# %%
+_B4 = np.array(sorted({r["B4"] for r in scan_rows}))
+_A = np.array(sorted({r["a"] for r in scan_rows}))
+_shape = (len(_A), len(_B4))
+_onset = np.full(_shape, np.nan)
+_mmax = np.full(_shape, np.nan)
+for r in scan_rows:
+    i, j = np.searchsorted(_A, r["a"]), np.searchsorted(_B4, r["B4"])
+    if r["window_exists"]:
+        _onset[i, j] = r["n_onset"]
+    _mmax[i, j] = r.get("M_max", np.nan)
+
+fig, ax = plt.subplots(figsize=(8, 5.5))
+_im = ax.pcolormesh(_B4, _A, _onset, shading="nearest", cmap="viridis")
+fig.colorbar(_im, ax=ax, label=r"onset density  $n_{\rm onset}$  [fm$^{-3}$]")
+# Mark the combinations with no transition, which nan leaves blank.
+for i, a in enumerate(_A):
+    for j, b in enumerate(_B4):
+        if not np.isfinite(_onset[i, j]):
+            ax.plot(b, a, "x", color="0.4", ms=9, mew=1.8)
+if SCAN_TOV and np.isfinite(_mmax).any():
+    ax.contour(_B4, _A, _mmax, levels=[2.0], colors="crimson", linewidths=2.2)
+    ax.plot([], [], "-", color="crimson", lw=2.2, label=r"$M_{\max}=2\,M_\odot$")
+ax.plot(VMIT.B4, VMIT.a, "*", color="white", ms=18, mec="k", mew=1.2,
+        label="current VMIT")
+ax.set_xlabel(r"$B^{1/4}$  [MeV]")
+ax.set_ylabel(r"vector coupling  $a$  [fm$^2$]")
+ax.set_title("Where a complete transition exists  (x = none)")
+ax.legend(fontsize=9, loc="upper left")
+fig.tight_layout()
+plt.show()
+
+
+# %% [markdown]
+# ## III.6 Composition through the transition
 #
 # Volume-weighted fractions Y_i = w n_i / n_B, with w = 1−χ for hadrons and w = χ for
 # quarks, so the curves sum consistently across the mixed phase. Hadrons solid, quarks
