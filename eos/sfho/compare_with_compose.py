@@ -20,7 +20,6 @@ from typing import Dict, List, Optional, Tuple
 import os
 
 # My modules
-from eos.sfho.eos import SFHoEOS
 from eos.sfho.compute_tables import compute_table, TableSettings, results_to_arrays
 
 
@@ -380,7 +379,14 @@ def compute_my_table(parametrization: str, particle_content: str,
 #==============================================================================
 # PLOTTING FUNCTIONS (using general_plotting_info)
 #==============================================================================
-from eos.general.plotting_info import set_global_style, FONTS, STYLE, COLORS, LABELS, apply_style
+from eos.general.figure_style import (set_global_style, FONTS, STYLE,
+                                      STANDARD_COLORS, LABELS, apply_style)
+
+# Two-curve comparison palette: the CompOSE reference table vs this code's
+# result. Named locally because they are roles, not colours -- swapping the hue
+# here restyles every comparison figure in this module.
+COLORS = {'jel': STANDARD_COLORS['Blue'],        # CompOSE reference ("jel" tables)
+          'reference': STANDARD_COLORS['Red']}   # this implementation
 
 # Nuclear saturation density
 N_SAT = 0.158  # fm^-3

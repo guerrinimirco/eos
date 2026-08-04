@@ -66,14 +66,18 @@ N_SAT = 0.16  # Saturation density [fm^-3]
 #                              COLORS
 # ==============================================================================
 
-# Standard colors (RGB tuples matching Mathematica style)
-STANDARD_RED    = (0.80, 0.25, 0.33)
-STANDARD_GREEN  = (0.24, 0.60, 0.44)
-STANDARD_BLUE   = (0.24, 0.60, 0.80)
-STANDARD_GRAY   = (0.40, 0.40, 0.40)
-STANDARD_ORANGE = (0.90, 0.40, 0.00)
-STANDARD_CYAN   = (0.10, 0.60, 0.60)
-STANDARD_PURPLE = (0.50, 0.35, 0.65)
+# Standard colors: aliases onto the ONE palette in eos.general.figure_style.
+# These names are kept because notebooks import them directly; the RGB values
+# are unchanged (they were a verbatim copy of STANDARD_COLORS).
+from eos.general.figure_style import STANDARD_COLORS
+
+STANDARD_RED    = STANDARD_COLORS['Red']
+STANDARD_GREEN  = STANDARD_COLORS['Green']
+STANDARD_BLUE   = STANDARD_COLORS['Blue']
+STANDARD_GRAY   = STANDARD_COLORS['Gray']
+STANDARD_ORANGE = STANDARD_COLORS['Orange']
+STANDARD_CYAN   = STANDARD_COLORS['Cyan']
+STANDARD_PURPLE = STANDARD_COLORS['Purple']
 
 
 # ==============================================================================

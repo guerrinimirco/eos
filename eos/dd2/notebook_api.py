@@ -33,6 +33,9 @@ from eos.dd2.verify.tov import build_core_table, N_TRANSITION
 from eos.tov.solver import (
     compute_tov_sequence, find_mmax_precise, generate_ec_logspace, CRUST_PATHS,
 )
+from eos.general.observational_constraints import (
+    add_observational_constraints, DEFAULT_CONTOUR_DIR,
+)
 
 #: Nucleonic degrees of freedom (npe-mu): the NS-structure default.
 NUCLEONIC = SpeciesFlags(hyperons=False, phi_field=False)
@@ -41,7 +44,10 @@ OCTET = SpeciesFlags(hyperons=True, phi_field=True)
 
 #: Shipped observational data (figs 8, 9, 10).
 _DATA = os.path.join(str(REPO_ROOT), "plot", "data")
-CONTOUR_DIR = os.path.join(_DATA, "contours")
+#: M-R credible contours now ship INSIDE the package (eos/general/data/contours),
+#: so they resolve from an installed wheel too -- unlike REPO_ROOT, which only
+#: points at a real checkout.
+CONTOUR_DIR = str(DEFAULT_CONTOUR_DIR)
 CHIRAL_EFT = os.path.join(_DATA, "samples", "chiral_eft.txt")
 #: SNM pressure flow constraints (rho, P_low, P_up), fig 9.
 DANIELEWICZ = os.path.join(_DATA, "samples", "DLL_2002_PSM.txt")
@@ -304,12 +310,10 @@ def plot_mr_with_constraints(par, flags=NUCLEONIC, tov=None,
                              contour_dir=CONTOUR_DIR):
     """
     M-R curve over the observational constraints. ``add_observational_constraints``
-    lives in the user's figure utilities (imported lazily below so this module
-    loads even before that package is on the path); it reads the contour CSVs in
-    ``contour_dir`` (J0030, J0740, HESS, GW170817, GW190425) and silently skips
-    any that are missing.
+    reads the contour CSVs in ``contour_dir`` (J0030, J0740, HESS, GW170817,
+    GW190425) and silently skips any that are missing; the default set ships
+    inside the package.
     """
-    from nucleation.analysis.figure import add_observational_constraints
     tov = compute_tov(par, flags) if tov is None else tov
     fig, ax = plt.subplots()
     add_observational_constraints(ax, contour_dir)
@@ -328,11 +332,10 @@ def plot_mass_radius_comparison(curves, contour_dir=None):
     Overlay M-R sequences for several parametrizations on one axis. ``curves`` is
     a list of ``(label, par, flags)``; each is solved with ``compute_tov`` (once)
     and drawn with its M_max in the legend. Pass ``contour_dir`` to underlay the
-    observational posteriors (same lazy import as ``plot_mr_with_constraints``).
+    observational posteriors (use ``DEFAULT_CONTOUR_DIR`` for the packaged set).
     """
     fig, ax = plt.subplots()
     if contour_dir is not None:
-        from nucleation.analysis.figure import add_observational_constraints
         add_observational_constraints(ax, contour_dir)
     for label, par, flags in curves:
         tov = compute_tov(par, flags)

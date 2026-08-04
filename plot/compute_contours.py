@@ -23,7 +23,11 @@ import matplotlib.pyplot as plt
 
 HERE = Path(__file__).resolve().parent
 SAMPLES = HERE / "data" / "samples"
-CONTOURS = HERE / "data" / "contours"
+# The generated CSVs live INSIDE the package (shipped as package-data) so that
+# eos.general.observational_constraints can read them from an installed wheel.
+# The raw posterior samples stay out here: they are ~160 MB and only this
+# script needs them.
+CONTOURS = HERE.parent / "eos" / "general" / "data" / "contours"
 
 FRACTIONS = (0.68, 0.95)         # 1σ / 2σ enclosed probability
 KDE_NMAX = 8000                  # subsample cap: gaussian_kde is O(n_samples * n_grid)

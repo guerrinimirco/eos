@@ -100,6 +100,122 @@ def test_tov_off_by_default(dd2_nmp):
     assert "M_max" not in row
 
 
+def test_eos_guard_rejects_a_descending_table():
+    """A stitched table that steps DOWN in pressure is not an equation of
+    state. Integrating it returns confident nonsense (maximum masses in the
+    hundreds of solar masses), so it must be caught before TOV, not after."""
+    from types import SimpleNamespace
+    from eos.mixed.scan import eos_is_physical
+
+    n = np.linspace(0.1, 1.0, 40)
+    good = SimpleNamespace(P=np.linspace(1.0, 400.0, 40),
+                           eps=np.linspace(100.0, 1200.0, 40), n_B=n)
+    assert eos_is_physical(good)[0]
+
+    bad_P = good.P.copy()
+    bad_P[15:] -= 60.0                       # the onset step-down seen in practice
+    ok, reason = eos_is_physical(SimpleNamespace(P=bad_P, eps=good.eps, n_B=n))
+    assert not ok and "P_not_monotone" in reason
+
+    # superluminal: dP/deps > 1
+    ok, reason = eos_is_physical(
+        SimpleNamespace(P=np.linspace(1.0, 3000.0, 40), eps=good.eps, n_B=n))
+    assert not ok and "cs2_out_of_range" in reason
+
+
+def test_maxwell_plateau_passes_the_guard():
+    """A flat plateau is dP = 0, which must be allowed — rejecting it would
+    reject every eta = 1 table."""
+    from types import SimpleNamespace
+    from eos.mixed.scan import eos_is_physical
+
+    P = np.concatenate([np.linspace(1.0, 200.0, 20),
+                        np.full(10, 200.0),
+                        np.linspace(200.0, 400.0, 20)])
+    eps = np.linspace(100.0, 1400.0, P.size)
+    assert eos_is_physical(
+        SimpleNamespace(P=P, eps=eps, n_B=np.linspace(0.1, 1.2, P.size)))[0]
+
+
+def test_build_parametrization_attaches_hyperons_and_deltas(dd2_nmp):
+    """from_nmp inverts the NUCLEON sector only, so the strange and resonant
+    sectors have to be attached on top or a hyperon flag fails on a lookup."""
+    from eos.dd2 import SpeciesFlags
+    from eos.mixed import build_parametrization
+
+    flags = SpeciesFlags(hyperons=True, deltas=True, muons=True,
+                         phi_field=True)
+    par, stage, msg = build_parametrization(dd2_nmp, flags)
+    assert stage == "ok", msg
+    assert par.hyperon_coupling_map, "hyperon couplings were not attached"
+    assert par.x_Delta_sigma != 0.0
+
+    nucleonic, stage2, _ = build_parametrization(
+        dd2_nmp, SpeciesFlags(hyperons=False, deltas=False, phi_field=False))
+    assert stage2 == "ok"
+    assert not nucleonic.hyperon_coupling_map
+
+
+def test_build_parametrization_reports_the_two_failures_apart(dd2_nmp):
+    from eos.dd2 import SpeciesFlags
+    from eos.mixed import build_parametrization
+
+    flags = SpeciesFlags(hyperons=True, deltas=True, phi_field=True)
+    par, stage, _ = build_parametrization(dict(dd2_nmp, K_sat=1.0e4), flags)
+    assert stage == "inversion_failed" and par is None
+    # U_Delta outside the literature range is rejected by the constructor
+    par, stage, _ = build_parametrization(dd2_nmp, flags, U_Delta=+10.0)
+    assert stage == "sectors_failed" and par is None
+
+
+def test_hadronic_stage_reports_each_check(dd2_nmp):
+    from eos.dd2 import SpeciesFlags
+    from eos.mixed import scan_hadronic_point
+
+    flags = SpeciesFlags(hyperons=True, deltas=True, muons=True,
+                         phi_field=True)
+    row = scan_hadronic_point(dd2_nmp, flags, np.linspace(0.05, 1.6, 60),
+                              tov=True)
+    assert row["inversion_ok"] == 1.0 and row["sectors_ok"] == 1.0
+    # Deltas drive scalar collapse before the top of the grid; the sweep is
+    # expected to truncate, and what matters is how far it got.
+    assert np.isfinite(row["n_sweep_max"]) and row["n_sweep_max"] > 1.0
+    assert row["status"] == "ok", row["status"]
+    assert 1.8 < row["M_max_had"] < 2.6, row["M_max_had"]
+
+    bad = scan_hadronic_point(dict(dd2_nmp, K_sat=1.0e4), flags,
+                              np.linspace(0.05, 1.6, 40), tov=False)
+    assert bad["status"] == "inversion_failed"
+    assert bad["inversion_ok"] == 0.0
+
+
+def test_K_sat_cannot_be_moved_at_fixed_Q_sat(dd2_nmp):
+    """Pins the documented limitation rather than leaving it folklore: the
+    isoscalar cross-constraint ties K_sat to Q_sat, so K_sat alone does not
+    move. If this ever starts passing, the inverter got better and the scan
+    docs should be updated."""
+    from eos.dd2 import Parametrization
+
+    _, at_dd2 = Parametrization.from_nmp(dd2_nmp, return_status=True)
+    assert at_dd2.ok, "the DD2 point itself must invert"
+    for K in (220.0, 260.0):
+        _, st = Parametrization.from_nmp(dict(dd2_nmp, K_sat=K),
+                                         return_status=True)
+        assert not st.ok, f"K_sat={K} unexpectedly inverts at fixed Q_sat"
+
+
+def test_L_sym_is_free(dd2_nmp):
+    """The isovector inversion is near-analytic and must converge across the
+    whole literature range — this is what makes L_sym the usable scan axis."""
+    from eos.dd2 import Parametrization
+
+    for L in (30.0, 55.0, 85.0, 100.0):
+        _, st = Parametrization.from_nmp(dict(dd2_nmp, L_sym=L),
+                                         return_status=True)
+        assert st.ok, f"L_sym={L} failed: {st.message}"
+        assert st.isovector_residual < 1e-6
+
+
 def test_grid_samples_is_a_product():
     out = grid_samples(B4=[150.0, 180.0], a=[0.0, 0.2, 0.4])
     assert len(out) == 6

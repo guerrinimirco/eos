@@ -11,7 +11,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 HERE = Path(__file__).resolve().parent
-CONTOURS = HERE / "data" / "contours"
+# Contours are shipped inside the package -- see compute_contours.py.
+CONTOURS = HERE.parent / "eos" / "general" / "data" / "contours"
 
 # source key -> (label, RGB colour).  Keys match the CSV basenames.
 SOURCES = {

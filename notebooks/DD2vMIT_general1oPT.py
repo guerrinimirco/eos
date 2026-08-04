@@ -112,8 +112,20 @@ from eos.mixed import (
     mass_radius_mixed, save_table, load_table, export_csv,
     locate_window, sweep_mixed,
     sound_speed_eq, frozen_along,
-    scan_parameters, grid_samples,
+    scan_parameters, scan_hadronic, grid_samples, DEFAULT_U_DELTA,
 )
+# Shared figure styling and the observational overlays, so every figure in this
+# notebook reads the same way as every other figure built on `eos`. This is the
+# NOTEBOOK style family (12-14 pt, gridlines, 150 dpi); `set_paper_style` /
+# `paper_grid` from the same module are the manuscript counterparts, and mixing
+# the two in one session means the last call wins.
+from eos.general.figure_style import (
+    set_global_style, setup_scientific_figure, apply_style, add_panel_labels,
+    save_figure, particle_style, LABELS, STANDARD_COLORS,
+)
+from eos.general.observational_constraints import add_observational_constraints
+
+set_global_style()
 
 OUT = Path("eos_tables_DD2vMIT")
 OUT.mkdir(exist_ok=True)
@@ -268,6 +280,131 @@ elif not all(_ok):
     print("   sweep in Part II will show empty tables for the eta that fails.")
 else:
     print("\n-> Complete transition at both eta. Part II is worth running.")
+
+
+# %% [markdown]
+# ## I.4 Choosing parameters — a two-stage scan
+#
+# Two questions, answered in the order that fails cheapest, **with hyperons and Δ
+# isobars switched on** regardless of what `FLAGS` says above (this section builds its
+# own parametrizations from nuclear-matter parameters, so it is independent of the
+# `PAR` chosen in I.2).
+#
+# **Stage 1 — which NMP give a working DD2 at all?** Four checks per sample:
+#
+# | check | what fails it |
+# |---|---|
+# | `inversion_ok` | the NMPs have no DD-RMF realisation |
+# | `sectors_ok` | the hyperon / Δ scalar couplings do not invert on that base |
+# | `sweep_ok` | the β-eq sweep does not reach `n_sweep_min` before scalar collapse |
+# | `M_max_had` | the hadronic branch alone misses 2 M_sun |
+#
+# **Read this before choosing NMP axes.** `L_sym` is free — the isovector inversion is
+# near-analytic and converges across 30–100 MeV. **`K_sat` is not**: the isoscalar
+# system is closed by a cross-constraint that ties `K_sat` to `Q_sat`, so moving
+# `K_sat` alone leaves a residual that grows away from the DD2 value (~3e-2 at 240 MeV
+# against a 2e-2 gate, 0.2 by 220 MeV). The `K_sat` column below is included precisely
+# so you can *see* that — it will report `inversion_failed` everywhere except at DD2's
+# own value. That is a statement about the DD2 functional form, not a solver defect.
+#
+# **Stage 2 — which of those, crossed with the quark parameters (B^1/4, a, m_s), give
+# M_max > 2 M_sun, and which of those actually have a phase transition?** Those are
+# two different questions and the table reports both: a combination can be heavy
+# enough without transitioning (it is then just a hyperonic star), and it can
+# transition without being heavy enough.
+#
+# **A third outcome, and with hyperons and Δ isobars on it is the most common one:
+# `eos_unphysical`.** The χ=0 crossing that the window locator finds can be spurious
+# at a low bag constant — the mixed branch it locks onto sits at a *lower* pressure
+# than the hadronic branch at the same density, so it is not the favoured state, and
+# the stitched table steps *down* by tens of MeV/fm³ at the onset. Such a table is not
+# an equation of state, and integrating it returns confident nonsense (maximum masses
+# in the hundreds of solar masses). The scan therefore checks P is non-decreasing and
+# 0 ≤ c_s² ≤ 1 **before** integrating, and reports `eos_unphysical` instead of a
+# number. Expect a large fraction of the "has a transition" cells to be rejected here;
+# that rejection is the scan working, not failing.
+
+# %%
+# ---- stage-1 axes ---------------------------------------------------------
+SCAN_FLAGS = SpeciesFlags(hyperons=True, deltas=True, muons=True,
+                          phi_field=True, photons=True)
+SCAN_K_SAT = [230.0, 242.7, 255.0]      # see the note above: only ~242.7 inverts
+SCAN_L_SYM = [30.0, 45.0, 55.0, 70.0, 85.0]
+SCAN_NMP_GRID = np.linspace(0.05, 1.6, 80)   # a probe grid, coarser than NB
+
+# ---- stage-2 axes (crossed with whatever survives stage 1) -----------------
+# Hyperons and Deltas soften the hadronic branch, so the transition needs a
+# lower bag constant than the nucleonic default of 180 MeV.
+SCAN2_B4 = [145.0, 155.0, 165.0]        # MeV
+SCAN2_A = [0.0, 0.2]                    # fm^2
+SCAN2_MS = [100.0, 150.0]               # MeV
+SCAN_N_JOBS = 1                         # -1 to spread over cores with joblib
+
+BASE_NMP = compute_nmp(Parametrization.from_dd2_defaults())
+nmp_samples = [dict(BASE_NMP, K_sat=k, L_sym=l)
+               for k in SCAN_K_SAT for l in SCAN_L_SYM]
+
+print(f"STAGE 1 — {len(nmp_samples)} NMP samples, hyperons+deltas, "
+      f"U_Delta={DEFAULT_U_DELTA:.0f} MeV")
+t0 = time.time()
+had_rows = scan_hadronic(nmp_samples, SCAN_FLAGS, SCAN_NMP_GRID, tov=True,
+                         n_jobs=SCAN_N_JOBS)
+print(f"  K_sat  L_sym | inv sec swp  n_max  M_max_had  R_1.4 | status")
+for r in had_rows:
+    print(f"  {r['K_sat']:6.1f} {r['L_sym']:5.1f} |  {r['inversion_ok']:.0f}   "
+          f"{r['sectors_ok']:.0f}   {r['sweep_ok']:.0f}  {r['n_sweep_max']:5.2f}  "
+          f"{r['M_max_had']:8.3f}  {r['R_1p4_had']:6.2f} | {r['status']}")
+
+had_ok = [r for r in had_rows if r["status"] == "ok"]
+print(f"\n-> {len(had_ok)}/{len(had_rows)} NMP work for DD2 + hyperons + deltas "
+      f"({time.time()-t0:.1f} s)")
+if not had_ok:
+    print("   None. Stage 2 has nothing to cross; widen SCAN_L_SYM or relax "
+          "the M_max target.")
+
+# %%
+# ---- STAGE 2: the working NMP crossed with the quark parameters -----------
+good_nmp = [dict(BASE_NMP, K_sat=r["K_sat"], L_sym=r["L_sym"]) for r in had_ok]
+vmit_samples = grid_samples(B4=SCAN2_B4, a=SCAN2_A, m_s=SCAN2_MS)
+
+print(f"STAGE 2 — {len(good_nmp)} NMP x {len(vmit_samples)} vMIT "
+      f"= {len(good_nmp)*len(vmit_samples)} combinations")
+t0 = time.time()
+hyb_rows = scan_parameters(good_nmp, vmit_samples, SCAN_FLAGS, SCAN_NMP_GRID,
+                           eta=0.0, T=0.0, tov=True, n_jobs=SCAN_N_JOBS)
+
+from collections import Counter
+
+_trans = [r for r in hyb_rows if r["window_exists"] == 1.0]
+_bad = [r for r in hyb_rows if r["status"] == "eos_unphysical"]
+_heavy = [r for r in hyb_rows
+          if np.isfinite(r.get("M_max", np.nan)) and r["M_max"] > 2.0]
+_both = [r for r in _heavy if r["window_exists"] == 1.0]
+
+print(f"\n  {len(_trans):3d}/{len(hyb_rows)} have a phase transition")
+print(f"  {len(_bad):3d}/{len(hyb_rows)} of those stitch to an UNPHYSICAL EoS "
+      f"(rejected before TOV)")
+print(f"  {len(_heavy):3d}/{len(hyb_rows)} reach M_max > 2.0 Msun")
+print(f"  {len(_both):3d}/{len(hyb_rows)} do BOTH  <- the viable hybrid stars")
+print(f"\n  status breakdown: {dict(Counter(r['status'] for r in hyb_rows))}")
+
+print(f"\n  L_sym    B4     a    m_s | transition          M_max   R_1.4  cs2max")
+for r in sorted(_both, key=lambda r: -r["M_max"])[:25]:
+    print(f"  {r['L_sym']:5.1f} {r['B4']:5.1f}  {r['a']:.2f} {r['m_s']:5.1f} | "
+          f"[{r['n_onset']:.3f},{r['n_offset']:.3f}] fm^-3  "
+          f"{r['M_max']:6.3f}  {r['R_1p4']:5.2f}  {r['cs2_max']:.3f}")
+if not _both:
+    print("  (none in this grid — widen SCAN2_A upward, which stiffens the")
+    print("   quark phase, or raise SCAN2_B4 to push the onset to higher density)")
+elif _heavy and not _both:
+    print("  (none — every heavy-enough combination is a pure hyperonic star)")
+print("\n  Note: an onset below ~2 n_sat is formally allowed by these checks but")
+print("  physically doubtful — uniform matter is not the ground state there.")
+print(f"\n({time.time()-t0:.1f} s)")
+
+save_table(had_rows, OUT / "scan_stage1_nmp.h5", meta=dict(flags=SCAN_FLAGS))
+save_table(hyb_rows, OUT / "scan_stage2_hybrid.h5", meta=dict(flags=SCAN_FLAGS))
+export_csv(hyb_rows, OUT / "scan_stage2_hybrid.csv")
 
 
 # %% [markdown]
@@ -435,7 +572,9 @@ for eta in TOV_ETAS:
 # and costs the product of the two grids.
 
 # %%
-BASE_NMP = compute_nmp(PAR)
+# The NMPs of the parametrization chosen in I.2, so this plane is purely the
+# quark sector. (I.4 scans the NMPs themselves, from the DD2 defaults.)
+NMP_OF_PAR = compute_nmp(PAR)
 
 
 def scan_progress(r):
@@ -449,7 +588,7 @@ def scan_progress(r):
 
 t0 = time.time()
 scan_rows = scan_parameters(
-    [BASE_NMP], grid_samples(B4=SCAN_B4, a=SCAN_A), FLAGS, SCAN_GRID,
+    [NMP_OF_PAR], grid_samples(B4=SCAN_B4, a=SCAN_A), FLAGS, SCAN_GRID,
     eta=0.0, T=0.0, tov=SCAN_TOV, n_jobs=1, progress=scan_progress)
 
 _n_ok = sum(r["status"] == "ok" for r in scan_rows)
@@ -561,34 +700,35 @@ def plot_eos_panels(T, show_pure=True):
     transition, where they are metastable, so the gain from the transition is
     visible rather than implied.
     """
-    fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
+    fig, axes = setup_scientific_figure(nrows=1, ncols=3, figsize=(15, 4.6))
     for eta in sorted(loaded):
         d = full_eos(eta, T)
         if not d:
             continue
         c = COLOR_OF[eta]
         for ax, key in zip(axes, ("P", "S_per_B", "chi")):
-            ax.plot(d["n_B"], d[key], "-", lw=2, color=c, label=rf"$\eta={eta}$")
+            ax.plot(d["n_B"], d[key], "-", color=c, label=rf"$\eta={eta}$")
 
     if show_pure:
         for pure, lab in ((pure_hadronic.get(T), "pure hadronic"),
                           (pure_quark.get(T), "pure quark")):
             if pure is None or not pure["n_B"].size:
                 continue
-            axes[0].plot(pure["n_B"], pure["P"], ":", lw=1.4, color="0.45",
-                         label=lab)
-            axes[1].plot(pure["n_B"], pure["S_per_B"], ":", lw=1.4, color="0.45")
+            axes[0].plot(pure["n_B"], pure["P"], ":", lw=1.4,
+                         color=STANDARD_COLORS["Gray"], label=lab)
+            axes[1].plot(pure["n_B"], pure["S_per_B"], ":", lw=1.4,
+                         color=STANDARD_COLORS["Gray"])
 
-    axes[0].set_ylabel(r"$P$  [MeV fm$^{-3}$]")
-    axes[1].set_ylabel(r"$S = s/n_B$  [$k_B$ / baryon]")
+    axes[0].set_ylabel(LABELS["P"])
+    axes[1].set_ylabel(LABELS["S"] + r"  [$k_B$ / baryon]")
     axes[2].set_ylabel(r"quark volume fraction  $\chi$")
     axes[2].set_ylim(-0.02, 1.02)
-    axes[2].axhline(0.0, color="0.7", lw=0.8)
-    axes[2].axhline(1.0, color="0.7", lw=0.8)
+    for y in (0.0, 1.0):
+        axes[2].axhline(y, color=STANDARD_COLORS["Gray"], lw=0.8, ls="--")
     for ax in axes:
-        ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
-        ax.grid(alpha=0.3)
-        ax.legend(fontsize=9)
+        ax.set_xlabel(LABELS["nB"])
+        apply_style(ax)
+    add_panel_labels(axes)
     fig.suptitle(rf"DD2+vMIT, {MODE}, $T = {T:g}$ MeV", y=1.02)
     fig.tight_layout()
     plt.show()
@@ -615,7 +755,7 @@ plot_eos_panels(20.0, show_pure=False)
 # narrows towards η = 1, where it becomes the Maxwell density jump.
 
 # %%
-fig, ax = plt.subplots(figsize=(7.5, 5.5))
+fig, ax = setup_scientific_figure()
 for eta in ETA_LIST:
     wins = windows_by_eta.get(eta, {})
     Ts = sorted(k[0] for k in wins)
@@ -627,44 +767,59 @@ for eta in ETA_LIST:
         continue
     Ts = np.array(Ts, dtype=float)
     c = COLOR_OF[eta]
-    ax.plot(onset[good], Ts[good], "-o", ms=4, lw=2, color=c,
-            label=rf"$\eta={eta}$")
-    ax.plot(offset[good], Ts[good], "--s", ms=4, lw=2, color=c)
+    ax.plot(onset[good], Ts[good], "-o", ms=4, color=c, label=rf"$\eta={eta}$")
+    ax.plot(offset[good], Ts[good], "--s", ms=4, color=c)
     ax.fill_betweenx(Ts[good], onset[good], offset[good], color=c, alpha=0.13)
 
-ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
-ax.set_ylabel(r"$T$  [MeV]")
+ax.set_xlabel(LABELS["nB"])
+ax.set_ylabel(LABELS["T"])
 ax.set_title("Mixed-phase boundaries\n"
              "solid: onset ($\\chi=0$)   dashed: offset ($\\chi=1$)")
-ax.grid(alpha=0.3)
-ax.legend(fontsize=9)
+apply_style(ax)
 fig.tight_layout()
 plt.show()
 
 # %% [markdown]
 # ## III.3 Mass-radius and tidal deformability
 #
-# Cold, beta-equilibrium stars built on the stitched core equation of state.
+# Cold, beta-equilibrium stars built on the stitched core equation of state, drawn
+# over the NICER and HESS credible regions and the PSR J0952-0607 mass band.
+#
+# The overlays come from `eos.general.observational_constraints`, which reads contours
+# precomputed offline and shipped inside the package — nothing is refitted here. They
+# are drawn at low `zorder` so the model curves stay on top. Set `INLINE_LABELS=True`
+# to write each source name next to its blob instead of filling the legend with them.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(12.5, 5))
+INLINE_LABELS = True
+
+fig, axes = setup_scientific_figure(nrows=1, ncols=2, figsize=(12.5, 5))
+
+# Constraints first, so the model curves are drawn over them.
+add_observational_constraints(axes[0], inline_labels=INLINE_LABELS)
+
 for eta, res in tov.items():
     r = res["results"]
     idx, _, M_max = find_mmax_precise(r)
     M, R, Lam = r[:idx + 1, 4], r[:idx + 1, 3], r[:idx + 1, 6]
-    c = COLOR_OF.get(eta, "k")
-    axes[0].plot(R, M, "-", lw=2, color=c,
+    c = COLOR_OF.get(eta, STANDARD_COLORS["Gray"])
+    axes[0].plot(R, M, "-", color=c, zorder=4,
                  label=rf"$\eta={eta}$  ($M_{{\max}}={M_max:.2f}\,M_\odot$)")
-    axes[0].plot(res["R_Mmax"], M_max, "o", ms=6, color=c)
-    axes[1].semilogy(M, Lam, "-", lw=2, color=c, label=rf"$\eta={eta}$")
+    axes[0].plot(res["R_Mmax"], M_max, "o", ms=6, color=c, zorder=5)
+    axes[1].semilogy(M, Lam, "-", color=c, label=rf"$\eta={eta}$")
 
-axes[0].set_xlabel(r"$R$  [km]"); axes[0].set_ylabel(r"$M$  [$M_\odot$]")
+axes[0].set_xlabel(r"$R$  [km]")
+axes[0].set_ylabel(r"$M$  [$M_\odot$]")
 axes[0].set_title("Mass-radius")
-axes[1].set_xlabel(r"$M$  [$M_\odot$]"); axes[1].set_ylabel(r"$\Lambda$")
+# Pin the frame: the constraint blobs would otherwise stretch the axes out to
+# wherever the widest posterior reaches.
+axes[0].set_xlim(9.0, 16.0)
+axes[0].set_ylim(0.5, 2.8)
+axes[1].set_xlabel(r"$M$  [$M_\odot$]")
+axes[1].set_ylabel(r"$\Lambda$")
 axes[1].set_title("Tidal deformability")
 for ax in axes:
-    ax.grid(alpha=0.3, which="both")
-    ax.legend(fontsize=9)
+    apply_style(ax)
 fig.tight_layout()
 plt.show()
 
@@ -693,9 +848,10 @@ plt.show()
 # %%
 CS_ETAS = [e for e in (0.0, 0.3, 1.0) if e in ETA_LIST]
 
-fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
+fig, axes = setup_scientific_figure(nrows=1, ncols=2, figsize=(13, 5),
+                                    sharey=True)
 for eta in CS_ETAS:
-    c = COLOR_OF.get(eta, "k")
+    c = COLOR_OF.get(eta, STANDARD_COLORS["Gray"])
     w = locate_window(PAR, FLAGS, NB, eta, beta_eq_neutrinoless(),
                       vmit_params=VMIT, T=0.0)
     if not w.exists:
@@ -705,7 +861,7 @@ for eta in CS_ETAS:
     # hadronic wing, the window and the quark wing.
     core = build_mixed_eos_table(PAR, FLAGS, NB, eta, beta_eq_neutrinoless(),
                                  vmit_params=VMIT, T=0.0, window=w)
-    axes[0].plot(core.n_B, sound_speed_eq(core.P, core.eps), "-", lw=2, color=c,
+    axes[0].plot(core.n_B, sound_speed_eq(core.P, core.eps), "-", color=c,
                  label=rf"$\eta={eta}$")
 
     # Frozen: only defined where there are two phases, so it is drawn across the
@@ -715,7 +871,7 @@ for eta in CS_ETAS:
                      vmit_params=VMIT, T=0.0)
     n_mix = np.array([r.n_B for r in rs])
     axes[1].plot(n_mix, frozen_along(PAR, FLAGS, rs, vmit_params=VMIT),
-                 "-", lw=2, color=c, label=rf"$\eta={eta}$")
+                 "-", color=c, label=rf"$\eta={eta}$")
     axes[1].plot(n_mix, sound_speed_eq(np.array([r.P for r in rs]),
                                        np.array([r.eps for r in rs])),
                  "--", lw=1.4, color=c, alpha=0.7)
@@ -725,14 +881,14 @@ for eta in CS_ETAS:
 for ax, title in zip(axes, ("equilibrium  $c_{\\rm eq}^2$  (full EoS)",
                             "frozen  $c_{\\rm ad}^2$  (solid) vs "
                             "$c_{\\rm eq}^2$ (dashed), window only")):
-    ax.axhline(1.0, color="0.5", lw=0.9, ls="-.")
-    ax.axhline(0.0, color="0.7", lw=0.8)
-    ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
+    ax.axhline(1.0, color=STANDARD_COLORS["Gray"], lw=0.9, ls="-.")
+    ax.axhline(0.0, color=STANDARD_COLORS["Gray"], lw=0.8, ls="--")
+    ax.set_xlabel(LABELS["nB"])
     ax.set_title(title)
-    ax.grid(alpha=0.3)
-    ax.legend(fontsize=9)
+    apply_style(ax)
 axes[0].set_ylabel(r"$c_s^2$  [$c^2$]")
 axes[0].set_ylim(-0.05, 1.05)
+add_panel_labels(axes)
 fig.suptitle(rf"Sound speeds — DD2+vMIT, $T = 0$ MeV", y=1.01)
 fig.tight_layout()
 plt.show()
@@ -758,22 +914,26 @@ for r in scan_rows:
         _onset[i, j] = r["n_onset"]
     _mmax[i, j] = r.get("M_max", np.nan)
 
-fig, ax = plt.subplots(figsize=(8, 5.5))
+fig, ax = setup_scientific_figure(figsize=(8, 5.5))
+# Sequential field -> viridis, per the palette convention in figure_style.
 _im = ax.pcolormesh(_B4, _A, _onset, shading="nearest", cmap="viridis")
 fig.colorbar(_im, ax=ax, label=r"onset density  $n_{\rm onset}$  [fm$^{-3}$]")
 # Mark the combinations with no transition, which nan leaves blank.
 for i, a in enumerate(_A):
     for j, b in enumerate(_B4):
         if not np.isfinite(_onset[i, j]):
-            ax.plot(b, a, "x", color="0.4", ms=9, mew=1.8)
+            ax.plot(b, a, "x", color=STANDARD_COLORS["Gray"], ms=9, mew=1.8)
 if SCAN_TOV and np.isfinite(_mmax).any():
-    ax.contour(_B4, _A, _mmax, levels=[2.0], colors="crimson", linewidths=2.2)
-    ax.plot([], [], "-", color="crimson", lw=2.2, label=r"$M_{\max}=2\,M_\odot$")
+    _red = STANDARD_COLORS["Red"]
+    ax.contour(_B4, _A, _mmax, levels=[2.0], colors=[_red], linewidths=2.2)
+    ax.plot([], [], "-", color=_red, lw=2.2, label=r"$M_{\max}=2\,M_\odot$")
 ax.plot(VMIT.B4, VMIT.a, "*", color="white", ms=18, mec="k", mew=1.2,
         label="current VMIT")
 ax.set_xlabel(r"$B^{1/4}$  [MeV]")
 ax.set_ylabel(r"vector coupling  $a$  [fm$^2$]")
 ax.set_title("Where a complete transition exists  (x = none)")
+# A heatmap wants no gridlines over it; the legend still comes from apply_style.
+apply_style(ax, grid=False, minor_grid=False)
 ax.legend(fontsize=9, loc="upper left")
 fig.tight_layout()
 plt.show()
@@ -795,28 +955,33 @@ T_COMP = 0.0
 Y_FLOOR = 1e-3
 
 d = full_eos(ETA_COMP, T_COMP)
-quarks = {"u", "d", "s"}
 species = sorted(k[2:] for k in d
                  if k.startswith("Y_") and k not in ("Y_C", "Y_S"))
 
-fig, ax = plt.subplots(figsize=(8, 5.5))
+fig, ax = setup_scientific_figure(figsize=(8, 5.5))
 for sp in species:
     y = d[f"Y_{sp}"]
     if not np.isfinite(y).any() or np.nanmax(y) < Y_FLOOR:
         continue
-    ax.plot(d["n_B"], y, "--" if sp in quarks else "-", lw=1.8, label=sp)
+    # Colour by particle and linestyle by multiplet, from the shared table:
+    # nucleons solid, hyperons dashed, Deltas dash-dot, quarks densely dashed,
+    # leptons dotted — so the figure survives being printed in black and white.
+    colour, style = particle_style(sp)
+    ax.plot(d["n_B"], y, ls=style, color=colour, label=sp)
 
 mixed = (d["chi"] > 0.0) & (d["chi"] < 1.0)
 if mixed.any():
     ax.axvspan(d["n_B"][mixed].min(), d["n_B"][mixed].max(),
-               color="0.85", zorder=0, label="mixed")
+               color=STANDARD_COLORS["Gray"], alpha=0.15, zorder=0,
+               label="mixed")
 ax.set_yscale("log")
 ax.set_ylim(Y_FLOOR, 2.0)
-ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
-ax.set_ylabel(r"$Y_i = n_i / n_B$  (volume-weighted)")
+ax.set_xlabel(LABELS["nB"])
+ax.set_ylabel(LABELS["Y_i"] + r"  (volume-weighted)")
 ax.set_title(rf"Composition — $\eta={ETA_COMP}$, $T={T_COMP:g}$ MeV")
-ax.grid(alpha=0.3, which="both")
-ax.legend(ncol=3, fontsize=8)
+# Minor gridlines are noise under a log axis with this many curves.
+apply_style(ax, minor_grid=False)
+ax.legend(ncol=3, fontsize=8, frameon=False)
 fig.tight_layout()
 plt.show()
 

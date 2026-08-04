@@ -21,6 +21,22 @@ The golden reference values embedded in `test/dd2/` pin the T=0 nucleonic
 sector. They are ground truth: if a new implementation disagrees with them,
 the new implementation is wrong.
 
+## 1b. Dependency direction (non-negotiable)
+
+**`eos` must never import `nucleation`** (or any other downstream project).
+`eos` is the library; `nucleation` and friends are its consumers and declare it
+as a dependency. An import in this direction is a cycle: it makes
+`pip install eos` alone insufficient to use `eos`.
+
+This was violated once — `eos/dd2/notebook_api.py` imported
+`nucleation.analysis.figure` for the M-R constraint overlay. The overlay now
+lives where it belongs, in `eos/general/observational_constraints.py`.
+`test/test_imports.py::test_eos_never_imports_nucleation` enforces the rule.
+
+Corollary: shared *figure* code belongs in `eos/general/figure_style.py`, the
+one home for publication styling. Do not re-declare `STANDARD_COLORS` or write
+a second rcParams setter in a submodule — import them.
+
 ## 2. Sign and naming conventions (non-negotiable)
 
 - **Strangeness**: `S = +1` per *s*-quark. So `Λ` has `S = +1`, `Ξ` has

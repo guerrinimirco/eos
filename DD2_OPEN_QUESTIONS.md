@@ -260,6 +260,45 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
   (`solve_composition` is nucleons only). Add it if a hyperonic frozen sound
   speed is ever needed quantitatively.
 
+### E9. K_sat cannot be moved at fixed Q_sat — and this is the long-standing M8 failure
+- **Measured:** at the DD2 Q_sat (168.7 MeV) the isoscalar inversion converges
+  ONLY at the DD2 K_sat. The residual grows smoothly away from it — 2.6e-3 at
+  K_sat = 243, 2.7e-2 at 240, 5.0e-2 at 250, 0.21 at 220 — against a 2e-2 gate.
+  L_sym by contrast is free across 30-100 MeV (isovector residual ~1e-9).
+- **This is the cause of `test/dd2/test_dd2_m8.py::test_perturbed_nmp_solves`,**
+  which has been failing for some time. It asks for `K_sat=250, L_sym=60` and
+  calls it "a nearby feasible NMP set"; the K_sat half of that premise is what
+  is wrong. The test has NOT been loosened — the tolerance is not the problem.
+- **Why:** K_sat and Q_sat are tied by the cross-constraint that closes the
+  6x6 isoscalar system, so they are not independent knobs. A joint (K_sat,
+  Q_sat) scan does find a feasible ridge — (230, 100) inverts, as does
+  (243, 169) — but it is narrow, so a rectangular grid mostly misses it.
+- **Consequence for the Bayesian goal:** a prior that varies K_sat
+  independently will reject nearly every sample. Either sample along the
+  (K_sat, Q_sat) ridge, or treat Q_sat as determined by K_sat via a 1-D root
+  solve on the cross-constraint rather than as a free parameter.
+- **Open:** is the 2e-2 gate on the isoscalar residual the right threshold, and
+  would a better-conditioned isoscalar solve widen the feasible region? Both
+  are worth checking before the inference run.
+
+### E10. Spurious chi=0 crossings with hyperons + Deltas at low bag constant
+- **What happens:** `locate_window` reports an onset where the mixed branch it
+  converges to sits at a LOWER pressure than the hadronic branch at the same
+  density — so it is not the favoured state. Measured with hyperons + Deltas,
+  L_sym = 85, B^1/4 = 165 MeV: at the claimed onset chi jumps 0 -> 0.517 and P
+  falls 36.3 -> 7.8 MeV/fm^3.
+- **Consequence:** `build_mixed_eos_table` stitches a table that steps DOWN in
+  pressure, c_s^2 goes to -4, and TOV integrates it to maximum masses in the
+  hundreds of solar masses without raising.
+- **Mitigation shipped:** `eos/mixed/scan.py:eos_is_physical` checks P is
+  non-decreasing and 0 <= c_s^2 <= 1 before any TOV call, and the scan reports
+  `eos_unphysical` instead of a mass. On one representative grid this rejected
+  21 of 27 apparent transitions. Maxwell plateaus (dP = 0) still pass.
+- **Open:** the real fix is in the window locator — it should reject a chi
+  crossing whose branch is not pressure-favoured over the pure phase, rather
+  than leaving every downstream consumer to check. Not attempted here because
+  it changes solver behaviour that the whole `test/mixed` suite is pinned to.
+
 ---
 
 ## F. Things that are settled (no action needed) — for the record

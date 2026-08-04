@@ -84,7 +84,9 @@ from eos.mixed.coefficients import (
 
 # --- where in parameter space a hybrid equation of state exists -------------
 from eos.mixed.scan import (
-    scan_parameters, scan_point, grid_samples, NMP_KEYS, VMIT_KEYS,
+    scan_parameters, scan_point, scan_hadronic, scan_hadronic_point,
+    build_parametrization, grid_samples, NMP_KEYS, VMIT_KEYS,
+    DEFAULT_HYPERON_POTENTIALS, DEFAULT_U_DELTA,
 )
 
 __all__ = [
@@ -108,5 +110,7 @@ __all__ = [
     # coefficients
     "sound_speed_eq", "sound_speed_frozen", "adiabatic_index", "frozen_along",
     # parameter-space scan
-    "scan_parameters", "scan_point", "grid_samples", "NMP_KEYS", "VMIT_KEYS",
+    "scan_parameters", "scan_point", "scan_hadronic", "scan_hadronic_point",
+    "build_parametrization", "grid_samples", "NMP_KEYS", "VMIT_KEYS",
+    "DEFAULT_HYPERON_POTENTIALS", "DEFAULT_U_DELTA",
 ]

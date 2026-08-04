@@ -136,10 +136,15 @@ os.makedirs(OUT_DIR, exist_ok=True)
 # Symmetric-matter plot (IV.5): Y_C=0.5, Y_S=0, no leptons, Δ active (vs FOPI/Danielewicz).
 FLAGS_SNM = SpeciesFlags(hyperons=False, deltas=True, muons=False, neutrinos=False)
 
-# ── reference data (repo-relative from notebooks/; NOT shipped in the pip package) ─
+# ── reference data ───────────────────────────────────────────────────────────
+# The raw posterior SAMPLES stay repo-relative (~160 MB, NOT shipped in the pip
+# package). The M-R credible CONTOURS derived from them now ship inside the
+# package, so they resolve wherever eos is installed.
+from eos.general.observational_constraints import DEFAULT_CONTOUR_DIR
+
 DATA_DIR    = "../plot/data"
 SAMPLES     = DATA_DIR + "/samples"
-CONTOUR_DIR = DATA_DIR + "/contours"
+CONTOUR_DIR = str(DEFAULT_CONTOUR_DIR)
 CHIRAL_EFT  = SAMPLES + "/chiral_eft.txt"          # PNM E/N band (Y_C=0)
 DANIELEWICZ = SAMPLES + "/DLL_2002_PSM.txt"        # SNM P flow constraint
 FOPI_PSM    = SAMPLES + "/FOPI_2016_PSM.txt"       # SNM P flow constraint
