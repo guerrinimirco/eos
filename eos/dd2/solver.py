@@ -349,7 +349,7 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
 def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
                 Y_L=0.0, yc_leptons=False, include_photons=True,
-                check_consistency=True, analytic_jac=False):
+                check_consistency=True, analytic_jac=True):
     """
     General octet solve (the unified charge/strangeness scheme) at (n_B [fm^-3], T [MeV]).
 
@@ -358,6 +358,14 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     CompOSE general-purpose (nB,T,Yq) convention). strange_mode='fixed' adds
     mu_S and fixes the strangeness fraction to Y_S. Raises RuntimeError on
     non-convergence; asserts HVH (and, in beta mode, the beta condition).
+
+    analytic_jac=True (the default) selects the exact-Jacobian backend; it is
+    3-11x faster on a warm-started sweep and agrees with the finite-difference
+    backend to solver tolerance. Pass False for the finite-difference reference
+    path, which stays the correctness oracle when the two disagree. The one
+    case where it does not pay is the full octet at T > 0, where it is ~10%
+    slower than finite differences; it is left on there for one default rather
+    than a speed heuristic.
     """
     ctx = build_octet_ctx(par, n_B, flags, T=T, charge_mode=charge_mode,
                           Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
@@ -376,8 +384,8 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     # eos_fast backend (analytic_jac): exact analytic Jacobian via MINPACK
     # hybrj. At T=0 the residual AND Jacobian are Numba-jitted (kernel_numba,
     # machine-identical to the NumPy kernel); T>0 uses the NumPy analytic path
-    # (the JEL integrals don't jit). eos_ref (default) uses the forward-
-    # difference Jacobian.
+    # (the JEL integrals don't jit). eos_ref (analytic_jac=False) uses the
+    # forward-difference Jacobian and remains the correctness oracle.
     if analytic_jac and T == 0.0 and _NUMBA_OK:
         _spec, _prm, _flg = build_numba_arrays(ctx)
         res_fn = lambda xx, _c: residual_t0_jit(xx, _spec, _prm, _flg)
@@ -448,7 +456,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
 
 def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
                         include_photons=True, check_consistency=True,
-                        analytic_jac=False):
+                        analytic_jac=True):
     """
     Beta-equilibrium matter with the full active baryon set (
     mode 1; mu_S = mu_L = 0, charge neutrality). Thin wrapper over solve_octet.
@@ -501,7 +509,7 @@ def solve_yl_octet(par, n_B, Y_L, flags, T=0.0, x0=None,
 
 def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
                         max_bisect=6, stop_at_boundary=False,
-                        analytic_jac=False):
+                        analytic_jac=True):
     """
     Warm-started density sweep with step-bisection continuation.
     Each point seeds the next; through a sharp onset where the warm start
@@ -523,12 +531,13 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
 def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_L=0.0,
                 yc_leptons=False, include_photons=True, max_bisect=6,
-                stop_at_boundary=False, analytic_jac=False):
+                stop_at_boundary=False, analytic_jac=True):
     """
     Warm-started density sweep for any octet mode, with the same
     step-bisection continuation and scalar-collapse boundary handling as the
     beta-eq sweep. See solve_octet for the mode arguments. analytic_jac selects
-    the eos_fast (exact-Jacobian) backend.
+    the eos_fast (exact-Jacobian) backend, on by default; False is the
+    finite-difference reference path.
     """
     has_phi = flags.phi_field and flags.hyperons
     has_muS = (strange_mode == "fixed")

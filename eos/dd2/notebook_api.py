@@ -230,12 +230,16 @@ def plot_heat_capacity(par, flags=NUCLEONIC, grid=None, T=10.0):
 # =============================================================================
 # 6-8. TOV: M-R, Λ-M, constraints
 # =============================================================================
-def compute_tov(par, flags=NUCLEONIC, e_c_min=150.0, e_c_max=3000.0, n_ec=180):
+def compute_tov(par, flags=NUCLEONIC, e_c_min=150.0, e_c_max=3000.0, n_ec=180,
+                backend="fast"):
     """
     Cold β-eq core + BPS crust TOV sequence with tidal deformability. Returns a
     dict with the stable branch (M, R, Lambda), M_max, R_1.4, Lambda_1.4, and
     the raw ``results`` array. Shared by figs 6-8 so the notebook solves once
     per parametrization.
+
+    ``backend`` is ``'fast'`` (the Numba solver) by default; pass ``'scipy'``
+    for the readable reference implementation it is validated against.
     """
     core = build_core_table(par, flags)
     crust = "BPS" if os.path.isfile(CRUST_PATHS.get("BPS", "")) else "No"
@@ -244,7 +248,7 @@ def compute_tov(par, flags=NUCLEONIC, e_c_min=150.0, e_c_max=3000.0, n_ec=180):
         core, e_c_vec, add_crust_table=crust, add_crust_mode="attach",
         n_transition=(N_TRANSITION if crust != "No" else None),
         compute_baryonic_mass=False, compute_tidal=True,
-        verbose=False, backend="scipy",
+        verbose=False, backend=backend,
     )
     idx, _, M_max = find_mmax_precise(res)
     R = res[:idx + 1, 3]

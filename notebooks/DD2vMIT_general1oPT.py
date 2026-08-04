@@ -48,25 +48,38 @@
 # %% [markdown]
 # ## I.1 Imports
 #
-# Works both from a clone of the repository and from an installed `eos` package: if
-# the import fails, the repository root is located by walking up for `pyproject.toml`.
+# Imports the repository clone when the notebook sits inside one — the root is found by
+# walking up for `pyproject.toml` — and falls back to installing the package from GitHub
+# only when it does not, so a stale copy in `site-packages` can never shadow the working
+# tree. The line printed at the end says which copy was actually loaded.
+#
 
 # %%
 import sys
 import time
+import subprocess
 from pathlib import Path
+
+# Import the repository clone in preference to anything pip has left behind in
+# site-packages. The notebook runs from `notebooks/`, so the repository root is
+# not on sys.path by default and an older installed copy of `eos` wins the
+# import — one that is missing whatever subpackages have been added since it
+# was installed, which is how `eos.mixed` goes absent.
+ROOT = next((p for p in (Path.cwd(), *Path.cwd().parents)
+             if (p / "pyproject.toml").is_file() and (p / "eos").is_dir()), None)
+if ROOT is not None:
+    sys.path.insert(0, str(ROOT))
+    # Drop anything already imported from the wrong copy, so re-running this
+    # cell fixes the kernel instead of needing a restart.
+    for _m in [m for m in sys.modules if m == "eos" or m.startswith("eos.")]:
+        del sys.modules[_m]
 
 try:
     import eos.mixed
-except ModuleNotFoundError:
-    here = Path.cwd()
-    for candidate in (here, *here.parents):
-        if (candidate / "pyproject.toml").is_file() and (candidate / "eos").is_dir():
-            sys.path.insert(0, str(candidate))
-            break
-    else:
-        raise ModuleNotFoundError(
-            "could not locate the eos repository root from " + str(here))
+except ImportError:      # not inside a clone (Colab, say) — fetch the package
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-deps",
+                           "--quiet",
+                           "git+https://github.com/guerrinimirco/eos.git"])
     import eos.mixed
 
 import numpy as np
@@ -86,7 +99,8 @@ from eos.mixed import (
 
 OUT = Path("eos_tables_DD2vMIT")
 OUT.mkdir(exist_ok=True)
-print("eos imported from:", Path(eos.mixed.__file__).parents[2])
+print("eos imported from:", Path(eos.__file__).parent)
+
 
 # %% [markdown]
 # ## I.2 Knobs
@@ -98,7 +112,7 @@ print("eos imported from:", Path(eos.mixed.__file__).parents[2])
 # from_dd2_defaults()   nucleonic DD2
 # from_dd2y_defaults()  DD2Y, with the hyperon couplings (required for hyperons)
 # from_nmp(NMP)         pin the nuclear-matter parameters yourself
-PAR = Parametrization.from_dd2_defaults()
+PAR = Parametrization.from_dd2y_defaults()
 
 # ---- which degrees of freedom exist --------------------------------------
 # Every species is an explicit flag; nothing is switched on implicitly, and a
@@ -112,7 +126,15 @@ FLAGS = SpeciesFlags(
 )
 
 # ---- quark parametrization ------------------------------------------------
-VMIT = get_vmit_default()          # B^1/4 = 180 MeV, a = 0.2 fm^2, m_s = 150 MeV
+VMIT = get_vmit_default()
+# The hyperon couplings live in DD2Y and nowhere else — DD2 has no entry for
+# Lambda — so `hyperons=True` on `from_dd2_defaults()` fails deep in the
+# coupling lookup with a bare KeyError. Catch the mismatch here instead.
+if FLAGS.hyperons and not PAR.hyperon_coupling_map:
+    raise ValueError("FLAGS.hyperons=True needs "
+                     "Parametrization.from_dd2y_defaults(); the DD2 defaults "
+                     "carry no hyperon couplings")
+          # B^1/4 = 180 MeV, a = 0.2 fm^2, m_s = 150 MeV
 
 # ---- STRANGE / RESONANT HADRONIC MATTER -----------------------------------
 # To switch hyperons and Delta isobars on, replace the three settings above
@@ -159,7 +181,7 @@ T_LIST = [0.0, 0.1, 2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0]
 ETA_LIST = [0.0, 0.1, 0.3, 0.6, 1.0]
 
 # ---- what to run ----------------------------------------------------------
-TOV_ETAS = [0.0, 0.3, 1.0]      # TOV is beta-equilibrium, T = 0 only
+TOV_ETAS = [0.0, 0.1, 0.3, 0.6, 1.0]      # TOV is beta-equilibrium, T = 0 only
 
 print(f"n_sat = {N_SAT:.6f} fm^-3")
 print(f"n_B  : {NB[0]:.4f} .. {NB[-1]:.4f} fm^-3  ({len(NB)} points, "
@@ -172,6 +194,7 @@ print(f"mode : {MODE};  species: "
 print(f"vMIT : B^1/4={VMIT.B4} MeV, a={VMIT.a} fm^2, m_s={VMIT.m_s} MeV")
 print(f"\nNote: below ~0.5 n_sat and at low T, uniform matter sits inside the")
 print(f"liquid-gas spinodal and has no stable solution; those points are skipped.")
+
 
 # %% [markdown]
 # # Part II — tables
@@ -192,30 +215,55 @@ print(f"liquid-gas spinodal and has no stable solution; those points are skipped
 # expensive part starts.
 
 # %%
+def _columns(rows):
+    """A list of flat dicts to a {name: array} table."""
+    return {k: np.array([r[k] for r in rows], dtype=float) for k in rows[0]}
+
+
+def _hadronic_row(p):
+    """One pure-hadronic point, keyed the way `composition_row` keys a mixed
+    one, so the pure wings and the mixed window can be concatenated in Part III
+    without renaming anything. chi = 0: no quark matter present."""
+    row = dict(n_B=p.n_B, T=p.T, chi=0.0, P=p.P, eps=p.eps, s=p.s,
+               S_per_B=(p.s / p.n_B if p.n_B else 0.0), mu_B=p.mu_n,
+               Y_C=p.n_p / p.n_B, Y_S=0.0,
+               Y_e=p.n_e / p.n_B, **{"Y_mu-": p.n_mu / p.n_B})
+    for name, n in p.composition_map.items():
+        row[f"Y_{name}"] = n / p.n_B
+    return row
+
+
+def _quark_row(q):
+    """One pure-quark point, same keys. chi = 1: no hadronic matter left."""
+    return dict(n_B=q.n_B, T=q.T, chi=1.0, P=q.P_total, eps=q.e_total,
+                s=q.s_total, S_per_B=(q.s_total / q.n_B if q.n_B else 0.0),
+                mu_B=q.mu_B, Y_C=q.Y_C, Y_S=q.Y_S,
+                Y_u=q.Y_u, Y_d=q.Y_d, Y_s=q.Y_s, Y_e=q.Y_e)
+
+
 t0 = time.time()
 pure_hadronic = {}
 for T in T_LIST:
     pts = sweep_beta_eq_octet(PAR, NB, FLAGS, T=T, stop_at_boundary=True)
-    pure_hadronic[T] = dict(
-        n_B=np.array([p.n_B for p in pts]), P=np.array([p.P for p in pts]),
-        eps=np.array([p.eps for p in pts]), s=np.array([p.s for p in pts]))
+    if pts:
+        pure_hadronic[T] = _columns([_hadronic_row(p) for p in pts])
     print(f"  hadronic T={T:5.1f} MeV : {len(pts):3d}/{len(NB)} points", flush=True)
 print(f"pure hadronic: {time.time()-t0:.1f} s\n")
 
 t0 = time.time()
 pure_quark = {}
 for T in T_LIST:
-    nb, P, eps, s = [], [], [], []
+    rows = []
     for n in NB:
         try:
-            q = solve_vmit_beta_eq(float(n), T, params=VMIT)
+            rows.append(_quark_row(solve_vmit_beta_eq(float(n), T, params=VMIT)))
         except Exception:
             continue
-        nb.append(q.n_B); P.append(q.P_total); eps.append(q.e_total); s.append(q.s_total)
-    pure_quark[T] = dict(n_B=np.array(nb), P=np.array(P),
-                         eps=np.array(eps), s=np.array(s))
-    print(f"  quark    T={T:5.1f} MeV : {len(nb):3d}/{len(NB)} points", flush=True)
+    if rows:
+        pure_quark[T] = _columns(rows)
+    print(f"  quark    T={T:5.1f} MeV : {len(rows):3d}/{len(NB)} points", flush=True)
 print(f"pure quark: {time.time()-t0:.1f} s")
+
 
 # %% [markdown]
 # ## II.2 Mixed tables
@@ -288,8 +336,12 @@ for eta in TOV_ETAS:
 # %% [markdown]
 # # Part III — plots
 #
-# All plotting is defined here. The tables are re-read from disk, so this part can be
-# run on its own in a later session without redoing Part II.
+# All plotting is defined here. The mixed tables are re-read from disk, so Part II.2 need
+# not be repeated; the pure wings come from Part II.1, which is the cheap cell.
+#
+# Everything below plots the **complete equation of state** — pure hadronic, mixed, pure
+# quark — not the mixed window alone. `full_eos` does the joining.
+#
 
 # %%
 loaded = {}
@@ -298,6 +350,9 @@ for eta in ETA_LIST:
     if path.is_file():
         cols, meta, wins = load_table(path)
         loaded[eta] = cols
+        if not cols:
+            print(f"  eta={eta}: table is empty — no mixed point converged, so"
+                  f" the equation of state below is the pure hadronic branch")
 print("loaded eta values:", sorted(loaded))
 
 ETA_COLORS = plt.cm.viridis(np.linspace(0.0, 0.88, len(ETA_LIST)))
@@ -305,35 +360,88 @@ COLOR_OF = {eta: ETA_COLORS[i] for i, eta in enumerate(ETA_LIST)}
 
 
 def at_temperature(cols, T, tol=1e-6):
-    """Rows of one loaded table at a single temperature, sorted by density."""
+    """Rows of one loaded table at a single temperature, sorted by density.
+
+    An eta whose window held no converged point saves an empty table; that is a
+    legitimate outcome, not an error, so it comes back as no rows rather than
+    raising.
+    """
+    if "T" not in cols:
+        return {}
     m = np.abs(cols["T"] - T) < tol
     order = np.argsort(cols["n_B"][m])
-    return {k: v[m][order] for k, v in cols.items() if v.ndim == 1}
+    return {k: v[m][order] for k, v in cols.items()
+            if v.ndim == 1 and v.dtype.kind == "f"}
+
+
+def full_eos(eta, T):
+    """The complete equation of state at one (eta, T), as {name: array}.
+
+    Three segments joined on density: pure hadronic below the onset, the
+    eta-mixed phase through the window, pure quark above the offset. The
+    boundaries are read off the mixed table itself — it was built only between
+    the two chi crossings — so the segments meet by construction and nothing is
+    interpolated to close a gap. With no transition the mixed table is empty
+    and the result is pure hadronic throughout, which is the correct answer.
+
+    A column absent from a segment (a hadron fraction in the quark wing, say)
+    is filled with nan there, not zero, so a logarithmic plot ends the curve
+    instead of sending it to the floor.
+    """
+    mix = at_temperature(loaded[eta], T) if eta in loaded else {}
+    n_lo, n_hi = ((mix["n_B"].min(), mix["n_B"].max())
+                  if mix and mix["n_B"].size else (np.inf, np.inf))
+
+    segs = []
+    had, qk = pure_hadronic.get(T), pure_quark.get(T)
+    if had is not None:
+        segs.append({k: v[had["n_B"] < n_lo] for k, v in had.items()})
+    if mix and mix["n_B"].size:
+        segs.append(mix)
+    if qk is not None:
+        segs.append({k: v[qk["n_B"] > n_hi] for k, v in qk.items()})
+    segs = [s for s in segs if s["n_B"].size]
+    if not segs:
+        return {}
+
+    out = {}
+    for k in set().union(*(s.keys() for s in segs)):
+        out[k] = np.concatenate(
+            [s[k] if k in s else np.full(s["n_B"].size, np.nan) for s in segs])
+    order = np.argsort(out["n_B"])
+    return {k: v[order] for k, v in out.items()}
+
 
 
 # %% [markdown]
 # ## III.1 Pressure, entropy per baryon, and quark fraction vs density
 #
-# One panel each, at a chosen temperature, with one colour per η. The pure hadronic
-# branch is shown in grey for reference: the mixed curves leave it at the onset.
+# One panel each, at a chosen temperature, with one colour per η — the whole equation of
+# state, hadronic wing through mixed window through quark wing. The χ panel says which
+# segment you are looking at: flat at 0 is hadronic, rising is mixed, flat at 1 is quark.
+# The two pure branches are drawn dotted in grey underneath, continued past the
+# transition where they are metastable, so the gain from the transition is visible.
+#
 
 # %%
 T_SHOW = 0.0
 
 fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
 for eta in sorted(loaded):
-    d = at_temperature(loaded[eta], T_SHOW)
-    if not len(d["n_B"]):
+    d = full_eos(eta, T_SHOW)
+    if not d:
         continue
     c = COLOR_OF[eta]
     axes[0].plot(d["n_B"], d["P"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
     axes[1].plot(d["n_B"], d["S_per_B"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
     axes[2].plot(d["n_B"], d["chi"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
 
-ph = pure_hadronic.get(T_SHOW)
-if ph is not None and len(ph["n_B"]):
-    axes[0].plot(ph["n_B"], ph["P"], ":", lw=1.4, color="0.45", label="pure hadronic")
-    axes[1].plot(ph["n_B"], ph["s"] / ph["n_B"], ":", lw=1.4, color="0.45")
+for pure, lab in ((pure_hadronic.get(T_SHOW), "pure hadronic"),
+                  (pure_quark.get(T_SHOW), "pure quark")):
+    if pure is None or not pure["n_B"].size:
+        continue
+    axes[0].plot(pure["n_B"], pure["P"], ":", lw=1.4, color="0.45", label=lab)
+    axes[1].plot(pure["n_B"], pure["S_per_B"], ":", lw=1.4, color="0.45")
 
 axes[0].set_ylabel(r"$P$  [MeV fm$^{-3}$]")
 axes[1].set_ylabel(r"$S = s/n_B$  [$k_B$ / baryon]")
@@ -349,6 +457,7 @@ fig.suptitle(rf"DD2+vMIT, {MODE}, $T = {T_SHOW:g}$ MeV", y=1.02)
 fig.tight_layout()
 plt.show()
 
+
 # %% [markdown]
 # Reading the middle panel: at T = 0 the entropy is identically zero, so run the cell
 # again with `T_SHOW` set to one of the finite temperatures in `T_LIST` to see it.
@@ -358,8 +467,8 @@ T_SHOW_HOT = 20.0
 
 fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
 for eta in sorted(loaded):
-    d = at_temperature(loaded[eta], T_SHOW_HOT)
-    if not len(d["n_B"]):
+    d = full_eos(eta, T_SHOW_HOT)
+    if not d:
         continue
     c = COLOR_OF[eta]
     axes[0].plot(d["n_B"], d["P"], "-", lw=2, color=c, label=rf"$\eta={eta}$")
@@ -376,6 +485,7 @@ for ax in axes:
 fig.suptitle(rf"DD2+vMIT, {MODE}, $T = {T_SHOW_HOT:g}$ MeV", y=1.02)
 fig.tight_layout()
 plt.show()
+
 
 # %% [markdown]
 # ## III.2 Phase boundaries in the (n_B, T) plane
@@ -445,15 +555,18 @@ plt.show()
 # ## III.4 Composition through the transition
 #
 # Volume-weighted fractions Y_i = w n_i / n_B, with w = 1−χ for hadrons and w = χ for
-# quarks, so the curves sum consistently across the mixed phase. Hadrons solid,
-# quarks dashed.
+# quarks, so the curves sum consistently across the mixed phase. Hadrons solid, quarks
+# dashed. Shown across the whole density range: hadrons start at their pure values, hand
+# over through the window, and are gone above the offset, where the quarks reach their
+# pure ones. The shading marks the mixed window.
+#
 
 # %%
 ETA_COMP = 0.0
 T_COMP = 0.0
 Y_FLOOR = 1e-3
 
-d = at_temperature(loaded[ETA_COMP], T_COMP)
+d = full_eos(ETA_COMP, T_COMP)
 quarks = {"u", "d", "s"}
 species = sorted(k[2:] for k in d
                  if k.startswith("Y_") and k not in ("Y_C", "Y_S"))
@@ -464,6 +577,11 @@ for sp in species:
     if not np.isfinite(y).any() or np.nanmax(y) < Y_FLOOR:
         continue
     ax.plot(d["n_B"], y, "--" if sp in quarks else "-", lw=1.8, label=sp)
+
+mixed = (d["chi"] > 0.0) & (d["chi"] < 1.0)
+if mixed.any():
+    ax.axvspan(d["n_B"][mixed].min(), d["n_B"][mixed].max(),
+               color="0.85", zorder=0, label="mixed")
 ax.set_yscale("log")
 ax.set_ylim(Y_FLOOR, 2.0)
 ax.set_xlabel(r"$n_B$  [fm$^{-3}$]")
@@ -473,3 +591,4 @@ ax.grid(alpha=0.3, which="both")
 ax.legend(ncol=3, fontsize=8)
 fig.tight_layout()
 plt.show()
+

@@ -135,12 +135,24 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
 def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                       crust="BPS", n_transition=0.08, n_ec=160,
                       e_c_min=150.0, e_c_max=3000.0, compute_tidal=True,
-                      backend="scipy", table=None):
+                      backend="fast", table=None, tov_parallel=True):
     """Build the core EoS and run the TOV sequence, giving M(R) and Lambda(M).
 
     A BPS crust is attached below `n_transition`. The Maxwell tidal correction
     across a density discontinuity is applied automatically when the table
     carries a plateau, so it needs no flag here.
+
+    This is a convenience wrapper, not a separate TOV implementation: the
+    integration is `eos.tov`'s, and the equation of state reaches it through
+    `MixedEoSTable.to_tov()`, which is the contract to use directly when you
+    want to drive `eos.tov` yourself.
+
+    backend       : 'fast' (default) is the Numba solver; 'scipy' is the
+                    readable reference it is validated against. They agree to
+                    ~1e-4 Msun on M_max at both eta=0 and eta=1 — see
+                    test/mixed/test_tov_backend_parity.py.
+    tov_parallel  : fast backend only; set False when this call is already
+                    inside a parallel map over equations of state.
 
     Returns a dict with M_max, R at M_max, R(1.4 Msun), the central energy
     density at M_max, the raw TOV `results` array, and the `table` used. Pass
@@ -161,7 +173,7 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         table.to_tov(), e_c_vec, add_crust_table=crust, add_crust_mode="attach",
         n_transition=(n_transition if crust != "No" else None),
         compute_baryonic_mass=False, compute_tidal=compute_tidal,
-        verbose=False, backend=backend,
+        verbose=False, backend=backend, tov_parallel=tov_parallel,
 )
     idx_max, e_c_max, M_max = find_mmax_precise(results)
     M = results[:idx_max + 1, 4]

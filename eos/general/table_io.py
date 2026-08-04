@@ -1,16 +1,17 @@
 """
-mixed/tables/io.py
-==================
+general/table_io.py
+===================
 Reading and writing generated EoS tables.
 
-*Public API* (re-exported from `eos.mixed`): `save_table`, `load_table`,
-`export_csv`.
+*Public API* (re-exported from both `eos.dd2` and `eos.mixed`): `save_table`,
+`load_table`, `export_csv`.
 
-A table is a list of dicts (the long format `build_mixed_table` returns) plus
-metadata describing how it was made. HDF5 is the working format: one dataset
-per column, metadata in file attributes. That keeps large multi-axis grids
-compact and lets a Bayesian pipeline memory-map a single column without reading
-the rest.
+Engine-neutral: nothing here knows about hadrons, quarks or mixed phases. A
+table is a list of dicts — the long format that `eos.dd2.build_table(rows=True)`
+and `eos.mixed.build_mixed_table` both return — plus metadata describing how it
+was made. HDF5 is the working format: one dataset per column, metadata in file
+attributes. That keeps large multi-axis grids compact and lets a Bayesian
+pipeline memory-map a single column without reading the rest.
 
 `export_csv` writes the same rows as plain text with a commented header, for
 sharing with tools that do not read HDF5.
@@ -128,9 +129,9 @@ def load_table(path):
         for name in grp:
             arr = grp[name][()]
             if arr.dtype.kind == "S":
-                arr = np.array([b.decode for b in arr])
+                arr = np.array([b.decode() for b in arr])
             columns[name] = arr
-        meta = {k: (v.decode if isinstance(v, bytes) else v)
+        meta = {k: (v.decode() if isinstance(v, bytes) else v)
                 for k, v in f.attrs.items()}
         windows = {}
         if "windows" in f:

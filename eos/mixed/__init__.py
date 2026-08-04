@@ -75,7 +75,7 @@ from eos.mixed.tables.generate import (
 from eos.mixed.tables.core_eos import (
     MixedEoSTable, build_mixed_eos_table, mass_radius_mixed,
 )
-from eos.mixed.tables.io import save_table, load_table, export_csv
+from eos.general.table_io import save_table, load_table, export_csv
 
 __all__ = [
     # modes
