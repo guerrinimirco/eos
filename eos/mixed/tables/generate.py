@@ -180,6 +180,39 @@ class MixedTableSpec:
                              f"{list(MODE_FRACTIONS)}")
 
 
+def _locate_chained(spec, nB, cs, vp, T, hint):
+    """`locate_window`, told where the previous temperature found the window.
+
+    A search over the whole density grid spreads its dozen probes across a
+    range that is almost all pure phase, and the few that land inside the
+    window take steps far larger than the mixed solve can follow. At low
+    temperature the refinement recovers from that; by T ~ 80 MeV, where the
+    window has moved down to a few tenths of fm^-3 and narrowed, it does not,
+    and the boundary search fails outright on scattered temperatures. Since the
+    boundaries move smoothly with T, the temperature just solved says where to
+    look, and concentrating the probes there both finds the window and costs
+    several times less.
+
+    The hint is discarded and the full-grid search repeated when it finds
+    nothing, or when a boundary lands on the edge of the hinted range: that
+    means the window has moved out from under the hint, and the number would be
+    the edge of the search box rather than a phase boundary. So a window that
+    genuinely disappears is still reported as gone, and one that jumps is still
+    found -- the hint is an accelerator, never the source of the answer.
+    """
+    kw = dict(vmit_params=vp, T=T, analytic_jac=spec.analytic_jac)
+    if hint is not None:
+        lo, hi = hint
+        pad = max(0.15, hi - lo)          # generous: the docstring's advice
+        edge = 0.5 * float(np.min(np.diff(np.sort(nB))))
+        window = locate_window(spec.par, spec.flags, nB, spec.eta, cs,
+                               hint=(lo - pad, hi + pad), **kw)
+        if (window.exists and window.n_onset > lo - pad + edge
+                and window.n_offset < hi + pad - edge):
+            return window
+    return locate_window(spec.par, spec.flags, nB, spec.eta, cs, **kw)
+
+
 def build_mixed_table(spec, progress=None):
     """Solve a `MixedTableSpec` over the product of its temperature and
     fraction axes, warm-started along n_B within each combination.
@@ -209,6 +242,7 @@ def build_mixed_table(spec, progress=None):
         vp = get_vmit_default()
 
     rows, windows = [], {}
+    hint_of = {}                  # last located window, per fraction combo
     for tv in temp_vals:
         for combo in product(*frac_grids) if frac_grids else [()]:
             t0 = time.time()
@@ -226,10 +260,10 @@ def build_mixed_table(spec, progress=None):
                                             float(tv), spec.eta, cs, vp)
                 window = None
             elif spec.window_only:
-                window = locate_window(spec.par, spec.flags, nB, spec.eta, cs,
-                                       vmit_params=vp, T=float(tv),
-                                       analytic_jac=spec.analytic_jac)
+                window = _locate_chained(spec, nB, cs, vp, float(tv),
+                                         hint_of.get(combo))
                 if window.exists:
+                    hint_of[combo] = (window.n_onset, window.n_offset)
                     inside = nB[(nB >= window.n_onset) & (nB <= window.n_offset)]
                     results = sweep_mixed(spec.par, spec.flags, inside,
                                           spec.eta, cs, vmit_params=vp,

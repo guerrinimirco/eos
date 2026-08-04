@@ -106,6 +106,9 @@ from eos.dd2.solver import sweep_beta_eq_octet
 from eos.vmit.parameters import get_vmit_default, get_vmit_custom
 from eos.vmit.eos import solve_vmit_beta_eq
 from eos.tov.solver import find_mmax_precise
+from eos.tov.rotating import (kepler_sequence, rotating_grid,
+                              GRID_COLUMNS, KEPLER_COLUMNS)
+from eos.tov.rns_backend import have_rns
 from eos.mixed import (
     beta_eq_neutrinoless,
     MixedTableSpec, build_mixed_table, build_mixed_eos_table,
@@ -240,7 +243,7 @@ NB = np.linspace(0.1 * N_SAT, 12.0 * N_SAT, 300)      # baryon density [fm^-3]
 # T_LIST x ETA_LIST is what Part II.2 costs: one window search plus one window
 # sweep per pair. The 12 x 5 default is a full production run (minutes); for a
 # first look cut T_LIST to [0.0, 10.0, 30.0] and ETA_LIST to [0.0, 1.0].
-T_LIST = [0.0, 0.1, 2.5, 5.0, 7.5, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0]
+T_LIST = np.concatenate([[0, 0.1], np.arange(2, 101., 2)])  # MeV
 ETA_LIST = [0.0, 0.1, 0.3, 0.6, 1.0]
 
 # ---- what to run ----------------------------------------------------------
@@ -253,6 +256,17 @@ SCAN_B4 = [150.0, 160.0, 170.0, 180.0, 190.0]     # MeV
 SCAN_A = [0.05, 0.10, 0.15, 0.20]                 # fm^2 (>= 0.25 has no window)
 SCAN_GRID = np.linspace(0.05, 1.6, 120)           # coarser than NB: a probe
 SCAN_TOV = True                                   # also record M_max, R_1.4
+
+# ---- rotation (III.7) -----------------------------------------------------
+# Uniformly rotating models, computed by RNS through eos.tov.rotating. One
+# axis-ratio scan per central density answers every J and every frequency at
+# once, so the cost is ROT_N_SCAN solver runs per (eta, n_B_c) and is set by
+# ROT_N_SCAN x len(ROT_NB_C), not by how many isolines you ask for.
+ROT_NB_C = np.linspace(0.4, 1.6, 13)      # central baryon density [fm^-3]
+ROT_J = [0.5, 1.0, 1.5, 2.0]              # angular momentum, cJ/(G M_sun^2)
+ROT_FREQ = [300.0, 600.0, 900.0, 1200.0]  # spin frequency [Hz]
+ROT_ETA_SHOW = 0.0                        # eta for the two isoline panels
+ROT_N_SCAN = 14                           # axis ratios per central density
 
 # The hyperon couplings live in DD2Y and nowhere else — DD2 has no entry for
 # Lambda — so `hyperons=True` on `from_dd2_defaults()` fails deep in the
@@ -618,7 +632,9 @@ for eta in TOV_ETAS:
                                  vmit_params=VMIT, T=0.0)
     res = mass_radius_mixed(PAR, FLAGS, NB, eta, beta_eq_neutrinoless(),
                             vmit_params=VMIT, T=0.0, table=core, n_ec=120)
-    tov[eta] = res
+    # Keep the stitched table: III.7 rotates *this* equation of state, and
+    # rebuilding it there would risk rotating something subtly different.
+    tov[eta] = dict(res, core=core)
     trans = (f"onset {core.n_onset:.3f} offset {core.n_offset:.3f} fm^-3"
              if core.has_transition else "no transition")
     print(f"eta={eta}: {trans} | M_max={res['M_max']:.3f} Msun "
@@ -1060,3 +1076,181 @@ ax.legend(ncol=3, fontsize=8, frameon=False)
 fig.tight_layout()
 plt.show()
 
+
+# %% [markdown]
+# ## III.7 Rotation — constant-J and constant-frequency sequences
+#
+# Uniformly rotating, axisymmetric models of the *same* stitched equations of state
+# Part II.3 integrated, computed with the Komatsu–Eriguchi–Hachisu self-consistent
+# field method as implemented in RNS (Stergioulas & Friedman 1995, ApJ 444, 306),
+# driven through `eos.tov.rotating`.
+#
+# **Read this before trusting a number.** `rotating_grid` never asks the solver for a
+# physical target directly. It scans the axis ratio r_p/r_e — where every model
+# converges — and inverts the resulting curve in Python, because M, M_0, Ω and J are
+# all monotone in r_p/r_e at fixed central density. Two consequences:
+#
+# * one scan answers every J *and* every frequency, so adding isolines is free and
+#   the cost is set by `ROT_N_SCAN` × `len(ROT_NB_C)` alone;
+# * the values on the isolines are **interpolated between converged models**, not
+#   themselves converged models. Call `rotating_model` for a point that has to be
+#   exact.
+#
+# A target beyond the Keplerian limit of its central density comes back as NaN rather
+# than an error, which is why the high-frequency isolines simply stop at low n_B,c —
+# those stars cannot spin that fast without shedding mass at the equator.
+#
+# The shaded band marks central densities where the star has a **mixed core**: n_B,c
+# between the onset and the offset. Note that the shading is in *central* density, so
+# a star to the right of the band has a pure quark core, not no quark core.
+
+# %%
+rot_kepler, rot_iso = {}, {}
+
+if not have_rns():
+    print("No `rns` executable found — III.7 skipped.\n"
+          "eos.tov.rns_backend.find_rns_binary() looks on PATH and at the usual\n"
+          "build locations; point it at your build or pass rns_path= to run it.")
+else:
+    for eta in TOV_ETAS:
+        t0 = time.time()
+        core = tov[eta]["core"]
+        eos_rot = core.to_tov()
+        # The solver is parametrised by central ENERGY density; the figures want
+        # central BARYON density, so map across on the table that produced both.
+        e_c = np.interp(ROT_NB_C, core.n_B, core.eps)
+        rot_kepler[eta] = kepler_sequence(eos_rot, e_c, parallel=True)
+
+        extra = ""
+        if eta == ROT_ETA_SHOW:
+            # Only the displayed eta needs the isolines; every eta needs its
+            # Keplerian limit for the ratio panel below.
+            rot_iso["J"] = rotating_grid(eos_rot, e_c, J_grid=ROT_J,
+                                         n_scan=ROT_N_SCAN, parallel=True)
+            rot_iso["freq"] = rotating_grid(eos_rot, e_c, freq_grid=ROT_FREQ,
+                                            n_scan=ROT_N_SCAN, parallel=True)
+            extra = (f"  (+{len(ROT_J)} J and {len(ROT_FREQ)} frequency "
+                     f"sequences)")
+
+        M_kep = np.nanmax(rot_kepler[eta][:, KEPLER_COLUMNS.index("M")])
+        f_kep = np.nanmax(rot_kepler[eta][:, KEPLER_COLUMNS.index("freq")])
+        print(f"eta={eta}: M_max^Kepler={M_kep:.3f} Msun  "
+              f"M_max^TOV={tov[eta]['M_max']:.3f} Msun  "
+              f"ratio={M_kep / tov[eta]['M_max']:.3f}  "
+              f"f_K(max)={f_kep:.0f} Hz | {time.time() - t0:.1f} s{extra}",
+              flush=True)
+
+# %%
+if rot_iso:
+    ICOL = {c: k for k, c in enumerate(GRID_COLUMNS)}
+    KCOL = {c: k for k, c in enumerate(KEPLER_COLUMNS)}
+    core = tov[ROT_ETA_SHOW]["core"]
+    static = tov[ROT_ETA_SHOW]["results"]      # columns e_c, n_c, P_c, R, M, ...
+    kep = rot_kepler[ROT_ETA_SHOW]
+
+    fig, axes = setup_scientific_figure(nrows=1, ncols=2, figsize=(12.8, 5.2),
+                                        sharey=True)
+    panels = (("J", ROT_J, lambda v: rf"$cJ/GM_\odot^2 = {v:g}$",
+               "constant angular momentum"),
+              ("freq", ROT_FREQ, lambda v: rf"$f = {v:g}$ Hz",
+               "constant frequency"))
+
+    for ax, (key, targets, label_of, title) in zip(axes, panels):
+        # rotating_grid stacks one block of targets per central density.
+        grid = rot_iso[key].reshape(len(ROT_NB_C), len(targets), -1)
+
+        if core.has_transition:
+            ax.axvspan(core.n_onset, core.n_offset,
+                       color=STANDARD_COLORS["Gray"], alpha=0.15, zorder=0,
+                       label="mixed core")
+        # The static and Keplerian curves bound the whole rotating family.
+        ax.plot(static[:, 1], static[:, 4], color="black", lw=1.8, zorder=5,
+                label=r"static ($J=0$)")
+        ax.plot(ROT_NB_C, kep[:, KCOL["M"]], color=STANDARD_COLORS["Gray"],
+                lw=1.8, ls="--", zorder=5, label="Kepler limit")
+
+        # J and f are continuous, so a sequential map rather than categorical.
+        shades = plt.cm.viridis(np.linspace(0.12, 0.86, len(targets)))
+        for k, value in enumerate(targets):
+            M = grid[:, k, ICOL["M"]]
+            good = np.isfinite(M)
+            if good.any():
+                ax.plot(ROT_NB_C[good], M[good], "-o", ms=3.5, lw=1.5,
+                        color=shades[k], zorder=4, label=label_of(value))
+
+        ax.set_xlabel(LABELS["nB"] + r"  (central)")
+        ax.set_title(title)
+        apply_style(ax)
+        ax.legend(fontsize=8.5, frameon=False, loc="lower right")
+
+    axes[0].set_ylabel(r"$M\ [M_\odot]$")
+    add_panel_labels(axes)
+    fig.suptitle(rf"Rotating hybrid stars, $\eta = {ROT_ETA_SHOW:g}$", y=1.01)
+    fig.tight_layout()
+    plt.show()
+
+# %% [markdown]
+# ### M_max at the Kepler limit, against the static value
+#
+# The left panel is the quantity of interest: how much extra mass uniform rotation
+# supports. For nucleonic and hyperonic equations of state this ratio is famously
+# insensitive to the microphysics — Breu & Rezzolla (2016, MNRAS 459, 646) find
+# 1.203 ± 0.022 across a wide set of tables, and that band is drawn for reference.
+#
+# **The ratio comes out flat in η, and that is not the plot failing to do anything.**
+# η is a phase-construction parameter, not a stiffness parameter: it reshapes the
+# equation of state *inside* the window and nowhere else. The maximum-mass
+# configuration sits at a central density above the offset, where every η is pure
+# quark matter and the tables coincide exactly — so M_max is set by a branch η never
+# touches. The η=0 and η=1 tables here differ by up to 30 MeV/fm³ in pressure and
+# still give Keplerian maxima within 0.005 M_sun of each other, while the *shape* of
+# the M(n_B,c) curve at intermediate densities does differ between them.
+#
+# `M_max^Kepler` is a maximum over the `ROT_NB_C` grid, so it is resolved only as well
+# as that grid is — the curve is flat near its peak, which helps, but a number that
+# has to be exact wants a finer grid or a `rotating_model` call.
+
+# %%
+if rot_kepler:
+    etas = sorted(rot_kepler)
+    M_kep = np.array([np.nanmax(rot_kepler[e][:, KEPLER_COLUMNS.index("M")])
+                      for e in etas])
+    M_tov = np.array([tov[e]["M_max"] for e in etas])
+
+    fig, axes = setup_scientific_figure(nrows=1, ncols=2, figsize=(12.0, 4.8))
+
+    axes[0].axhspan(1.203 - 0.022, 1.203 + 0.022, color=STANDARD_COLORS["Gray"],
+                    alpha=0.25, zorder=0, label="Breu & Rezzolla (2016)")
+    axes[0].axhline(1.203, color=STANDARD_COLORS["Gray"], ls="--", lw=1.3,
+                    zorder=1)
+    for k, eta in enumerate(etas):
+        axes[0].plot(eta, M_kep[k] / M_tov[k], "o", ms=8, zorder=4,
+                     color=COLOR_OF.get(eta, STANDARD_COLORS["Gray"]))
+    axes[0].plot(etas, M_kep / M_tov, "-", lw=1.4, zorder=3, color="black",
+                 label="this model")
+    axes[0].set_ylabel(r"$M_{\max}^{\rm Kepler} / M_{\max}^{\rm TOV}$")
+    # Pinned wider than the reference band: the model values span ~0.001, so on
+    # autoscale the band would fill the frame and stop reading as a band.
+    axes[0].set_ylim(1.15, 1.26)
+    axes[0].legend(fontsize=9, frameon=False, loc="lower right")
+
+    axes[1].plot(etas, M_kep, "-o", ms=6, color=STANDARD_COLORS["Blue"],
+                 label=r"$M_{\max}^{\rm Kepler}$")
+    axes[1].plot(etas, M_tov, "-s", ms=6, color=STANDARD_COLORS["Orange"],
+                 label=r"$M_{\max}^{\rm TOV}$")
+    axes[1].axhline(2.0, color=STANDARD_COLORS["Gray"], ls=":", lw=1.3,
+                    label=r"$2\,M_\odot$")
+    axes[1].set_ylabel(r"$M_{\max}\ [M_\odot]$")
+    axes[1].legend(fontsize=9, frameon=False)
+
+    for ax in axes:
+        ax.set_xlabel(r"$\eta$")
+        apply_style(ax)
+    add_panel_labels(axes)
+    fig.tight_layout()
+    plt.show()
+
+    print(f"{'eta':>5} {'M_TOV':>8} {'M_Kepler':>9} {'ratio':>7}")
+    for k, eta in enumerate(etas):
+        print(f"{eta:5.2f} {M_tov[k]:8.3f} {M_kep[k]:9.3f} "
+              f"{M_kep[k] / M_tov[k]:7.3f}")

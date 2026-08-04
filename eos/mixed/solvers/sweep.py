@@ -68,7 +68,7 @@ def seed_across_eta(result, spec, eta, flags=None):
 
 def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                 max_bisect=6, x0=None, analytic_jac=False,
-                mixed_only=False):
+                mixed_only=False, nH0=None):
     """Warm-started sweep over `n_B_grid` at fixed eta.
 
     Returns a list of `MixedResult` in grid order. Each solved point seeds the
@@ -76,6 +76,10 @@ def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     that still fails is skipped, leaving a hole rather than aborting the sweep.
 
     `x0` seeds the first point (otherwise the physical cold start is used).
+    `nH0` seeds that first point's *hadronic phase* density; see `solve_from`
+    below for why the total density is the wrong guess once chi is appreciable.
+    Pass it whenever `x0` comes from a solved point deep inside the window,
+    otherwise the first step re-derives that point from a guess known to stall.
     `mixed_only=True` keeps only the points genuinely inside the window.
     """
     slots = mixed_slots(spec, eta, flags)
@@ -101,7 +105,7 @@ def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
             return step(n_mid, n_target, _as_x0(p_mid, slots),
                         p_mid.th_H.n_B, depth + 1)
 
-    out, seed, n_prev, nH = [], x0, None, None
+    out, seed, n_prev, nH = [], x0, None, nH0
     for n_B in n_B_grid:
         try:
             p = step(n_prev, float(n_B), seed, nH, 0)
@@ -140,23 +144,6 @@ class MixedWindow:
         return self.exists and self.n_onset <= n_B <= self.n_offset
 
 
-def _chi_at(par, flags, n_B, eta, spec, vmit_params, T, seed, analytic_jac,
-            nH=None):
-    """One probe solve, or None if the mixed system will not converge there.
-
-    `nH` seeds the hadronic phase's internal solve at that phase's own density
-    (see `sweep_mixed`); without it, probes deep in the window seed the phase
-    at the total density and stall.
-    """
-    try:
-        return solve_mixed(par, flags, float(n_B), eta, spec,
-                           vmit_params=vmit_params, T=T, x0=seed,
-                           n_B_guess=(nH if nH is not None else n_B),
-                           check_consistency=False, analytic_jac=analytic_jac)
-    except RuntimeError:
-        return None
-
-
 def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                   n_probe=12, tol=None, analytic_jac=False, x0=None,
                   hint=None, max_refine=2):
@@ -186,17 +173,24 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     slots = mixed_slots(spec, eta, flags)
 
     def scan(lo, hi, count):
-        """Solve at `count` densities across [lo, hi], warm-started along the way."""
-        out, seed, nH = [], x0, None
-        for n in np.unique(np.linspace(lo, hi, count)):
-            r = _chi_at(par, flags, n, eta, spec, vmit_params, T, seed,
-                        analytic_jac, nH)
-            if r is None:
-                seed, nH = None, None         # reset the warm start past a gap
-                continue
-            out.append(r)
-            seed, nH = _as_x0(r, slots), r.th_H.n_B
-        return out
+        """Solve at `count` densities across [lo, hi], warm-started along the way.
+
+        Delegates to `sweep_mixed` so the probes get the same continuation a
+        table sweep gets: a step that misses is bisected rather than dropped,
+        and the warm start survives a point that is skipped anyway.
+
+        That matters more here than it looks. The probe spacing is the whole
+        grid divided by `n_probe`, which is a far bigger step than any table
+        sweep takes, and a step that large inside the window regularly misses.
+        Dropping those points loses every probe above the first failure, so the
+        chi >= 1 side of the transition is never seen, the refinement below
+        concludes there is no transition, and the offset falls through to the
+        last probe that happened to converge -- a boundary that then jumps
+        around from one temperature to the next.
+        """
+        return sweep_mixed(par, flags, np.unique(np.linspace(lo, hi, count)),
+                           eta, spec, vmit_params=vmit_params, T=T, x0=x0,
+                           analytic_jac=analytic_jac)
 
     lo, hi = (float(grid[0]), float(grid[-1])) if hint is None else (
         max(float(grid[0]), float(hint[0])), min(float(grid[-1]), float(hint[1])))
@@ -222,14 +216,32 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         return MixedWindow(np.nan, np.nan, [])
 
     def bisect(target, lo, hi):
-        """Density at which chi crosses `target`, bracketed by (lo, hi)."""
+        """Density at which chi crosses `target`, bracketed by (lo, hi).
+
+        Each midpoint is reached by continuation from the low end of the
+        bracket, not by a lone solve. The starting bracket is a full coarse
+        probe spacing wide -- a tenth of the grid -- and a single solve across
+        a gap that size misses often, especially deep in the window.
+
+        A midpoint that still will not converge returns nan rather than the
+        current bracket midpoint. Accepting the midpoint looks like a graceful
+        degradation and is not: it reports a boundary up to half a probe
+        spacing wrong *as if it had converged*, and since the error depends on
+        where the probes happened to land it moves unpredictably from one
+        temperature to the next. nan says the crossing was bracketed but not
+        located, which is what actually happened.
+        """
         r_lo, r_hi = lo, hi
         while (r_hi.n_B - r_lo.n_B) > tol:
             n_mid = 0.5 * (r_lo.n_B + r_hi.n_B)
-            r = _chi_at(par, flags, n_mid, eta, spec, vmit_params, T,
-                        _as_x0(r_lo, slots), analytic_jac, r_lo.th_H.n_B)
-            if r is None:
-                break                          # cannot refine further; accept
+            stepped = sweep_mixed(par, flags, [r_lo.n_B, n_mid], eta, spec,
+                                  vmit_params=vmit_params, T=T,
+                                  x0=_as_x0(r_lo, slots),
+                                  nH0=r_lo.th_H.n_B,
+                                  analytic_jac=analytic_jac)
+            if not stepped or abs(stepped[-1].n_B - n_mid) > 1e-12:
+                return np.nan
+            r = stepped[-1]
             probes.append(r)
             if (r.chi - target) * (r_lo.chi - target) > 0.0:
                 r_lo = r
@@ -259,11 +271,28 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     # A crossing may be missing because the grid begins or ends inside the
     # window rather than because there is no transition; fall back to the
     # extent of the probes that actually came out mixed.
+    #
+    # Only when the probes reached that end of the range, though. If the solves
+    # stopped converging partway up, the last mixed probe is where the SOLVER
+    # gave up, not where the phase boundary is, and returning it turns a
+    # convergence failure into a confident wrong number -- one that moves with
+    # the probe spacing and so wanders from one temperature to the next. nan
+    # here means `exists` is False and the caller reports no window, which is
+    # the honest answer when the boundary was never bracketed.
     mixed = sorted(r.n_B for r in probes if r.in_mixed_phase)
-    if not np.isfinite(n_onset) and mixed:
-        n_onset = mixed[0]
-    if not np.isfinite(n_offset) and mixed:
-        n_offset = mixed[-1]
+    if mixed:
+        reached = sorted(r.n_B for r in probes)
+        # "The grid ended inside the window" means two things at once: the
+        # probes got to that end of the range, AND that side of the transition
+        # was never seen. If a chi >= 1 probe exists, the offset was bracketed
+        # and merely failed to refine, and the last mixed probe is nowhere near
+        # it -- so the fallback must not fire.
+        if (not np.isfinite(n_onset) and reached[0] <= lo + tol
+                and not any(r.chi <= 0.0 for r in probes)):
+            n_onset = mixed[0]
+        if (not np.isfinite(n_offset) and reached[-1] >= hi - tol
+                and not any(r.chi >= 1.0 for r in probes)):
+            n_offset = mixed[-1]
     return MixedWindow(float(n_onset), float(n_offset), probes)
 
 
