@@ -85,7 +85,7 @@ except ImportError:      # not inside a clone (Colab, say) — fetch the package
 import numpy as np
 import matplotlib.pyplot as plt
 
-from eos.dd2 import Parametrization, SpeciesFlags
+from eos.dd2 import Parametrization, SpeciesFlags, hadronic_row
 from eos.dd2.solver import sweep_beta_eq_octet
 from eos.vmit.parameters import get_vmit_default, get_vmit_custom
 from eos.vmit.eos import solve_vmit_beta_eq
@@ -216,25 +216,19 @@ print(f"liquid-gas spinodal and has no stable solution; those points are skipped
 
 # %%
 def _columns(rows):
-    """A list of flat dicts to a {name: array} table."""
-    return {k: np.array([r[k] for r in rows], dtype=float) for k in rows[0]}
+    """A list of flat dicts to a {name: array} table.
 
-
-def _hadronic_row(p):
-    """One pure-hadronic point, keyed the way `composition_row` keys a mixed
-    one, so the pure wings and the mixed window can be concatenated in Part III
-    without renaming anything. chi = 0: no quark matter present."""
-    row = dict(n_B=p.n_B, T=p.T, chi=0.0, P=p.P, eps=p.eps, s=p.s,
-               S_per_B=(p.s / p.n_B if p.n_B else 0.0), mu_B=p.mu_n,
-               Y_C=p.n_p / p.n_B, Y_S=0.0,
-               Y_e=p.n_e / p.n_B, **{"Y_mu-": p.n_mu / p.n_B})
-    for name, n in p.composition_map.items():
-        row[f"Y_{name}"] = n / p.n_B
-    return row
+    The string label columns (`phase`) are dropped: everything below plots or
+    slices numerically, and carrying them would only force a dtype check at
+    every use.
+    """
+    return {k: np.array([r[k] for r in rows], dtype=float) for k in rows[0]
+            if not isinstance(rows[0][k], str)}
 
 
 def _quark_row(q):
-    """One pure-quark point, same keys. chi = 1: no hadronic matter left."""
+    """One pure-quark point, keyed like `hadronic_row` / `composition_row`.
+    chi = 1: no hadronic matter left."""
     return dict(n_B=q.n_B, T=q.T, chi=1.0, P=q.P_total, eps=q.e_total,
                 s=q.s_total, S_per_B=(q.s_total / q.n_B if q.n_B else 0.0),
                 mu_B=q.mu_B, Y_C=q.Y_C, Y_S=q.Y_S,
@@ -246,7 +240,12 @@ pure_hadronic = {}
 for T in T_LIST:
     pts = sweep_beta_eq_octet(PAR, NB, FLAGS, T=T, stop_at_boundary=True)
     if pts:
-        pure_hadronic[T] = _columns([_hadronic_row(p) for p in pts])
+        # `hadronic_row` keys a pure-hadronic point exactly the way
+        # `composition_row` keys a mixed one, so the wings and the window
+        # concatenate in Part III without renaming anything. It also sums Y_C
+        # and Y_S over every active baryon, which matters the moment hyperons
+        # are switched on.
+        pure_hadronic[T] = _columns([hadronic_row(p, FLAGS) for p in pts])
     print(f"  hadronic T={T:5.1f} MeV : {len(pts):3d}/{len(NB)} points", flush=True)
 print(f"pure hadronic: {time.time()-t0:.1f} s\n")
 

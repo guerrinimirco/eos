@@ -77,6 +77,11 @@ from eos.mixed.tables.core_eos import (
 )
 from eos.general.table_io import save_table, load_table, export_csv
 
+# --- where in parameter space a hybrid equation of state exists -------------
+from eos.mixed.scan import (
+    scan_parameters, scan_point, grid_samples, NMP_KEYS, VMIT_KEYS,
+)
+
 __all__ = [
     # modes
     "beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
@@ -95,4 +100,6 @@ __all__ = [
     "MixedTableSpec", "build_mixed_table", "composition_row",
     "MixedEoSTable", "build_mixed_eos_table", "mass_radius_mixed",
     "save_table", "load_table", "export_csv",
+    # parameter-space scan
+    "scan_parameters", "scan_point", "grid_samples", "NMP_KEYS", "VMIT_KEYS",
 ]

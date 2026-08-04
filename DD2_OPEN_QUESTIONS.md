@@ -211,6 +211,34 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
   equilibrium Jacobian. Straightforward once M9's derivative engine exists (or via
   finite-difference in `eos_ref`).
 
+### E6. Mixed-phase solver nesting (deferred, measured)
+- **What it is:** the outer mixed root calls a *nested* inner DD2 root through
+  `hadronic_phase`, roughly 15 times per converged point (measured: 1619 inner
+  solves and 26 654 `_hadronic_residual` calls for a 105-point window sweep).
+- **Consequence:** the analytic mixed Jacobian is a net *loss* — 11.2 vs
+  9.5 ms/pt — because `_hadronic_block` and `_fd_quark_kappa` finite-difference
+  *through* that inner solve, so the "analytic" Jacobian is partly numeric and
+  costs more than it saves. `MixedTableSpec.analytic_jac` therefore stays
+  `False` by default, unlike the DD2 one.
+- **The fix, when it is worth doing:** fold the hadronic field/density unknowns
+  into the outer unknown vector, so there is one MINPACK solve per point. Est.
+  a further 2-3x, and it is what would make the analytic Jacobian pay.
+- **Why deferred:** it restructures `eos/mixed/solvers/phases.py` and the
+  equilibrium layer, which is a much larger and riskier change than the jitted
+  `meson_sources_t0` inner loop that was taken instead (measured 1.9x).
+
+### E7. TOV backend difference across a Maxwell jump (known, bounded)
+- **What it is:** at eta = 1 the `fast` (Numba) and `scipy` TOV backends give
+  M_max differing by 4.1e-3 Msun (~0.2%). At eta = 0 they agree to 1.4e-4.
+- **Not a resolution artifact:** the gap is flat from n_ec = 100 to 400, so it
+  is a systematic in how the two treat the density discontinuity, not central-
+  density discretization. R(M_max) agrees to ~0.002 km either way.
+- **Status:** `backend="fast"` is the shipped default (it is ~600x faster and
+  is what makes a Bayesian scan affordable); `backend="scipy"` remains the
+  reference. Pinned by `test/mixed/test_tov_backend_parity.py`.
+- **Open:** whether the 0.2% matters depends on the inference's M_max
+  likelihood width. Revisit if a Maxwell-dominated posterior is the target.
+
 ---
 
 ## F. Things that are settled (no action needed) — for the record

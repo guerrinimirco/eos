@@ -65,6 +65,48 @@ def _derivs_t0(nu, m, g):
 
 
 @njit(cache=True)
+def meson_sources_t0(spec, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S,
+                     Gs_N, Gw_N, Gr_N):
+    """Meson source terms and total baryon density at T=0, at fixed charge
+    potentials — the inner loop of a mixed-phase hadronic solve, where the
+    phase density is itself an unknown and there is no neutrality row.
+
+    Returns (src_s, src_w, src_r, src_phi, n_tot) in natural units. A returned
+    n_tot of -1.0 signals that some effective mass went non-positive, i.e. the
+    trial point is outside the physical domain; the caller answers that with a
+    penalty residual rather than an exception.
+
+    Only n and n_s are formed. The kinetic P, eps and s that a full
+    thermodynamic evaluation would also compute do not enter these source
+    terms, and computing them here would be pure waste — they are assembled
+    once, after convergence.
+    """
+    src_s = 0.0
+    src_w = 0.0
+    src_r = 0.0
+    src_phi = 0.0
+    n_tot = 0.0
+    for k in range(spec.shape[0]):
+        mass, Q, t3, g = spec[k, 0], spec[k, 1], spec[k, 2], spec[k, 3]
+        xs, xw, xr, xphi = spec[k, 4], spec[k, 5], spec[k, 6], spec[k, 7]
+        S = spec[k, 8]
+        Gs, Gw, Gr = xs * Gs_N, xw * Gw_N, xr * Gr_N
+        Gphi = xphi * Gw_N                      # phi inherits f_omega (DD2Y)
+        ms = mass - Gs * sigma
+        if ms <= 0.0:
+            return 0.0, 0.0, 0.0, 0.0, -1.0
+        nu = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
+              - Gr * t3 * rho0 - Gphi * phi0)
+        n, ns = _n_ns_t0(nu, ms, g)
+        src_s += xs * Gs_N * ns
+        src_w += xw * Gw_N * n
+        src_r += xr * Gr_N * t3 * n
+        src_phi += xphi * Gw_N * n
+        n_tot += n
+    return src_s, src_w, src_r, src_phi, n_tot
+
+
+@njit(cache=True)
 def residual_t0_jit(x, spec, params, flags):
     """T=0 octet residual (mirrors octet.octet_residual)."""
     Gs_N, Gw_N, Gr_N = params[0], params[1], params[2]

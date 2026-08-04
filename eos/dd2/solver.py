@@ -468,6 +468,31 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
                        analytic_jac=analytic_jac)
 
 
+def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
+                   x0=None, analytic_jac=True, check_consistency=True,
+                   include_photons=True, **fracs):
+    """
+    One hadronic point in a NAMED equilibrium mode — the counterpart of
+    `eos.mixed.solve_mixed`, so both engines are driven the same way.
+
+    mode  : one of `eos.dd2.MODES` — 'beta_eq_neutrinoless',
+            'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_neutral',
+            'fixed_YS', 'fixed_YC_YS'.
+    fracs : the fixed fractions the mode consumes, as keywords, e.g.
+            Y_C=0.3 for 'fixed_YC' or Y_L=0.4 for the trapped mode. Which
+            keys each mode needs is `eos.dd2.MODE_FRACTIONS`.
+
+    A thin dispatcher over `solve_octet`, which implements every mode; this
+    only turns the mode name into its argument set. Returns an `EoSPoint`.
+    """
+    from eos.dd2.table import _mode_kwargs
+    return solve_octet(par, n_B, flags, T=T, x0=x0,
+                       analytic_jac=analytic_jac,
+                       check_consistency=check_consistency,
+                       include_photons=include_photons,
+                       **_mode_kwargs(mode, fracs))
+
+
 def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
                          leptons=False, include_photons=True,
                          check_consistency=True):

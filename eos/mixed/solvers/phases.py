@@ -30,12 +30,14 @@ starting field configuration — dominates the cost. Both adapters accept an
 from dataclasses import dataclass
 from typing import Mapping
 
+import numpy as np
 from scipy.optimize import root
 
 from eos.general.physics_constants import hc3
 from eos.dd2.physics.octet import (
     build_octet_ctx, _baryon_kinetics, assemble_octet,
 )
+from eos.dd2.physics.kernel_numba import meson_sources_t0, _NUMBA_OK
 from eos.dd2.physics.mesons import thermal_meson_thermo
 from eos.dd2.solver import solve_beta_eq_octet
 from eos.vmit.parameters import get_vmit_default
@@ -146,6 +148,11 @@ def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S):
     mixed phase only the *average* density is prescribed. DD2's couplings are
     density-dependent, so they are re-evaluated at the current nB_nat on every
     iteration. There is no neutrality or Y_C row: mu_Q is an input.
+
+    At T=0 the per-species loop runs in the jitted `meson_sources_t0` kernel,
+    which is the same closed form the NumPy path uses; T>0 keeps the NumPy path
+    because the JEL integrals do not jit. The two agree to machine precision —
+    see test/mixed/test_hadronic_residual_backends.py.
     """
     sigma, omega0, rho0 = x[0], x[1], x[2]
     i = 3
@@ -162,19 +169,31 @@ def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S):
     ctx.dGs_N, ctx.dGw_N, ctx.dGr_N = dGs, dGw, dGr
     ctx.nB_nat = nB_nat
 
-    kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
-                           mu_tilde_B, mu_Q, mu_S)
-    if kin is None:                                  # m* <= 0: outside domain
-        return [1.0e6] * len(x)
+    if ctx.T == 0.0 and _NUMBA_OK:
+        spec_arr = getattr(ctx, "_spec_arr", None)
+        if spec_arr is None:
+            # Built once per phase solve, not per residual evaluation.
+            spec_arr = np.asarray(ctx.specs, dtype=np.float64)
+            ctx._spec_arr = spec_arr
+        src_s, src_w, src_r, src_phi, n_tot = meson_sources_t0(
+            spec_arr, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S,
+            Gs, Gw, Gr)
+        if n_tot < 0.0:                              # m* <= 0: outside domain
+            return [1.0e6] * len(x)
+    else:
+        kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
+                               mu_tilde_B, mu_Q, mu_S)
+        if kin is None:                              # m* <= 0: outside domain
+            return [1.0e6] * len(x)
 
-    src_s = src_w = src_r = src_phi = n_tot = 0.0
-    for (spec, nu, ms, n, ns, eps, P, s) in kin:
-        _mass, _Q, t3, _g, xs, xw, xr, xphi, _S = spec
-        src_s += xs * Gs * ns
-        src_w += xw * Gw * n
-        src_r += xr * Gr * t3 * n
-        src_phi += xphi * Gw * n
-        n_tot += n
+        src_s = src_w = src_r = src_phi = n_tot = 0.0
+        for (spec, nu, ms, n, ns, eps, P, s) in kin:
+            _mass, _Q, t3, _g, xs, xw, xr, xphi, _S = spec
+            src_s += xs * Gs * ns
+            src_w += xw * Gw * n
+            src_r += xr * Gr * t3 * n
+            src_phi += xphi * Gw * n
+            n_tot += n
 
     res = [
         (sigma - src_s / ctx.m_sigma2) / ctx.mbar,

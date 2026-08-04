@@ -45,7 +45,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from eos.general.particles import Up, Down, Strange
-from eos.dd2.species import active_baryons
+from eos.dd2.species import hadronic_qn, hadronic_charges
 
 
 class Regime(Enum):
@@ -129,25 +129,8 @@ def quark_charges(n_u, n_d, n_s):
     return n_B, n_C, n_S
 
 
-def hadronic_qn(flags):
-    """(name, B, C, S) for each baryon active under `flags`."""
-    return tuple((b.name, b.baryon_no, b.charge, b.strangeness)
-                 for b in active_baryons(flags))
-
-
-def hadronic_charges(flags, densities):
-    """(n_B, n_C, n_S) of the hadronic phase from a {name: n} map.
-
-    `densities` and the result share whatever units the caller passes in.
-    Baryons absent from the map contribute zero.
-    """
-    n_B = n_C = n_S = 0.0
-    for name, B, C, S in hadronic_qn(flags):
-        n = densities.get(name, 0.0)
-        n_B += B * n
-        n_C += C * n
-        n_S += S * n
-    return n_B, n_C, n_S
+# The hadronic quantum numbers depend only on the DD2 species set, so they live
+# with it in eos/dd2/species.py and are re-exported here beside the quark ones.
 
 
 # =============================================================================

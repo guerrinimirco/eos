@@ -512,60 +512,47 @@ def benchmark_dd2_vs_sfho(par, grid=None, T=0.0, Y_C=0.3):
 # =============================================================================
 # EoS table generation / export
 # =============================================================================
-#: Per-point scalar columns written by ``export_eos_table`` (composition
-#: fractions are appended per active baryon species).
-#: (per-species Y_<baryon> — including Y_n/Y_p — are appended after these.)
-_TABLE_COLS = ("n_B", "T", "P", "eps", "s", "mu_n", "mu_p", "mu_e",
-               "mu_S", "mu_L", "Y_e", "Y_mu")
-
-
 def export_eos_table(par, flags, mode="beta_eq_neutrinoless", nB=None, T=None, SnB=None,
                      fixed=None, path=None, want_coeffs=False, skip_errors=False):
     """
     Build a DD2 EoS table for the requested species/mode/axes (``TableSpec`` +
-    ``build_table``) and, if ``path`` is given, write it to a text file.
+    ``build_table``) and, if ``path`` is given, write it out.
 
-    mode    : one of the names in table.py's `_MODES`, e.g.
+    mode    : one of the names in ``eos.dd2.MODES``, e.g.
               'beta_eq_neutrinoless', 'fixed_YC', 'fixed_YC_YS',
               'beta_eq_neutrino_trapped'.
     nB      : density grid [fm^-3]; defaults to ``default_grid()``.
     T / SnB : the temperature axis — pass ONE. ``T`` is temperature [MeV]
               (scalar or list); ``SnB`` is entropy per baryon (adds the outer
               T-solve). Defaults to T=0.
-    fixed   : {'Y_C':..,'Y_S':..,'Y_L':..} for the constrained modes.
+    fixed   : {'Y_C':..,'Y_S':..,'Y_L':..} for the constrained modes. Any of
+              those keys may instead be a grid, which makes it a further table
+              axis.
 
-    Returns (TableResult, path). Columns: the scalars in ``_TABLE_COLS`` plus one
-    ``Y_<species>`` per active baryon.
+    ``path`` ending in .h5 is written with ``save_table``, anything else with
+    ``export_csv`` — the same writers ``eos.mixed`` tables use, so hadronic and
+    hybrid tables land in the same format. Returns (TableResult, path).
     """
-    from eos.dd2 import TableSpec, build_table
+    from eos.dd2 import (TableSpec, build_table, rows_from_result,
+                         save_table, export_csv)
     nB = default_grid() if nB is None else np.asarray(nB, float)
     if SnB is not None:
         axes = {"nB": nB, "SnB": np.atleast_1d(SnB)}
     else:
         axes = {"nB": nB, "T": np.atleast_1d(0.0 if T is None else T)}
+    fixed = dict(fixed or {})
+    # A fraction given as a grid becomes an axis; a scalar stays in `fixed`.
+    for key in ("Y_C", "Y_S", "Y_L"):
+        if key in fixed and np.ndim(fixed[key]) > 0:
+            axes[key] = np.asarray(fixed.pop(key), float)
     spec = TableSpec(parametrization=par, mode=mode, axes=axes, include=flags,
-                     fixed=(fixed or {}), want_coeffs=want_coeffs)
+                     fixed=fixed, want_coeffs=want_coeffs)
     result = build_table(spec, skip_errors=skip_errors)
     if path is not None:
-        _write_table(result, path)
+        meta = dict(mode=mode, parametrization=par, flags=flags)
+        (save_table if str(path).endswith(".h5") else export_csv)(
+            rows_from_result(result), path, meta=meta)
     return result, path
-
-
-def _write_table(result, path):
-    """Flatten a TableResult to a whitespace .dat with a header line."""
-    species = sorted({n for line in result.points for p in line
-                      for n, _ in p.composition})
-    cols = list(_TABLE_COLS) + [f"Y_{s}" for s in species]
-    with open(path, "w") as f:
-        f.write("# DD2 EoS table (mode=%s, %s axis)\n"
-                % (result.spec.mode, result.temp_key))
-        f.write("# " + " ".join(f"{c:>13}" for c in cols) + "\n")
-        for line in result.points:
-            for p in line:
-                row = [p.n_B, p.T, p.P, p.eps, p.s, p.mu_n, p.mu_p, p.mu_e,
-                       p.mu_S, p.mu_L, p.Y_e, p.Y_mu]
-                row += [p.Y(s) for s in species]
-                f.write("  " + " ".join(f"{v:13.6e}" for v in row) + "\n")
 
 
 if __name__ == "__main__":

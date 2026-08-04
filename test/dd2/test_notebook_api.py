@@ -59,11 +59,20 @@ def test_nmp_comparison():
 
 
 def test_export_eos_table(tmp_path):
+    # export_eos_table now writes through eos.general.table_io, the same writer
+    # eos.mixed tables use, so a hadronic and a hybrid table share one format:
+    # '# key = value' metadata lines, then a commented column header, then one
+    # row per point. `phase` is a string label ('H'), so it is dropped before
+    # the numeric check rather than the check being weakened.
     out = tmp_path / "dd2.dat"
     result, path = api.export_eos_table(PAR, api.NUCLEONIC, mode="beta_eq_neutrinoless",
                                         nB=GRID, T=0.0, path=str(out))
     assert out.is_file()
-    rows = np.loadtxt(out, comments="#")
+    header = [ln for ln in out.read_text().splitlines() if ln.startswith("#")][-1]
+    names = header.lstrip("# ").split()
+    assert "phase" in names and "n_B" in names and "Y_C" in names
+    numeric = [i for i, n in enumerate(names) if n != "phase"]
+    rows = np.loadtxt(out, comments="#", usecols=numeric)
     assert rows.shape[0] == len(GRID)
     assert np.isfinite(rows).all()
 

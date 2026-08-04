@@ -11,11 +11,12 @@ The temperature axis may be given directly as 'T' or as entropy per baryon
 a thin wrapper around the same octet solve.
 """
 from dataclasses import dataclass, field
+from itertools import product
 
 import numpy as np
 from scipy.optimize import brentq
 
-from eos.dd2.species import SpeciesFlags
+from eos.dd2.species import SpeciesFlags, hadronic_charges
 from eos.dd2.solver import solve_octet, sweep_octet
 
 
@@ -34,7 +35,7 @@ from eos.dd2.solver import solve_octet, sweep_octet
 #:                             system is electrically neutral
 #:   fixed_YS                  charge-neutral, strangeness fraction fixed
 #:   fixed_YC_YS               both fractions fixed
-_MODES = {
+MODES = {
     "beta_eq_neutrinoless": dict(charge_mode="neutral"),
     "fixed_YC": dict(charge_mode="fixed"),
     "fixed_YC_neutral": dict(charge_mode="fixed", yc_leptons=True),
@@ -44,8 +45,10 @@ _MODES = {
                                      lepton_mode="trapped"),
 }
 
-#: Which `TableSpec.fixed` keys each mode consumes.
-_MODE_FIXED = {
+#: mode name -> the fixed fractions it consumes, either as a `TableSpec.axes`
+#: grid or as a scalar in `TableSpec.fixed`. Mirrors
+#: `eos.mixed.MODE_FRACTIONS`, which names the four modes both engines share.
+MODE_FRACTIONS = {
     "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",),
     "fixed_YC_neutral": ("Y_C",), "fixed_YS": ("Y_S",),
     "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_L",),
@@ -53,14 +56,39 @@ _MODE_FIXED = {
 
 
 def _mode_kwargs(mode, fixed):
-    if mode not in _MODES:
-        raise ValueError(f"unknown mode {mode!r}; expected one of {list(_MODES)}")
-    kw = dict(_MODES[mode])
-    for key in _MODE_FIXED[mode]:
+    if mode not in MODES:
+        raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
+    kw = dict(MODES[mode])
+    for key in MODE_FRACTIONS[mode]:
         if key not in fixed:
             raise ValueError(f"mode {mode!r} needs fixed[{key!r}]")
         kw[key] = fixed[key]
     return kw
+
+
+def hadronic_row(p, flags):
+    """Flatten one `EoSPoint` into a dict row.
+
+    Keyed exactly the way `eos.mixed.composition_row` keys a mixed point, so a
+    pure-hadronic table and a hybrid table concatenate without renaming
+    anything. chi = 0 and phase = 'H': no quark matter is present.
+
+    Y_C is the NON-leptonic charge fraction and Y_S counts +1 per s-quark, both
+    summed over the active baryons rather than read off the proton alone — with
+    hyperons switched on those differ.
+    """
+    n_B = p.n_B
+    _, n_C, n_S = hadronic_charges(flags, p.composition_map)
+    row = dict(n_B=n_B, T=p.T, chi=0.0, phase="H", P=p.P, eps=p.eps, s=p.s,
+               S_per_B=(p.s / n_B if n_B else 0.0), mu_B=p.mu_n,
+               Y_C=n_C / n_B, Y_S=n_S / n_B,
+               mu_e=p.mu_e, mu_S=p.mu_S, mu_L=p.mu_L,
+               Y_e=p.n_e / n_B, **{"Y_mu-": p.n_mu / n_B})
+    for name, n in p.composition_map.items():
+        row[f"Y_{name}"] = n / n_B
+    if p.n_nu:
+        row["Y_nue"] = p.n_nu / n_B
+    return row
 
 
 def solve_octet_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
@@ -92,10 +120,16 @@ def solve_octet_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
 
 @dataclass
 class TableSpec:
-    """One table request."""
+    """One table request.
+
+    axes : {'nB': grid, exactly one of 'T'/'SnB': grid, and optionally any of
+           'Y_C'/'Y_S'/'Y_L': grid to sweep that fraction as a further axis}
+    fixed: scalar values for the fractions the mode needs that are not swept
+           as axes
+    """
     parametrization: object
-    mode: str                             # a key of _MODES, above
-    axes: dict                            # {'nB': grid, 'T'|'SnB': grid}
+    mode: str                             # a key of MODES, above
+    axes: dict
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)   # Y_C / Y_S / Y_L targets
     want_coeffs: bool = False             # attach equilibrium c_s^2 per T-line
@@ -107,7 +141,15 @@ class TableSpec:
         if len(temp_axes) != 1:
             raise ValueError("TableSpec.axes needs exactly one of 'T' / 'SnB'")
         self._temp_key = temp_axes[0]
-        _mode_kwargs(self.mode, self.fixed)   # validate early
+        if self.mode not in MODES:
+            raise ValueError(f"unknown mode {self.mode!r}; expected one of "
+                             f"{list(MODES)}")
+        self._frac_keys = [k for k in ("Y_C", "Y_S", "Y_L") if k in self.axes]
+        # Validate early that every fraction the mode needs is supplied, by an
+        # axis or a scalar; an axis value stands in here only for the check.
+        probe = dict(self.fixed)
+        probe.update({k: 0.0 for k in self._frac_keys})
+        _mode_kwargs(self.mode, probe)
 
 
 @dataclass
@@ -116,8 +158,12 @@ class TableResult:
     nB: np.ndarray
     temp_values: np.ndarray               # the T or S grid
     temp_key: str                         # 'T' or 'SnB'
-    points: list                          # points[i_temp][i_nB] EoSPoint
-    cs2_eq: list = None                   # cs2[i_temp][i_nB] if want_coeffs
+    points: list                          # points[i_combo][i_nB] EoSPoint
+    cs2_eq: list = None                   # cs2[i_combo][i_nB] if want_coeffs
+    #: [(temperature value, {fraction: value}), ...], parallel to `points`.
+    #: One entry per line; with no fraction axes it is one entry per
+    #: temperature and the dict is empty, which is the historical layout.
+    combos: list = None
 
 
 def _cs2_along(points):
@@ -127,15 +173,26 @@ def _cs2_along(points):
     return np.gradient(P, eps)
 
 
-def build_table(spec, skip_errors=False):
+def build_table(spec, skip_errors=False, rows=False):
     """
-    Solve the TableSpec grid. For each temperature-axis value an n_B sweep is
-    warm-started along density (the stiff axis); the 'SnB' axis
-    replaces each solve with the outer entropy T-solve. Returns a TableResult;
-    with want_coeffs, equilibrium c_s^2 is attached per T-line.
+    Solve the TableSpec grid over the product of its temperature and fraction
+    axes. Within each combination an n_B sweep is warm-started along density
+    (the stiff axis); the 'SnB' axis replaces each solve with the outer entropy
+    T-solve.
+
+    rows=False (default) returns a `TableResult`, whose `points` are indexed
+    [i_combination][i_nB] — one line per (temperature, fractions) pair, in the
+    order `TableResult.combos` records. With want_coeffs, equilibrium c_s^2 is
+    attached per line.
+
+    rows=True instead returns `(rows, {})` in the long format
+    `eos.mixed.build_mixed_table` returns — one flat dict per converged point,
+    ready for `eos.general.table_io`. The empty second element is where that
+    function returns its phase windows, which purely hadronic matter has none
+    of; it is returned anyway so the two calls unpack the same way.
 
     skip_errors: if True, points where the octet solve doesn't converge are
-    dropped from their T-line instead of aborting the whole table (the warm
+    dropped from their line instead of aborting the whole table (the warm
     start resets on a skip). This is expected for constrained modes at low T /
     low density inside the liquid-gas spinodal, where uniform matter has no
     stable solution; the returned lines are then shorter than ``nB``.
@@ -143,43 +200,73 @@ def build_table(spec, skip_errors=False):
     from eos.dd2.solver import octet_warm_start
     nB = np.asarray(spec.axes["nB"], dtype=float)
     temp = np.asarray(spec.axes[spec._temp_key], dtype=float)
-    mode_kw = _mode_kwargs(spec.mode, spec.fixed)
     flags = spec.include
-    has_phi = flags.phi_field and flags.hyperons
-    has_muS = mode_kw.get("strange_mode") == "fixed"
-    has_muL = mode_kw.get("lepton_mode") == "trapped"
+    frac_keys = spec._frac_keys
+    frac_grids = [np.atleast_1d(np.asarray(spec.axes[k], float))
+                  for k in frac_keys]
 
-    def solve_at(n, tv, x0):
-        if spec._temp_key == "T":
-            return solve_octet(spec.parametrization, float(n), flags,
-                               T=float(tv), x0=x0, **mode_kw)
-        return solve_octet_at_entropy(spec.parametrization, float(n),
-                                      float(tv), flags, x0=x0, **mode_kw)
-
-    points = []
+    points, combos = [], []
     for tv in temp:
-        # Fast path: the whole line in one warm-started sweep (T axis only).
-        if spec._temp_key == "T" and not skip_errors:
-            points.append(sweep_octet(spec.parametrization, nB, flags,
-                                      T=float(tv), **mode_kw))
-            continue
-        # Tolerant / entropy path: per-point, warm-started, optionally skipping.
-        line, x0 = [], None
-        for n in nB:
-            try:
-                p = solve_at(n, tv, x0)
-            except RuntimeError:
-                if not skip_errors:
-                    raise
-                x0 = None          # reset the warm start past the gap
+        for combo in product(*frac_grids) if frac_grids else [()]:
+            fracs = dict(spec.fixed)
+            fracs.update(zip(frac_keys, (float(c) for c in combo)))
+            mode_kw = _mode_kwargs(spec.mode, fracs)
+            has_phi = flags.phi_field and flags.hyperons
+            has_muS = mode_kw.get("strange_mode") == "fixed"
+            has_muL = mode_kw.get("lepton_mode") == "trapped"
+
+            def solve_at(n, x0):
+                if spec._temp_key == "T":
+                    return solve_octet(spec.parametrization, float(n), flags,
+                                       T=float(tv), x0=x0, **mode_kw)
+                return solve_octet_at_entropy(spec.parametrization, float(n),
+                                              float(tv), flags, x0=x0,
+                                              **mode_kw)
+
+            combos.append((float(tv), dict(zip(frac_keys, map(float, combo)))))
+            # Fast path: the whole line in one warm-started sweep (T axis only).
+            if spec._temp_key == "T" and not skip_errors:
+                points.append(sweep_octet(spec.parametrization, nB, flags,
+                                          T=float(tv), **mode_kw))
                 continue
-            line.append(p)
-            x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
-        points.append(line)
+            # Tolerant / entropy path: per-point, warm-started, may skip.
+            line, x0 = [], None
+            for n in nB:
+                try:
+                    p = solve_at(n, x0)
+                except RuntimeError:
+                    if not skip_errors:
+                        raise
+                    x0 = None          # reset the warm start past the gap
+                    continue
+                line.append(p)
+                x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
+            points.append(line)
 
     cs2 = [_cs2_along(line) for line in points] if spec.want_coeffs else None
-    return TableResult(spec=spec, nB=nB, temp_values=temp,
-                       temp_key=spec._temp_key, points=points, cs2_eq=cs2)
+    result = TableResult(spec=spec, nB=nB, temp_values=temp,
+                         temp_key=spec._temp_key, points=points, cs2_eq=cs2,
+                         combos=combos)
+    return (rows_from_result(result), {}) if rows else result
+
+
+def rows_from_result(result):
+    """A solved `TableResult` to the long-format rows `eos.general.table_io`
+    writes — the same shape `eos.mixed.build_mixed_table` returns.
+
+    Separate from `build_table` so a table already solved for its `TableResult`
+    can be written out without being solved a second time.
+    """
+    flags = result.spec.include
+    out = []
+    for (tv, fracs), line in zip(result.combos, result.points):
+        for p in line:
+            row = hadronic_row(p, flags)
+            row.update(fracs)
+            if result.temp_key == "SnB":
+                row["SnB"] = tv
+            out.append(row)
+    return out
 
 
 if __name__ == "__main__":

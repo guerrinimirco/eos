@@ -139,9 +139,12 @@ def test_backend_parity(par, T):
 
 def test_fast_backend_sweep_matches(par):
     # the eos_fast backend works through a warm-started hyperon sweep.
+    # analytic_jac is stated on BOTH calls: it now defaults to True, so
+    # omitting it on the reference side would compare the fast path to itself.
     flags = SpeciesFlags(hyperons=True, phi_field=True)
     grid = np.linspace(0.1, 1.0, 25)
-    ref = sweep_beta_eq_octet(par, grid, flags, include_photons=False)
+    ref = sweep_beta_eq_octet(par, grid, flags, include_photons=False,
+                              analytic_jac=False)
     fast = sweep_beta_eq_octet(par, grid, flags, include_photons=False,
                                analytic_jac=True)
     assert len(ref) == len(fast)

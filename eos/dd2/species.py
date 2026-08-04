@@ -48,3 +48,31 @@ def active_baryons(flags):
     if flags.deltas:
         baryons += list(DELTAS)
     return baryons
+
+
+def hadronic_qn(flags):
+    """(name, B, C, S) for each baryon active under `flags`.
+
+    Strangeness is S = +1 per s-quark, so Lambda has S = +1 and Xi has S = +2.
+    That is the opposite of the PDG sign and is used consistently throughout
+    this repository.
+    """
+    return tuple((b.name, b.baryon_no, b.charge, b.strangeness)
+                 for b in active_baryons(flags))
+
+
+def hadronic_charges(flags, densities):
+    """(n_B, n_C, n_S) of hadronic matter from a {name: n} map.
+
+    n_C is the NON-leptonic electric charge density; total electric neutrality
+    is a separate condition that also counts the leptons. `densities` and the
+    result share whatever units the caller passes in, and baryons absent from
+    the map contribute zero.
+    """
+    n_B = n_C = n_S = 0.0
+    for name, B, C, S in hadronic_qn(flags):
+        n = densities.get(name, 0.0)
+        n_B += B * n
+        n_C += C * n
+        n_S += S * n
+    return n_B, n_C, n_S
