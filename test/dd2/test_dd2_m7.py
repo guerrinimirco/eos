@@ -6,10 +6,10 @@ terms. The mesons are an additive ideal Bose gas on top of the mean field with
 effective chemical potentials tied to the DD2 density-dependent couplings; the
 Bose-gas Euler relation e + P = T s + mu* n makes mu*_j n_j the right HVH term.
 
-Note: the thermal mesons are added post-baryonic-solve and NOT fed back into
-charge neutrality (valid in the dilute thermal regime; off by default for cold
-NS). Their net charge/strangeness densities are exposed for later
-self-consistent coupling.
+The gas is self-consistently coupled: its net charge and strangeness enter the
+solver's neutrality and Y_S constraints, so switching it on shifts the
+baryonic solution too (see test_thermal_meson_feedback.py). Its P/e/s remain
+additive on top of the converged state.
 """
 import pytest
 
@@ -49,13 +49,24 @@ def test_hvh_holds_with_mesons(par):
 
 
 def test_contribution_grows_with_T(par):
-    dPs = []
+    # The gas's OWN pressure grows with T. The total P does not simply rise
+    # with it: the mesons carry charge, so switching them on displaces leptons
+    # through the neutrality condition, and at moderate T the lost lepton
+    # pressure exceeds the gas's own. What must fall is the free energy —
+    # extra degrees of freedom at fixed (n_B, T) can only lower f.
+    P_gas, dfs = [], []
     for T in (10.0, 30.0, 50.0):
         base = solve_octet(par, 0.16, _flags(), T=T)
         both = solve_octet(par, 0.16, _flags(ps=True, tv=True), T=T)
-        dPs.append(both.P - base.P)
-    assert all(d > 0 for d in dPs)
-    assert dPs[0] < dPs[1] < dPs[2]
+        mg = thermal_meson_thermo(par, 0.16, -both.mu_e, 0.0, both.omega0,
+                                  both.rho0, T, include_pseudoscalars=True,
+                                  include_thermal_vectors=True)
+        P_gas.append(mg["P"])
+        dfs.append(both.free_energy_density - base.free_energy_density)
+    assert all(p > 0 for p in P_gas)
+    assert P_gas[0] < P_gas[1] < P_gas[2]
+    assert all(d < 0 for d in dfs)
+    assert dfs[0] > dfs[1] > dfs[2]          # and it falls further as T rises
 
 
 def test_pseudoscalar_and_vector_additive(par):

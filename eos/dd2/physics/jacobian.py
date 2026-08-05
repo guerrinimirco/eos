@@ -62,6 +62,34 @@ def kinetic_derivs(nu, m, g, T=0.0):
     return dn_dnu, dn_dm, dns_dnu, dns_dm
 
 
+def _dmeson(ctx, col, n, omega0, rho0, muQ, muS, which):
+    """
+    Gradient (over the unknown columns) of the thermal meson gas's natural-unit
+    n_C (which=0) or n_S (which=1).
+
+    Central differences in the four unknowns the gas actually depends on;
+    identically zero when the gas is off, so the caller can add it blind.
+    """
+    from eos.dd2.physics.octet import meson_charges_nat
+
+    d = np.zeros(n)
+    if ctx.T <= 0.0 or not (ctx.include_pseudoscalars
+                            or ctx.include_thermal_vectors):
+        return d
+    args = dict(omega0=omega0, rho0=rho0, mu_Q=muQ, mu_S=muS)
+    knobs = [("mu_Q", "muQ"), ("omega0", "omega0"), ("rho0", "rho0")]
+    if ctx.has_muS:
+        knobs.append(("mu_S", "muS"))
+    for name, column in knobs:
+        h = max(1e-3, 1e-4 * abs(args[name]))
+        hi, lo = dict(args), dict(args)
+        hi[name] += h
+        lo[name] -= h
+        d[col[column]] = (meson_charges_nat(ctx, **hi)[which]
+                          - meson_charges_nat(ctx, **lo)[which]) / (2.0 * h)
+    return d
+
+
 def _columns(ctx):
     """Column index of each unknown (matches octet._unpack ordering)."""
     c = dict(sigma=0, omega0=1, rho0=2)
@@ -133,6 +161,14 @@ def octet_jacobian(x, ctx):
         dn_tot += dn_i
         dcharge += Q * dn_i
         dstrange += S * dn_i
+
+    # Thermal meson gas: it carries charge and strangeness (no baryon number),
+    # so it enters the two constraint rows only. Differenced as one block, the
+    # same tactic kinetic_derivs uses at T>0 — the JEL Bose routine exposes no
+    # exact derivative, and the gas depends on the unknowns only through
+    # (mu_Q, mu_S, omega0, rho0).
+    dcharge += _dmeson(ctx, col, n, omega0, rho0, muQ, muS, 0)
+    dstrange += _dmeson(ctx, col, n, omega0, rho0, muQ, muS, 1)
 
     # field-equation rows (scaled by mbar), R = (field - src/m^2)/mbar
     row = 0

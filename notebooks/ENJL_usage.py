@@ -39,11 +39,18 @@
 # |---|---|
 # | vacuum gap solution, $E_0$ | reproduces the published values |
 # | fixed-composition mean field (`solve_point`) | $\mu_i$ to 0.05 MeV against four of the five reference tables |
-# | beta equilibrium (`solve_beta_point`) | **exact up to the chiral transition, fails above it** — see §6 |
-# | Maxwell construction, TOV, finite $T$ | not implemented yet |
+# | beta equilibrium (`beta_eos_table`) | reproduces every table to 0.1 MeV in $\mu_b$ up to that table's first transition; solves at every density from 0.05 to 10 fm⁻³ |
+# | choosing between branches above a transition | **open** — see §6 |
+# | TOV, finite $T$ | not implemented yet |
 #
-# So: use `solve_point` freely. Treat `solve_beta_point` as usable only below
-# the first-order transition until the continuation work is done.
+# So: use `solve_point` and `beta_eos_table` freely. Above a first-order
+# transition, be aware that a sweep returns *one* branch and that which branch
+# is the physical one is not yet settled — §6 shows what that looks like.
+#
+# §7 and §8 build the paper's figures and the derived characteristics
+# ($Y_i$, $n_b^Q/n_b$, $c_s^2$, onset densities) from the engine, in cells you
+# can edit. `plot/enjl_paper_figures.py` runs the same thing over all six
+# parameter sets in one go if you want the whole set written to disk.
 
 # %%
 import sys
@@ -56,7 +63,7 @@ sys.path.insert(0, os.path.abspath(os.path.join("..", "test", "enjl")))
 
 from eos.enjl import ENJLParams, get_enjl_default, solve_point
 from eos.enjl.uniform import vacuum_solution, vacuum_energy_density, _baryon_masses
-from eos.enjl.eos_beta import solve_beta_point
+from eos.enjl.eos_beta import beta_eos_table, solve_beta_point
 from eos.general.physics_constants import hc3
 from eos.general.figure_style import OKAB_CAT, apply_style
 
@@ -150,6 +157,11 @@ print("   E_0 depends only on (Lambda, m_q0, G_S, K), never on f_q or B.")
 
 # %%
 SPECIES = ("p", "n", "Lambda", "u", "d", "s", "e", "mu")
+LABEL_SP = {"p": "$p$", "n": "$n$", "Lambda": r"$\Lambda$", "u": "$u$",
+            "d": "$d$", "s": "$s$", "e": "$e$", "mu": r"$\mu$"}
+COLOR_SP = {"p": OKAB_CAT[0], "n": OKAB_CAT[1], "Lambda": OKAB_CAT[2],
+            "u": OKAB_CAT[3], "d": OKAB_CAT[4], "s": OKAB_CAT[5],
+            "e": "0.45", "mu": "0.7"}
 
 
 def dens(**kwargs):
@@ -373,62 +385,197 @@ plt.show()
 # nearly degenerate, so the sensitivity of $M_q$ to any difference in
 # convergence is at its largest exactly there.
 #
-# ## 6. Beta equilibrium — works below the transition, not through it
+# ## 6. Beta equilibrium, and the one thing that is still open
 #
-# `solve_beta_point(n_b)` solves Eqs. (23)-(24) simultaneously with the mean
-# field, so it produces the composition rather than consuming it. Below the
-# first-order transition it reproduces the reference table to the printed
-# digits. Above it, the continuation is not yet in place and the solve fails.
+# `beta_eos_table(nb_grid, par, direction)` solves Eqs. (23)-(24) simultaneously
+# with the mean field along a density grid, so it *produces* the composition
+# rather than consuming it — the onset density of every species is a prediction.
+# It reaches every density from 0.05 to 10 fm⁻³, and below each table's first
+# first-order transition it reproduces that table to 0.1 MeV in $\mu_b$ and
+# ~10⁻³ in the species densities.
 #
-# **This is the next milestone, not a bug to work around.** Do not build on
-# `solve_beta_point` above the transition density of your parameter set.
+# **What it does not do is choose a branch.** Above a first-order transition the
+# local equations have several solutions at the same $n_b$ — chirally broken,
+# chirally restored but still confined, and fully deconfined — and all of them
+# are self-consistent and charge-neutral. A continuation follows the branch it
+# started on and keeps following it past the transition, into the metastable
+# region beyond. That is why `direction` exists: `"up"` starts from the
+# low-density side, `"down"` starts deconfined at the top of the grid.
+#
+# Deciding which branch is physical needs a Maxwell construction, and in this
+# implementation it is **unresolved** — for $f_q = 0.7$, $B = 1$ the deconfined
+# branch has both lower $\varepsilon$ at fixed $n_b$ and higher $P$ at fixed
+# $\mu_b$ than the branch the reference table follows, yet the paper states that
+# parameter set does not fully deconfine. See `DD2_OPEN_QUESTIONS.md` §G3.
+# So: below the first transition, trust the curve. Above it, look at both
+# branches, which is what §8 plots.
 
 # %%
-def beta_eos(nb_grid, par=None):
-    """Beta-equilibrium EoS along a density grid, stopping at the first failure.
-
-    Returns (points, n_b, eps, P) with the arrays truncated at whatever the
-    solver actually reached. It stops rather than skipping, because a gap in a
-    continuation sequence means the points after it are no longer warm-started
-    from a neighbouring solution and cannot be trusted to be on the same
-    branch.
-    """
-    pts, seed = [], None
-    for x in nb_grid:
-        try:
-            bp = solve_beta_point(x, par=par, x0=seed)
-        except RuntimeError as exc:
-            print(f"  stopped at n_b = {x:.3f} fm^-3: {str(exc)[:96]}")
-            break
-        pts.append(bp)
-        seed = (bp.M_q["u"], bp.M_q["d"], bp.M_q["s"], bp.mu_b, bp.mu_e,
-                sum(bp.densities[q] for q in "uds") / 3.0 * hc3,
-                bp.pt.gomega_omega, bp.pt.grho_rho,
-                bp.pt.SigmaR_b, bp.pt.SigmaR_q)
-    return (pts, np.array([p.n_b_fm for p in pts]),
-            np.array([p.eps for p in pts]), np.array([p.P for p in pts]))
-
-
 mu_b_table = baryon_potential(col)
+print("below the transition, the composition is predicted, not read:")
 print(f"{'n_b':>6s} {'P ours':>10s} {'P table':>10s} {'mu_b ours':>11s} "
       f"{'mu_b table':>11s} {'n_p ours':>9s} {'n_p table':>10s}")
-for x in (0.10, 0.20, 0.30, 0.40, 0.60, 1.00):
+for x in (0.10, 0.20, 0.30, 0.40):
     j = int(np.argmin(abs(col["nB"] - x)))
-    try:
-        bp = solve_beta_point(x, par=par_ref)
-        print(f"{x:6.2f} {bp.P:10.3f} {col['P'][j]:10.3f} {bp.mu_b:11.2f} "
-              f"{mu_b_table[j]:11.2f} {bp.densities['p']:9.4f} "
-              f"{col['np'][j]:10.4f}")
-    except RuntimeError:
-        print(f"{x:6.2f} {'--- solve failed (above the chiral transition) ---':>52s}")
-
-print("\ncontinuation sweep with beta_eos():")
-_, nb_beta, eps_beta, P_beta = beta_eos(np.arange(0.05, 1.01, 0.05), par=par_ref)
-print(f"  reached n_b = {nb_beta.max():.2f} fm^-3 "
-      f"({len(nb_beta)} points), P = {P_beta.max():.2f} MeV/fm^3")
+    bp = solve_beta_point(x, par=par_ref)
+    print(f"{x:6.2f} {bp.P:10.3f} {col['P'][j]:10.3f} {bp.mu_b:11.2f} "
+          f"{mu_b_table[j]:11.2f} {bp.densities['p']:9.4f} {col['np'][j]:10.4f}")
 
 # %% [markdown]
-# ## 7. Things that will cost you an afternoon
+# ## 7. Branches and their characteristics
+#
+# Two helpers do all the work below. `branch` maps one solution branch onto
+# arrays; `characteristics` turns those into the quantities the paper plots —
+# particle fractions $Y_i = n_i / n_b$, the quark baryon fraction
+# $n_b^Q / n_b$, and the sound speed $c_s^2 = dP/d\varepsilon$.
+#
+# Change `CASE` and `NB_GRID` in the next cell to look at a different parameter
+# set or resolution; everything downstream follows.
+
+# %%
+CASE = "Beta_fq0.7_B1.dat"          # any key of PARAMETER_SETS
+NB_GRID = np.round(np.arange(0.05, 10.001, 0.1), 4)
+
+
+def branch(par, nb_grid, direction="up"):
+    """One solution branch as {quantity -> array}, ordered in n_b.
+
+    `direction` picks which branch the continuation follows. Densities the
+    sweep could not reach are simply absent, so the arrays can be shorter than
+    `nb_grid` — a branch is allowed to end.
+    """
+    points, _, _ = beta_eos_table(nb_grid, par=par, direction=direction)
+    out = {"n_b": np.array([p.n_b_fm for p in points]),
+           "P": np.array([p.P for p in points]),
+           "eps": np.array([p.eps for p in points]),
+           "mu_b": np.array([p.mu_b for p in points]),
+           "mu_e": np.array([p.mu_e for p in points])}
+    for sp in SPECIES:
+        out["n_" + sp] = np.array([p.densities[sp] for p in points])
+    for q in "uds":
+        out["M_" + q] = np.array([p.M_q[q] for p in points])
+    for b in ("p", "n", "Lambda"):
+        out["Mb_" + b] = np.array([p.M_b[b] for p in points])
+    return out
+
+
+def characteristics(br):
+    """Y_i, the quark baryon fraction and c_s^2, added to a branch dict.
+
+    c_s^2 = dP/d(eps) by finite difference along the branch. It is meaningful
+    only where the branch is smooth: at a first-order transition the physical
+    sound speed is not the derivative along one branch, so read the spikes as
+    "a transition is here", not as a sound speed.
+    """
+    out = dict(br)
+    for sp in SPECIES:
+        out["Y_" + sp] = br["n_" + sp] / br["n_b"]
+    out["fq"] = sum(br["n_" + q] for q in "uds") / 3.0 / br["n_b"]
+    out["cs2"] = (np.gradient(br["P"], br["eps"]) if len(br["n_b"]) > 2
+                  else np.zeros_like(br["P"]))
+    return out
+
+
+def onsets(br, threshold=1e-6):
+    """First density at which each species appears [fm^-3]."""
+    found = {}
+    for sp in SPECIES:
+        above = np.flatnonzero(br["n_" + sp] > threshold)
+        found[sp] = br["n_b"][above[0]] if len(above) else None
+    return found
+
+
+f_q_case, B_case = PARAMETER_SETS[CASE]
+col_case, ok_case, par_case = load_case(CASE)
+mu_b_case = baryon_potential(col_case)
+up = characteristics(branch(par_case, NB_GRID, "up"))
+down = characteristics(branch(par_case, NB_GRID, "down"))
+print(f"{CASE}: f_q = {f_q_case}, B = {B_case} GeV/fm^3")
+print(f"  upward branch   {len(up['n_b']):3d} points, "
+      f"n_b up to {up['n_b'].max():.2f} fm^-3")
+print(f"  downward branch {len(down['n_b']):3d} points, "
+      f"n_b down to {down['n_b'].min():.2f} fm^-3")
+print("\n  onset densities on the upward branch [fm^-3]:")
+for sp, x in onsets(up).items():
+    print(f"    {sp:7s} {'--' if x is None else f'{x:.3f}'}")
+
+# %% [markdown]
+# ## 8. The paper's figures
+#
+# Four of the plots the paper builds, from the arrays above.
+#
+# In the $P$ vs $\mu_b$ panel the reference table lies on the upward branch
+# across the whole range. The second branch is the fully deconfined one; it
+# exists only above $n_b \approx 1$ fm⁻³ and appears as a separate curve at
+# high $\mu_b$ rather than as a crossing, because the chiral transition this
+# parameter set does have is *internal* to the upward branch — the sweep passes
+# through it continuously. Where a Maxwell construction has two branches to
+# equate, it is these two, and which of them is admissible is the open question
+# of §6, drawn rather than hidden.
+#
+# `plot/enjl_paper_figures.py` produces the same figures over all six
+# $(f_q, B)$ combinations and writes them to disk; that takes a few minutes,
+# which is why this notebook does one parameter set.
+
+# %%
+fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.0))
+
+# --- P vs mu_b: the variables a Maxwell construction lives in
+ax = axes[0, 0]
+ax.plot(up["mu_b"], up["P"], color=OKAB_CAT[0], label="branch from low density")
+ax.plot(down["mu_b"], down["P"], color=OKAB_CAT[3],
+        label="branch from high density")
+ax.plot(mu_b_case[ok_case], col_case["P"][ok_case], "k:", lw=1.5,
+        label="reference table")
+ax.set_xlabel(r"$\mu_b$ [MeV]")
+ax.set_ylabel(r"$P$ [MeV/fm$^3$]")
+ax.set_xlim(900, 2600)
+ax.set_ylim(0, 900)
+ax.set_title(r"$P$ vs $\mu_b$")
+apply_style(ax)
+
+# --- P vs n_b: the equation of state itself
+ax = axes[0, 1]
+ax.loglog(up["n_b"], up["P"], color=OKAB_CAT[0], label="this engine")
+ax.loglog(col_case["nB"][ok_case], col_case["P"][ok_case], "k:", lw=1.5,
+          label="reference table")
+ax.set_xlabel(r"$n_b$ [fm$^{-3}$]")
+ax.set_ylabel(r"$P$ [MeV/fm$^3$]")
+ax.set_title("$P$ vs $n_b$")
+apply_style(ax, minor_ticks=False)
+
+# --- particle fractions
+ax = axes[1, 0]
+for sp in SPECIES:
+    ax.semilogy(up["n_b"], np.maximum(up["Y_" + sp], 1e-6),
+                color=COLOR_SP[sp], lw=1.3, label=LABEL_SP[sp])
+ax.set_ylim(1e-4, 3)
+ax.set_xlim(0, 3)
+ax.set_xlabel(r"$n_b$ [fm$^{-3}$]")
+ax.set_ylabel(r"$Y_i = n_i / n_b$")
+ax.set_title("composition")
+apply_style(ax, minor_ticks=False)
+ax.legend(ncol=4, fontsize=7, loc="lower right")
+
+# --- quark fraction and sound speed
+ax = axes[1, 1]
+ax.plot(up["n_b"], up["fq"], color=OKAB_CAT[0], label=r"$n_b^Q / n_b$")
+ax.plot(up["n_b"], np.clip(up["cs2"], 0, 1), color=OKAB_CAT[3],
+        label=r"$c_s^2$")
+ax.axhline(1.0 / 3.0, color="0.7", lw=0.8, ls=":")
+ax.set_xlabel(r"$n_b$ [fm$^{-3}$]")
+ax.set_ylabel("fraction")
+ax.set_ylim(0, 1.05)
+ax.set_title("quark fraction and sound speed")
+apply_style(ax)
+
+fig.suptitle(f"{CASE}   ($f_q = {f_q_case}$, $B = {B_case:g}$ GeV/fm$^3$)",
+             y=1.01)
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## 9. Things that will cost you an afternoon
 #
 # **Units.** Natural units inside `eos.enjl.uniform` and
 # `eos.enjl.thermodynamics` (MeV, MeV³, MeV⁴); fm-based on the public
@@ -460,14 +607,18 @@ print(f"  reached n_b = {nb_beta.max():.2f} fm^-3 "
 # accuracy — the gap equation acquires spurious negative-mass roots.
 
 # %% [markdown]
-# ## 8. What is not here yet
+# ## 10. What is not here yet
 #
-# * **Beta equilibrium through the transition** — continuation in density past
-#   the first-order transitions (§6).
-# * **Maxwell construction** — the reference tables contain four verified
-#   coexistence windows to test one against.
-# * **TOV sequences** — `eos.tov` is ready; it needs a table that spans the
-#   full density range, which needs the two items above.
+# * **Choosing between branches above a transition** — the one thing blocking
+#   everything below it. See §6 and `DD2_OPEN_QUESTIONS.md` §G3.
+# * **Maxwell construction** — the crossing machinery works (it reproduces this
+#   parameter set's chiral transition to 0.3% in both $P$ and $\mu_b$), but
+#   which branches are admissible is the open question above. The reference
+#   tables contain four verified coexistence windows to gate one against.
+# * **TOV sequences and mass-radius curves (paper Fig. 8)** — `eos.tov` is
+#   ready and needs a table spanning the full density range, which needs the
+#   branch question closed. It also needs a crust: a crustless star is about
+#   0.9 km too small at 1.4 solar masses, larger than the spread Fig. 8 shows.
 # * **Finite temperature** — the whole extension is one function: route the
 #   kinetic block to `eos.general.fermi_integrals.solve_fermi_jel` for the
 #   medium part and keep the $\Lambda$ vacuum term analytic, since it is

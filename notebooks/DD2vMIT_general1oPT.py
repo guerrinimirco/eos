@@ -14,27 +14,39 @@
 # ---
 
 # %% [markdown]
-# # DD2 + vMIT — general first-order phase transition
+# # DD2 + vMIT — general framework for the first-order deconfinement transition
 #
-# A hadronic equation of state (**DD2**, a density-dependent relativistic mean field)
-# and a quark equation of state (**vMIT**, a vector-enhanced bag model) joined across a
-# first-order phase transition, with the character of that transition controlled by a
-# single continuous parameter **η**.
+# A hadronic EOS (**DD2**, a density-dependent relativistic mean field) and a quark EOS
+# (**vMIT**, a vector-enhanced bag model) joined across a first-order deconfinement
+# phase transition, with the character of that transition controlled by a single
+# continuous parameter **η**.
 #
-# **What η means.** In a mixed phase the two phases must be electrically neutral
-# *somewhere*, and the question is where. η is the fraction of neutrality imposed
-# **locally**, inside each phase, rather than **globally**, on the volume average:
+# **What η means.** The hadronic (*H*) and quark (*Q*) phases coexist in the mixed
+# phase with a *quasi-permeable* interface for charged leptons: in the vicinity of the
+# interface the two phases exchange charged leptons, which then help neutralize
+# electric charge across both phases, while regions farther away remain effectively
+# locally charge neutral. Charge neutrality is therefore realized *partly locally* and
+# *partly globally*, and η ∈ [0,1] measures the fraction of charged leptons that
+# enforce local charge neutrality (**LCN**) separately in each phase; the remaining
+# fraction 1−η participates only in global charge neutrality (**GCN**).
 #
-# | η | construction | behaviour through the mixed window |
+# | η | construction | behaviour through the mixed phase |
 # |---|---|---|
-# | 0 | **Gibbs** | only the average is neutral; the phases exchange charge freely and the pressure rises continuously |
-# | 1 | **Maxwell** | each phase is separately neutral; no charge is exchanged, and the window collapses to a constant-pressure plateau with a density jump |
-# | in between | — | stands in for the finite surface tension and Coulomb cost of the mixed-phase structures |
+# | 0 | **Gibbs (GC)** | baryon number *and* electric charge are conserved globally; only the volume average is neutral and the pressure varies continuously across the mixed phase |
+# | 1 | **Maxwell (MC)** | baryon number is the only globally conserved charge and neutrality is imposed locally in each phase; the pressure remains constant and the window collapses to a density jump |
+# | in between | — | finite-size effects are *not* included microscopically; their net impact is emulated by tuning the balance between local and global neutrality through η |
 #
-# **How a density is classified.** The quark volume fraction χ comes out of the solve
-# and is *not* clamped: **χ ≤ 0 → pure hadronic, χ ≥ 1 → pure quark, 0 < χ < 1 → mixed.**
-# The table builder locates the two χ crossings first and then solves the expensive
-# mixed system only between them.
+# An equivalent picture is that of pure-phase "lumps" forming in the coexistence
+# region. If their characteristic size is much larger than the Debye screening length,
+# charged leptons are effectively tied to individual lumps and charge neutrality is
+# local — roughly, the σ → ∞ limit; if it is much smaller, they experience an averaged
+# background and neutrality becomes purely global (σ → 0). Intermediate sizes
+# correspond to 0 < η < 1.
+#
+# **How a density is classified.** The quark volume fraction χ ≡ V_Q/(V_H + V_Q) comes
+# out of the solve and is *not* clamped: **χ ≤ 0 → pure hadronic, χ ≥ 1 → pure quark,
+# 0 < χ < 1 → mixed phase.** The table builder locates the two χ crossings first and
+# then solves the expensive mixed system only between them.
 #
 # **The two sound speeds.** A first-order transition has two, and the gap between
 # them is the clearest single picture of what η does:
@@ -76,23 +88,16 @@ import time
 import subprocess
 from pathlib import Path
 
-# Import the repository clone in preference to anything pip has left behind in
-# site-packages. The notebook runs from `notebooks/`, so the repository root is
-# not on sys.path by default and an older installed copy of `eos` wins the
-# import — one that is missing whatever subpackages have been added since it
-# was installed, which is how `eos.mixed` goes absent.
 ROOT = next((p for p in (Path.cwd(), *Path.cwd().parents)
              if (p / "pyproject.toml").is_file() and (p / "eos").is_dir()), None)
 if ROOT is not None:
     sys.path.insert(0, str(ROOT))
-    # Drop anything already imported from the wrong copy, so re-running this
-    # cell fixes the kernel instead of needing a restart.
     for _m in [m for m in sys.modules if m == "eos" or m.startswith("eos.")]:
         del sys.modules[_m]
 
 try:
     import eos.mixed
-except ImportError:      # not inside a clone (Colab, say) — fetch the package
+except ImportError:      
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-deps",
                            "--quiet",
                            "git+https://github.com/guerrinimirco/eos.git"])
@@ -117,11 +122,7 @@ from eos.mixed import (
     sound_speed_eq, frozen_along,
     scan_parameters, scan_hadronic, grid_samples, DEFAULT_U_DELTA,
 )
-# Shared figure styling and the observational overlays, so every figure in this
-# notebook reads the same way as every other figure built on `eos`. This is the
-# NOTEBOOK style family (12-14 pt, gridlines, 150 dpi); `set_paper_style` /
-# `paper_grid` from the same module are the manuscript counterparts, and mixing
-# the two in one session means the last call wins.
+
 from eos.general.figure_style import (
     set_global_style, setup_scientific_figure, apply_style, add_panel_labels,
     save_figure, particle_style, LABELS, STANDARD_COLORS,
@@ -136,38 +137,12 @@ print("eos imported from:", Path(eos.__file__).parent)
 
 
 # %% [markdown]
-# ## I.2 Knobs
+# ## I.2 Parameters and grids
 #
 # Everything tunable lives in this cell. Edit, then run the rest.
 
 # %%
 # ---- hadronic parametrization -------------------------------------------
-# The default below is a *validated* nucleons + hyperons + Delta parametrization:
-# it has a complete mixed phase and M_max > 2 M_sun. See the block below for what
-# it is and what happens when you move off it.
-#
-# Other starting points:
-#   from_dd2_defaults()   nucleonic DD2, no hyperon couplings
-#   from_dd2y_defaults()  DD2Y (hyperons, no Delta sector) — with the vMIT
-#                         defaults this has NO transition at all
-#   from_nmp(NMP)         pin the nuclear-matter parameters yourself
-#
-# WHAT THE DELTA IS. The Delta(1232) isobar, the first excited state of the
-# nucleon: a spin-3/2 isospin-3/2 quartet (Delta++, Delta+, Delta0, Delta-),
-# mass 1232 MeV, S = 0, g = 4 each. In dense matter it competes with the
-# hyperons -- the Delta- is the one that matters, since charge -1 lets it
-# replace leptonic pressure and its large negative isospin (t3 = -3) earns a
-# big rho-field bonus in neutron-rich matter. It therefore usually appears
-# BEFORE the hyperons and softens the equation of state at intermediate
-# density. Unlike the hyperons there is no SU(6) rule fixing its couplings, so
-# the ratios x_iD = Gamma_iD/Gamma_iN are free parameters.
-#
-# The three sectors compose, each from its own physical input. To pick all of
-# them independently -- nucleons from NMP, hyperons from U_Y, Delta from the
-# coupling ratios directly -- chain them (each takes the previous as `base`):
-#
-#   from dataclasses import replace
-#
 #   # 1. nucleons: invert the nuclear-matter parameters at saturation
 #   NMP = dict(n_sat=0.149065, E_sat=-16.02, m_eff_ratio=0.5625,
 #              K_sat=242.7, Q_sat=169.15, E_sym=31.67, L_sym=55.03)
@@ -180,7 +155,6 @@ print("eos imported from:", Path(eos.__file__).parent)
 #       U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0, base=PAR)
 #
 #   # 3. Delta: no SU(6) rule exists, so set x_iD = Gamma_iD/Gamma_iN by hand.
-#   #    Literature x_Dsigma ~ 1.0-1.3, x_Domega ~ 1.0. Delta has S=0: no phi.
 #   PAR = replace(PAR, x_Delta_sigma=1.15, x_Delta_omega=1.0, x_Delta_rho=1.0)
 #
 #   # ...or, instead of step 3, let U_Delta fix x_Dsigma for chosen vectors by
@@ -203,36 +177,16 @@ FLAGS = SpeciesFlags(
     muons=True,         # electrons are always present; muons optional
     phi_field=True,     # hidden-strange vector, required with hyperons
     photons=True,       # matters only at T > 0
-    # ---- thermal meson gases (off; this notebook runs at T = 0) ----------
-    # Ideal Bose gases on top of the mean field (Lavagno 2010), with effective
-    # potentials tied to the SAME meson fields that generate the baryon
-    # interactions and DD2's density-dependent couplings:
-    #   mu*_pi+ = mu_Q - Gamma_rhoN(n_B) rho0
-    #   mu*_K+  = mu_Q - mu_S - (Gamma_omegaN - Gamma_omegaL)(n_B) omega0
-    #                         - 1/2 Gamma_rhoN(n_B) rho0
-    # and mu* = 0 for the strangeless neutrals (pi0, eta, eta', rho0, omega, phi).
-    # No rearrangement term: the thermal mesons are spectators to Sigma^R.
-    #
-    #   include_pseudoscalars=True,     # thermal pi, K, eta, eta'
-    #   include_thermal_vectors=True,   # thermal rho, omega, K*, phi
-    #
-    # The vector flag is separate on purpose: the thermal rho/omega/phi are the
-    # incoherent k != 0 quanta sitting ON TOP of the mean field, a modelling
-    # choice rather than an obvious inclusion. Two things to know before
-    # switching either on:
-    #   1. Both are no-ops at T = 0, so they change nothing here.
-    #   2. The gas is additive in P, eps, s and joins the HVH sum, but its net
-    #      charge and strangeness are NOT fed back: it is added after the octet
-    #      solve, so meson n_C / n_S do not enter charge neutrality or the
-    #      strangeness condition. Fine while thermal K-/pi- populations are
-    #      small, wrong at high T where they are not.
+    # Thermal Bose gases on top of the mean field. Self-consistently coupled:
+    # their charge and strangeness enter neutrality and the Y_C / Y_S rows, so
+    # in neutron-rich matter (mu_Q < 0) the pi-/K- excess pushes Y_p up and Y_e
+    # down. No baryon number, and no sourcing of the sigma/omega/rho/phi fields.
+    # Both are no-ops at T = 0; the vectors stay negligible below T ~ 80 MeV.
+    include_pseudoscalars=True,     # thermal pi, K, eta, eta'
+    include_thermal_vectors=True,   # thermal rho, omega, K*, phi
 )
 
 # ---- quark parametrization ------------------------------------------------
-# get_vmit_default() is B^1/4 = 180 MeV, a = 0.2 fm^2, m_s = 150 MeV.
-# get_vmit_custom(B4=..., a=..., m_s=...) to change any of them. B4 sets how
-# costly quark matter is (higher -> later transition, or none at all) and a is
-# the vector coupling (higher -> stiffer quark matter -> larger M_max).
 VMIT = get_vmit_custom(B4=180.0, a=0.15, m_s=150.0)
 
 # ---- WHY THIS PARAMETRIZATION ---------------------------------------------
@@ -257,58 +211,28 @@ VMIT = get_vmit_custom(B4=180.0, a=0.15, m_s=150.0)
 #                    about four times more likely to give a viable star;
 #   quarks           B^1/4 = 180 MeV, a = 0.15 fm^2, m_s = 150 MeV.
 #
-# At eta = 0 it gives a complete window at 0.93-1.23 fm^-3 (6.2-8.2 n_sat),
-# M_max = 2.05 M_sun, R(1.4) = 12.90 km, max c_s^2 = 0.505.
-#
-# It was chosen over the other viable combinations for one practical reason:
-# it is one of the few that completes at EVERY eta in ETA_LIST, and the windows
-# nest monotonically as eta rises — [0.93, 1.23] at eta = 0 shrinking to
-# [1.00, 1.17] at eta = 1 — which is the textbook Gibbs-to-Maxwell picture and
-# what every eta-family figure in Part III is drawing. Combinations that are
-# heavier but drop the window at one or two intermediate eta (B^1/4 = 160,
-# a = 0.20 reaches 2.07 M_sun but has no window at eta = 0.6) leave holes in
-# those figures.
-#
-# Moving off it, in rough order of how much it costs you:
-#
-#   a          THE binding constraint. Only 0.05 <= a <= 0.20 fm^2 works at all:
-#              a = 0 leaves the quark phase too soft to reach 2 M_sun, and from
-#              a = 0.25 upward there is no ordered window for ANY B^1/4 in
-#              [120, 200] MeV — chi comes back decreasing in density instead of
-#              rising, which is an unexplained boundary rather than a physical
-#              one, so do not read it as a bound on the vMIT vector coupling;
-#   B^1/4      trades off against a: both raise the onset density, so they move
-#              in OPPOSITE directions. a = 0.20 wants B^1/4 ~ 150-190;
-#              a = 0.10 wants ~190-200. Raise B^1/4 alone and the transition
-#              leaves the grid;
-#   x_wD       1.2 works far more often than 1.0 (see above);
-#   L_sym      free over 30-100 MeV, and it barely moves the result;
-#   U_Y, m_s   no measurable effect on viability.
+
 
 # ---- equilibrium mode -----------------------------------------------------
 # 'beta_eq_neutrinoless'      independent variables (nB, T)
 # 'beta_eq_neutrino_trapped'  independent variables (nB, Y_L, T)
 # 'fixed_YC'                  independent variables (nB, Y_C, T)
 # 'fixed_YC_YS'               independent variables (nB, Y_C, Y_S, T)
-#
-# Y_C is the NON-leptonic charge fraction (hadrons and quarks only); Y_S counts
-# +1 per s-quark. The fixed-fraction modes sweep their fraction as an extra
-# table axis, taken from the list below.
+
 MODE = "beta_eq_neutrinoless"
 FIXED = {}                      # scalar values for fractions not swept as axes
-Y_C_LIST = [0.05, 0.1, 0.3]     # the Y_C axis, for the fixed-Y_C modes
+Y_C_LIST = [0.05, 0.1, 0.3, 0.5]     # the Y_C axis, for the fixed-Y_C modes
 
 # ---- grids ----------------------------------------------------------------
 N_SAT = PAR.n_sat                                     # fm^-3
 NB = np.linspace(0.1 * N_SAT, 12.0 * N_SAT, 300)      # baryon density [fm^-3]
-# T_LIST x ETA_LIST is what Part II.2 costs: one window search plus one window
-# sweep per pair. The 12 x 5 default is a full production run (minutes); for a
-# first look cut T_LIST to [0.0, 10.0, 30.0] and ETA_LIST to [0.0, 1.0].
-T_LIST = np.concatenate([[0, 0.1], np.arange(2, 101., 2)])  # MeV
+T_LIST = np.concatenate([[0, 0.1], np.arange(2.5, 101., 2.5)])  # MeV
 ETA_LIST = [0.0, 0.1, 0.3, 0.6, 1.0]
 
 # ---- what to run ----------------------------------------------------------
-TOV_ETAS = [0.0, 0.1, 0.3, 0.6, 1.0]      # TOV is beta-equilibrium, T = 0 only
+TOV_ETAS = ETA_LIST     # TOV is beta-equilibrium, T = 0 only
+
+
 
 # ---- parameter scan (II.4) ------------------------------------------------
 # The map of where a hybrid star exists at all. Kept coarse by default; each
@@ -358,12 +282,13 @@ print(f"liquid-gas spinodal and has no stable solution; those points are skipped
 # simply reads off where χ crosses 0 and 1:
 #
 # - **a window** → the parameters give a complete transition, go on to Part II;
-# - **no window** → χ never reaches 1. Either the hadronic phase never becomes
-#   unfavourable (lower `B4`) or the transition starts and stalls. This is a
+# - **no window** → χ never reaches 1. Either the quark phase never becomes the
+#   favoured one (lower `B4`) or the transition starts and stalls. This is a
 #   statement about the physics of your parameters, not a solver failure.
 #
-# η=1 (Maxwell) is checked alongside η=0 (Gibbs) because the window narrows with η,
-# and a combination that transitions under Gibbs can fail to under Maxwell.
+# η = 1 (MC, purely LCN) is checked alongside η = 0 (GC, purely GCN) because the
+# window narrows as η rises, and a combination that transitions under a Gibbs
+# construction can fail to under a Maxwell one.
 
 # %%
 print(f"pre-flight  B4={VMIT.B4:.0f} MeV  a={VMIT.a} fm^2  m_s={VMIT.m_s:.0f} MeV")
@@ -438,7 +363,7 @@ else:
 # at a low bag constant — the mixed branch it locks onto sits at a *lower* pressure
 # than the hadronic branch at the same density, so it is not the favoured state, and
 # the stitched table steps *down* by tens of MeV/fm³ at the onset. Such a table is not
-# an equation of state, and integrating it returns confident nonsense (maximum masses
+# an EOS, and integrating it returns confident nonsense (maximum masses
 # in the hundreds of solar masses). The scan therefore checks P is non-decreasing and
 # 0 ≤ c_s² ≤ 1 **before** integrating, and reports `eos_unphysical` instead of a
 # number. Expect a large fraction of the "has a transition" cells to be rejected here;
@@ -631,6 +556,21 @@ print(f"pure quark: {time.time()-t0:.1f} s")
 # One table per η (η changes the size of the unknown vector, so it is looped outside
 # rather than being an axis). Each line prints its transition window, how many points
 # it converged, and the cost per point.
+#
+# `MODE` selects which charges are globally conserved, and with them the independent
+# variables of the table:
+#
+# | `MODE` | globally conserved | independent variables | where it applies |
+# |---|---|---|---|
+# | `beta_eq_neutrinoless` | B | (n_B, T, η) | cold compact stars |
+# | `beta_eq_neutrino_trapped` | B, L | (n_B, Y_L, T, η) | early neutrino-trapped stages of protoneutron stars |
+# | `fixed_YC` | B, C | (n_B, Y_C, T, η) | EOS tables for CCSN and BNSM simulations, where β reactions are not always equilibrated |
+# | `fixed_YC_YS` | B, C, S | (n_B, Y_C, Y_S, T, η) | timescales short compared with the weak strangeness-changing one — heavy-ion collisions, or the first critical droplet in nucleation |
+#
+# In the first three modes weak equilibrium with respect to non-leptonic
+# strangeness-changing reactions is established *separately* in each phase, μ_S^H =
+# μ_S^Q = 0; in the last, global conservation of strangeness ties the phases together
+# through a common and generally nonvanishing μ_S^H = μ_S^Q.
 
 # %%
 def progress(info):
@@ -671,14 +611,15 @@ print(f"\nTOTAL: {time.time()-grand_total:.1f} s for "
 # %% [markdown]
 # ## II.3 TOV
 #
-# The stitched core equation of state — pure hadronic below the onset, mixed through
-# the window, pure quark above the offset — integrated to a mass-radius sequence.
+# The stitched core EOS — pure hadronic below the onset, mixed through the window,
+# pure quark above the offset — integrated to a mass-radius sequence.
 #
-# **This is always cold beta equilibrium, whatever `MODE` is set to.** A neutron-star
-# core is neutrino-transparent and cold; the fixed-Y_C and trapped modes describe
-# snapshot conditions, not a cold star, so running TOV on them would answer a
-# different question than the one the tables above answer. The mass-radius curve
-# below therefore does *not* change when you change `MODE`.
+# **This is always cold, neutrinoless β-equilibrated matter, whatever `MODE` is set
+# to.** A neutron-star core is cold and neutrino-transparent; the fixed-charge-fraction
+# and neutrino-trapped modes describe the conditions of CCSN and BNSM matter, not of a
+# cold star, so running TOV on them would answer a different question than the one the
+# tables above answer. The mass-radius curve below therefore does *not* change when you
+# change `MODE`.
 #
 # A Maxwell (η=1) table carries a constant-pressure plateau, and `eos.tov` detects it
 # and applies the tidal correction across the density discontinuity by itself.
@@ -760,8 +701,8 @@ export_csv(scan_rows, OUT / "scan_B4_a.csv")
 # All plotting is defined here. The mixed tables are re-read from disk, so Part II.2 need
 # not be repeated; the pure wings come from Part II.1, which is the cheap cell.
 #
-# Everything below plots the **complete equation of state** — pure hadronic, mixed, pure
-# quark — not the mixed window alone. `full_eos` does the joining.
+# Everything below plots the **complete EOS** — pure hadronic, mixed phase, pure quark —
+# not the mixed phase alone. `full_eos` does the joining.
 #
 
 # %%
@@ -837,9 +778,9 @@ def full_eos(eta, T):
 # %% [markdown]
 # ## III.1 Pressure, entropy per baryon, and quark fraction vs density
 #
-# One panel each, at a chosen temperature, with one colour per η — the whole equation of
-# state, hadronic wing through mixed window through quark wing. The χ panel says which
-# segment you are looking at: flat at 0 is hadronic, rising is mixed, flat at 1 is quark.
+# One panel each, at a chosen temperature, with one colour per η — the whole EOS,
+# hadronic wing through mixed phase through quark wing. The χ panel says which segment
+# you are looking at: flat at 0 is hadronic, rising is mixed, flat at 1 is quark.
 # The two pure branches are drawn dotted in grey underneath, continued past the
 # transition where they are metastable, so the gain from the transition is visible.
 #
@@ -903,8 +844,10 @@ plot_eos_panels(20.0, show_pure=False)
 #
 # For each η, the density at which the quark phase appears (χ = 0, onset) and the one
 # at which the hadronic phase disappears (χ = 1, offset), as functions of temperature.
-# The shaded band between them is the mixed phase. A wide band is Gibbs-like; the band
-# narrows towards η = 1, where it becomes the Maxwell density jump.
+# The shaded band between them is the mixed phase. A wide band is Gibbs-like, the two
+# phases sharing charge freely under GCN; the band narrows as η rises and the charged
+# leptons are progressively tied to their own phase, until at η = 1 it becomes the
+# density jump of the Maxwell construction.
 
 # %%
 fig, ax = setup_scientific_figure()
@@ -934,8 +877,8 @@ plt.show()
 # %% [markdown]
 # ## III.3 Mass-radius and tidal deformability
 #
-# Cold, beta-equilibrium stars built on the stitched core equation of state, drawn
-# over the NICER and HESS credible regions and the PSR J0952-0607 mass band.
+# Cold, neutrinoless β-equilibrated stars built on the stitched core EOS, drawn over
+# the NICER and HESS credible regions and the PSR J0952-0607 mass band.
 #
 # The overlays come from `eos.general.observational_constraints`, which reads contours
 # precomputed offline and shipped inside the package — nothing is refitted here. They
@@ -980,11 +923,11 @@ plt.show()
 #
 # The clearest single picture of what η does.
 #
-# **c_eq² = dP/dε** is taken along the equilibrium sequence, where the quark fraction χ
-# is free to readjust. A compression is then answered by converting hadrons into
-# quarks instead of by raising the pressure, so c_eq **dips** through a Gibbs window
-# and **collapses to zero** through a Maxwell one, where the pressure is flat by
-# construction. This is the sound speed that enters the TOV equations.
+# **c_eq² = dP/dε** is taken along the equilibrium sequence, where the quark volume
+# fraction χ is free to readjust. A compression is then answered by converting hadrons
+# into quarks instead of by raising the pressure, so c_eq **dips** through a Gibbs
+# window and **collapses to zero** through a Maxwell one, where the pressure remains
+# constant by construction. This is the sound speed that enters the TOV equations.
 #
 # **c_ad² (frozen)** holds χ fixed — the mixture is compressed faster than one phase
 # can convert into the other — so the pressure has to rise and c_ad does *not*
@@ -1094,11 +1037,12 @@ plt.show()
 # %% [markdown]
 # ## III.6 Composition through the transition
 #
-# Volume-weighted fractions Y_i = w n_i / n_B, with w = 1−χ for hadrons and w = χ for
-# quarks, so the curves sum consistently across the mixed phase. Hadrons solid, quarks
-# dashed. Shown across the whole density range: hadrons start at their pure values, hand
-# over through the window, and are gone above the offset, where the quarks reach their
-# pure ones. The shading marks the mixed window.
+# The particle fractions of the mixed phase, obtained from the corresponding densities:
+# Y_h = (1−χ) n_h^H / n_B for the hadrons and Y_q = χ n_q^Q / n_B for the quarks, so
+# that the curves sum consistently across the mixed phase. Hadrons solid, quarks
+# dashed. Shown across the whole density range: the hadrons start at their pure-phase
+# values, hand over through the window, and are gone above the offset, where the quarks
+# reach theirs. The shading marks the mixed phase.
 #
 
 # %%
@@ -1141,8 +1085,8 @@ plt.show()
 # %% [markdown]
 # ## III.7 Rotation — constant-J and constant-frequency sequences
 #
-# Uniformly rotating, axisymmetric models of the *same* stitched equations of state
-# Part II.3 integrated, computed with the Komatsu–Eriguchi–Hachisu self-consistent
+# Uniformly rotating, axisymmetric models of the *same* stitched EOSs Part II.3
+# integrated, computed with the Komatsu–Eriguchi–Hachisu self-consistent
 # field method as implemented in RNS (Stergioulas & Friedman 1995, ApJ 444, 306),
 # driven through `eos.tov.rotating`.
 #
@@ -1254,13 +1198,13 @@ if rot_iso:
 # ### M_max at the Kepler limit, against the static value
 #
 # The left panel is the quantity of interest: how much extra mass uniform rotation
-# supports. For nucleonic and hyperonic equations of state this ratio is famously
-# insensitive to the microphysics — Breu & Rezzolla (2016, MNRAS 459, 646) find
+# supports. For nucleonic and hyperonic EOSs this ratio is famously insensitive to
+# the microphysics — Breu & Rezzolla (2016, MNRAS 459, 646) find
 # 1.203 ± 0.022 across a wide set of tables, and that band is drawn for reference.
 #
 # **The ratio comes out flat in η, and that is not the plot failing to do anything.**
 # η is a phase-construction parameter, not a stiffness parameter: it reshapes the
-# equation of state *inside* the window and nowhere else. The maximum-mass
+# EOS *inside* the mixed phase and nowhere else. The maximum-mass
 # configuration sits at a central density above the offset, where every η is pure
 # quark matter and the tables coincide exactly — so M_max is set by a branch η never
 # touches. The η=0 and η=1 tables here differ by up to 30 MeV/fm³ in pressure and

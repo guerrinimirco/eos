@@ -22,6 +22,14 @@ bose_integrals. Off by default for cold NS; the thermal
 rho/omega/phi are the incoherent k!=0 quanta on top of the mean field, a
 modelling choice kept switchable.
 
+The gas carries electric charge and strangeness, and those DO enter the
+solver's constraints: `thermal_meson_charges` supplies (n_C, n_S) to the octet
+residual, so charge neutrality is imposed on baryons + mesons together and a
+fixed strangeness fraction counts thermal kaons. The gas does NOT source the
+sigma/omega/rho/phi field equations — it is an ideal Bose gas riding on the
+mean fields, not a source of them — and it carries no baryon number, so the
+n_B constraint is untouched.
+
 Masses (PDG, MeV).
 """
 from eos.general.bose_integrals import solve_bose_jel
@@ -37,6 +45,72 @@ def _bose(mu_eff, T, m, g):
     """(n, P, e, s) fm-based; antiparticles are separate species here."""
     n, P, e, s, _ = solve_bose_jel(mu_eff, T, m, g, include_antiparticles=False)
     return n, P, e, s
+
+
+def lambda_omega_ratio(par):
+    """x_omega^Lambda entering the kaon omega-shift (SU(6) 2/3 without hyperons)."""
+    # map row: (mass, x_sigma, x_omega, x_rho, x_phi) -> x_omega at [2]
+    return (par.hyperon_coupling_map.get("Lambda", (0, 0, _X_OMEGA_LAMBDA))[2]
+            if par.hyperon_couplings else _X_OMEGA_LAMBDA)
+
+
+def meson_families(Gw, Gr, x_omega_L, mu_Q, mu_S, omega0, rho0,
+                   include_pseudoscalars=False, include_thermal_vectors=False):
+    """
+    (mu_eff, mass, Q, S, g) per thermal meson species, antiparticles listed
+    explicitly. Q is the electric charge and S the strangeness in this
+    repository's convention (S = +1 per s-quark, so K- and K0bar have S = +1).
+
+    Gw, Gr are the NUCLEON couplings Gamma_{omega,rho}N(n_B) and x_omega_L the
+    Lambda/nucleon omega ratio; all potentials and fields in MeV.
+    """
+    dGw_KL = (1.0 - x_omega_L) * Gw          # (Gamma_omegaN - Gamma_omegaL)
+
+    mu_pi = mu_Q - Gr * rho0                              # mu*_pi+ = mu*_rho+
+    mu_Kp = mu_Q - mu_S - dGw_KL * omega0 - 0.5 * Gr * rho0
+    mu_K0 = -mu_S - dGw_KL * omega0 + 0.5 * Gr * rho0
+
+    families = []
+    if include_pseudoscalars:
+        families += [
+            (mu_pi, M_PI, +1, 0, 1.0), (-mu_pi, M_PI, -1, 0, 1.0),
+            (0.0, M_PI, 0, 0, 1.0),                          # pi0
+            (mu_Kp, M_K, +1, -1, 1.0), (-mu_Kp, M_K, -1, +1, 1.0),   # K+, K-
+            (mu_K0, M_K, 0, -1, 1.0), (-mu_K0, M_K, 0, +1, 1.0),     # K0, K0bar
+            (0.0, M_ETA, 0, 0, 1.0), (0.0, M_ETAP, 0, 0, 1.0),
+        ]
+    if include_thermal_vectors:
+        families += [
+            (mu_pi, M_RHO, +1, 0, 3.0), (-mu_pi, M_RHO, -1, 0, 3.0),
+            (0.0, M_RHO, 0, 0, 3.0), (0.0, M_OMEGA, 0, 0, 3.0),
+            (mu_Kp, M_KSTAR, +1, -1, 3.0), (-mu_Kp, M_KSTAR, -1, +1, 3.0),
+            (mu_K0, M_KSTAR, 0, -1, 3.0), (-mu_K0, M_KSTAR, 0, +1, 3.0),
+            (0.0, M_PHI, 0, 0, 3.0),
+        ]
+    return families
+
+
+def thermal_meson_charges(Gw, Gr, x_omega_L, mu_Q, mu_S, omega0, rho0, T,
+                          include_pseudoscalars=False,
+                          include_thermal_vectors=False):
+    """
+    (n_C, n_S) of the thermal meson gas [fm^-3] — the net electric charge and
+    strangeness the gas carries.
+
+    This is the piece the solver needs inside its residual, so it skips the
+    P/e/s work of thermal_meson_thermo. Same couplings-in convention as
+    meson_families; zero at T <= 0 or with both flags off.
+    """
+    if T <= 0.0 or not (include_pseudoscalars or include_thermal_vectors):
+        return 0.0, 0.0
+    n_C = n_S = 0.0
+    for mu_eff, m, Q, S, g in meson_families(
+            Gw, Gr, x_omega_L, mu_Q, mu_S, omega0, rho0,
+            include_pseudoscalars, include_thermal_vectors):
+        n = _bose(mu_eff, T, m, g)[0]
+        n_C += Q * n
+        n_S += S * n
+    return n_C, n_S
 
 
 def thermal_meson_thermo(par, n_B, mu_Q, mu_S, omega0, rho0, T,
@@ -56,33 +130,9 @@ def thermal_meson_thermo(par, n_B, mu_Q, mu_S, omega0, rho0, T,
         return dict(P=0.0, e=0.0, s=0.0, n_C=0.0, n_S=0.0, mu_dot_n=0.0)
 
     _, Gw, Gr, _, _, _ = par.couplings_at(n_B)
-    # map row: (mass, x_sigma, x_omega, x_rho, x_phi) -> x_omega at [2]
-    x_omega_L = par.hyperon_coupling_map.get("Lambda", (0, 0, _X_OMEGA_LAMBDA))[2] \
-        if par.hyperon_couplings else _X_OMEGA_LAMBDA
-    dGw_KL = (1.0 - x_omega_L) * Gw          # (Gamma_omegaN - Gamma_omegaL)
-
-    mu_pi = mu_Q - Gr * rho0                              # mu*_pi+ = mu*_rho+
-    mu_Kp = mu_Q - mu_S - dGw_KL * omega0 - 0.5 * Gr * rho0
-    mu_K0 = -mu_S - dGw_KL * omega0 + 0.5 * Gr * rho0
-
-    # (mu_eff, mass, Q, S) per species; antiparticles listed explicitly.
-    families = []
-    if include_pseudoscalars:
-        families += [
-            (mu_pi, M_PI, +1, 0, 1.0), (-mu_pi, M_PI, -1, 0, 1.0),
-            (0.0, M_PI, 0, 0, 1.0),                          # pi0
-            (mu_Kp, M_K, +1, -1, 1.0), (-mu_Kp, M_K, -1, +1, 1.0),   # K+, K-
-            (mu_K0, M_K, 0, -1, 1.0), (-mu_K0, M_K, 0, +1, 1.0),     # K0, K0bar
-            (0.0, M_ETA, 0, 0, 1.0), (0.0, M_ETAP, 0, 0, 1.0),
-        ]
-    if include_thermal_vectors:
-        families += [
-            (mu_pi, M_RHO, +1, 0, 3.0), (-mu_pi, M_RHO, -1, 0, 3.0),
-            (0.0, M_RHO, 0, 0, 3.0), (0.0, M_OMEGA, 0, 0, 3.0),
-            (mu_Kp, M_KSTAR, +1, -1, 3.0), (-mu_Kp, M_KSTAR, -1, +1, 3.0),
-            (mu_K0, M_KSTAR, 0, -1, 3.0), (-mu_K0, M_KSTAR, 0, +1, 3.0),
-            (0.0, M_PHI, 0, 0, 3.0),
-        ]
+    families = meson_families(Gw, Gr, lambda_omega_ratio(par), mu_Q, mu_S,
+                              omega0, rho0, include_pseudoscalars,
+                              include_thermal_vectors)
 
     for mu_eff, m, Q, S, g in families:
         n, P_j, e_j, s_j = _bose(mu_eff, T, m, g)

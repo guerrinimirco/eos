@@ -191,6 +191,36 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
   **off by default for cold NS** (the thermal ρ,ω,φ quanta partly double-count the
   mean fields). Confirm default-off is what we want.
 
+### E2b. Thermal meson charge/strangeness in the constraints — PINNED
+- **Was:** the gas was added *after* the octet solve, so its `n_C`/`n_S` were
+  computed and discarded. Neutrality closed on baryons alone. Harmless at
+  T ≲ 30 MeV, badly wrong above: at n_B = 0.4 fm⁻³, T = 100 MeV the gas carries
+  |n_C| ≈ 0.6 n_B.
+- **Now:** `octet_residual` adds the meson `n_C`/`n_S` to the neutrality, fixed-Y_C
+  and fixed-Y_S rows, so the constraints read
+  `n_C^baryons + n_C^mesons = n_e + n_mu` etc. `assemble_octet` reports the same
+  totals in `Y_C`/`Y_S`, which is how the mixed-phase solver inherits the
+  feedback (`PhaseThermo.n_C = Y_C·n_B`). Baryons-only values stay available as
+  `Y_C_baryons`/`Y_S_baryons`.
+- **Why:** matches the neutrality condition of the reference Mathematica
+  implementation (`nCbarioni + nCmesoni − n_e = 0`) and is required for the
+  mixed-phase charge bookkeeping to balance.
+- **Pinned convention — worth a review:** the meson charge counts *inside* `Y_C`,
+  i.e. `Y_C` is the total non-leptonic charge fraction, not the baryonic one.
+  Same for `Y_S` and thermal kaons. This is the reading consistent with
+  neutrality and with §2's "n_C is the non-leptonic charge density", but a
+  CompOSE `Y_q` slice could instead be read as baryons-only. **If we decide
+  differently**, the residual rows revert to `charge`/`strangeness` and only the
+  neutrality row keeps the meson term.
+- **Not fed back:** the gas does not source the σ/ω/ρ/φ field equations, and
+  carries no baryon number, so the n_B row is untouched. `mu_dot_n` stays the
+  baryon sum — the meson `Σ_j μ*_j n_j` is added by the callers from
+  `thermal_meson_thermo`, and folding it into `charge_had` would double count.
+- **Jacobian:** the meson block of `octet_jacobian` is a central difference of
+  `meson_charges_nat` in (μ_Q, μ_S, ω₀, ρ₀), the same tactic `kinetic_derivs`
+  already uses at T > 0. T = 0 is untouched (the gas vanishes), so the jitted
+  T = 0 kernels needed no change.
+
 ### E3. M8 NMP inverter
 - **Plan:** the §2.5 cascade (saturation point → curvatures → isovector →
   hyperons), with feasibility flags (§2.6). `from_nmp` currently raises

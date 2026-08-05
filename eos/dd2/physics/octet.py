@@ -40,6 +40,7 @@ from scipy.optimize import brentq
 from eos.general.particles import Electron, Muon
 from eos.general.physics_constants import hc3
 from eos.dd2.physics.thermo import kinetic_thermo
+from eos.dd2.physics.mesons import lambda_omega_ratio, thermal_meson_charges
 from eos.dd2.species import active_baryons
 
 # Each baryon spec: (mass, Q, t3, g, x_sigma, x_omega, x_rho, x_phi, S)
@@ -108,6 +109,12 @@ class OctetCtx:
     lepton_mode: str = "transparent"  # 'transparent' (mu_L=0) | 'trapped' (Y_L)
     Y_L: float = 0.0               # target electron lepton fraction (trapped)
     yc_leptons: bool = False       # fixed-Y_C: 2a leptonless (F) | 2b neutralizing (T)
+    # Thermal meson gas: contributes n_C and n_S to the charge/strangeness
+    # constraints (never to the field sources or to n_B). x_omega_L is the
+    # Lambda/nucleon omega ratio entering the kaon shift.
+    include_pseudoscalars: bool = False
+    include_thermal_vectors: bool = False
+    x_omega_L: float = 2.0 / 3.0
 
     @property
     def leptons(self):
@@ -175,7 +182,23 @@ def build_octet_ctx(par, n_B, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
         include_muons=flags.muons, has_phi=has_phi, n_unknowns=n_unknowns,
         charge_mode=charge_mode, Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
         lepton_mode=lepton_mode, Y_L=Y_L, yc_leptons=yc_leptons,
+        include_pseudoscalars=flags.include_pseudoscalars,
+        include_thermal_vectors=flags.include_thermal_vectors,
+        x_omega_L=lambda_omega_ratio(par),
     )
+
+
+def meson_charges_nat(ctx, mu_Q, mu_S, omega0, rho0):
+    """(n_C, n_S) of the thermal meson gas in NATURAL units [MeV^3].
+
+    Zero unless a thermal-meson flag is on and T > 0, so every caller can
+    add it unconditionally.
+    """
+    n_C, n_S = thermal_meson_charges(
+        ctx.Gw_N, ctx.Gr_N, ctx.x_omega_L, mu_Q, mu_S, omega0, rho0, ctx.T,
+        include_pseudoscalars=ctx.include_pseudoscalars,
+        include_thermal_vectors=ctx.include_thermal_vectors)
+    return n_C * hc3, n_S * hc3
 
 
 def _unpack(x, ctx):
@@ -239,6 +262,11 @@ def octet_residual(x, ctx):
     ]
     if ctx.has_phi:
         res.append((phi0 - src_phi / ctx.m_phi2) / ctx.mbar)
+    # Thermal mesons carry no baryon number, so n_B above is baryons only, but
+    # they do carry charge and strangeness: both constraints below see the sum.
+    mC, mS = meson_charges_nat(ctx, mu_Q, mu_S, omega0, rho0)
+    charge += mC
+    strangeness += mS
     res.append(n_tot / ctx.nB_nat - 1.0)
 
     n_e = 0.0
@@ -302,6 +330,16 @@ def assemble_octet(x, ctx):
     eps_fields = 0.5 * (s2 + w2 + r2 + p2)
     P_fields = 0.5 * (-s2 + w2 + r2 + p2)
 
+    # Thermal meson charge/strangeness, matching octet_residual. `charge_tot`
+    # is the total NON-leptonic charge (baryons + mesons) and is what
+    # neutrality, Y_C and Y_S are stated in terms of; `charge_had` stays
+    # baryons-only because mu_dot_n below is the baryon mu_i n_i sum — the
+    # meson sum_j mu*_j n_j is a separate term the callers add from
+    # thermal_meson_thermo, and folding it in here would double count it.
+    mC, mS = meson_charges_nat(ctx, mu_Q, mu_S, omega0, rho0)
+    charge_tot = charge_had + mC
+    strangeness_tot = strangeness + mS
+
     nnue = Pnue = enue = snue = 0.0
     if ctx.charge_mode == "neutral":
         # beta / trapped: electron carries +mu_L, muon family transparent
@@ -319,7 +357,7 @@ def assemble_octet(x, ctx):
         # fixed-Y_C flavor 2b: neutralizing leptons (mu_mu = mu_e), n_e+n_mu =
         # hadronic charge so the total is neutral.
         mu_e, (ne, Pe, ee, se), (nmu, Pmu, emu, smu) = _yc_neutralizing_leptons(
-            charge_had, ctx.m_e, ctx.m_mu, ctx.include_muons, ctx.T)
+            charge_tot, ctx.m_e, ctx.m_mu, ctx.include_muons, ctx.T)
         mu_mu = mu_e
         lepton_dot_n = mu_e * (ne + nmu)
     else:
@@ -344,7 +382,9 @@ def assemble_octet(x, ctx):
         mu_n=mu_B, mu_p=mu_B + mu_Q,
         eps=eps, P=P, s=s, n_tot=n_tot,
         n_e=ne, n_mu=nmu, n_nue=nnue,
-        Y_C=charge_had / ctx.nB_nat, Y_S=strangeness / ctx.nB_nat,
+        Y_C=charge_tot / ctx.nB_nat, Y_S=strangeness_tot / ctx.nB_nat,
+        Y_C_baryons=charge_had / ctx.nB_nat,
+        Y_S_baryons=strangeness / ctx.nB_nat,
         Y_L=(ne + nnue) / ctx.nB_nat,
         densities=densities,
         mu_dot_n=mu_dot_n + lepton_dot_n,
