@@ -87,12 +87,26 @@ def test_tov_columns_appear_and_are_physical(dd2_nmp):
     assert 0.0 < row["cs2_max"] <= 1.0, row["cs2_max"]
 
 
+def test_core_phase_says_where_the_central_density_landed(dd2_nmp):
+    """A window in the equation of state and a window realised inside a star are
+    different statements; `core_phase` is the second one, and it must agree with
+    the central density it was derived from."""
+    row = scan_point(dd2_nmp, {"B4": 180.0}, FLAGS, GRID, tov=True)
+    assert row["core_phase"] in ("H", "mix", "Q"), row["core_phase"]
+    assert GRID[0] <= row["n_c_max"] <= GRID[-1], row["n_c_max"]
+    below = row["n_c_max"] < row["n_onset"]
+    above = row["n_c_max"] >= row["n_offset"]
+    expected = "H" if below else ("Q" if above else "mix")
+    assert row["core_phase"] == expected, row
+
+
 def test_tov_columns_are_nan_without_a_window(dd2_nmp):
     """No window means no hybrid core to integrate. The columns must be present
     and nan, not absent — a ragged table is worse than an empty cell."""
     row = scan_point(dd2_nmp, {"B4": 400.0}, FLAGS, GRID, tov=True)
     assert row["window_exists"] == 0.0
     assert np.isnan(row["M_max"]) and np.isnan(row["R_1p4"])
+    assert np.isnan(row["n_c_max"]) and row["core_phase"] == ""
 
 
 def test_tov_off_by_default(dd2_nmp):

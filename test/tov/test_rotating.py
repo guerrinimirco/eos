@@ -438,3 +438,87 @@ def test_unstable_solver_tasks_are_refused():
     for task in ("omega", "jmoment", "gmass", "rmass"):
         with pytest.raises(ValueError, match="deliberately unsupported"):
             rns.run_rns("unused", task, 1e15)
+
+
+# ---------------------------------------------------------------------------
+# Turning-point stability
+# ---------------------------------------------------------------------------
+
+def test_turning_point_finds_the_mass_maximum():
+    """
+    On a smooth sequence with one maximum, the turning point is that maximum
+    and the stable set is everything up to it. The grid deliberately misses the
+    peak, so the interpolated location must beat the grid spacing.
+    """
+    x = np.linspace(0.4, 1.6, 25)
+    M = 2.0 - 3.0 * (x - 0.93) ** 2
+
+    stable, x_crit, M_crit = rot.turning_point(x, M)
+
+    assert x_crit == pytest.approx(0.93, abs=0.005)
+    assert M_crit == pytest.approx(2.0, abs=1e-3)
+    assert np.array_equal(stable, x <= x_crit)
+
+
+def test_turning_point_takes_the_first_maximum_not_the_largest():
+    """
+    A first-order transition can give a second, higher peak past the dip. The
+    first branch still destabilises at its own turning point, so the larger
+    maximum must not be the one reported.
+    """
+    x = np.linspace(0.4, 1.6, 61)
+    first, second = 0.7, 1.3
+    M = (1.6 + 0.4 * np.exp(-((x - first) / 0.18) ** 2)
+         + 0.5 * np.exp(-((x - second) / 0.18) ** 2))
+
+    assert M[np.argmin(abs(x - second))] > M[np.argmin(abs(x - first))]
+
+    stable, x_crit, M_crit = rot.turning_point(x, M)
+
+    assert x_crit == pytest.approx(first, abs=0.01)
+    assert not stable[x > first + 0.05].any()
+
+
+def test_a_sequence_that_never_turns_over_is_all_stable():
+    """
+    A grid that stops before the maximum has no turning point on it. That must
+    be said with NaN rather than reported as a maximum at the last point, which
+    would silently truncate a sequence that needs extending instead.
+    """
+    x = np.linspace(0.4, 0.9, 20)
+    M = 2.0 - 3.0 * (x - 1.3) ** 2            # still rising at the last point
+
+    stable, x_crit, M_crit = rot.turning_point(x, M)
+
+    assert stable.all()
+    assert np.isnan(x_crit) and np.isnan(M_crit)
+
+
+def test_noise_below_the_precision_is_not_a_turning_point():
+    """
+    Solver noise on a flat stretch produces local maxima that are not physical.
+    Only a drop larger than `precision` counts.
+    """
+    x = np.linspace(0.4, 1.0, 31)
+    M = 1.9 + 1e-4 * np.sin(9.0 * x)          # wiggles, no real turnover
+
+    stable, x_crit, _ = rot.turning_point(x, M, precision=1e-3)
+
+    assert stable.all() and np.isnan(x_crit)
+
+
+def test_failed_models_are_skipped_and_never_marked_stable():
+    """
+    A sweep keeps non-converged points as NaN. They must not break the search,
+    and must not come back flagged as stable models.
+    """
+    x = np.linspace(0.4, 1.6, 25)
+    M = 2.0 - 3.0 * (x - 0.93) ** 2
+    M[3] = np.nan                              # a failed model below the peak
+    M[-2] = np.nan                             # and one above it
+
+    stable, x_crit, _ = rot.turning_point(x, M)
+
+    assert x_crit == pytest.approx(0.93, abs=0.005)
+    assert not stable[3] and not stable[-2]
+    assert stable[2] and stable[4]

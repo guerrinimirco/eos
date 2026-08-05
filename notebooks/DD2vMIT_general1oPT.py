@@ -105,6 +105,7 @@ except ImportError:
 
 import numpy as np
 import matplotlib.pyplot as plt
+from dataclasses import replace
 
 from eos.dd2 import Parametrization, SpeciesFlags, hadronic_row, compute_nmp
 from eos.dd2.solver import sweep_beta_eq_octet
@@ -156,17 +157,13 @@ print("eos imported from:", Path(eos.__file__).parent)
 #
 #   # 3. Delta: no SU(6) rule exists, so set x_iD = Gamma_iD/Gamma_iN by hand.
 #   PAR = replace(PAR, x_Delta_sigma=1.15, x_Delta_omega=1.0, x_Delta_rho=1.0)
-#
-#   # ...or, instead of step 3, let U_Delta fix x_Dsigma for chosen vectors by
-#   # inverting U_D = -x_Dsigma Gamma_sigma sigma + x_Domega Gamma_omega omega0
-#   # + Sigma^R at n_sat (U_Delta is range-checked to [-100, -50] MeV):
-#   #   PAR = Parametrization.from_delta_potential(U_Delta=-100.0, x_wD=1.2,
-#   #                                              x_rD=1.0, base=PAR)
-#   # (U_Delta=-100, x_wD=1.2 -> x_Dsigma = 1.222 on the DD2 nucleon sector.)
-PAR = Parametrization.from_delta_potential(
-    U_Delta=-100.0, x_wD=1.2,
-    base=Parametrization.from_hyperon_potentials(
-        U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0))
+
+NMP = dict(n_sat=0.149065, E_sat=-16.02, m_eff_ratio=0.5625, K_sat=242.7, Q_sat=169.15, E_sym=31.67, L_sym=55.03)
+PAR = Parametrization.from_nmp(NMP)
+PAR = Parametrization.from_hyperon_potentials(U_Lambda=-26., U_Sigma=15., U_Xi=-18., base=PAR)
+#PAR = Parametrization.from_delta_potential(U_Delta=-75.19, x_wD=1.0, x_rD=1.0, base=PAR)
+PAR = replace(PAR, x_Delta_sigma=1.0, x_Delta_omega=1.0, x_Delta_rho=1.0)
+
 
 # ---- which degrees of freedom exist --------------------------------------
 # Every species is an explicit flag; nothing is switched on implicitly, and a
@@ -177,11 +174,6 @@ FLAGS = SpeciesFlags(
     muons=True,         # electrons are always present; muons optional
     phi_field=True,     # hidden-strange vector, required with hyperons
     photons=True,       # matters only at T > 0
-    # Thermal Bose gases on top of the mean field. Self-consistently coupled:
-    # their charge and strangeness enter neutrality and the Y_C / Y_S rows, so
-    # in neutron-rich matter (mu_Q < 0) the pi-/K- excess pushes Y_p up and Y_e
-    # down. No baryon number, and no sourcing of the sigma/omega/rho/phi fields.
-    # Both are no-ops at T = 0; the vectors stay negligible below T ~ 80 MeV.
     include_pseudoscalars=True,     # thermal pi, K, eta, eta'
     include_thermal_vectors=True,   # thermal rho, omega, K*, phi
 )
@@ -189,28 +181,6 @@ FLAGS = SpeciesFlags(
 # ---- quark parametrization ------------------------------------------------
 VMIT = get_vmit_custom(B4=180.0, a=0.15, m_s=150.0)
 
-# ---- WHY THIS PARAMETRIZATION ---------------------------------------------
-# It is one of 605 combinations (out of 5904 scanned with I.4's machinery) that
-# satisfy BOTH requirements at once: a complete mixed phase — chi crosses 0 and
-# 1, in that order — and M_max > 2 M_sun with hyperons and Deltas active.
-#
-#   nuclear matter   DD2's own NMP, unchanged (L_sym = 55.03 MeV). The isoscalar
-#                    cross-constraint locks K_sat to ~243 anyway, so there is
-#                    little to gain by moving them;
-#   hyperons         the DD2Y potentials, unchanged: U_Lambda = -30,
-#                    U_Sigma = +30, U_Xi = -18 MeV. The scan found these make
-#                    almost no difference to whether a hybrid star exists,
-#                    because the transition sits at or below the hyperon
-#                    threshold — so there is no reason not to use the
-#                    literature values;
-#   Delta isobars    U_Delta = -100 MeV with x_omegaDelta = 1.2. This is the
-#                    only setting that departs from the published tables, and it
-#                    is the one that matters: x_omegaDelta = 1.0 at this U_Delta
-#                    drives the effective mass to zero (scalar collapse) near
-#                    0.9 fm^-3, and across the whole scan x_omegaDelta = 1.2 was
-#                    about four times more likely to give a viable star;
-#   quarks           B^1/4 = 180 MeV, a = 0.15 fm^2, m_s = 150 MeV.
-#
 
 
 # ---- equilibrium mode -----------------------------------------------------

@@ -343,7 +343,8 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
             the cold-star condition
 
     tov   : also build the core equation of state and run the mass-radius
-            sequence, adding M_max, R_Mmax, R_1p4 and cs2_max to the row. Only
+            sequence, adding M_max, R_Mmax, R_1p4, cs2_max, the central baryon
+            density n_c_max and the `core_phase` it falls in to the row. Only
             attempted when a window exists. Costs ~1-2 s per sample on top of
             the ~0.5 s the window search takes, which is affordable only
             because the TOV integration defaults to the Numba backend.
@@ -373,7 +374,7 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
                n_onset=np.nan, n_offset=np.nan, seconds=0.0, status="")
     if tov:
         row.update(M_max=np.nan, R_Mmax=np.nan, R_1p4=np.nan, cs2_max=np.nan,
-                   eos_ok=0.0, eos_reason="")
+                   n_c_max=np.nan, core_phase="", eos_ok=0.0, eos_reason="")
 
     t0 = time.time()
     try:
@@ -447,8 +448,33 @@ def eos_is_physical(table, tol=1e-9):
     return True, ""
 
 
+def core_phase(n_c, table):
+    """Which phase sits at the centre of the maximum-mass star.
+
+    A transition existing in the equation of state and a transition being
+    *realised inside a star* are different statements: the window can open at a
+    density the heaviest stable star never reaches, in which case the model
+    predicts a hybrid branch that nothing in nature occupies. The central
+    baryon density decides it:
+
+        'none'  no window at all — the star is pure hadronic
+        'H'     n_c < n_onset — the window exists but no star reaches it
+        'mix'   n_onset <= n_c < n_offset — a mixed-phase core
+        'Q'     n_c >= n_offset — a genuine pure-quark core
+
+    '' when the central density is unknown (the sequence did not integrate).
+    """
+    if not np.isfinite(n_c):
+        return ""
+    if not table.has_transition:
+        return "none"
+    if n_c < table.n_onset:
+        return "H"
+    return "mix" if n_c < table.n_offset else "Q"
+
+
 def _tov_columns(par, flags, grid, eta, spec, params, T, window, tov_parallel):
-    """M_max, R(M_max), R(1.4) and max c_s^2 for one parameter sample.
+    """M_max, R(M_max), R(1.4), max c_s^2 and the core phase for one sample.
 
     The window is reused rather than re-located — `scan_point` has already paid
     for it. The stitched equation of state is checked for monotonicity and
@@ -456,6 +482,10 @@ def _tov_columns(par, flags, grid, eta, spec, params, T, window, tov_parallel):
     an 'eos_unphysical' reason, because integrating it would return a confident
     wrong number instead of an error. A sequence that then fails to integrate
     gives nan columns too, never an exception.
+
+    `n_c_max` is the central *baryon* density at M_max, read off the same table
+    the sequence was integrated from, since `mass_radius_mixed` reports the
+    central energy density and the transition boundaries are in n_B.
     """
     from eos.mixed.tables.core_eos import build_mixed_eos_table, mass_radius_mixed
     from eos.mixed.coefficients import sound_speed_eq
@@ -466,7 +496,8 @@ def _tov_columns(par, flags, grid, eta, spec, params, T, window, tov_parallel):
     cs2 = sound_speed_eq(table.P, table.eps)
     out = {"cs2_max": float(np.nanmax(cs2)) if cs2.size else np.nan,
            "eos_ok": 0.0, "eos_reason": "",
-           "M_max": np.nan, "R_Mmax": np.nan, "R_1p4": np.nan}
+           "M_max": np.nan, "R_Mmax": np.nan, "R_1p4": np.nan,
+           "n_c_max": np.nan, "core_phase": ""}
 
     ok, reason = eos_is_physical(table)
     out["eos_ok"] = float(ok)
@@ -480,8 +511,10 @@ def _tov_columns(par, flags, grid, eta, spec, params, T, window, tov_parallel):
                                 n_ec=120, tov_parallel=tov_parallel)
     except Exception:
         return out
+    n_c = float(np.interp(res["e_c_max"], table.eps, table.n_B))
     out.update(M_max=float(res["M_max"]), R_Mmax=float(res["R_Mmax"]),
-               R_1p4=float(res["R_1p4"]))
+               R_1p4=float(res["R_1p4"]), n_c_max=n_c,
+               core_phase=core_phase(n_c, table))
     return out
 
 
@@ -572,9 +605,15 @@ if __name__ == "__main__":
     assert all(isinstance(r["seconds"], float) for r in rows)
     assert np.isfinite(rows[0]["M_max"]) and rows[0]["M_max"] > 1.5, rows[0]
     assert np.isnan(rows[1]["M_max"]), rows[1]
+    # The core phase must be consistent with where the central density landed.
+    assert rows[0]["core_phase"] in ("H", "mix", "Q"), rows[0]
+    assert np.isfinite(rows[0]["n_c_max"]), rows[0]
+    assert (rows[0]["n_c_max"] >= rows[0]["n_onset"]) == (
+        rows[0]["core_phase"] != "H"), rows[0]
     print(f"DD2 defaults : window [{rows[0]['n_onset']:.4f}, "
           f"{rows[0]['n_offset']:.4f}] fm^-3, M_max={rows[0]['M_max']:.3f} "
           f"Msun, R(1.4)={rows[0]['R_1p4']:.2f} km, "
-          f"max c_s^2={rows[0]['cs2_max']:.3f}")
+          f"max c_s^2={rows[0]['cs2_max']:.3f}, "
+          f"n_c={rows[0]['n_c_max']:.3f} fm^-3 ({rows[0]['core_phase']})")
     print(f"K_sat=1e4    : {rows[1]['status']}")
     print("scan self-check OK")

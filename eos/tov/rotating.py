@@ -89,6 +89,7 @@ __all__ = [
     "rotating_model",
     "kepler_sequence",
     "rotating_grid",
+    "turning_point",
     "static_cross_check",
     "KEPLER_COLUMNS",
     "GRID_COLUMNS",
@@ -782,6 +783,97 @@ def rotating_grid(eos: Union[str, EOSTable_for_TOV],
 
     blocks = _pmap(one_e_c, e_c_grid, parallel, n_jobs)
     return np.vstack(blocks)
+
+
+def turning_point(x: Sequence[float], M: Sequence[float],
+                  precision: float = 1e-3
+                  ) -> Tuple[np.ndarray, float, float]:
+    """
+    Locate the secular-instability point of a **constant-J** sequence.
+
+    Friedman, Ipser & Sorkin (1988, ApJ 325, 722) proved that along a sequence
+    of uniformly rotating equilibria with fixed angular momentum, the point
+    where the gravitational mass is stationary in central density marks the
+    onset of secular instability to axisymmetric perturbations: models on the
+    low-density side of that turning point are stable, models beyond it are
+    not. Because dM = Omega dJ + mu dM_0 at fixed entropy, the turning points of
+    M and of the rest mass M_0 along the same sequence coincide, so either
+    column may be passed.
+
+    Two limitations of the theorem, both worth knowing before quoting a number:
+    it is *sufficient* for instability but not necessary, and the true neutral
+    point sits marginally on the stable side of the turning point -- by a few
+    tenths of a percent in central density for uniform rotation (Takami,
+    Rezzolla & Yoshida 2011, MNRAS 416, L1). And it applies to sequences of
+    **constant J** (or constant M_0), *not* constant angular velocity: a
+    constant-frequency sequence has a mass maximum too, and it is not a
+    stability boundary.
+
+    The **first** maximum is taken, not the largest. With a first-order phase
+    transition the mass can turn over, dip and rise again into a second stable
+    (twin) branch whose peak may be the higher of the two; the first branch
+    still becomes unstable at its own turning point. A maximum counts only if
+    the mass later falls at least `precision` below it, which is what keeps
+    solver noise on a nearly flat sequence from being read as a turning point.
+
+    Parameters
+    ----------
+    x : sequence of float
+        Sequence parameter, ascending: central energy density [MeV/fm^3] or
+        central baryon density [fm^-3]. The two are monotonically related, so
+        the turning point is the same model either way.
+    M : sequence of float
+        Gravitational (or rest) mass [M_sun] along the sequence, same length as
+        `x`. Non-converged entries may be NaN and are skipped.
+    precision : float
+        Mass drop [M_sun] required after a maximum for it to count.
+
+    Returns
+    -------
+    stable : ndarray of bool
+        Aligned with the input: True for a converged model at or below the
+        turning point. Non-converged (NaN) entries are False.
+    x_crit, M_crit : float
+        Sequence parameter and mass at the turning point, refined by monotone
+        interpolation between the bracketing grid points. Both NaN when the
+        sequence has no turning point on this grid, in which case every
+        converged model is marked stable -- extend the grid to higher density
+        rather than concluding that none of them destabilises.
+    """
+    x = np.asarray(x, dtype=float)
+    M = np.asarray(M, dtype=float)
+    if x.shape != M.shape:
+        raise ValueError(f"x and M must have the same shape, got {x.shape} "
+                         f"and {M.shape}.")
+
+    finite = np.isfinite(x) & np.isfinite(M)
+    order = np.argsort(x[finite])
+    xf, Mf = x[finite][order], M[finite][order]
+
+    idx = None
+    for i in range(1, xf.size - 1):
+        if (Mf[i] >= Mf[i - 1] and Mf[i] >= Mf[i + 1]
+                and Mf[i] - Mf[i + 1:].min() > precision):
+            idx = i
+            break
+
+    if idx is None:
+        return finite.copy(), float("nan"), float("nan")
+
+    # Refine on the three bracketing points only, by the vertex of the parabola
+    # through them. A monotone (PCHIP) interpolant cannot help here: it is flat
+    # by construction at an extremum node, so its maximum is that node and the
+    # answer would never beat the grid spacing. A wider window is no better --
+    # it reaches the rise of a twin branch and climbs out of the maximum it was
+    # sent to find.
+    coeff = np.polyfit(xf[idx - 1:idx + 2], Mf[idx - 1:idx + 2], 2)
+    if coeff[0] < 0.0:
+        x_crit = float(np.clip(-coeff[1] / (2.0 * coeff[0]),
+                               xf[idx - 1], xf[idx + 1]))
+    else:
+        x_crit = float(xf[idx])      # degenerate triple, keep the grid point
+    M_crit = float(np.polyval(coeff, x_crit))
+    return finite & (x <= x_crit), x_crit, M_crit
 
 
 def static_cross_check(eos: Union[str, EOSTable_for_TOV],
