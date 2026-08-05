@@ -197,15 +197,82 @@ def _scaled_residual(x, par, n_b_target):
     return [r / s[i] for i, r in enumerate(res)]
 
 
-def solve_beta_point(n_b_fm, par=None, x0=None):
+#: acceptance on the scaled residuals of `_scaled_residual`, which are O(1)
+#: by construction, so this is a dimensionless convergence bound
+BETA_TOL = 1.0e-8
+
+
+def _bounds(n_b_fm):
+    """Box for the ten unknowns, widened with density.
+
+    The chemical potentials, the vector fields and the rearrangement terms all
+    grow roughly linearly with n_b — mu_b reaches ~16 GeV and g_omega*omega
+    ~5 GeV at n_b = 10 fm^-3 — so a box calibrated at saturation density
+    excludes the solution entirely above a few times n_0. Only the quark masses
+    have a genuine, density-independent ceiling (they are bounded above by
+    their vacuum values) and n_b^Q a genuine one (it cannot exceed n_b).
+    """
+    big = 3000.0 + 3000.0 * n_b_fm
+    lo = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -big, -big, -big, -big]
+    hi = [1000.0, 1000.0, 1000.0, big, 2000.0, n_b_fm * hc3,
+          big, big, big, big]
+    return lo, hi
+
+
+def _seed_ladder(x0, n_b_fm, par, cold_start=True):
+    """Starting points to try, in order of decreasing prior plausibility.
+
+    A first-order transition makes the solution discontinuous in n_b, so the
+    previous point alone cannot cross one: seeded from the low-density side the
+    solver is asked for a root several hundred MeV away in the quark masses,
+    and lands nowhere. The second entry is the same state with the light-quark
+    condensates switched off, which is where the chirally restored branch sits,
+    and it is what carries a sweep across a chiral transition.
+
+    `cold_start` adds two parameter-free starting points for use when there is
+    no previous point to continue from. They must be left out once a sweep is
+    under way: a cold start that happens to converge lands on whichever branch
+    it lands on, so allowing it mid-sweep lets the sequence hop between
+    branches from one density to the next, which shows up as an equation of
+    state that oscillates rather than one that has a transition in it.
+    """
+    seeds = []
+    if x0 is not None:
+        seeds.append(list(x0))
+        restored = list(x0)
+        restored[0], restored[1] = par.m_u0, par.m_d0
+        restored[2] = max(par.m_s0, x0[2] * 0.5)
+        seeds.append(restored)
+    if cold_start:
+        g_w0 = par.Gamma_w(n_b_fm * hc3) * 3.0 * n_b_fm * hc3
+        mu_b0 = 950.0 + 400.0 * n_b_fm
+        # nucleonic: vacuum quark masses, no quarks
+        seeds.append([367.6, 367.6, 549.5, mu_b0, 130.0, 0.0,
+                      g_w0, -0.1 * g_w0, 0.0, 0.0])
+        # quark matter: current masses, baryons dissolved
+        seeds.append([par.m_u0, par.m_d0, par.m_s0 + 100.0, mu_b0, 100.0,
+                      0.9 * n_b_fm * hc3, g_w0, -0.05 * g_w0, 0.0, 0.0])
+    return seeds
+
+
+def solve_beta_point(n_b_fm, par=None, x0=None, cold_start=True):
     """Solve beta-equilibrium, charge-neutral uniform matter at n_b [fm^-3].
+
+    Returns *a* root of Eqs. (23)-(24), namely the first one reached from the
+    starting points tried in order. Above a first-order transition there is
+    more than one: the deconfined branch and the metastable baryonic branch
+    both satisfy the local equations over a finite density range, and which is
+    found depends on where the search began. Selecting the stable one is the
+    job of `beta_eos_table`, which has the neighbouring densities needed to do
+    it. Call this directly only when a single local root is what is wanted.
 
     Parameters:
         n_b_fm: total baryon density [fm^-3].
         par:    ENJLParams (default paper Table I + RKH).
         x0:     initial guess (M_u, M_d, M_s, mu_b, mu_e, n_bQ, g_w, g_r,
-                SigmaR_b, SigmaR_q); defaults to vacuum masses and a
-                nucleonic estimate.
+                SigmaR_b, SigmaR_q), normally the previous point of a density
+                sweep. It is the first of several starting points tried, not
+                the only one.
 
     Returns:
         BetaPoint.
@@ -213,27 +280,38 @@ def solve_beta_point(n_b_fm, par=None, x0=None):
     if par is None:
         par = get_enjl_default()
     n_b = n_b_fm * hc3
-    if x0 is None:
-        g_w0 = par.Gamma_w(n_b) * 3.0 * n_b_fm * hc3
-        g_r0 = -par.Gamma_r(n_b) * 0.6 * n_b_fm * hc3
-        x0 = [367.6, 367.6, 549.5, 950.0, 130.0, 0.0, g_w0, g_r0, 0.0, 0.0]
-    lo = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2000.0, -2000.0, -3000.0, -3000.0]
-    hi = [1000.0, 1000.0, 1000.0, 3000.0, 1000.0, n_b_fm * hc3,
-          2000.0, 2000.0, 3000.0, 3000.0]
+    lo, hi = _bounds(n_b_fm)
     x_scale = [100.0, 100.0, 100.0, 100.0, 100.0, n_b_fm * hc3,
                100.0, 100.0, 3000.0, 1000.0]
-    sol = least_squares(lambda x: _scaled_residual(x, par, n_b), x0,
-                        bounds=(lo, hi), x_scale=x_scale,
-                        xtol=1e-13, ftol=1e-13, gtol=1e-13, max_nfev=4000)
-    if not (sol.success and sol.cost < 1e-12):
+
+    sol_x, tried, best_residual = None, 0, float("inf")
+    seen = []
+    for seed in _seed_ladder(x0, n_b_fm, par, cold_start=cold_start):
+        seed = [min(max(v, l), h) for v, l, h in zip(seed, lo, hi)]
+        if any(all(abs(a - b) <= 1e-9 * max(1.0, abs(b)) for a, b in
+                   zip(seed, other)) for other in seen):
+            continue                      # duplicate of a start already tried
+        seen.append(seed)
+        tried += 1
+        sol = least_squares(lambda x: _scaled_residual(x, par, n_b), seed,
+                            bounds=(lo, hi), x_scale=x_scale,
+                            xtol=1e-13, ftol=1e-13, gtol=1e-13, max_nfev=1500)
+        residual = max(abs(r) for r in _scaled_residual(sol.x, par, n_b))
+        best_residual = min(best_residual, residual)
+        if residual < BETA_TOL:
+            sol_x = sol.x
+            break
+    if sol_x is None:
         raise RuntimeError(
-            f"ENJL beta-equilibrium solve failed at n_b={n_b_fm:.4f} fm^-3: "
-            f"success={sol.success} cost={sol.cost:.3e}")
+            f"ENJL beta-equilibrium solve failed at n_b={n_b_fm:.4f} fm^-3 "
+            f"after {tried} starting points; best scaled residual "
+            f"{best_residual:.3e} against a {BETA_TOL:.0e} bound")
 
-    _, n, _, _, _, _, _, _, _, _, _, _ = _evaluate(sol.x, par, n_b)
+    _, n, _, _, _, _, _, _, _, _, _, _ = _evaluate(sol_x, par, n_b)
 
-    # final consistent uniform solution via the validated solver
-    pt = solve_point(n, par=par)
+    # final consistent uniform solution via the validated solver, seeded from
+    # the quark masses just found so it stays on the branch that was solved
+    pt = solve_point(n, par=par, x0=[sol_x[0], sol_x[1], sol_x[2]])
     densities = {k: v / hc3 for k, v in n.items()}
     return BetaPoint(
         n_b_fm=n_b_fm,
@@ -244,31 +322,75 @@ def solve_beta_point(n_b_fm, par=None, x0=None):
     )
 
 
-def beta_eos_table(nb_grid, par=None, x0=None):
-    """EOS table (P, eps, n_b, composition) along a density grid.
+def _continuation_state(p):
+    """The ten-vector that warm-starts the next point of a sweep."""
+    return (p.M_q["u"], p.M_q["d"], p.M_q["s"], p.mu_b, p.mu_e,
+            (p.densities["u"] + p.densities["d"] + p.densities["s"])
+            / 3.0 * hc3, p.pt.gomega_omega, p.pt.grho_rho,
+            p.pt.SigmaR_b, p.pt.SigmaR_q)
 
-    Continuation in density: each point starts from the previous converged
-    solution for robust root finding.
+
+def _sweep(nb_grid, par, x0=None):
+    """Continuation along `nb_grid` in the order given; {index -> BetaPoint}.
+
+    Cold starts are allowed only until the branch is established. After that
+    the sweep continues from its own previous point or not at all, so the
+    result is one branch rather than a sequence that changes branch wherever a
+    cold start happens to converge somewhere else. A density that cannot be
+    reached from its neighbour is left out, and the sweep carries on from the
+    last point that was.
+    """
+    out, cur, started = {}, x0, x0 is not None
+    for k, nb in enumerate(nb_grid):
+        try:
+            p = solve_beta_point(nb, par=par, x0=cur, cold_start=not started)
+        except RuntimeError:
+            continue
+        out[k] = p
+        cur = _continuation_state(p)
+        started = True
+    return out
+
+
+def beta_eos_table(nb_grid, par=None, x0=None, direction="up"):
+    """EOS table (P, eps, n_b, composition) along one branch of a density grid.
+
+    This is a *continuation*, not a phase diagram: each point is warm-started
+    from its neighbour, so the sequence follows one branch of the model and
+    keeps following it past any first-order transition, into the metastable
+    region beyond. That is deliberate. Mapping a branch and choosing between
+    branches are separate steps, and the second one needs both branches — a
+    Maxwell construction equates P and mu_b across the two, which cannot be
+    done from a single sweep. It is also what the reference tables themselves
+    contain: two of them retain a step with dP/dn_b < 0 rather than the
+    coexistence plateau that would replace it.
+
+    `direction` selects which branch is followed. "up" starts from the
+    low-density, chirally broken side; "down" starts at the top of the grid
+    from a deconfined guess and walks back. Where only one branch exists the
+    two agree; where several do, they differ, and the difference is the
+    branch structure.
 
     Parameters:
-        nb_grid: array of total baryon densities [fm^-3] (ascending).
-        par:     ENJLParams.
-        x0:      initial guess for the first grid point.
+        nb_grid:   total baryon densities [fm^-3], ascending.
+        par:       ENJLParams.
+        x0:        initial guess for the first point solved.
+        direction: "up" (default) or "down".
 
     Returns:
-        points: list of BetaPoint; P, eps: arrays [MeV/fm^3].
+        points: list of BetaPoint; P, eps: arrays [MeV/fm^3]. All three are
+        ordered like `nb_grid`, and shortened where a density did not converge.
     """
     if par is None:
         par = get_enjl_default()
-    points = []
-    cur = x0
-    for nb in nb_grid:
-        p = solve_beta_point(nb, par=par, x0=cur)
-        points.append(p)
-        cur = (p.M_q["u"], p.M_q["d"], p.M_q["s"], p.mu_b, p.mu_e,
-               (p.densities["u"] + p.densities["d"] + p.densities["s"])
-               / 3.0 * hc3, p.pt.gomega_omega, p.pt.grho_rho,
-               p.pt.SigmaR_b, p.pt.SigmaR_q)
+    if direction not in ("up", "down"):
+        raise ValueError(f"direction must be 'up' or 'down', got {direction!r}")
+    nb_grid = list(nb_grid)
+    order = nb_grid if direction == "up" else nb_grid[::-1]
+    solved = _sweep(order, par, x0=x0)
+    if direction == "down":
+        solved = {len(nb_grid) - 1 - k: p for k, p in solved.items()}
+    points = [solved[k] for k in sorted(solved)]
     P = [p.P for p in points]
     eps = [p.eps for p in points]
     return points, P, eps

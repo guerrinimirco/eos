@@ -377,7 +377,47 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
   nbar^s_d <= 0 that this solver does not. Sub-MeV, and confined to the two
   grid points either side of chiral restoration in one parameter set.
 
-### G3. Finite-temperature decisions — not yet taken
+### G3. Branch selection above the transitions — UNRESOLVED, blocks Figs. 4-8
+
+- **Where:** `eos/enjl/eos_beta.py::beta_eos_table`, above the first-order
+  transitions of each parameter set.
+- **The situation:** the local equations (23)-(24) have **three** solution
+  branches, all self-consistent, all charge-neutral to 1e-15, all satisfying
+  the gap equation: (i) chirally broken hadronic; (ii) chirally restored but
+  still confined — the quarkyonic branch, baryons *and* quarks; (iii) fully
+  deconfined quark matter, n_p = n_n = 0, n_u = n_d = n_s. Continuation follows
+  whichever branch it starts on straight past a transition, indefinitely.
+- **Two selection rules were tried and neither reproduces all five tables:**
+
+  | rule | fq1.0_B0 | fq1.0_B1 | fq0.7_B0 | fq0.7_B1 | fq0.5_B1 |
+  |---|---|---|---|---|---|
+  | upward continuation | 1 | 7 | **183** | 1 | 16 |
+  | lowest eps at fixed n_b | 0 | 0 | 18 | **79** | 0 |
+
+  (rows out of ~250 where mu_b differs from the table by more than 0.5 MeV.)
+- **The specific contradiction:** for f_q = 0.7, B = 1 GeV/fm^3 branch (iii)
+  exists from n_b ~ 2 fm^-3 up and has *both* lower eps at fixed n_b and higher
+  P at fixed mu_b than the branch the reference table follows — at n_b = 7.2 it
+  gives eps = 32545 against the table's 44204 MeV/fm^3. Either criterion
+  therefore selects it. But Paper 1 states explicitly that full deconfinement
+  to n_b^Q/n_b = 1 occurs for (0.5, 0), (0.5, 1) and (0.7, 0) and *not* for
+  (0.7, 1), (1, 0), (1, 1), and the reference table agrees with the paper. So
+  branch (iii) is reachable in this implementation and is not in the author's.
+- **What is confirmed working:** the Maxwell machinery itself. Constructing the
+  crossing of branches (i) and (ii) for f_q = 0.7, B = 1 on a 0.1 fm^-3 grid
+  gives mu_b = 1164.9 MeV, P = 69.33 MeV/fm^3 against the table's recorded
+  chiral transition at 1168.4748 and 69.6419 — 0.3% on both, on a grid far too
+  coarse to do better. So the transition-finding is right and only the
+  admissibility of branch (iii) is in question.
+- **Open, and the next thing to settle:** what excludes branch (iii) in the
+  author's treatment. Candidates: an additional constraint on n_b^Q that this
+  implementation does not impose; a restriction that baryons cannot be removed
+  by hand once bound; or the possibility that the author's solver simply never
+  reaches it from a continuation and the branch is physical but not explored.
+  Until this is decided, `beta_eos_table` deliberately does *not* choose:
+  it maps one branch per call, with `direction` selecting which.
+
+### G4. Finite-temperature decisions — not yet taken
 
 Thermal antibaryons, thermal antiquarks and whether the paper's "quarks are
 restricted to the lowest energy states" remark has finite-T content are all

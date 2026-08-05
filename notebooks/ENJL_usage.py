@@ -305,6 +305,7 @@ axb.set_title("effective scalar density (capped at 0)")
 plt.tight_layout()
 plt.show()
 
+
 # %% [markdown]
 # ## 5. Against the reference tables
 #
@@ -363,6 +364,7 @@ ax.set_ylabel("residual against the reference table")
 ax.set_title("solve_point vs. the author's own output")
 apply_style(ax, minor_ticks=False)
 plt.show()
+
 
 # %% [markdown]
 # The residual spikes at the chiral transition ($n_b \approx 0.45$ fm⁻³ for

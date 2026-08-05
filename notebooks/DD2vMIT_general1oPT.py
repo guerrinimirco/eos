@@ -151,6 +151,44 @@ print("eos imported from:", Path(eos.__file__).parent)
 #   from_dd2y_defaults()  DD2Y (hyperons, no Delta sector) — with the vMIT
 #                         defaults this has NO transition at all
 #   from_nmp(NMP)         pin the nuclear-matter parameters yourself
+#
+# WHAT THE DELTA IS. The Delta(1232) isobar, the first excited state of the
+# nucleon: a spin-3/2 isospin-3/2 quartet (Delta++, Delta+, Delta0, Delta-),
+# mass 1232 MeV, S = 0, g = 4 each. In dense matter it competes with the
+# hyperons -- the Delta- is the one that matters, since charge -1 lets it
+# replace leptonic pressure and its large negative isospin (t3 = -3) earns a
+# big rho-field bonus in neutron-rich matter. It therefore usually appears
+# BEFORE the hyperons and softens the equation of state at intermediate
+# density. Unlike the hyperons there is no SU(6) rule fixing its couplings, so
+# the ratios x_iD = Gamma_iD/Gamma_iN are free parameters.
+#
+# The three sectors compose, each from its own physical input. To pick all of
+# them independently -- nucleons from NMP, hyperons from U_Y, Delta from the
+# coupling ratios directly -- chain them (each takes the previous as `base`):
+#
+#   from dataclasses import replace
+#
+#   # 1. nucleons: invert the nuclear-matter parameters at saturation
+#   NMP = dict(n_sat=0.149065, E_sat=-16.02, m_eff_ratio=0.5625,
+#              K_sat=242.7, Q_sat=169.15, E_sym=31.67, L_sym=55.03)
+#   PAR = Parametrization.from_nmp(NMP)          # add return_status=True to
+#                                                # inspect the inversion residuals
+#
+#   # 2. hyperons: SU(6) vectors, scalars inverted from the potentials in SNM.
+#   #    Re-solves SNM on `base`, so it adapts to the NMP nucleon sector.
+#   PAR = Parametrization.from_hyperon_potentials(
+#       U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0, base=PAR)
+#
+#   # 3. Delta: no SU(6) rule exists, so set x_iD = Gamma_iD/Gamma_iN by hand.
+#   #    Literature x_Dsigma ~ 1.0-1.3, x_Domega ~ 1.0. Delta has S=0: no phi.
+#   PAR = replace(PAR, x_Delta_sigma=1.15, x_Delta_omega=1.0, x_Delta_rho=1.0)
+#
+#   # ...or, instead of step 3, let U_Delta fix x_Dsigma for chosen vectors by
+#   # inverting U_D = -x_Dsigma Gamma_sigma sigma + x_Domega Gamma_omega omega0
+#   # + Sigma^R at n_sat (U_Delta is range-checked to [-100, -50] MeV):
+#   #   PAR = Parametrization.from_delta_potential(U_Delta=-100.0, x_wD=1.2,
+#   #                                              x_rD=1.0, base=PAR)
+#   # (U_Delta=-100, x_wD=1.2 -> x_Dsigma = 1.222 on the DD2 nucleon sector.)
 PAR = Parametrization.from_delta_potential(
     U_Delta=-100.0, x_wD=1.2,
     base=Parametrization.from_hyperon_potentials(
@@ -165,6 +203,29 @@ FLAGS = SpeciesFlags(
     muons=True,         # electrons are always present; muons optional
     phi_field=True,     # hidden-strange vector, required with hyperons
     photons=True,       # matters only at T > 0
+    # ---- thermal meson gases (off; this notebook runs at T = 0) ----------
+    # Ideal Bose gases on top of the mean field (Lavagno 2010), with effective
+    # potentials tied to the SAME meson fields that generate the baryon
+    # interactions and DD2's density-dependent couplings:
+    #   mu*_pi+ = mu_Q - Gamma_rhoN(n_B) rho0
+    #   mu*_K+  = mu_Q - mu_S - (Gamma_omegaN - Gamma_omegaL)(n_B) omega0
+    #                         - 1/2 Gamma_rhoN(n_B) rho0
+    # and mu* = 0 for the strangeless neutrals (pi0, eta, eta', rho0, omega, phi).
+    # No rearrangement term: the thermal mesons are spectators to Sigma^R.
+    #
+    #   include_pseudoscalars=True,     # thermal pi, K, eta, eta'
+    #   include_thermal_vectors=True,   # thermal rho, omega, K*, phi
+    #
+    # The vector flag is separate on purpose: the thermal rho/omega/phi are the
+    # incoherent k != 0 quanta sitting ON TOP of the mean field, a modelling
+    # choice rather than an obvious inclusion. Two things to know before
+    # switching either on:
+    #   1. Both are no-ops at T = 0, so they change nothing here.
+    #   2. The gas is additive in P, eps, s and joins the HVH sum, but its net
+    #      charge and strangeness are NOT fed back: it is added after the octet
+    #      solve, so meson n_C / n_S do not enter charge neutrality or the
+    #      strangeness condition. Fine while thermal K-/pi- populations are
+    #      small, wrong at high T where they are not.
 )
 
 # ---- quark parametrization ------------------------------------------------
