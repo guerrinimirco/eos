@@ -2,8 +2,8 @@
 P1 gate (uniform-matter solver, Paper 1): eos/enjl reproduces the reference
 numbers of Xia 2024 (PRD 110, 014022, arXiv:2405.02946) for uniform matter.
 
-Reference anchor points (paper Table II + Sec. II prose + our Maple-verified
-reading of the rho coupling):
+Reference anchor points (paper Table II + Sec. II prose + the factor-9 reading
+of the rho coupling read off the tables in test/enjl/reference/):
 
     * vacuum:  M_u = M_d = 367.6, M_s = 549.5 MeV;  M_N = 938.9, M_L = 1113.7;
                alpha_S(0) = 0.849, alpha_S(n_S) = 0.57000
@@ -16,8 +16,8 @@ Tolerances: the paper quotes 1-3 significant figures; we assert the exact
 solver output against the printed values at ~1% (rel=1.5e-2), and keep the
 exact-round-off checks (masses, alpha_S) at the tightest tolerance.
 
-The rho channel uses the Maple-verified factor 9 (RHO_FACTOR in
-eos/enjl/parameters.py); without it S(0.1)=13.3 and S(0.158)=20.2 would fail.
+The rho channel carries the factor 9 of RHO_FACTOR (eos/enjl/parameters.py);
+without it S(0.1)=13.3 and S(0.158)=20.2 would fail.
 """
 import numpy as np
 import pytest
@@ -136,7 +136,7 @@ def test_lambda_potential(par):
 
 
 # -----------------------------------------------------------------------------
-# 4. Maple-verified rho coupling (the factor-9 fix)
+# 4. the factor-9 rho coupling
 # -----------------------------------------------------------------------------
 def test_rho_factor_is_verified_nine():
     assert RHO_FACTOR == 9.0

@@ -862,6 +862,54 @@ def load_eos_table(filepath: str, eq_type: str) -> EOSTableData:
     )
 
 
+class _EdgeSnapped:
+    """RegularGridInterpolator that absorbs float round-trip noise at the edges.
+
+    Why this exists. The grid axes are written to the .dat file with '%e', i.e.
+    7 significant digits, so a node rebuilt in memory need not be bit-identical
+    to its on-disk twin. The classic offender is the last node of an arange:
+
+        np.arange(0.10, 0.401, 0.05)[-1] == 0.40000000000000013
+
+    while the file reads back exactly 0.4. Asking for Y_L there is asking for a
+    point *outside* the interpolation domain, and RegularGridInterpolator then
+    fills the ENTIRE query with NaN -- one ULP silently blanks a whole EoS
+    table, and the failure only surfaces much later (e.g. "EOS has 0 finite
+    rows" when the crust is spliced on).
+
+    Mechanics. Before delegating, every coordinate that sits within `rtol` of an
+    axis endpoint is snapped onto that endpoint. This carries no physics: it
+    moves a query by at most a part in 1e9. A coordinate that misses the grid by
+    more than that (T = 200 MeV on a grid stopping at 100) is left alone and
+    still returns NaN, because that one is a genuine out-of-range request.
+    """
+
+    __slots__ = ('_rgi', '_lo', '_hi', '_tol')
+
+    def __init__(self, rgi, grids, rtol: float = 1e-9):
+        self._rgi = rgi
+        # Axes are sorted ascending by load_eos_table, so [0] / [-1] are the ends.
+        self._lo = [float(g[0]) for g in grids]
+        self._hi = [float(g[-1]) for g in grids]
+        self._tol = [rtol * max(abs(lo), abs(hi))
+                     for lo, hi in zip(self._lo, self._hi)]
+
+    def __call__(self, xi):
+        # Only the tuple-of-coordinates call style is snapped; the (n, ndim)
+        # array style is passed straight through (nothing here uses it).
+        if not isinstance(xi, (tuple, list)):
+            return self._rgi(xi)
+        return self._rgi(tuple(
+            self._snap(c, lo, hi, tol)
+            for c, lo, hi, tol in zip(xi, self._lo, self._hi, self._tol)))
+
+    @staticmethod
+    def _snap(c, lo, hi, tol):
+        c = np.asarray(c, dtype=float)
+        c = np.where(np.abs(c - lo) <= tol, lo, c)
+        return np.where(np.abs(c - hi) <= tol, hi, c)
+
+
 def build_interpolators(table: EOSTableData,
                         method: str = 'linear',
                         bounds_error: bool = False,
@@ -903,12 +951,12 @@ def build_interpolators(table: EOSTableData,
 
     interpolators = {}
     for name, arr in table.data.items():
-        interpolators[name] = RegularGridInterpolator(
+        interpolators[name] = _EdgeSnapped(RegularGridInterpolator(
             grid_tuple, arr,
             method=method,
             bounds_error=bounds_error,
             fill_value=fill_value
-        )
+        ), grid_tuple)
 
     result = {
         'interpolators': interpolators,

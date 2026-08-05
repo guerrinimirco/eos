@@ -328,6 +328,64 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
 
 ---
 
+## G. Extended NJL engine (`eos/enjl`, Xia 2024 PRD 110 014022)
+
+### G1. The effective scalar density is capped at zero — pinned, not in the paper
+
+- **Where:** `eos/enjl/uniform.py::_effective_scalar_densities`.
+- **The issue:** Eq. (6) reads nbar^s_q = n^s_q + alpha_S sum_i N^q_i n^s_i.
+  The quark term is negative (vacuum-subtracted) but the baryon cluster term is
+  positive and grows with baryon density, so above chiral restoration the sum
+  turns positive: at n_b = 10 fm^-3 in the f_q = 0.7, B = 1 set it reaches
+  +2.5 fm^-3 for the u flavor. A positive nbar^s_q is a scalar condensate of
+  the wrong sign and drives M_q below its current mass m_q0.
+- **Pinned:** nbar^s_q is capped at zero from above, so M_q >= m_q0 always.
+- **Evidence this is what the author's own implementation does**, all from the
+  reference tables in `test/enjl/reference/`, which are that implementation's
+  output: (i) the `Sigmaq` columns are written as exactly 0 on precisely the
+  rows where the uncapped expression would be positive, while `Sigmas` on the
+  same rows is reproduced by the uncapped formula to 1e-5 fm^-3; (ii) with the
+  cap, the computed nbar^s_q matches the `Sigmaq` columns over *all* solved
+  rows of all five files to <= 9.5e-4 fm^-3; (iii) M_s on those rows follows
+  from m_s0 - 4 G_S nbar^s_s with the u and d contributions to the 't Hooft
+  term switched off by the cap, which reproduces the printed M_s exactly
+  (386.887 at n_b = 10); (iv) the E_0 offset extracted from Eq. (13) stays
+  density-independent, which it would not if the condensate energy used
+  uncapped values.
+- **Consequence if we decide differently:** without the cap the uniform solver
+  does not merely lose accuracy, it fails — the gap equation acquires spurious
+  negative-mass roots and `solve_point` either raises or returns M_q < 0.
+- **Open:** whether the paper intends the cap as a constraint on the field
+  equations or whether Eq. (6) is meant to be read with a cluster term that
+  cannot exceed the quark term. The two agree everywhere the tables can
+  distinguish them, so nothing downstream depends on the answer.
+
+### G2. Where the chiral knee falls, to one grid step
+
+- **Where:** `Beta_fq0.7_B0.dat` at n_b = 0.63 and 0.64 fm^-3 only.
+- **Symptom:** the reference tables pin M_d to m_d0 = 5.5 MeV on those two
+  rows while this solver's nbar^s_d is still marginally negative, giving
+  M_d = 6.30 and 5.77. Through the 't Hooft term this also moves M_u
+  (8.79 against the table's 10.42 at n_b = 0.63), and through Eq. (4) it moves
+  M_Lambda, which is where the residual shows up: 0.26 MeV in mu_Lambda.
+- **Pinned:** reported rather than tuned away. Excluding those two rows the
+  file agrees to 0.018 MeV over its whole range, which is the same figure an
+  independent rebuild of the mean field from the table's own columns reaches —
+  so the difference is the placement of the knee, not the mean field.
+  `test/enjl/test_enjl_fixed_composition.py` asserts both numbers.
+- **Open:** whether the reference run applied a tolerance when testing
+  nbar^s_d <= 0 that this solver does not. Sub-MeV, and confined to the two
+  grid points either side of chiral restoration in one parameter set.
+
+### G3. Finite-temperature decisions — not yet taken
+
+Thermal antibaryons, thermal antiquarks and whether the paper's "quarks are
+restricted to the lowest energy states" remark has finite-T content are all
+open. They are decisions for the finite-temperature work and are recorded here
+when that starts, not before.
+
+---
+
 ## F. Things that are settled (no action needed) — for the record
 - τ₃=±1 nucleon convention: verified (E_sym=31.67, ρ₀ sign correct).
 - DD2 nucleonic sector: exact — TOV M_max 2.419 vs pub 2.42, R_1.4 13.19 vs 13.2;

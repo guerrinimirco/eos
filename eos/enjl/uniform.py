@@ -98,6 +98,37 @@ class ENJLEoSPoint:
         return (self.eps / self.n_b) - 938.9
 
 
+#: the two flavors the 't Hooft determinant term couples to, per flavor
+_OTHER_FLAVORS = {"u": ("d", "s"), "d": ("u", "s"), "s": ("u", "d")}
+
+
+def quark_masses_from_gap(nbar_s, par):
+    """Quark masses from the gap equation, Eq. (5) with Eq. (8) substituted.
+
+        M_u = m_u0 - 4 G_S nbar^s_u + 2 K nbar^s_d nbar^s_s
+
+    and cyclically. The paper writes the 't Hooft determinant term as
+    2 K nbar^s_u nbar^s_d nbar^s_s / nbar^s_q; that is the same number wherever
+    nbar^s_q is nonzero, but it is a 0/0 at chiral restoration, where the
+    condensate of a flavor vanishes. The product over the *other two* flavors
+    is the same expression without the removable singularity, so it is the form
+    used here.
+
+    `nbar_s` maps "u"/"d"/"s" to the *effective* scalar densities of Eq. (6):
+    the medium term, the vacuum (Dirac-sea) term regularized by the cut-off
+    Lambda, and the alpha_S-weighted baryon cluster term together. The medium
+    term alone is not the argument of this equation.
+
+    Natural units: nbar_s in MeV^3, masses returned in MeV. Pure arithmetic,
+    so a dict of numpy arrays evaluates the gap along a whole density sweep.
+    """
+    m0 = _m0_of(par)
+    return {q: (m0[q] - 4.0 * par.GS * nbar_s[q]
+                + 2.0 * par.K * nbar_s[_OTHER_FLAVORS[q][0]]
+                * nbar_s[_OTHER_FLAVORS[q][1]])
+            for q in QUARKS}
+
+
 def _m0_of(par):
     return {"u": par.m_u0, "d": par.m_d0, "s": par.m_s0}
 
@@ -147,20 +178,20 @@ def solve_point(n, par=None, x0=None, _vac_mass=None):
         M_b = _baryon_masses(par, M_q, alpha_S, n_bQ)
         n_s_b = {b: scalar_density_t0(kF[b], M_b[b], 2.0, 0.0) for b in BARYONS}
         nbar = _effective_scalar_densities(kF, M_q, n_s_b, alpha_S, par.Lambda)
-        prod = nbar["u"] * nbar["d"] * nbar["s"]
-        out = []
-        for q in QUARKS:
-            gap = m0[q] - 4.0 * par.GS * nbar[q] + 2.0 * par.K * prod / nbar[q]
-            out.append(x[QUARKS.index(q)] - gap)
-        return out
+        gap = quark_masses_from_gap(nbar, par)
+        return [x[QUARKS.index(q)] - gap[q] for q in QUARKS]
 
     if x0 is None:
         x0 = [367.6, 367.6, 549.5]
     sol = root(residuals, x0, method="hybr", tol=GAP_TOL)
-    if not sol.success:
+    # hybr reports "not making good progress" (status 5) whenever it is asked
+    # for more precision than the residual can supply, which at GAP_TOL happens
+    # routinely on a converged root. The residual, not the status flag, decides.
+    residual = max(abs(r) for r in residuals(sol.x))
+    if not sol.success and residual > GAP_TOL:
         raise RuntimeError(
             f"ENJL gap solve failed at n_b={n_b / hc3:.4f} fm^-3: "
-            f"{sol.message}")
+            f"residual {residual:.3e} MeV, {sol.message}")
 
     M_u, M_d, M_s = sol.x
     M_q = {"u": M_u, "d": M_d, "s": M_s}
@@ -237,12 +268,26 @@ def _baryon_masses(par, M_q, alpha_S, n_bQ):
 
 
 def _effective_scalar_densities(kF, M_q, n_s_b, alpha_S, Lambda):
-    """nbar_sq = n_sq(M_q,nu_q) + alpha_S sum_{i=n,p,L} N_i^q n_i^s (Eq. 6)."""
+    """nbar_sq = n_sq(M_q,nu_q) + alpha_S sum_{i=n,p,L} N_i^q n_i^s (Eq. 6).
+
+    Capped at zero from above. nbar_sq is the scalar condensate up to a
+    positive factor (g_sigma sigma_q = 4 G_S nbar_sq, Eq. (8)), so it is
+    negative in vacuum and rises towards zero as chiral symmetry is restored;
+    a positive value would be a condensate of the wrong sign and would drive
+    M_q below its current mass m_q0. The bound is reached in this model well
+    before the quark medium term alone would reach it, because the baryon
+    cluster term alpha_S sum_i N^q_i n^s_i is positive and grows with the
+    baryon density: at n_b = 10 fm^-3 the uncapped expression returns
+    +2.5 fm^-3 for the u flavor while the condensate has long since vanished.
+
+    Once nbar_sq is zero the gap equation returns M_q = m_q0 exactly, and the
+    't Hooft term of the remaining flavors loses its coupling to this one.
+    """
     out = {}
     for q in QUARKS:
         n_sq = scalar_density_t0(kF[q], M_q[q], 6.0, Lambda)
         bar = sum(_N_BARYON[b][QUARKS.index(q)] * n_s_b[b] for b in BARYONS)
-        out[q] = n_sq + alpha_S * bar
+        out[q] = min(n_sq + alpha_S * bar, 0.0)
     return out
 
 
@@ -272,13 +317,8 @@ def _vacuum_residual(x, par):
         "d": scalar_density_t0(0.0, M_d, 6.0, par.Lambda),
         "s": scalar_density_t0(0.0, M_s, 6.0, par.Lambda),
     }
-    prod = n_s["u"] * n_s["d"] * n_s["s"]
-    m0 = _m0_of(par)
-    out = []
-    for q in QUARKS:
-        gap = m0[q] - 4.0 * par.GS * n_s[q] + 2.0 * par.K * prod / n_s[q]
-        out.append(x[QUARKS.index(q)] - gap)
-    return out
+    gap = quark_masses_from_gap(n_s, par)
+    return [x[QUARKS.index(q)] - gap[q] for q in QUARKS]
 
 
 def vacuum_energy_density(par, _vac_mass=None):

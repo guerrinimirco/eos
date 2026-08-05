@@ -15,14 +15,20 @@ import math
 
 from eos.general.physics_constants import hc3
 
-#: Isospin-source normalization of the rho channel, verified against the
-#: author's Maple worksheet (eNJL.mw, cell 61): the worksheet defines
-#: Gamma_rho = 9 * 4 G_S [aTV e^{-n_b/nTV} + bTV] with J_rho = sum_i f_i tau_i
-#: n_i (no factor 3), i.e. an effective coupling 9x the paper Eq. (22) reading.
-#: This reproduces the paper's symmetry energies S(0.1)=25.5 and
-#: S(0.158)=31.5 (without the 9 they come out 13.3/20.2). The omega channel is
-#: unaffected: the worksheet's 9 there is cancelled by J_omega^2 = (3 sum f n)^2
-#: for baryonic matter, so Gamma_w keeps the paper Eq. (21) form.
+#: Isospin-source normalization of the rho channel: the effective coupling is
+#: 9x the literal reading of Eq. (22), used with J_rho = sum_i f_i tau_i n_i
+#: (no factor 3) and tau_p = +1, tau_n = -1. Two independent confirmations:
+#:
+#:   * it reproduces the paper's symmetry energies S(0.1) = 25.5 MeV and
+#:     S(0.158) = 31.5 MeV; the literal Eq. (22) gives 13.3 and 20.2.
+#:   * on the nucleonic rows of the author's own beta-equilibrium tables in
+#:     test/enjl/reference/, the isospin splitting of the printed potentials
+#:     gives g_rho rho = [(E_F^n - E_F^p) - (mu_n - mu_p)] / 2, and dividing
+#:     that by J_rho = n_p - n_n yields exactly 9.0000x Eq. (22) at every one
+#:     of those densities — with no fit and no symmetry-energy argument.
+#:
+#: The omega channel needs no such factor, because J_omega already carries
+#: N_i = 3 for the baryons; Gamma_w keeps the paper Eq. (21) form.
 RHO_FACTOR: float = 9.0
 
 
@@ -59,10 +65,19 @@ class ENJLParams:
     # coefficient B_nat = 1000 * hc^-3 MeV^-2 gives the mass shift in MeV.
     B_GeV_fm3: float = 1.0
 
-    # --- bare meson masses [MeV] (Paper-2 TFA engine; enter the uniform
-    #     engine only through g^2/m^2 as G_S and Gamma_w/r) ---
+    # --- bare meson masses [MeV], Table I of Xia, Maruyama, Yasutake &
+    #     Tatsumi, arXiv:2409.12489. They enter the uniform engine only
+    #     through g^2/m^2 (i.e. G_S and Gamma_w/r) and so are inert here;
+    #     they matter once the gradient terms of that paper are switched on,
+    #     which fix the interaction ranges.
+    #
+    #     m_omega is 1e5 MeV and that is not a typo for 105: the paper adopts
+    #     "a rather large omega meson mass" to suppress density fluctuations
+    #     in its Thomas-Fermi approximation, and notes it could be reduced
+    #     given a better treatment. It is not a physical omega mass and must
+    #     not be used as one.
     m_sigma: float = 630.0
-    m_omega: float = 105.0
+    m_omega: float = 1.0e5
     m_rho: float = 769.0
 
     # --- lepton masses [MeV] ---
@@ -104,7 +119,7 @@ class ENJLParams:
     def Gamma_r(self, n_b):
         """g_rho^2/m_rho^2 = 9 * 4 G_S [aTV e^{-n_b/nTV} + bTV] [MeV^-2].
 
-        The factor 9 is the Maple-verified normalization (see RHO_FACTOR);
+        The factor 9 is the isospin-source normalization (see RHO_FACTOR);
         the paper Eq. (22) prints the coupling without it.
         """
         x = n_b / (self.nTV * hc3)

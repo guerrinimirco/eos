@@ -17,11 +17,10 @@ Files, one per parameter set (f_q = f_u = f_d = f_s; B in GeV/fm^3):
     Beta_fq0.5_B1.dat    f_q = 0.5   B = 1        383 rows, extra columns
 
 All are tab-separated with one header row of column names, n_b from 0.01 to
-10 fm^-3. Column meanings, units and the exact identities they satisfy are
-documented in `docs/enjl/REFERENCE_TABLES.md`; `load_reference` below returns
-them as a plain dict of numpy arrays with the blank columns dropped.
+10 fm^-3. `load_reference` below returns them as a plain dict of numpy arrays
+with the blank columns dropped.
 
-Four traps, all documented at length in that file:
+Four traps in the column semantics:
 
   * `nsq` and `Sigmaq` (q = u, d, s) are NOT the same quantity. `nsq` is the
     quark scalar density *without* the vacuum Dirac-sea term; `Sigmaq` is the
@@ -95,6 +94,49 @@ def solved_rows(col):
     and the gap equation does not hold.
     """
     return np.isfinite(col["munr"])
+
+
+#: Rows that are non-converged solver output and cannot be repaired, keyed by
+#: file; values are n_b [fm^-3], matched to 1e-6.
+BAD_ROWS = {
+    #   3.4: this row's own columns are self-consistent (`nB` matches the sum
+    #        of its species densities, and epa * nB == E to 8e-8), but it
+    #        fails Eq. (23) by 9.6 MeV in the proton channel and by 3-6 MeV in
+    #        u, d and s. The two rows below it satisfy the same identity to
+    #        1e-8, and the two above it are stale-`nB` rows, so it reads as
+    #        the first row of a non-converged run rather than a lone glitch.
+    "Beta_fq0.7_B0.dat": (3.4,),
+}
+
+
+def stale_density_rows(col):
+    """Mask of rows whose `nB` disagrees with the sum of their own densities.
+
+    Eight rows of `Beta_fq0.7_B0.dat` are like this, with `nB` high by one
+    grid step. Their `epa` equals E / (sum of the densities) rather than
+    E / `nB`, to 1e-10, which identifies the sum as the true density and the
+    `nB` column as stale — most likely a density label written from the
+    following iteration. Their other columns come from a mixture of
+    iterations too, so substituting the corrected density does not rescue
+    them (the mean-field residual stays around 2 MeV): they can only be
+    excluded, not repaired.
+    """
+    n_sum = (col["np"] + col["nn"] + col["nL"]
+             + (col["nu"] + col["nd"] + col["ns"]) / 3.0)
+    return np.abs(n_sum - col["nB"]) > 1.0e-5
+
+
+def bad_rows(col, filename):
+    """Mask of rows to exclude: stale-`nB` rows plus the `BAD_ROWS` entries.
+
+    With these out, every file satisfies its own identities uniformly across
+    the full 0.01-10 fm^-3 range; with them in, `Beta_fq0.7_B0.dat` looks two
+    orders of magnitude worse than it is.
+    """
+    mask = stale_density_rows(col)
+    for n_b in BAD_ROWS.get(filename, ()):
+        mask = mask | (np.abs(col["nB"] - n_b) < 1.0e-6)
+    return mask
 
 
 def baryon_potential(col):

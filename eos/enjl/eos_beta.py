@@ -33,8 +33,8 @@ from eos.enjl.parameters import ENJLParams, get_enjl_default
 from eos.enjl.species import BARYONS, QUARKS, LEPTONS
 from eos.enjl.thermodynamics import scalar_density_t0, number_density_t0
 from eos.enjl.uniform import (
-    GAP_TOL, _baryon_masses, _f_of, _m0_of,
-    _N_BARYON, solve_point,
+    ENJLEoSPoint, _baryon_masses, _effective_scalar_densities, _f_of, _m0_of,
+    _N_BARYON, quark_masses_from_gap, solve_point,
 )
 from eos.general.physics_constants import hc3
 
@@ -163,17 +163,11 @@ def _evaluate(x, par, n_b_target):
         + (1.0 / 3.0) * SigmaR_b_c
 
     # --- effective scalar densities for the gap (Eq. (6)) ---
-    nbar = {}
-    for q in QUARKS:
-        bar = sum(_N_BARYON[b][QUARKS.index(q)] * n_s_b[b] for b in BARYONS)
-        nbar[q] = n_s_q[q] + alpha * bar
+    nbar = _effective_scalar_densities(kF, M_q, n_s_b, alpha, par.Lambda)
 
     # --- residuals ---
-    res = []
-    prod = nbar["u"] * nbar["d"] * nbar["s"]
-    for q in QUARKS:
-        gap = m0[q] - 4.0 * par.GS * nbar[q] + 2.0 * par.K * prod / nbar[q]
-        res.append(M_q[q] - gap)
+    gap = quark_masses_from_gap(nbar, par)
+    res = [M_q[q] - gap[q] for q in QUARKS]
     nB = sum(_B[sp] * n[sp] for sp in _ALL)
     nQ = sum(_Q[sp] * n[sp] for sp in _ALL)
     res.append(nB - n_b_target)

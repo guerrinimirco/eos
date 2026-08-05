@@ -27,8 +27,8 @@ REPO = os.path.abspath(os.path.join(HERE, os.pardir, os.pardir))
 sys.path.insert(0, os.path.join(REPO, "test", "enjl"))
 
 from reference import (   # noqa: E402
-    load_reference, solved_rows, baryon_potential, electron_potential,
-    present, PARAMETER_SETS,
+    load_reference, solved_rows, bad_rows, baryon_potential,
+    electron_potential, present, PARAMETER_SETS,
 )
 
 # --- constants and published parameters (paper Sec. II.B and Table I) --------
@@ -163,36 +163,9 @@ def mean_field(col, f_q, B_GeV):
 
 
 # --- individual audits ------------------------------------------------------
-#: rows that are non-converged Maple output and cannot be repaired. Keyed by
-#: file, values are n_b [fm^-3] to be matched to 1e-6. See REFERENCE_TABLES.md
-#: section 4b-bis for the evidence on each.
-BAD_ROWS = {
-    #   3.4 : self-consistent columns (`nB` right, epa*nB == E to 8e-8) but
-    #         fails Eq. (23) by 9.6 MeV in the p channel, while the two rows
-    #         below satisfy it to 1e-8 and the two above are stale-nB rows
-    "Beta_fq0.7_B0.dat": (3.4,),
-}
-
-
-def bad_rows(col, filename):
-    """Explicitly excluded non-converged rows, plus the stale-`nB` ones."""
-    mask = stale_density_rows(col)
-    for n_b in BAD_ROWS.get(filename, ()):
-        mask = mask | (np.abs(col["nB"] - n_b) < 1.0e-6)
-    return mask
-
-
-def stale_density_rows(col):
-    """Rows whose `nB` column disagrees with the sum of its own densities.
-
-    Eight rows of Beta_fq0.7_B0.dat are like this — `nB` high by one grid step
-    while `epa` = E / (sum of densities). Their other columns come from a
-    mixture of iterations too, so they cannot be repaired, only excluded.
-    See REFERENCE_TABLES.md section 4b-bis.
-    """
-    n_sum = (col["np"] + col["nn"] + col["nL"]
-             + (col["nu"] + col["nd"] + col["ns"]) / 3.0)
-    return np.abs(n_sum - col["nB"]) > 1.0e-5
+# The row-exclusion masks (`bad_rows`, `stale_density_rows`, `BAD_ROWS`) live
+# in test/enjl/reference/ so that this script and the test suite mask exactly
+# the same rows. See REFERENCE_TABLES.md section 4b-bis for the evidence.
 
 
 def audit_bookkeeping(col, ok):

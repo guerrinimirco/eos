@@ -16,8 +16,6 @@ Package layout:
     thermodynamics.py  — T=0 Fermi-gas integrals with the Lambda cut-off
     uniform.py         — self-consistent uniform-matter solver (Paper 1)
     eos_beta.py        — beta equilibrium / charge neutrality + tables (Paper 1)
-    star.py            — TOV star sequences (Paper 1)
-    tfa/               — Thomas-Fermi approximation engine (Paper 2)
 
 Physics conventions follow CLAUDE.md: strangeness S = +1 per s-quark, charge
 C excludes leptons, natural units (MeV powers) internally with fm-based
