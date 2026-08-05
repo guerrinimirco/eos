@@ -77,6 +77,33 @@ def test_perturbed_nmp_solves(dd2_nmp):
     assert abs(got["L_sym"] - 60.0) < 0.5
 
 
+def test_restarts_recover_a_seed_limited_inversion(dd2_nmp):
+    """(K_sat, Q_sat) = (240, 300) misses the gate by four orders of magnitude
+    from the published seed and converges cleanly from a jittered one, so the
+    single-seed verdict was a statement about the seed and not about whether the
+    NMPs have a DD-RMF realisation. Guards the distinction those two answers
+    are easy to confuse."""
+    from eos.dd2.nmp_inverter import invert_nmp, ISO_GATE
+
+    tgt = dict(dd2_nmp, K_sat=240.0, Q_sat=300.0)
+    single = invert_nmp(tgt, n_restarts=0)[1]
+    restarted = invert_nmp(tgt)[1]
+    assert not single.ok, "expected the single-seed solve to miss the gate"
+    assert restarted.ok, restarted.message
+    assert restarted.isoscalar_residual < ISO_GATE < single.isoscalar_residual
+
+
+def test_inversion_is_deterministic(dd2_nmp):
+    """The restarts are seeded from a constant, not from entropy: a scan run
+    twice, or spread over parallel workers, must not classify the same NMP set
+    differently on different runs."""
+    from eos.dd2.nmp_inverter import invert_nmp
+
+    tgt = dict(dd2_nmp, K_sat=220.0, Q_sat=169.0)
+    first, second = invert_nmp(tgt)[1], invert_nmp(tgt)[1]
+    assert first.isoscalar_residual == second.isoscalar_residual
+
+
 if __name__ == "__main__":
     dd2 = Parametrization.from_dd2_defaults()
     nmp = compute_nmp(dd2)

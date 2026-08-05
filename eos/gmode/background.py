@@ -173,6 +173,52 @@ def brunt_vaisala(g, cs2_eq, cs2_ad, e_nu, e_lam):
     return g**2 * delta * e_nu / e_lam
 
 
+def with_crust(eos, cs2_eq, cs2_ad, crust="BPS", n_transition=0.08,
+               custom_path=None):
+    """Prepend a tabulated crust to a core equation of state, with N^2 = 0.
+
+    Returns `(eos_full, cs2_eq_full, cs2_ad_full)` ready for
+    `build_background`. The crust rows get `cs2_ad = cs2_eq`, so the
+    Brunt-Vaisala frequency vanishes there: a tabulated crust carries no
+    composition information, and the standard treatment in the g-mode
+    literature is to model it as a homogeneous fluid, which supports no
+    composition buoyancy. The core g-mode is insensitive to this, being
+    confined well inside the crust.
+
+    eos          : core `EOSTable_for_TOV`
+    cs2_eq/cs2_ad: sound speeds on the core rows
+    crust        : name understood by `eos.tov.solver.load_crust_table`, or
+                   "No" to skip and return the input unchanged
+    n_transition : baryon density [fm^-3] below which crust rows are kept
+    """
+    from eos.tov.solver import EOSTable_for_TOV, load_crust_table
+
+    cs2_eq = np.asarray(cs2_eq)
+    cs2_ad = np.asarray(cs2_ad)
+    if crust in (None, "No", "no", False):
+        return eos, cs2_eq, cs2_ad
+
+    ct = load_crust_table(crust, custom_path=custom_path)
+    keep = ct.nB < n_transition
+    core = np.asarray(eos.nB) >= n_transition
+    if not np.any(keep):
+        raise ValueError(f"crust {crust!r} has no rows below "
+                         f"n_transition = {n_transition} fm^-3")
+
+    # The crust's own dP/deps: equilibrium and frozen coincide by construction.
+    cs2_crust = np.gradient(ct.P[keep], ct.epsilon[keep])
+    cs2_crust = np.clip(cs2_crust, 1e-8, 1.0)
+
+    full = EOSTable_for_TOV(
+        P=np.concatenate([ct.P[keep], np.asarray(eos.P)[core]]),
+        epsilon=np.concatenate([ct.epsilon[keep],
+                                np.asarray(eos.epsilon)[core]]),
+        nB=np.concatenate([ct.nB[keep], np.asarray(eos.nB)[core]]))
+    return (full,
+            np.concatenate([cs2_crust, cs2_eq[core]]),
+            np.concatenate([cs2_crust, cs2_ad[core]]))
+
+
 def _tov_rhs(r, y, eps_grid, P_grid):
     """RHS of [dm/dr, dP/dr, dnu/dr] in geometric units.
 
@@ -314,26 +360,49 @@ def _background_at_mass(eos, cs2_eq, cs2_ad, M_target, n_points, r_max,
                         P_surf_rel, e_c_bracket, P_tab, e_tab, n_tab):
     """Bisect on central density until M(e_c) = M_target.
 
-    Bisection rather than a Newton step: M(e_c) turns over at the maximum mass,
-    so the bracket is the thing that keeps the search on the stable branch.
+    Bisection rather than a Newton step, and preceded by a coarse scan: M(e_c)
+    turns over at the maximum mass, so a target mass below M_max is reached on
+    *two* branches and only the low-density one is stable. The scan takes the
+    first crossing, which is the stable one.
     """
-    if e_c_bracket is None:
-        lo = max(float(eos.epsilon.min()) * 2.0, 200.0)
-        hi = float(eos.epsilon.max()) * 0.95
-    else:
-        lo, hi = e_c_bracket
-
     def mass_of(e_c):
         bg = _integrate(P_tab, e_tab, n_tab, cs2_eq, cs2_ad,
                         e_c * MEV_FM3_TO_KM2_INV, 32, r_max, P_surf_rel)
         return bg.M_msun
 
-    f_lo, f_hi = mass_of(lo) - M_target, mass_of(hi) - M_target
-    if f_lo * f_hi > 0:
-        raise ValueError(
-            f"M = {M_target} M_sun not bracketed by e_c in [{lo:.1f}, {hi:.1f}] "
-            f"MeV/fm^3, which spans M in [{f_lo + M_target:.3f}, "
-            f"{f_hi + M_target:.3f}] M_sun")
+    if e_c_bracket is not None:
+        lo, hi = e_c_bracket
+        f_lo, f_hi = mass_of(lo) - M_target, mass_of(hi) - M_target
+        if f_lo * f_hi > 0:
+            raise ValueError(
+                f"M = {M_target} M_sun not bracketed by the requested e_c "
+                f"[{lo:.1f}, {hi:.1f}] MeV/fm^3, which spans M in "
+                f"[{f_lo + M_target:.3f}, {f_hi + M_target:.3f}] M_sun")
+    else:
+        e_min = float(np.min(eos.epsilon))
+        e_max = float(np.max(eos.epsilon))
+        scan = np.logspace(np.log10(max(e_min * 2.0, 100.0)),
+                           np.log10(e_max * 0.98), 24)
+        masses = []
+        for e in scan:
+            try:
+                masses.append(mass_of(e))
+            except (RuntimeError, ValueError):
+                masses.append(np.nan)
+        masses = np.asarray(masses)
+        f = masses - M_target
+        ok = np.isfinite(f)
+        idx = [i for i in range(len(f) - 1)
+               if ok[i] and ok[i + 1] and f[i] * f[i + 1] <= 0]
+        if not idx:
+            reached = np.nanmax(masses) if ok.any() else float("nan")
+            raise ValueError(
+                f"M = {M_target} M_sun is not reached by this equation of "
+                f"state: scanning e_c over [{scan[0]:.1f}, {scan[-1]:.1f}] "
+                f"MeV/fm^3 gives M_max = {reached:.3f} M_sun. Pass e_c_bracket "
+                "to search a different range.")
+        i = idx[0]                                  # first = stable branch
+        lo, hi, f_lo = scan[i], scan[i + 1], f[i]
 
     for _ in range(60):
         mid = 0.5 * (lo + hi)

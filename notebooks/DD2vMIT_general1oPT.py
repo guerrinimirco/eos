@@ -61,14 +61,17 @@
 #
 # ---
 # **Layout**
-# - **Part I** — imports, every knob in one cell, and a fast pre-flight check.
+# - **Part I** — imports, the parameter-space funnel, then every knob in one cell.
 # - **Part II** — pure phases, the mixed tables, TOV, and a parameter scan.
 # - **Part III** — plots, all defined here in the notebook.
 #
-# **Start here if you are choosing parameters:** run Part I only. Section I.3
-# tells you in under a second whether your (parametrization, B4, a) has a
-# transition at all, before Part II spends minutes finding out the hard way.
-# Section II.4 then maps the region where it does.
+# **Start here if you are choosing parameters:** run Part I only. Section I.2 is a
+# staged funnel over (nuclear-matter parameters × hyperon and Δ potentials × B^1/4,
+# a, m_s × η) that reports which combinations land in a target M_max and R(1.4) band
+# and, for each, whether the centre of the star is hadronic, mixed or pure quark. It
+# ends by printing the recipe for the best one, ready to paste into I.3 before Part II
+# is run at full resolution. Section II.4 then maps the (B^1/4, a) plane of that one
+# choice as a picture.
 
 # %% [markdown]
 # # Part I — setup
@@ -138,7 +141,620 @@ print("eos imported from:", Path(eos.__file__).parent)
 
 
 # %% [markdown]
-# ## I.2 Parameters and grids
+# ## I.2 Parameter-space funnel — which parameters give the star you asked for?
+#
+# One cell, four questions, asked in the order that fails cheapest. Each stage runs
+# only on what survived the one before, so the expensive mixed-phase solves are never
+# spent on parameters that were already ruled out.
+#
+# | stage | question | cost per sample |
+# |---|---|---|
+# | **1** | which nuclear-matter parameters have a DD-RMF realisation at all? | milliseconds |
+# | **2** | which of those, crossed with the hyperon and Δ potentials, give a hadronic branch near the target band? | ~1 s |
+# | **3** | which of those, crossed with the quark parameters, give M_max and R(1.4) in the target band — at how many η, and **where does the centre of the star actually sit**? | ~2–3 s |
+#
+# **The answer stage 3 gives is a phase, not a yes/no.** A transition existing in the
+# equation of state and a transition being *realised inside a star* are different
+# statements: the window can open at a density no stable star reaches. Every
+# combination is therefore labelled by where the central baryon density of the
+# maximum-mass star falls:
+#
+# | `core_phase` | meaning | is it a hybrid star? |
+# |---|---|---|
+# | `none` | no window on this grid | no — pure hadronic, judged on the stage-2 hadronic M_max and R(1.4) |
+# | `H` | a window exists but n_Bc < n_onset | no — the transition is above every stable star |
+# | `mix` | n_onset ≤ n_Bc < n_offset | yes — a mixed-phase core |
+# | `Q` | n_Bc ≥ n_offset | yes — a genuine pure-quark core |
+#
+# **Which parameters can actually be varied.** `L_sym` is free — the isovector
+# inversion is near-analytic and converges across 30–100 MeV. **`K_sat` is not**: the
+# isoscalar system is closed by a cross-constraint that ties `K_sat` to `Q_sat`, so
+# moving `K_sat` alone leaves a residual that grows away from the DD2 value (~3e-2 at
+# 240 MeV against a 2e-2 gate, 0.2 by 220 MeV). Stage 1 reports it as
+# `inversion_failed`, which is a statement about the DD2 functional form, not a solver
+# defect. The `K_sat` axis is kept below precisely so you can see that.
+#
+# The hadronic *sector* knobs are all free and matter far more than the NMP do, because
+# they set how soft the hadronic branch becomes: `x_wD` alone moves the viable fraction
+# by a factor of ~4, while `U_Lambda` and `U_Xi` barely move it once the transition
+# sits below the hyperon threshold. `from_delta_potential` restricts `U_Delta` to the
+# literature range [-100, -50] MeV.
+#
+# **The stage-2 cut is deliberately soft.** A hadronic branch under 2 M_sun is not
+# disqualifying — quark matter with a > 0 stiffens the star and routinely lifts it back
+# above two solar masses — so stage 2 reports every sample and drops only those under a
+# loose floor. `sweep_truncated` is kept for the same reason: the hadronic branch only
+# has to reach the transition *onset*, not the top of the grid, and a Δ model driving
+# the effective mass to zero at high density is expected physics.
+#
+# **A third stage-3 outcome, and with hyperons and Δ on it is a common one:
+# `eos_unphysical`.** The χ=0 crossing the window locator finds can be spurious at a
+# low bag constant — the mixed branch it locks onto sits at a *lower* pressure than the
+# hadronic branch at the same density, so it is not the favoured state, and the
+# stitched table steps *down* at the onset. Integrating that returns confident nonsense
+# (maximum masses in the hundreds of solar masses), so P monotonicity and 0 ≤ c_s² ≤ 1
+# are checked **before** the TOV run. Those rejections are the scan working.
+#
+# The funnel runs on the coarse `FUNNEL_GRID`; it is reconnaissance. Re-run Part II on
+# the winning recipe printed at the end into I.3, then run Part II at full `NB`.
+#
+# The stages are separate cells on purpose: tightening `M_MAX_RANGE` or `R14_RANGE` and
+# re-running the last two cells is instantaneous, where re-running the whole funnel
+# is minutes.
+
+# %%
+from collections import Counter, defaultdict
+from joblib import Parallel, delayed
+
+from eos.mixed import scan_point, build_parametrization, NMP_KEYS
+
+#: The keys `build_parametrization` understands. A finished scan row carries
+#: results and string columns alongside them, and only these may be fed back in.
+PAR_KEYS = NMP_KEYS + ("U_Lambda", "U_Sigma", "U_Xi", "U_Delta", "x_wD", "x_rD")
+
+# ---- what counts as an acceptable star ------------------------------------
+# The band the FINAL star must land in. Stage 3 tests these.
+M_MAX_RANGE = (2.0, 2.6)          # M_sun
+R14_RANGE = (11.5, 13.5)          # km, radius at M = 1.4 M_sun
+
+# The stage-2 pre-filter on the PURE HADRONIC branch. Deliberately looser than
+# the target band: quark matter changes both numbers, so a hard cut here throws
+# away hybrid stars that would have qualified. A sample whose hadronic TOV did
+# not integrate at all is kept — nan is "unknown", not "failed".
+HAD_M_MIN = 1.6                   # M_sun, soft floor (NOT M_MAX_RANGE[0])
+HAD_R14_RANGE = (10.0, 15.0)      # km, soft band
+
+# ---- axes -----------------------------------------------------------------
+# Independent of the PAR / FLAGS / VMIT chosen in I.3: this section builds its
+# own parametrizations from nuclear-matter parameters, with hyperons and Delta
+# isobars switched on regardless of what FLAGS says.
+FUNNEL_FLAGS = SpeciesFlags(hyperons=True, deltas=True, muons=True,
+                            phi_field=True, photons=True)
+NUCLEON_FLAGS = SpeciesFlags(hyperons=False, deltas=False, muons=True,
+                             phi_field=False, photons=True)
+
+# ---- stage-1 axes: K_sat and Q_sat on a plain rectangular grid ------------
+# Both are swept independently and widely, which is worth a word because it
+# contradicts what a single-seeded inversion appears to say.
+#
+# The isoscalar sector has six free couplings — Gamma_sigma, b_sigma, c_sigma
+# and their omega counterparts, since d_i and a_i are fixed by f_i''(0) = 0 and
+# f_i(1) = 1 — matched to six conditions: P(n_sat) = 0, E_sat, m*/m, K_sat,
+# Q_sat and the closing cross-constraint f_sigma''(1) = f_omega''(1). A square
+# system, so the freedom is genuinely limited. But the set that a solve seeded
+# from the published DD2 couplings can REACH is much smaller than the set that
+# exists, and it traces a narrow band through DD2's own (K_sat, Q_sat) that is
+# easy to mistake for a physical constraint curve. On a 187-cell grid over
+# K_sat = 200-300 and Q_sat = 0-400 MeV, the single seed inverts 7 cells;
+# 32 restarts invert 68 and 64 restarts invert 115, still without saturating.
+#
+# `invert_nmp` now restarts on a miss by default, so stage 1 reports the second
+# number rather than the first — but a miss costs n_restarts solves, which is
+# why stage 1 is no longer free and why the grid below is a few dozen cells
+# rather than a few hundred.
+SCAN_K_SAT = np.arange(210.0, 291.0, 20.0)        # MeV
+SCAN_Q_SAT = np.arange(50.0, 351.0, 50.0)         # MeV, independent of K_sat
+SCAN_L_SYM = [30.0, 50.0, 70.0, 90.0]             # free over 30-100
+
+# How many stage-1 survivors reach the expensive stages. The grid above is wide
+# so the feasible region is visible; carrying every cell of it into stage 3
+# would multiply that stage's cost by the number of survivors. They are thinned
+# evenly, so what goes forward still spans the region rather than clustering at
+# one corner of it.
+MAX_NMP = 4
+
+# ---- stage-2 axes: spend the budget where the sensitivity is ---------------
+# It is very uneven. x_wD alone moves the viable fraction by a factor of ~4 and
+# U_Delta sets how soft the branch becomes, while U_Lambda and U_Xi barely move
+# anything once the transition sits below the hyperon threshold — so those two
+# are held at one value each and the freed factor of four goes to the axes that
+# matter. U_Sigma is the least constrained hyperon potential (repulsive, but by
+# how much is genuinely open), so it gets an axis rather than a default.
+SCAN_U_LAMBDA = [-30.0]           # MeV, hyperon potentials in SNM at n_sat
+SCAN_U_SIGMA = [0.0, 30.0]
+SCAN_U_XI = [-18.0]
+SCAN_U_DELTA = [-100.0, -83.0, -67.0, -50.0]   # from_delta_potential limits
+SCAN_X_WD = [0.9, 1.0, 1.1, 1.2]  # Delta vector ratio x_omegaDelta
+SCAN_X_RD = [1.0]                 # x_rhoDelta; the isovector ratio moves least
+
+# a and B^1/4 both raise the onset density, so the viable combinations sit on
+# an anticorrelated ridge: a = 0.20 wants B^1/4 ~ 160-180, a = 0.10
+# wants ~190-200. A rectangular grid over the pair therefore spends most of its
+# cells off that ridge, which is worth knowing when reading the reject count and
+# is why both axes are swept wide rather than finely. Outside 0.05 <= a <= 0.20
+# nothing survives: a = 0 leaves the quark phase too soft to reach 2 M_sun, and
+# by a = 0.25 the ordered window is gone for every B^1/4 from 120 to 200 MeV.
+SCAN2_B4 = [160.0, 170.0, 180.0, 190.0, 200.0]   # MeV
+SCAN2_A = [0.05, 0.10, 0.15, 0.20]               # fm^2
+SCAN2_MS = [150.0]                # MeV; the EoS is only weakly sensitive to it
+
+FUNNEL_ETAS = [0.0, 0.3, 0.6, 1.0]
+#: One colour per eta for the funnel's own panels. Part III builds an equivalent
+#: map for ETA_LIST, but Part I runs before it and must not depend on it.
+FUNNEL_ETA_COLOR = {e: c for e, c in zip(
+    sorted(FUNNEL_ETAS),
+    plt.cm.viridis(np.linspace(0.0, 0.88, len(FUNNEL_ETAS))))}
+FUNNEL_GRID = np.linspace(0.05, 1.6, 80)   # a probe grid, coarser than NB
+FUNNEL_JOBS = -1                  # 1 to keep it serial and debuggable
+FUNNEL_TOP = 20                   # combinations printed in the final table
+
+# Measured wall cost per sample on ten cores, used only so a stage can say what
+# it is about to spend before it spends it. Re-measure if the machine changes.
+SEC_PER_HADRONIC = 0.46
+SEC_PER_HYBRID = 0.43
+
+
+def _in(x, band):
+    """Is x inside [lo, hi]? nan is outside — an unknown is not a pass."""
+    return bool(np.isfinite(x) and band[0] <= x <= band[1])
+
+
+def _budget(n, sec_each):
+    """A sample count as a projected wall time, so a stage can be cut before
+    it runs rather than after."""
+    t = n * sec_each
+    return f"{n} samples, ~{t:.0f} s" if t < 120 else f"{n} samples, ~{t/60:.0f} min"
+
+
+def _hadronic_mr(par, flags):
+    """(R, M) of the cold beta-equilibrium hadronic branch, stable part only.
+
+    The scan records M_max and R(1.4) but not the sequence they came from, so
+    the curve is rebuilt here. Same core table and the same Numba backend the
+    scan used, so what is drawn is the sequence the reported numbers describe
+    and not a second, subtly different one. Everything past M_max is cut: those
+    models are unstable to radial oscillations and are not stars.
+    """
+    import os
+    from eos.dd2.verify.tov import build_core_table, N_TRANSITION
+    from eos.tov.solver import (compute_tov_sequence, find_mmax_precise,
+                                generate_ec_logspace, CRUST_PATHS)
+    try:
+        core = build_core_table(par, flags)
+        if core.P.size < 10:
+            return np.array([]), np.array([])
+        crust = "BPS" if os.path.isfile(CRUST_PATHS.get("BPS", "")) else "No"
+        res = compute_tov_sequence(
+            core, generate_ec_logspace(150.0, 3000.0, 120),
+            add_crust_table=crust, add_crust_mode="attach",
+            n_transition=(N_TRANSITION if crust != "No" else None),
+            compute_baryonic_mass=False, compute_tidal=False, verbose=False,
+            backend="fast", tov_parallel=False)
+        i, _, _ = find_mmax_precise(res)
+        return res[:i + 1, 3], res[:i + 1, 4]
+    except Exception:
+        return np.array([]), np.array([])
+
+
+def _mr_axes(ax, title):
+    """One mass-radius panel: the two targets, the observational posteriors and
+    the axis furniture, so every stage of the funnel is drawn the same way and
+    the narrowing is legible from one panel to the next.
+
+    The two targets are deliberately NOT drawn as one rectangle. They constrain
+    different points of the same curve — M_MAX_RANGE the peak, R14_RANGE where
+    the curve crosses M = 1.4 — and a box would suggest a curve has to pass
+    through it, which is not the condition being tested.
+    """
+    add_observational_constraints(ax)
+    ax.axhspan(*M_MAX_RANGE, color="0.5", alpha=0.12, zorder=1)
+    ax.plot(R14_RANGE, [1.4, 1.4], color="k", lw=3.0, solid_capstyle="butt",
+            zorder=6, label=r"target $R_{1.4}$")
+    ax.axhline(M_MAX_RANGE[0], color="k", ls="--", lw=1.0, zorder=5,
+               label=r"target $M_{\max}$")
+    ax.axhline(M_MAX_RANGE[1], color="k", ls="--", lw=1.0, zorder=5)
+    ax.set_xlim(9.0, 16.0)
+    ax.set_ylim(0.0, 2.8)
+    ax.set_xlabel(r"$R$ [km]")
+    ax.set_ylabel(r"$M$ [$M_\odot$]")
+    ax.set_title(title, fontsize=10)
+    return ax
+
+
+# %% [markdown]
+# ### Stage 1 — which nuclear-matter parameters are representable?
+
+# %%
+BASE_NMP = compute_nmp(Parametrization.from_dd2_defaults())
+_held = {k: v for k, v in BASE_NMP.items()
+         if k not in ("K_sat", "Q_sat", "L_sym")}
+
+nmp_axes = [dict(_held, K_sat=float(_k), Q_sat=float(_q), L_sym=float(_L))
+            for _k in SCAN_K_SAT for _q in SCAN_Q_SAT for _L in SCAN_L_SYM]
+
+t0 = time.time()
+stage1_rows, nmp_ok = [], []
+print(f"STAGE 1 — {len(SCAN_K_SAT)} K_sat x {len(SCAN_Q_SAT)} Q_sat "
+      f"x {len(SCAN_L_SYM)} L_sym = {len(nmp_axes)} nucleon NMP combinations "
+      f"(a miss costs N_RESTARTS solves, so this is no longer instant)",
+      flush=True)
+for _s in nmp_axes:
+    # Nucleon sector only: the hyperon and Delta inversions ride on top in
+    # stage 2, and asking for them here would confuse "the NMPs have no DD-RMF
+    # realisation" with "the sector potentials do not invert on them".
+    _par, _stage, _msg = build_parametrization(_s, NUCLEON_FLAGS)
+    stage1_rows.append(dict(_s, inversion_ok=float(_stage == "ok"),
+                            status=_stage, message=_msg[:200]))
+    if _stage == "ok":
+        nmp_ok.append(_s)
+
+# The feasible region as a picture, counting how many of the L_sym invert in
+# each (K_sat, Q_sat) cell. Read it as a map of what the SOLVER reached, not of
+# what exists: raise eos.dd2.nmp_inverter.N_RESTARTS and cells keep filling in.
+_n_pass = Counter((r["K_sat"], r["Q_sat"])
+                  for r in stage1_rows if r["inversion_ok"])
+print(f"\n  (K_sat, Q_sat) cells that invert — out of {len(SCAN_L_SYM)} L_sym")
+print("  K_sat |" + "".join(f"{_q:5.0f}" for _q in SCAN_Q_SAT) + "   <- Q_sat")
+for _k in SCAN_K_SAT:
+    print(f"  {_k:5.0f} |" + "".join(f"{_n_pass[(_k, _q)]:5d}"
+                                     for _q in SCAN_Q_SAT))
+
+print(f"\n-> {len(nmp_ok)}/{len(nmp_axes)} NMP combinations invert "
+      f"({time.time()-t0:.1f} s)")
+if not nmp_ok:
+    raise RuntimeError("no NMP sample inverts — raise N_RESTARTS in "
+                       "eos.dd2.nmp_inverter before concluding anything about "
+                       "the physics, then widen SCAN_Q_SAT")
+
+# Thin evenly so the survivors still span the grid instead of clustering at
+# one end, and so stage 3 does not inherit the whole stage-1 map.
+if len(nmp_ok) > MAX_NMP:
+    _step = len(nmp_ok) / MAX_NMP
+    nmp_ok = [nmp_ok[int(_i * _step)] for _i in range(MAX_NMP)]
+    print(f"   thinned to {len(nmp_ok)} (MAX_NMP) for the expensive stages: "
+          + ", ".join(f"K={s['K_sat']:.0f}/Q={s['Q_sat']:.0f}/L={s['L_sym']:.0f}"
+                      for s in nmp_ok))
+
+# %% [markdown]
+# ### Stage 2 — crossed with the hyperon and Δ potentials, is the hadronic branch usable?
+
+# %%
+sector_axes = grid_samples(U_Lambda=SCAN_U_LAMBDA, U_Sigma=SCAN_U_SIGMA,
+                           U_Xi=SCAN_U_XI, U_Delta=SCAN_U_DELTA,
+                           x_wD=SCAN_X_WD, x_rD=SCAN_X_RD)
+had_samples = [dict(_s, **_sec) for _s in nmp_ok for _sec in sector_axes]
+
+print(f"STAGE 2 — {len(nmp_ok)} NMP x {len(sector_axes)} sector combinations "
+      f"= {_budget(len(had_samples), SEC_PER_HADRONIC)}, hyperons+deltas "
+      f"(one beta-eq sweep + one TOV each)", flush=True)
+t0 = time.time()
+had_rows = scan_hadronic(had_samples, FUNNEL_FLAGS, FUNNEL_GRID, tov=True,
+                         n_jobs=FUNNEL_JOBS)
+
+print(f"\n  K_sat  L_sym    U_L  U_Sig   U_Xi    U_D  x_wD | inv sec swp  "
+      f"n_max  M_max_had  R_1.4_had | status")
+for _r in had_rows:
+    print(f"  {_r['K_sat']:6.1f} {_r['L_sym']:5.1f} {_r['U_Lambda']:6.1f} "
+          f"{_r['U_Sigma']:6.1f} {_r['U_Xi']:6.1f} {_r['U_Delta']:6.1f} "
+          f"{_r['x_wD']:5.2f} |  "
+          f"{_r['inversion_ok']:.0f}   {_r['sectors_ok']:.0f}   "
+          f"{_r['sweep_ok']:.0f}  {_r['n_sweep_max']:5.2f}  "
+          f"{_r['M_max_had']:9.3f}  {_r['R_1p4_had']:9.2f} | {_r['status']}")
+
+# The soft cut. Everything whose sector couplings exist and whose hadronic
+# branch is not obviously hopeless goes through — see the markdown above for
+# why this is not the target band.
+had_ok = [(s, r) for s, r in zip(had_samples, had_rows)
+          if r["sectors_ok"] == 1.0
+          and (not np.isfinite(r["M_max_had"]) or r["M_max_had"] >= HAD_M_MIN)
+          and (not np.isfinite(r["R_1p4_had"])
+               or _in(r["R_1p4_had"], HAD_R14_RANGE))]
+
+print(f"\n-> {len(had_ok)}/{len(had_rows)} pass the soft hadronic cut "
+      f"(M_max_had >= {HAD_M_MIN} M_sun, R_1.4 in {HAD_R14_RANGE} km) "
+      f"({time.time()-t0:.1f} s)")
+print(f"   of which {sum(1 for _, r in had_ok if _in(r['M_max_had'], M_MAX_RANGE) and _in(r['R_1p4_had'], R14_RANGE))}"
+      f" already sit in the TARGET band as pure hadronic stars")
+print(f"   status breakdown: {dict(Counter(r['status'] for r in had_rows))}")
+if not had_ok:
+    raise RuntimeError("nothing survived stage 2; lower HAD_M_MIN or widen "
+                       "HAD_R14_RANGE")
+
+# %% [markdown]
+# #### The hadronic family, as mass-radius curves
+#
+# Every sample that survived the soft cut, coloured by `L_sym`. That is the axis worth
+# colouring by: over 30–90 MeV `L_sym` moves R(1.4) by **1.21 km** while moving M_max by
+# 0.028 M_sun, so it is very nearly a pure radius knob. Nothing else comes close —
+# n_sat over 0.145–0.155 fm⁻³ gives 0.40 km, K_sat over 220–270 MeV gives 0.20 km, and
+# E_sym over 29–34 MeV gives 0.14 km. Read the spread horizontally as `L_sym` and
+# vertically as almost everything else.
+#
+# The curves are rebuilt here rather than carried out of the scan, which costs one more
+# TOV pass over the survivors.
+
+# %%
+t0 = time.time()
+print(f"drawing {len(had_ok)} hadronic sequences "
+      f"(~{len(had_ok)*SEC_PER_HADRONIC:.0f} s)", flush=True)
+_pars = Parallel(n_jobs=FUNNEL_JOBS)(
+    delayed(build_parametrization)(s, FUNNEL_FLAGS) for s, _ in had_ok)
+_curves = Parallel(n_jobs=FUNNEL_JOBS)(
+    delayed(_hadronic_mr)(p, FUNNEL_FLAGS) for p, st, _ in _pars if st == "ok")
+_Ls = [s["L_sym"] for (s, _), (p, st, _) in zip(had_ok, _pars) if st == "ok"]
+
+fig, ax = plt.subplots(figsize=(5.2, 4.4))
+_mr_axes(ax, f"Stage 2 — {len(_curves)} hadronic branches, coloured by "
+             r"$L_{\rm sym}$")
+# A one-value L_sym axis would give a degenerate colour scale, so widen it.
+_lo, _hi = min(SCAN_L_SYM), max(SCAN_L_SYM)
+_norm = plt.Normalize(_lo, _hi if _hi > _lo else _lo + 1.0)
+for (R, M), _L in zip(_curves, _Ls):
+    if R.size:
+        ax.plot(R, M, lw=1.0, alpha=0.75, zorder=4,
+                color=plt.cm.viridis(_norm(_L)))
+fig.colorbar(plt.cm.ScalarMappable(norm=_norm, cmap="viridis"), ax=ax,
+             label=r"$L_{\rm sym}$ [MeV]")
+ax.legend(loc="lower left", fontsize=7)
+fig.tight_layout()
+plt.show()
+print(f"({time.time()-t0:.1f} s)")
+
+# %% [markdown]
+# ### Stage 3 — add quark matter: how many η work, and where does the centre sit?
+
+# %%
+good_nmp = [s for s, _ in had_ok]
+had_row_of = {i: r for i, (_, r) in enumerate(had_ok)}
+vmit_samples = grid_samples(B4=SCAN2_B4, a=SCAN2_A, m_s=SCAN2_MS)
+ETA_GATE = min(FUNNEL_ETAS)
+ETA_REST = [e for e in sorted(FUNNEL_ETAS) if e != ETA_GATE]
+
+# ponytail: the eta = 0 (Gibbs) window is the widest one, so a combination with
+# no window there has none at any higher eta and is not worth the other solves.
+# The gate costs one eta and saves len(ETA_REST) on every reject. If a run ever
+# needs to prove that, set ETA_GATE = 0.0 and ETA_REST = FUNNEL_ETAS to force
+# every eta on every combination.
+print(f"STAGE 3 — {len(good_nmp)} hadronic x {len(vmit_samples)} vMIT, gated "
+      f"at eta={ETA_GATE}: {_budget(len(good_nmp)*len(vmit_samples), SEC_PER_HYBRID)}"
+      f"\n   then eta in {ETA_REST} on whatever the gate passes — about half "
+      f"of them historically, so budget roughly "
+      f"{_budget(round(0.5*len(good_nmp)*len(vmit_samples)*len(ETA_REST)), SEC_PER_HYBRID)}"
+      f" more", flush=True)
+t0 = time.time()
+gate_rows = scan_parameters(good_nmp, vmit_samples, FUNNEL_FLAGS, FUNNEL_GRID,
+                            eta=ETA_GATE, T=0.0, tov=True, n_jobs=FUNNEL_JOBS)
+
+pairs = [(i, s, v) for i, s in enumerate(good_nmp) for v in vmit_samples]
+for _i, (_p, _r) in enumerate(zip(pairs, gate_rows)):
+    _r["combo"] = float(_i)
+    _r["nmp_index"] = float(_p[0])
+survivors = [(i, p, r) for i, (p, r) in enumerate(zip(pairs, gate_rows))
+             if r["window_exists"] == 1.0]
+
+print(f"  gate: {len(survivors)}/{len(gate_rows)} have a window at "
+      f"eta={ETA_GATE} ({time.time()-t0:.1f} s)")
+
+t0 = time.time()
+jobs = [(i, p, e) for i, p, _ in survivors for e in ETA_REST]
+print(f"  {len(jobs)} remaining (combination, eta) solves")
+rest_rows = list(Parallel(n_jobs=FUNNEL_JOBS, verbose=5)(
+    delayed(scan_point)(p[1], p[2], FUNNEL_FLAGS, FUNNEL_GRID, eta=e, T=0.0,
+                        tov=True, tov_parallel=False)
+    for _, p, e in jobs))
+for (_i, _p, _e), _r in zip(jobs, rest_rows):
+    _r["combo"] = float(_i)
+    _r["nmp_index"] = float(_p[0])
+
+hyb_rows = gate_rows + rest_rows
+by_combo = defaultdict(list)
+for _r in hyb_rows:
+    by_combo[int(_r["combo"])].append(_r)
+for _rows in by_combo.values():
+    _rows.sort(key=lambda r: r["eta"])
+print(f"  {time.time()-t0:.1f} s for the remaining eta")
+
+# %% [markdown]
+# ### The answer
+
+# %%
+# One summary per (NMP, sector, vMIT) combination. A combination with no window
+# is still a star — the pure hadronic one — so it is judged on the stage-2
+# hadronic numbers rather than being dropped.
+summary = []
+for _i, _rows in by_combo.items():
+    _first = _rows[0]
+    _had = had_row_of[int(_first["nmp_index"])]
+    if _first["window_exists"] != 1.0:
+        summary.append(dict(
+            combo=_i, rows=_rows, n_eta=0, n_ok=0,
+            phases={"none": len(_rows)},
+            M_best=_had["M_max_had"], R_best=_had["R_1p4_had"],
+            hadronic_in_band=(_in(_had["M_max_had"], M_MAX_RANGE)
+                              and _in(_had["R_1p4_had"], R14_RANGE))))
+        continue
+    _ok = [r for r in _rows if _in(r["M_max"], M_MAX_RANGE)
+           and _in(r["R_1p4"], R14_RANGE)]
+    _M = [r["M_max"] for r in _rows if np.isfinite(r["M_max"])]
+    summary.append(dict(
+        combo=_i, rows=_rows, n_eta=len(_rows), n_ok=len(_ok),
+        phases=dict(Counter(r["core_phase"] or "failed" for r in _rows)),
+        M_best=(max(_M) if _M else np.nan),
+        R_best=next((r["R_1p4"] for r in _ok), np.nan),
+        hadronic_in_band=(_in(_had["M_max_had"], M_MAX_RANGE)
+                          and _in(_had["R_1p4_had"], R14_RANGE))))
+
+_all_eta = [s for s in summary if s["n_eta"] and s["n_ok"] == s["n_eta"]]
+_some_eta = [s for s in summary if 0 < s["n_ok"] < s["n_eta"]]
+_no_trans = [s for s in summary if s["n_eta"] == 0]
+_phase_tally = Counter()
+for s in summary:
+    _phase_tally.update(s["phases"])
+
+print(f"{len(summary)} combinations reached stage 3\n")
+print(f"  {len(_all_eta):4d} in the target band at EVERY eta  "
+      f"(M_max in {M_MAX_RANGE} M_sun, R_1.4 in {R14_RANGE} km)")
+print(f"  {len(_some_eta):4d} in the target band at SOME eta")
+print(f"  {len(_no_trans):4d} have NO transition at eta={ETA_GATE} — pure "
+      f"hadronic stars, of which "
+      f"{sum(1 for s in _no_trans if s['hadronic_in_band'])} are in band")
+print(f"\n  where the centre of the M_max star sits, over all (combination, eta):")
+for _p, _n in sorted(_phase_tally.items(), key=lambda kv: -kv[1]):
+    _what = {"none": "no window — pure hadronic star",
+             "H": "window above every stable star — no quarks in the star",
+             "mix": "MIXED-PHASE core",
+             "Q": "PURE QUARK core",
+             "failed": "no maximum mass (eos_unphysical or TOV failure)"}
+    print(f"    {_p:7s} {_n:5d}   {_what.get(_p, '')}")
+print(f"\n  status breakdown: {dict(Counter(r['status'] for r in hyb_rows))}")
+
+# The table. Sorted by how many eta land in the band, then by maximum mass.
+# The columns are the axes swept by default; U_Lambda, U_Xi and x_rD are held
+# at one value each and are in the saved tables if they are ever re-opened.
+print(f"\n  K_sat  Q_sat  L_sym  U_Sig    U_D  x_wD |    B4    a   m_s |  eta |"
+      f" onset  offset |  M_max  R_1.4    n_Bc  core | status")
+for _s in sorted(summary, key=lambda s: (-s["n_ok"], -(s["M_best"] if
+                 np.isfinite(s["M_best"]) else -1)))[:FUNNEL_TOP]:
+    _r0 = _s["rows"][0]
+    _head = (f"  {_r0['K_sat']:6.1f} {_r0['Q_sat']:6.1f} {_r0['L_sym']:6.1f} "
+             f"{_r0['U_Sigma']:6.1f} {_r0['U_Delta']:6.1f} {_r0['x_wD']:5.2f} | "
+             f"{_r0['B4']:5.1f} {_r0['a']:.2f} {_r0['m_s']:5.1f} |")
+    print(f"{_head} {_s['n_ok']}/{max(_s['n_eta'], 1)} eta in band")
+    if _s["n_eta"] == 0:
+        _had = had_row_of[int(_r0["nmp_index"])]
+        print(f"{' ' * len(_head)}  --- | no transition   | "
+              f"{_had['M_max_had']:6.3f} {_had['R_1p4_had']:6.2f}     "
+              f"---  none | {_r0['status']}")
+        continue
+    for _r in _s["rows"]:
+        _flag = "*" if (_in(_r["M_max"], M_MAX_RANGE)
+                        and _in(_r["R_1p4"], R14_RANGE)) else " "
+        print(f"{' ' * len(_head)} {_r['eta']:4.2f} | {_r['n_onset']:5.3f} "
+              f"{_r['n_offset']:6.3f} | {_r['M_max']:6.3f} {_r['R_1p4']:6.2f} "
+              f"{_r['n_c_max']:7.3f}  {(_r['core_phase'] or '?'):4s}{_flag}| "
+              f"{_r['status']}")
+
+print("\n  Note: an onset below ~2 n_sat is formally allowed by these checks but")
+print("  physically doubtful — uniform matter is not the ground state there.")
+
+save_table(stage1_rows, OUT / "funnel_stage1_nmp.h5")
+save_table(had_rows, OUT / "funnel_stage2_hadronic.h5",
+           meta=dict(flags=FUNNEL_FLAGS))
+save_table(hyb_rows, OUT / "funnel_stage3_hybrid.h5",
+           meta=dict(flags=FUNNEL_FLAGS))
+export_csv(had_rows, OUT / "funnel_stage2_hadronic.csv")
+export_csv(hyb_rows, OUT / "funnel_stage3_hybrid.csv")
+
+# The recipe for the best combination, ready to paste into I.3 and re-run at
+# the full NB resolution — the funnel deliberately runs on a coarse grid.
+_best = max(summary, key=lambda s: (s["n_ok"], s["M_best"]
+                                    if np.isfinite(s["M_best"]) else -1))
+if _best["n_ok"]:
+    _b = _best["rows"][0]
+    print(f"\n{'=' * 78}\nBest combination — paste into I.3 and re-run Part II "
+          f"on the full NB grid:\n")
+    print(f"NMP = dict(n_sat={_b['n_sat']:.6f}, E_sat={_b['E_sat']:.2f}, "
+          f"m_eff_ratio={_b['m_eff_ratio']:.4f},\n"
+          f"           K_sat={_b['K_sat']:.1f}, Q_sat={_b['Q_sat']:.2f}, "
+          f"E_sym={_b['E_sym']:.2f}, L_sym={_b['L_sym']:.2f})")
+    print(f"PAR = Parametrization.from_nmp(NMP)")
+    print(f"PAR = Parametrization.from_hyperon_potentials("
+          f"U_Lambda={_b['U_Lambda']:.1f}, U_Sigma={_b['U_Sigma']:.1f}, "
+          f"U_Xi={_b['U_Xi']:.1f}, base=PAR)")
+    print(f"PAR = Parametrization.from_delta_potential("
+          f"U_Delta={_b['U_Delta']:.1f}, x_wD={_b['x_wD']:.2f}, "
+          f"x_rD={_b['x_rD']:.2f}, base=PAR)")
+    print(f"VMIT = get_vmit_custom(B4={_b['B4']:.1f}, a={_b['a']:.2f}, "
+          f"m_s={_b['m_s']:.1f})")
+else:
+    print(f"\nNothing landed in the target band. a and B^1/4 both raise the "
+          f"onset, so move\nthem in OPPOSITE directions: lower SCAN2_B4 if a "
+          f"is at 0.20, raise it towards\n200 if a is at 0.10. Going above "
+          f"a = 0.20 does not help; the ordered window\nis gone there for any "
+          f"B^1/4.")
+
+
+# %% [markdown]
+# #### The finalists, as mass-radius curves
+#
+# The same picture as the stage-2 panel, one η per colour, for the best `FUNNEL_TOP`
+# combinations. Compare it against stage 2: the hadronic family was a broad fan set by
+# `L_sym`, and adding the transition pulls the top of each curve — a first-order
+# transition softens the equation of state above the onset, so M_max falls and the peak
+# moves left, while R(1.4) is untouched whenever the onset sits above the central
+# density of a 1.4 M_sun star.
+#
+# A curve whose peak lands inside the dashed band **and** whose M = 1.4 crossing lands
+# on the thick bar is a combination that passes at that η. Solid means the centre of
+# the maximum-mass star is mixed or quark; dashed means the window exists but no stable
+# star reaches it.
+
+# %%
+_show = [s for s in sorted(summary, key=lambda s: (-s["n_ok"], -(s["M_best"]
+         if np.isfinite(s["M_best"]) else -1))) if s["n_eta"]][:FUNNEL_TOP]
+_jobs = [(s["combo"], r) for s in _show for r in s["rows"]
+         if np.isfinite(r["M_max"])]
+print(f"drawing {len(_jobs)} hybrid sequences "
+      f"(~{len(_jobs)*SEC_PER_HYBRID:.0f} s)", flush=True)
+t0 = time.time()
+
+
+def _hybrid_mr(row):
+    """(R, M) of one stitched hybrid sequence, stable branch only.
+
+    Rebuilt from the row's own parameters, so the curve belongs to the numbers
+    printed beside it. `mass_radius_mixed` returns the raw TOV array, which the
+    scan row does not carry.
+    """
+    try:
+        par, st, _ = build_parametrization(
+            {k: row[k] for k in PAR_KEYS if k in row}, FUNNEL_FLAGS)
+        if st != "ok":
+            return np.array([]), np.array([])
+        vm = get_vmit_custom(B4=row["B4"], a=row["a"], m_s=row["m_s"])
+        res = mass_radius_mixed(par, FUNNEL_FLAGS, FUNNEL_GRID, row["eta"],
+                                beta_eq_neutrinoless(), vmit_params=vm, T=0.0,
+                                n_ec=120, compute_tidal=False,
+                                tov_parallel=False)["results"]
+        i, _, _ = find_mmax_precise(res)
+        return res[:i + 1, 3], res[:i + 1, 4]
+    except Exception:
+        return np.array([]), np.array([])
+
+
+_hyb_curves = Parallel(n_jobs=FUNNEL_JOBS)(
+    delayed(_hybrid_mr)(r) for _, r in _jobs)
+
+fig, ax = plt.subplots(figsize=(5.2, 4.4))
+_mr_axes(ax, f"Stage 3 — {len(_show)} best combinations, one colour per "
+             r"$\eta$")
+_seen = set()
+for ((_c, _r), (R, M)) in zip(_jobs, _hyb_curves):
+    if not R.size:
+        continue
+    _lab = None if _r["eta"] in _seen else rf"$\eta$ = {_r['eta']:.2f}"
+    _seen.add(_r["eta"])
+    ax.plot(R, M, lw=1.2, alpha=0.85, zorder=4,
+            color=FUNNEL_ETA_COLOR.get(_r["eta"], "0.3"), label=_lab,
+            ls=("-" if _r["core_phase"] in ("mix", "Q") else "--"))
+ax.legend(loc="lower left", fontsize=7)
+fig.tight_layout()
+plt.show()
+print(f"({time.time()-t0:.1f} s)")
+
+
+# %% [markdown]
+# ## I.3 Parameters and grids
 #
 # Everything tunable lives in this cell. Edit, then run the rest.
 
@@ -245,213 +861,6 @@ print(f"liquid-gas spinodal and has no stable solution; those points are skipped
 
 
 # %% [markdown]
-# ## I.3 Pre-flight — does this combination have a transition?
-#
-# Under a second, and it answers the question Part II would otherwise take minutes
-# to answer. The quark volume fraction χ is not clamped, so the window locator
-# simply reads off where χ crosses 0 and 1:
-#
-# - **a window** → the parameters give a complete transition, go on to Part II;
-# - **no window** → χ never reaches 1. Either the quark phase never becomes the
-#   favoured one (lower `B4`) or the transition starts and stalls. This is a
-#   statement about the physics of your parameters, not a solver failure.
-#
-# η = 1 (MC, purely LCN) is checked alongside η = 0 (GC, purely GCN) because the
-# window narrows as η rises, and a combination that transitions under a Gibbs
-# construction can fail to under a Maxwell one.
-
-# %%
-print(f"pre-flight  B4={VMIT.B4:.0f} MeV  a={VMIT.a} fm^2  m_s={VMIT.m_s:.0f} MeV")
-_ok = []
-for _eta in (0.0, 1.0):
-    _t0 = time.time()
-    _w = locate_window(PAR, FLAGS, NB, _eta, beta_eq_neutrinoless(),
-                       vmit_params=VMIT, T=0.0)
-    _ok.append(_w.exists)
-    if _w.exists:
-        print(f"  eta={_eta}: window [{_w.n_onset:.4f}, {_w.n_offset:.4f}] fm^-3 "
-              f"= [{_w.n_onset/N_SAT:.2f}, {_w.n_offset/N_SAT:.2f}] n_sat "
-              f"({time.time()-_t0:.2f} s)")
-    else:
-        print(f"  eta={_eta}: NO TRANSITION on this grid ({time.time()-_t0:.2f} s)")
-
-if not any(_ok):
-    print("\n-> No transition at either eta. Part II will produce a pure hadronic")
-    print("   equation of state, which is a valid answer but not a hybrid one.")
-    print("   Lower B4 (try 160-165 MeV) or run II.4 to see where the window is.")
-elif not all(_ok):
-    print("\n-> Gibbs transitions but Maxwell does not (or vice versa). The eta")
-    print("   sweep in Part II will show empty tables for the eta that fails.")
-else:
-    print("\n-> Complete transition at both eta. Part II is worth running.")
-
-
-# %% [markdown]
-# ## I.4 Choosing parameters — a two-stage scan
-#
-# Two questions, answered in the order that fails cheapest, **with hyperons and Δ
-# isobars switched on** regardless of what `FLAGS` says above (this section builds its
-# own parametrizations from nuclear-matter parameters, so it is independent of the
-# `PAR` chosen in I.2).
-#
-# **Stage 1 — which NMP give a working DD2 at all?** Four checks per sample:
-#
-# | check | what fails it |
-# |---|---|
-# | `inversion_ok` | the NMPs have no DD-RMF realisation |
-# | `sectors_ok` | the hyperon / Δ scalar couplings do not invert on that base |
-# | `sweep_ok` | the β-eq sweep does not reach `n_sweep_min` before scalar collapse |
-# | `M_max_had` | the hadronic branch alone misses 2 M_sun |
-#
-# **The hadronic sector potentials are scan axes too.** `U_Lambda`, `U_Sigma`, `U_Xi`,
-# `U_Delta` and the Δ vector ratios `x_wD` / `x_rD` may be put in the *same* sample
-# dicts as the nuclear-matter parameters; the scan splits them out and inverts each
-# sector on top of the nucleon base. They matter far more than the NMP do, because they
-# set how soft the hadronic branch becomes: `x_wD` alone moves the viable fraction by
-# a factor of ~4, while `U_Lambda` and `U_Xi` barely move it at all once the transition
-# sits below the hyperon threshold. `U_Delta` is restricted to the literature range
-# [-100, -50] MeV by `from_delta_potential`, and `U_Delta = -100` with `x_wD = 1.0` is
-# soft enough to hit scalar collapse near 0.9 fm⁻³ — reported as `sweep_truncated`,
-# which is *not* disqualifying (see the stage-1 filter note below).
-#
-# **Read this before choosing NMP axes.** `L_sym` is free — the isovector inversion is
-# near-analytic and converges across 30–100 MeV. **`K_sat` is not**: the isoscalar
-# system is closed by a cross-constraint that ties `K_sat` to `Q_sat`, so moving
-# `K_sat` alone leaves a residual that grows away from the DD2 value (~3e-2 at 240 MeV
-# against a 2e-2 gate, 0.2 by 220 MeV). The `K_sat` column below is included precisely
-# so you can *see* that — it will report `inversion_failed` everywhere except at DD2's
-# own value. That is a statement about the DD2 functional form, not a solver defect.
-#
-# **Stage 2 — which of those, crossed with the quark parameters (B^1/4, a, m_s), give
-# M_max > 2 M_sun, and which of those actually have a phase transition?** Those are
-# two different questions and the table reports both: a combination can be heavy
-# enough without transitioning (it is then just a hyperonic star), and it can
-# transition without being heavy enough.
-#
-# **A third outcome, and with hyperons and Δ isobars on it is the most common one:
-# `eos_unphysical`.** The χ=0 crossing that the window locator finds can be spurious
-# at a low bag constant — the mixed branch it locks onto sits at a *lower* pressure
-# than the hadronic branch at the same density, so it is not the favoured state, and
-# the stitched table steps *down* by tens of MeV/fm³ at the onset. Such a table is not
-# an EOS, and integrating it returns confident nonsense (maximum masses
-# in the hundreds of solar masses). The scan therefore checks P is non-decreasing and
-# 0 ≤ c_s² ≤ 1 **before** integrating, and reports `eos_unphysical` instead of a
-# number. Expect a large fraction of the "has a transition" cells to be rejected here;
-# that rejection is the scan working, not failing.
-
-# %%
-# ---- stage-1 axes ---------------------------------------------------------
-# The hadronic sector potentials go in the SAME sample dicts as the NMP: the
-# scan splits them out and inverts each on top of the nucleon base, so one
-# grid_samples call crosses nuclear-matter parameters with hyperon and Delta
-# potentials.
-SCAN_FLAGS = SpeciesFlags(hyperons=True, deltas=True, muons=True,
-                          phi_field=True, photons=True)
-SCAN_K_SAT = [230.0, 242.7]             # see the note above: only ~242.7 inverts
-SCAN_L_SYM = [30.0, 55.0, 85.0]
-SCAN_U_LAMBDA = [-30.0, -10.0]          # MeV, hyperon potentials in SNM at n_sat
-SCAN_U_XI = [-18.0, 10.0]
-SCAN_U_DELTA = [-50.0, -100.0]          # MeV, from_delta_potential range limit
-SCAN_X_WD = [1.0, 1.2]                  # Delta vector ratio x_omegaDelta
-SCAN_NMP_GRID = np.linspace(0.05, 1.6, 80)   # a probe grid, coarser than NB
-
-# ---- stage-2 axes (crossed with whatever survives stage 1) -----------------
-# a and B^1/4 both raise the onset density, so the viable combinations sit on
-# an anticorrelated ridge: a = 0.20 wants B^1/4 ~ 160-180, a = 0.10 wants
-# ~190-200. Outside 0.05 <= a <= 0.20 nothing survives — a = 0 leaves the quark
-# phase too soft to reach 2 M_sun, and by a = 0.25 the ordered window is gone
-# for every bag constant from 120 to 200 MeV.
-SCAN2_B4 = [170.0, 180.0, 190.0]        # MeV
-SCAN2_A = [0.10, 0.15, 0.20]            # fm^2
-SCAN2_MS = [100.0, 150.0]               # MeV
-SCAN_N_JOBS = -1                        # 1 to keep it serial and debuggable
-
-BASE_NMP = compute_nmp(Parametrization.from_dd2_defaults())
-_scan_axes = {k: v for k, v in BASE_NMP.items()
-              if k not in ("K_sat", "L_sym")}      # these two go on axes below
-nmp_samples = grid_samples(**_scan_axes, K_sat=SCAN_K_SAT, L_sym=SCAN_L_SYM,
-                           U_Lambda=SCAN_U_LAMBDA, U_Xi=SCAN_U_XI,
-                           U_Delta=SCAN_U_DELTA, x_wD=SCAN_X_WD)
-
-print(f"STAGE 1 — {len(nmp_samples)} hadronic samples, hyperons+deltas")
-t0 = time.time()
-had_rows = scan_hadronic(nmp_samples, SCAN_FLAGS, SCAN_NMP_GRID, tov=True,
-                         n_jobs=SCAN_N_JOBS)
-print(f"  K_sat  L_sym    U_L   U_Xi    U_D  x_wD | inv sec swp  n_max  "
-      f"M_max_had | status")
-for r in had_rows:
-    print(f"  {r['K_sat']:6.1f} {r['L_sym']:5.1f} {r['U_Lambda']:6.1f} "
-          f"{r['U_Xi']:6.1f} {r['U_Delta']:6.1f} {r['x_wD']:5.2f} |  "
-          f"{r['inversion_ok']:.0f}   {r['sectors_ok']:.0f}   "
-          f"{r['sweep_ok']:.0f}  {r['n_sweep_max']:5.2f}  "
-          f"{r['M_max_had']:9.3f} | {r['status']}")
-
-# Everything whose couplings exist goes through to stage 2 — NOT only
-# status == 'ok'. Both of the other outcomes are survivable:
-#   'hadronic_M_max_low' — the hadronic branch alone misses 2 M_sun, which
-#       quark matter can and does fix;
-#   'sweep_truncated'    — the beta-eq sweep hit scalar collapse before the top
-#       of the grid, but the hadronic branch only has to reach the transition
-#       ONSET, not the top. Filtering these out drops real hybrid stars.
-had_ok = [(s, r) for s, r in zip(nmp_samples, had_rows)
-          if r["sectors_ok"] == 1.0]
-print(f"\n-> {len(had_ok)}/{len(had_rows)} hadronic samples have couplings "
-      f"({time.time()-t0:.1f} s); "
-      f"{sum(1 for _, r in had_ok if r['status'] == 'ok')} pass every check")
-if not had_ok:
-    print("   None. Stage 2 has nothing to cross; widen SCAN_L_SYM or relax "
-          "the M_max target.")
-
-# %%
-# ---- STAGE 2: the working NMP crossed with the quark parameters -----------
-good_nmp = [s for s, _ in had_ok]
-vmit_samples = grid_samples(B4=SCAN2_B4, a=SCAN2_A, m_s=SCAN2_MS)
-
-print(f"STAGE 2 — {len(good_nmp)} NMP x {len(vmit_samples)} vMIT "
-      f"= {len(good_nmp)*len(vmit_samples)} combinations")
-t0 = time.time()
-hyb_rows = scan_parameters(good_nmp, vmit_samples, SCAN_FLAGS, SCAN_NMP_GRID,
-                           eta=0.0, T=0.0, tov=True, n_jobs=SCAN_N_JOBS)
-
-from collections import Counter
-
-_trans = [r for r in hyb_rows if r["window_exists"] == 1.0]
-_bad = [r for r in hyb_rows if r["status"] == "eos_unphysical"]
-_heavy = [r for r in hyb_rows
-          if np.isfinite(r.get("M_max", np.nan)) and r["M_max"] > 2.0]
-_both = [r for r in _heavy if r["window_exists"] == 1.0]
-
-print(f"\n  {len(_trans):3d}/{len(hyb_rows)} have a phase transition")
-print(f"  {len(_bad):3d}/{len(hyb_rows)} of those stitch to an UNPHYSICAL EoS "
-      f"(rejected before TOV)")
-print(f"  {len(_heavy):3d}/{len(hyb_rows)} reach M_max > 2.0 Msun")
-print(f"  {len(_both):3d}/{len(hyb_rows)} do BOTH  <- the viable hybrid stars")
-print(f"\n  status breakdown: {dict(Counter(r['status'] for r in hyb_rows))}")
-
-print(f"\n  L_sym    U_L   U_Xi    U_D  x_wD |    B4     a    m_s | "
-      f"transition          M_max   R_1.4  cs2max")
-for r in sorted(_both, key=lambda r: -r["M_max"])[:25]:
-    print(f"  {r['L_sym']:5.1f} {r['U_Lambda']:6.1f} {r['U_Xi']:6.1f} "
-          f"{r['U_Delta']:6.1f} {r['x_wD']:5.2f} | {r['B4']:5.1f}  "
-          f"{r['a']:.2f} {r['m_s']:5.1f} | "
-          f"[{r['n_onset']:.3f},{r['n_offset']:.3f}] fm^-3  "
-          f"{r['M_max']:6.3f}  {r['R_1p4']:5.2f}  {r['cs2_max']:.3f}")
-if not _both:
-    print("  (none in this grid — a and B^1/4 both raise the onset, so move")
-    print("   them in OPPOSITE directions: lower SCAN2_B4 if a is at 0.20,")
-    print("   raise it towards 200 if a is at 0.10. Going above a = 0.20 does")
-    print("   not help; the ordered window is gone there for any B^1/4.)")
-elif _heavy and not _both:
-    print("  (none — every heavy-enough combination is a pure hyperonic star)")
-print("\n  Note: an onset below ~2 n_sat is formally allowed by these checks but")
-print("  physically doubtful — uniform matter is not the ground state there.")
-print(f"\n({time.time()-t0:.1f} s)")
-
-save_table(had_rows, OUT / "scan_stage1_nmp.h5", meta=dict(flags=SCAN_FLAGS))
-save_table(hyb_rows, OUT / "scan_stage2_hybrid.h5", meta=dict(flags=SCAN_FLAGS))
-export_csv(hyb_rows, OUT / "scan_stage2_hybrid.csv")
-
-
 # %% [markdown]
 # # Part II — tables
 #
@@ -630,13 +1039,13 @@ for eta in TOV_ETAS:
 # transition" but "is the resulting star heavy enough to be allowed".
 #
 # The nuclear-matter parameters are held at the current `PAR`'s own values here, so
-# the plane is purely the quark sector. Add entries to the `nmp_samples` list to
-# open the hadronic axes as well — that is the full Bayesian-prior reconnaissance
-# and costs the product of the two grids.
+# the plane is purely the quark sector — this is the (B^1/4, a) picture of the one
+# parametrization chosen in I.3, not a search. The search over the hadronic axes is
+# I.2's job.
 
 # %%
-# The NMPs of the parametrization chosen in I.2, so this plane is purely the
-# quark sector. (I.4 scans the NMPs themselves, from the DD2 defaults.)
+# The NMPs of the parametrization chosen in I.3, so this plane is purely the
+# quark sector. (I.2 scans the NMPs and the sector potentials themselves.)
 NMP_OF_PAR = compute_nmp(PAR)
 
 
