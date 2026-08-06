@@ -1,0 +1,278 @@
+% Composition g-modes of neutron stars: theory, observability, computation.
+% Compile with:  pdflatex gmode_theory && bibtex gmode_theory && pdflatex gmode_theory
+\documentclass[aps,prd,twocolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\begin{document}
+
+\title{Composition $g$-modes as a probe of dense-matter composition}
+
+\author{}
+\affiliation{}
+\date{\today}
+
+\begin{abstract}
+The gravity ($g$) modes of a neutron star are restored by buoyancy, which
+exists only when a displaced fluid element cannot chemically re-equilibrate
+within an oscillation period. Their frequencies therefore measure the
+\emph{composition gradient} of dense matter, an aspect of the equation of state
+to which mass, radius and tidal deformability are blind. We summarise the
+theory, the conditions under which such a mode could be detected, and its
+numerical computation, and we examine in detail which reactions are fast enough
+to matter in a quark--hadron mixed phase --- equivalently, which quantities must
+be held fixed in the thermodynamic derivatives that define the two sound speeds.
+\end{abstract}
+
+\maketitle
+
+\section{Buoyancy and the two sound speeds}
+
+Displace a fluid element radially outwards by $\xi_r$ in a stratified star. It
+re-establishes pressure balance with its new surroundings essentially
+instantaneously, on the sound-crossing time, but its \emph{composition} relaxes
+only as fast as the reactions that change particle fractions. If those
+reactions are slow, the element arrives with the composition it had, which is
+in general not the equilibrium composition at its new location. It is therefore
+denser or lighter than its surroundings, and the resulting buoyancy force
+drives an oscillation~\cite{ReiseneggerGoldreich1992}.
+
+The strength of this restoring force is the difference between two distinct
+sound speeds. The \emph{equilibrium} sound speed
+\begin{equation}
+  c_{\rm eq}^{2} = \frac{dP}{d\varepsilon}
+\end{equation}
+is the total derivative along the equilibrated sequence, with the composition
+free to track the density; this is the quantity that enters the
+Tolman--Oppenheimer--Volkoff equations and that a mass--radius measurement
+constrains. The \emph{frozen}, or adiabatic, sound speed
+\begin{equation}
+  c_{\rm ad}^{2} = \left(\frac{\partial P}{\partial \varepsilon}\right)_{\!x}
+\end{equation}
+is taken at fixed composition $x$. The Brunt--V\"ais\"al\"a frequency built from
+them,
+\begin{equation}
+  N^{2} = g^{2}\left(\frac{1}{c_{\rm eq}^{2}}
+                   - \frac{1}{c_{\rm ad}^{2}}\right) e^{\nu-\lambda},
+  \qquad g = -\frac{1}{\varepsilon+P}\frac{dP}{dr},
+  \label{eq:bv}
+\end{equation}
+is the local frequency of that oscillation~\cite{Jaikumar2021}. Here $\nu$ and
+$\lambda$ are the metric functions of the static interior,
+$ds^{2}=-e^{\nu}dt^{2}+e^{\lambda}dr^{2}+r^{2}d\Omega^{2}$, with
+$e^{\lambda}=(1-2Gm/rc^{2})^{-1}$.
+
+Equation~(\ref{eq:bv}) is the entire point. If matter has a single sound speed
+--- a one-component fluid, or any model without a density-dependent composition
+--- then $N^{2}\equiv0$ and \emph{no composition $g$-mode exists}. Convective
+stability requires $c_{\rm ad}>c_{\rm eq}$, and typically
+$c_{\rm ad}^{2}-c_{\rm eq}^{2}\sim10^{-3}$--$10^{-1}$, so $g$-mode frequencies
+lie far below the $\sim2$~kHz fundamental ($f$) mode, at
+$\sim100$--$300$~Hz for nucleonic matter.
+
+The diagnostic power comes from what happens at a phase transition. Across a
+quark--hadron mixed phase the appearance of a new species lets the system absorb
+compression by converting hadrons into quarks rather than by raising the
+pressure, so $c_{\rm eq}$ \emph{drops sharply}, while $c_{\rm ad}$, evaluated at
+frozen composition, does not. The difference in Eq.~(\ref{eq:bv}) jumps, and
+with it the $g$-mode frequency, which for a hybrid star can exceed $500$~Hz ---
+a factor of two or more above a purely nucleonic star of the same
+mass~\cite{Jaikumar2021,Constantinou2021}. Since hybrid and nucleonic stars can
+be constructed with indistinguishable $M$, $R$ and $\Lambda$, this is
+information no static observable supplies.
+
+\section{Which reactions are frozen}
+
+The frozen sound speed is not defined until one states what is held fixed, and
+that follows from comparing reaction timescales with the oscillation period, a
+few milliseconds for a $g$-mode. Writing $\tau$ for the equilibration time and
+$\omega$ for the mode frequency, a channel is \emph{frozen} when
+$\omega\tau\gg1$ and \emph{equilibrated} when $\omega\tau\ll1$.
+
+\paragraph{Strong and electromagnetic processes ($\tau\sim10^{-23}$~s).}
+Always fast. In a two-phase mixture this is what keeps the phases in
+\emph{mechanical} equilibrium at a common pressure throughout the oscillation,
+a fact we use below. Flavour-conserving rearrangements within each phase also
+equilibrate.
+
+\paragraph{Non-leptonic weak processes in quark matter ($\tau\sim10^{-8}$~s).}
+The reaction $u+d\leftrightarrow u+s$ is fast on a millisecond
+period~\cite{Madsen1993}. Strangeness in the quark phase therefore
+\emph{re-equilibrates} and arguably should not be frozen --- a point on which
+implementations differ, and to which we return.
+
+\paragraph{Leptonic weak processes (Urca, $\tau\propto T^{-4}$ or $T^{-6}$).}
+Direct Urca $n\to p+e+\bar\nu_{e}$ and its modified counterpart are slow for
+$T\lesssim1$~MeV. \emph{Their slowness is why composition $g$-modes exist at
+all} in cold neutron stars: the lepton fractions, and hence the proton fraction,
+are frozen.
+
+\paragraph{Quark--hadron conversion ($\tau\gg$~ms).}
+Changing the quark volume fraction $\chi$ requires transferring baryon number
+across phase boundaries with an accompanying change of strangeness --- a
+high-order weak process, further limited by transport across the mixed-phase
+structures. It is slow, so \textbf{$\chi$ is frozen}. This is the load-bearing
+assumption behind the large mixed-phase $g$-mode: were $\chi$ free to relax,
+$c_{\rm ad}$ would collapse onto $c_{\rm eq}$ and the signal would vanish.
+
+In short, the derivative defining $c_{\rm ad}^{2}$ is taken at fixed $\chi$ and
+fixed lepton fractions, with pressure equality between phases and the internal
+strong-interaction composition of each phase left free.
+
+\subsection{Finite rates}
+
+The frozen/equilibrated dichotomy is a limit of a continuous problem. For a
+finite equilibration rate $\gamma$ the response is neither, but a complex,
+frequency-dependent interpolation~\cite{Counsell2025}
+\begin{equation}
+  c_{\rm dy}^{2} = c_{\rm eq}^{2}
+    + \frac{c_{\rm ad}^{2}-c_{\rm eq}^{2}}{1+\gamma/i\omega},
+  \label{eq:cdy}
+\end{equation}
+whose real part interpolates between the two limits and whose imaginary part,
+maximal at $\gamma=\omega$, is bulk viscosity,
+$\zeta=(\varepsilon+P)\,{\rm Im}\,c_{\rm dy}^{2}/\omega$. Substituting
+Eq.~(\ref{eq:cdy}) into Eq.~(\ref{eq:bv}) makes $N^{2}$ and hence the
+eigenfrequency complex, the imaginary part being the bulk-viscous damping rate.
+As $\gamma$ approaches $\omega$ the buoyancy is destroyed and the mode is
+suppressed outright, which is what happens in protoneutron stars and merger
+remnants at $T\gtrsim$ a few MeV. Using Fermi-surface Urca
+rates~\cite{AlfordHarris2018,Alford2020} with the DD2
+interaction~\cite{Typel2010} we find $\gamma=\omega$ at $T\simeq5$~MeV for a
+1~kHz oscillation, nearly independent of density, consistent
+with~\cite{AlfordHarris2019}. Cold stars, $T\ll1$~MeV, are firmly frozen.
+
+\section{Convention dependence: a caveat}
+
+Two choices in the definition of the sound speeds change the answer materially,
+and neither is settled.
+
+\emph{(i) The lepton content.} Both sound speeds must describe the \emph{same}
+fluid. If $c_{\rm eq}^{2}$ is computed along the $\beta$-equilibrium sequence of
+charge-neutral matter (leptons included) while $c_{\rm ad}^{2}$ is computed for
+the baryons alone, the difference is contaminated by the lepton contribution,
+which is comparable to the entire buoyancy signal. In our DD2 calculation the
+mismatched pairing yields $c_{\rm ad}^{2}<c_{\rm eq}^{2}$ over part of the
+density range --- a spurious convective instability, $N^{2}<0$ --- whereas the
+consistent pairing gives $N^{2}>0$ throughout. Consistency here is not a
+refinement but a correctness condition.
+
+\emph{(ii) Combining the phases in a mixed phase.} Because strong interactions
+hold the two phases at a common pressure, a compression imposes the same $\delta
+P$ on both, and each responds with its own $\delta\varepsilon$. With
+$\varepsilon_{\rm mix}=(1-\chi)\varepsilon_{H}+\chi\varepsilon_{Q}$ at
+$P_{H}=P_{Q}$ this gives the \emph{reciprocal}, volume-fraction-weighted
+combination
+\begin{equation}
+  \frac{1}{c_{\rm ad,mix}^{2}} = \frac{1-\chi}{c_{\rm ad,H}^{2}}
+                               + \frac{\chi}{c_{\rm ad,Q}^{2}},
+  \label{eq:isobaric}
+\end{equation}
+pressure adding across the phases like a voltage across parallel
+resistors~\cite{Jaikumar2021}. An alternative prescription compresses both
+phases by the same density factor at fixed $\chi$ and volume-averages the
+pressures; it is a defensible definition of ``frozen'', but it does \emph{not}
+maintain a common pressure under the perturbation and so is inconsistent with
+the mechanical equilibrium that the mode equations assume. The two agree in the
+pure phases and differ only inside the mixed-phase window --- precisely where
+the signal lives. A related open question is whether the quark phase's
+strangeness should be frozen at all, given the fast non-leptonic rate noted
+above; freezing it overestimates the buoyancy, and a fully
+reaction-constrained treatment freezes only those species whose gradients
+genuinely survive an oscillation period~\cite{Haskell2024}. We therefore regard
+the mixed-phase $g$-mode frequency as carrying a systematic uncertainty of this
+origin, and recommend quoting results under both prescriptions.
+
+\section{Numerical computation}
+
+We work in the relativistic Cowling approximation, holding the spacetime fixed
+and perturbing only the fluid~\cite{McDermott1983}. This reduces the
+fourth-order system of Thorne and Campolattaro~\cite{ThorneCampolattaro1967} to
+two first-order equations confined to the star, at the cost of the
+gravitational-wave damping time; for $g$-modes the frequency error is a few per
+cent, since the mode is concentrated in the core and nearly divergence-free.
+
+With $e^{-i\omega t}$ time dependence, spherical-harmonic degree $l$, and
+variables $U=r^{2}e^{\lambda/2}\xi_{r}$ and $V=\delta P/(\varepsilon+P)$, the
+equations are~\cite{Jaikumar2021}
+\begin{align}
+  \frac{dU}{dr} &= \frac{g}{c_{\rm ad}^{2}}U
+    + e^{\lambda/2}\left[\frac{l(l+1)e^{\nu}}{\omega^{2}}
+      - \frac{r^{2}}{c_{\rm ad}^{2}}\right]V, \nonumber\\
+  \frac{dV}{dr} &= e^{\lambda/2-\nu}\frac{\omega^{2}-N^{2}}{r^{2}}U
+    + g\left(\frac{1}{c_{\rm eq}^{2}}-\frac{1}{c_{\rm ad}^{2}}\right)V.
+  \label{eq:cowling}
+\end{align}
+Note which speed appears where: $c_{\rm ad}$ governs the element's response to
+compression, while $c_{\rm eq}$ enters only through the buoyancy terms.
+
+The background is obtained by integrating the TOV equations while retaining the
+radial profiles. The metric function $\nu$ needs no equation of its own, since
+hydrostatic equilibrium gives $d\nu/dr=-2P'/(\varepsilon+P)$; it follows by
+quadrature from the pressure profile, fixed by matching $e^{\nu(R)}=1-2GM/Rc^{2}$
+at the surface, and the same relation supplies $g=\nu'/2$.
+
+Regularity at the centre gives $U\to r^{l+1}$ and
+$V\to(\omega^{2}/l)r^{l}e^{-\nu(0)}$, and the outer boundary condition is the
+vanishing of the Lagrangian pressure perturbation,
+$\Delta P=\delta P+\xi_{r}\,dP/dr=0$, i.e.
+\begin{equation}
+  V(R) = g(R)\,U(R)\,e^{-\lambda(R)/2}/R^{2}.
+\end{equation}
+Integrating outwards from the regular series always succeeds; the surface
+condition holds only for discrete $\omega$, so one scans $\omega$, brackets sign
+changes of the surface residual and refines them. The crust, which carries no
+tabulated composition, is treated as a homogeneous fluid with
+$c_{\rm ad}=c_{\rm eq}$ and hence $N^{2}=0$.
+
+Modes are classified by the node count of $\xi_{r}$: none for the $f$-mode, $k$
+for $g_{k}$ and $p_{k}$, with the $g$-branch below the $f$-mode and the
+$p$-branch above. In practice it is more robust to separate the branches by the
+buoyancy scale, since the $g$-branch is confined to $\omega<\max N$ while the
+$f$-mode sits near the dynamical frequency $\sqrt{GM/R^{3}}$; node counting near
+the surface is sensitive to where the star is truncated. For a complex $N^{2}$
+the eigenfrequency is found by continuing the real root into the lower half
+plane, which also fixes the mode's identity, node counting having no meaning for
+a complex eigenfunction.
+
+\section{Prospects for detection}
+
+$g$-modes couple weakly to gravitational radiation, so they are unlikely to be
+seen as an isolated ringing. Two routes are more promising.
+
+\emph{Resonant tidal excitation during inspiral.} As the orbital frequency
+sweeps upwards it passes through the $g$-mode frequency, transferring orbital
+energy into the mode and advancing the gravitational-wave phase~\cite{Lai1994}.
+The accumulated phase error is of order $\Delta\Phi\sim0.5$--$1$~rad, large
+enough to matter for waveform modelling. It is important to be honest about the
+discriminating power: a hybrid star's higher $g$-mode frequency means the
+resonance occurs \emph{later} in the inspiral, leaving less time to accumulate
+phase, so the net $\Delta\Phi$ is comparable to that of an ordinary neutron star
+even though the energy transferred is $2$--$3$ times
+larger~\cite{Jaikumar2021}. Distinguishing the two therefore requires the
+resonance to be localised in frequency, not merely detected.
+
+\emph{Post-merger remnants.} A hypermassive remnant is violently excited and
+hot. Here the finite-rate physics of Eq.~(\ref{eq:cdy}) is decisive: at
+$T\gtrsim$ a few MeV the Urca rates reach the mode frequency, and composition
+$g$-modes are damped and ultimately suppressed~\cite{Counsell2025}. Any search
+must therefore target the cooler, later phase.
+
+Third-generation detectors --- Einstein Telescope~\cite{Punturo2010} and Cosmic
+Explorer~\cite{Reitze2019} --- have their best strain sensitivity in the
+$100$--$1000$~Hz band where these modes lie, and the quasi-universal relations
+between $f$- and $g$-mode frequencies and the tidal
+deformability~\cite{ZhaoLattimer2022} offer a route to combining a marginal mode
+measurement with the far better-constrained $\Lambda$. A firm $g$-mode frequency
+near $500$~Hz in a star of known mass would be difficult to explain with
+nucleonic matter alone.
+
+\begin{acknowledgments}
+\end{acknowledgments}
+
+\bibliographystyle{apsrev4-2}
+\bibliography{gmode}
+
+\end{document}

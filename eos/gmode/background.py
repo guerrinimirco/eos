@@ -102,6 +102,8 @@ class StellarBackground:
     cs2_ad   : frozen/adiabatic sound speed squared; may be complex if a finite
                reaction rate was folded in (see `eos.gmode.sound_speeds`)
     N2       : Brunt-Vaisala frequency squared [km^-2]; complex when cs2_ad is
+    gamma    : chemical equilibration rate [s^-1] carried onto the star, or
+               None. Only used to rebuild N^2 at a trial frequency.
     """
     r: np.ndarray
     m: np.ndarray
@@ -114,6 +116,28 @@ class StellarBackground:
     cs2_eq: np.ndarray
     cs2_ad: np.ndarray
     N2: np.ndarray
+    gamma: np.ndarray = None
+
+    def at_frequency(self, omega_s):
+        """A copy whose buoyancy uses the dynamical sound speed at `omega_s`.
+
+        `omega_s` is an angular frequency in s^-1. The stellar structure --
+        m, P, eps, the metric, g -- does not depend on the sound speeds at all,
+        so a finite reaction rate changes only `cs2_ad` and `N2`. Rebuilding
+        just those avoids re-solving the TOV equations (and re-searching for
+        the target mass) every time the trial frequency moves.
+
+        Returns `self` unchanged when no rate was supplied.
+        """
+        from dataclasses import replace
+        from eos.gmode.sound_speeds import cs2_dynamical
+
+        if self.gamma is None:
+            return self
+        cs2_dy = cs2_dynamical(self.cs2_eq, self.cs2_ad, self.gamma, omega_s)
+        return replace(self, cs2_ad=cs2_dy,
+                       N2=brunt_vaisala(self.g, self.cs2_eq, cs2_dy,
+                                        self.e_nu, self.e_lam))
 
     @property
     def R(self):
@@ -243,7 +267,7 @@ def _tov_rhs(r, y, eps_grid, P_grid):
 
 def build_background(eos, cs2_eq, cs2_ad, e_c=None, M_target=None,
                      n_points=800, r_max=40.0, P_surf_rel=1e-9,
-                     e_c_bracket=None):
+                     e_c_bracket=None, gamma=None):
     """Integrate the TOV equations keeping the profiles, and form N^2.
 
     eos       : `EOSTable_for_TOV` (P, epsilon in MeV/fm^3, nB in fm^-3), or any
@@ -264,6 +288,10 @@ def build_background(eos, cs2_eq, cs2_ad, e_c=None, M_target=None,
     P_surf_rel: surface pressure as a fraction of the central pressure.
     e_c_bracket: (lo, hi) in MeV/fm^3 for the `M_target` bisection. Defaults to
                 the span of the table.
+    gamma     : optional chemical equilibration rate [s^-1], a scalar or one
+                value per row of `eos`. It is carried onto the star so that
+                `StellarBackground.at_frequency` can rebuild the buoyancy at a
+                trial mode frequency without re-solving the structure.
 
     Returns a `StellarBackground`.
     """
@@ -278,28 +306,37 @@ def build_background(eos, cs2_eq, cs2_ad, e_c=None, M_target=None,
             f"(got P:{len(P_tab)} eps:{len(e_tab)} nB:{len(n_tab)} "
             f"cs2_eq:{len(cs2_eq)} cs2_ad:{len(cs2_ad)})")
 
+    if gamma is not None:
+        gamma = np.broadcast_to(np.asarray(gamma, dtype=float),
+                                P_tab.shape).copy()
+
     order = np.argsort(P_tab)
     P_tab, e_tab, n_tab = P_tab[order], e_tab[order], n_tab[order]
     cs2_eq, cs2_ad = cs2_eq[order], cs2_ad[order]
+    if gamma is not None:
+        gamma = gamma[order]
     # A Maxwell plateau repeats P; keep the last (high-density) entry so the
     # inverse map eps(P) stays single-valued, matching `eos.tov`'s convention.
     keep = np.concatenate([np.diff(P_tab) > 0, [True]])
     P_tab, e_tab, n_tab = P_tab[keep], e_tab[keep], n_tab[keep]
     cs2_eq, cs2_ad = cs2_eq[keep], cs2_ad[keep]
+    if gamma is not None:
+        gamma = gamma[keep]
 
     if M_target is not None:
         return _background_at_mass(
             eos, cs2_eq, cs2_ad, M_target, n_points, r_max, P_surf_rel,
-            e_c_bracket, P_tab, e_tab, n_tab)
+            e_c_bracket, P_tab, e_tab, n_tab, gamma)
     if e_c is None:
         raise ValueError("give either e_c or M_target")
 
     return _integrate(P_tab, e_tab, n_tab, cs2_eq, cs2_ad,
-                      e_c * MEV_FM3_TO_KM2_INV, n_points, r_max, P_surf_rel)
+                      e_c * MEV_FM3_TO_KM2_INV, n_points, r_max, P_surf_rel,
+                      gamma)
 
 
 def _integrate(P_tab, e_tab, n_tab, cs2_eq, cs2_ad, e_c_geo,
-               n_points, r_max, P_surf_rel):
+               n_points, r_max, P_surf_rel, gamma=None):
     """The actual integration, everything already in geometric units."""
     P_c = float(np.interp(e_c_geo, e_tab, P_tab))
     if P_c <= 0.0:
@@ -350,14 +387,16 @@ def _integrate(P_tab, e_tab, n_tab, cs2_eq, cs2_ad, e_c_geo,
         cs2_ad_r = np.clip(np.interp(P, P_tab, cs2_ad), 1e-8, 1.0)
 
     N2 = brunt_vaisala(g, cs2_eq_r, cs2_ad_r, e_nu, e_lam)
+    gamma_r = None if gamma is None else np.interp(P, P_tab, gamma)
 
     return StellarBackground(
         r=r, m=m, P=P, eps=eps, n_B=n_B, e_lam=e_lam, e_nu=e_nu, g=g,
-        cs2_eq=cs2_eq_r, cs2_ad=cs2_ad_r, N2=N2)
+        cs2_eq=cs2_eq_r, cs2_ad=cs2_ad_r, N2=N2, gamma=gamma_r)
 
 
 def _background_at_mass(eos, cs2_eq, cs2_ad, M_target, n_points, r_max,
-                        P_surf_rel, e_c_bracket, P_tab, e_tab, n_tab):
+                        P_surf_rel, e_c_bracket, P_tab, e_tab, n_tab,
+                        gamma=None):
     """Bisect on central density until M(e_c) = M_target.
 
     Bisection rather than a Newton step, and preceded by a coarse scan: M(e_c)
@@ -415,4 +454,5 @@ def _background_at_mass(eos, cs2_eq, cs2_ad, M_target, n_points, r_max,
             break
     e_c = 0.5 * (lo + hi)
     return _integrate(P_tab, e_tab, n_tab, cs2_eq, cs2_ad,
-                      e_c * MEV_FM3_TO_KM2_INV, n_points, r_max, P_surf_rel)
+                      e_c * MEV_FM3_TO_KM2_INV, n_points, r_max, P_surf_rel,
+                      gamma)

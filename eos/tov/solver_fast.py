@@ -45,15 +45,27 @@ _CB = 3.0 * float(m_nucleon_MeV) / float(rho_sol)   # baryon-mass ODE prefactor
 # EOS preparation (once per EOS, plain Python)
 # =============================================================================
 def prepare_eos_uniform(P, epsilon, nB, n_grid: int = 2000,
-                        disc_rel_jump: float = 0.05):
+                        disc_rel_jump: float = 0.05, disc_P_tol: float = 1e-6):
     """Resample an EOS onto a uniform log10(P) grid for O(1) lookup, and flag
     first-order density discontinuities (Maxwell / phase-transition jumps).
 
-    A discontinuity is a cell where ε rises by more than ``disc_rel_jump`` in a
-    single grid cell (>>the smooth per-cell step). At those cells cs² is set to
-    1 so the ODE does not try to build the tidal Y jump itself; the jump is
-    instead applied explicitly at integration time (Takátsy & Kovács 2020) via
-    the returned ``(P_disc, deps_disc)``. This avoids double-counting.
+    A discontinuity is ε rising by more than ``disc_rel_jump`` **while P stands
+    still** — consecutive input points whose pressures agree to ``disc_P_tol``
+    relative. Across those cells cs² is set to 1 so the ODE does not try to
+    build the tidal Y jump itself; the jump is instead applied explicitly at
+    integration time (Takátsy & Kovács 2020) via the returned
+    ``(P_disc, deps_disc)``. This avoids double-counting.
+
+    The detection runs on the INPUT table, before the resampling and before
+    duplicate pressures are collapsed, and it is the same criterion the scipy
+    reference uses in ``solver._detect_maxwell_transition``. Testing Δε per
+    resampled cell instead cannot distinguish a genuine jump from a merely
+    steep segment: cell width is ``(logP_max - logP_min) / n_grid``, so how
+    steep a cell looks depends on the table's total pressure span. Attaching a
+    crust widens that span from ~4 decades to ~12, which used to turn ordinary
+    crust structure into dozens of spurious "transitions", each contributing a
+    fictitious ΔY and a cs²=1 cell — quietly returning maximum masses of 1e200
+    M_sun for some equations of state and raising ZeroDivisionError for others.
 
     Parameters
     ----------
@@ -62,7 +74,11 @@ def prepare_eos_uniform(P, epsilon, nB, n_grid: int = 2000,
     n_grid : int
         Number of uniform log10(P) points (2000 gives <0.1% on M, R, Lambda).
     disc_rel_jump : float
-        Relative ε jump per cell that flags a discontinuity.
+        Relative ε jump across a constant-P group that flags a discontinuity.
+    disc_P_tol : float
+        Relative pressure spread below which consecutive points count as
+        constant-P. A Gibbs (η=0) mixed phase has P rising smoothly through the
+        window and correctly yields no discontinuity at all.
 
     Returns
     -------
@@ -76,13 +92,44 @@ def prepare_eos_uniform(P, epsilon, nB, n_grid: int = 2000,
     nB = np.asarray(nB, float)
     m = (P > 0) & (epsilon > 0) & (nB > 0) & np.isfinite(P) & np.isfinite(epsilon)
     P, epsilon, nB = P[m], epsilon[m], nB[m]
-    o = np.argsort(P)
+    # Sort by P, then by eps within equal P. A Maxwell plateau's pressures agree
+    # to ~1e-14 relative, and argsort(P) alone leaves those points in arbitrary
+    # eps order — which makes the plateau's own Delta eps come out negative and
+    # the jump go undetected. The scipy reference guards the same trap by taking
+    # min/max over the plateau; sorting lexically fixes it at the source.
+    o = np.lexsort((epsilon, P))
     P, epsilon, nB = P[o], epsilon[o], nB[o]
+
+    # --- discontinuities, on the input table and before dedup ---------------
+    # np.unique below removes exactly the repeated-P points that ARE a Maxwell
+    # plateau, so the search has to happen first.
+    dP = np.diff(P)
+    P_mid = 0.5 * (P[:-1] + P[1:])
+    flat = np.where(np.abs(dP) < disc_P_tol * P_mid)[0]
+    P_disc_l, deps_disc_l, span_l = [], [], []
+    if flat.size:
+        # Consecutive flat pairs are one plateau, so group them and take the
+        # total Δε across the group rather than emitting one jump per pair.
+        for grp in np.split(flat, np.where(np.diff(flat) != 1)[0] + 1):
+            lo, hi = int(grp[0]), int(grp[-1]) + 1
+            # min/max over the group, not its endpoints: belt-and-braces against
+            # any residual eps disorder inside a plateau.
+            e_lo = float(np.min(epsilon[lo:hi + 1]))
+            e_hi = float(np.max(epsilon[lo:hi + 1]))
+            de = e_hi - e_lo
+            if de > disc_rel_jump * e_lo:
+                P_disc_l.append(0.5 * (P[lo] + P[hi]))
+                deps_disc_l.append(de)
+                span_l.append((P[lo], P[hi]))
+
     # unique P (strictly increasing x for interpolation); keep the LAST ε at a
     # repeated P (high-density side) so a literal Maxwell plateau reads as a
-    # single upward ε step rather than being averaged away.
-    P, u = np.unique(P, return_index=True)
-    epsilon, nB = epsilon[u], nB[u]
+    # single upward ε step rather than being averaged away. P is sorted, so the
+    # last occurrence of each unique value is one before its right insertion
+    # point — `np.unique(return_index=True)` would give the FIRST.
+    uP = np.unique(P)
+    u = np.searchsorted(P, uP, side="right") - 1
+    P, epsilon, nB = uP, epsilon[u], nB[u]
 
     logP = np.log10(P)
     logeps = np.log10(epsilon)
@@ -97,14 +144,19 @@ def prepare_eos_uniform(P, epsilon, nB, n_grid: int = 2000,
     cs2_g = np.interp(logP_u, logP, cs2)
     logn_g = np.interp(logP_u, logP, logn)
 
-    # Flag discontinuity cells on the uniform grid and neutralise their cs².
-    eps_g = 10.0 ** logeps_g
-    rel = np.diff(eps_g) / eps_g[:-1]
-    jump_cells = np.where(rel > disc_rel_jump)[0] + 1        # cell the jump lands in
-    P_disc = (10.0 ** logP_u[jump_cells]).astype(float)
-    deps_disc = (eps_g[jump_cells] - eps_g[jump_cells - 1]).astype(float)
-    cs2_g[jump_cells] = 1.0                                  # ODE skips the jump here
-    if P_disc.size == 0:                                     # numba needs non-empty arrays
+    # Neutralise cs² across each discontinuity so the ODE does not also try to
+    # build the jump it is about to be handed explicitly.
+    for P_lo, P_hi in span_l:
+        cells = (logP_u >= np.log10(P_lo)) & (logP_u <= np.log10(P_hi))
+        if cells.any():
+            cs2_g[cells] = 1.0
+        else:                       # plateau thinner than one cell
+            cs2_g[min(int(np.searchsorted(logP_u, np.log10(P_hi))),
+                      n_grid - 1)] = 1.0
+
+    P_disc = np.asarray(P_disc_l, float)
+    deps_disc = np.asarray(deps_disc_l, float)
+    if P_disc.size == 0:                                # numba needs non-empty
         P_disc = np.zeros(1); deps_disc = np.zeros(1)
 
     dx = (logP[-1] - logP[0]) / (n_grid - 1)
@@ -118,24 +170,47 @@ def prepare_eos_uniform(P, epsilon, nB, n_grid: int = 2000,
 # =============================================================================
 # njit kernels
 # =============================================================================
-@njit(fastmath=True, cache=True, inline='always')
+#: fastmath flags MINUS ``nnan``/``ninf``. Plain ``fastmath=True`` licenses the
+#: compiler to assume no NaN or Inf ever appears, which lets it delete the
+#: very guards that stop a diverged integration step from indexing out of
+#: bounds. These kernels detect NaN deliberately, so they cannot promise its
+#: absence; everything else fastmath offers (reassociation, reciprocals,
+#: contraction) is kept.
+_FASTMATH = {"nsz", "arcp", "contract", "afn", "reassoc"}
+
+
+@njit(fastmath=_FASTMATH, cache=True, inline='always')
 def _interp_uniform(logx, logP_min, dx_inv, grid):
-    """O(1) linear interpolation of ``grid`` at log10-pressure ``logx``."""
+    """O(1) linear interpolation of ``grid`` at log10-pressure ``logx``.
+
+    The bounds test is written as ``not (t >= 0.0)`` rather than ``t < 0.0`` so
+    that a NaN takes it too. This is not defensive programming: ``int(NaN)`` is
+    an arbitrary integer, and in a nopython kernel — which has no bounds
+    checking — indexing with it reads out of bounds. A single diverged
+    integration step then returns whatever that memory held, which is how this
+    produced maximum masses of ~1e200 M_sun that changed from run to run
+    instead of an honest NaN.
+    """
     t = (logx - logP_min) * dx_inv
-    i = int(t)
     n = grid.shape[0]
-    if i < 0:
+    if not (t >= 0.0):
         return grid[0]
-    if i >= n - 1:
+    if not (t < n - 1):
         return grid[n - 1]
+    i = int(t)
     f = t - i
     return grid[i] * (1.0 - f) + grid[i + 1] * f
 
 
-@njit(fastmath=True, cache=True)
+@njit(fastmath=_FASTMATH, cache=True)
 def _rhs(r, m, P, Y, logP_min, dx_inv, logeps_g, cs2_g, logn_g, out):
-    """Fill ``out = [dm/dr, dP/dr, dY/dr, dM_b/dr]`` (dimensionless r)."""
-    if P <= 0.0 or r <= 0.0:
+    """Fill ``out = [dm/dr, dP/dr, dY/dr, dM_b/dr]`` (dimensionless r).
+
+    The entry test is negated (``not (P > 0)``) so a NaN state — which a step
+    that diverged on a badly joined EOS can produce — stops here instead of
+    reaching log10 and the interpolator.
+    """
+    if not (P > 0.0) or not (r > 0.0) or not (m == m) or not (Y == Y):
         out[0] = 0.0; out[1] = 0.0; out[2] = 0.0; out[3] = 0.0
         return
     logP = np.log10(P)
@@ -171,7 +246,7 @@ def _rhs(r, m, P, Y, logP_min, dx_inv, logeps_g, cs2_g, logn_g, out):
 
 
 # Dormand-Prince RK45 Butcher tableau (nodes, a-matrix, 5th- and 4th-order b).
-@njit(fastmath=True, cache=True)
+@njit(fastmath=_FASTMATH, cache=True)
 def _solve_one(Pc, logP_min, dx_inv, logeps_g, cs2_g, logn_g, eps_s,
                P_disc, deps_disc, n_disc, P_surf, rtol, atol, r_max):
     """One star: returns (M [M_sun], R [km], M_b [M_sun], k2, Lambda). NaN on failure.
@@ -285,9 +360,15 @@ def _solve_one(Pc, logP_min, dx_inv, logeps_g, cs2_g, logn_g, eps_s,
     if not (s1 <= P_surf) and r >= r_max:
         return np.nan, np.nan, np.nan, np.nan, np.nan
 
-    # linear interpolation to P = P_surf for the surface radius/state
+    # linear interpolation to P = P_surf for the surface radius/state.
+    # frac is a position WITHIN the last step, so it belongs in [0, 1]: the loop
+    # exits with s1 <= P_surf < P_prev. A denominator that is merely nonzero is
+    # not enough to guarantee that — a last step which barely moved the pressure
+    # sends frac to 1e30 and m_s = m_prev + frac*(s0 - m_prev) with it, which is
+    # how this returned stars of 1e200 M_sun instead of failing. Clamp it.
     if abs(P_prev - s1) > 1e-30:
         frac = (P_prev - P_surf) / (P_prev - s1)
+        frac = min(max(frac, 0.0), 1.0)
     else:
         frac = 1.0
     r_s = r_prev + frac * (r - r_prev)
@@ -315,7 +396,7 @@ def _solve_one(Pc, logP_min, dx_inv, logeps_g, cs2_g, logn_g, eps_s,
     return m_s, r_s * _RSUN_KM, Mb_s, k2love, Lam
 
 
-@njit(parallel=True, fastmath=True, cache=True)
+@njit(parallel=True, fastmath=_FASTMATH, cache=True)
 def solve_sequence(Pc_array, logP_min, dx_inv, logeps_g, cs2_g, logn_g, eps_s,
                    P_disc, deps_disc, n_disc, P_surf, rtol, atol, r_max):
     """Solve a whole central-pressure sequence in parallel (prange).
@@ -334,7 +415,7 @@ def solve_sequence(Pc_array, logP_min, dx_inv, logeps_g, cs2_g, logn_g, eps_s,
     return M, R, Mb, K2, Lam
 
 
-@njit(fastmath=True, cache=True)
+@njit(fastmath=_FASTMATH, cache=True)
 def solve_sequence_serial(Pc_array, logP_min, dx_inv, logeps_g, cs2_g, logn_g,
                           eps_s, P_disc, deps_disc, n_disc, P_surf, rtol, atol,
                           r_max):

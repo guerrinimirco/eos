@@ -19,7 +19,7 @@ large scales; it is a much worse approximation for the f-mode.
 The equations
 -------------
 With the displacement expanded in spherical harmonics of degree `l` and time
-dependence e^{-i omega t}, the perturbation equations reduce to two first-order
+dependence e^{+i omega t}, the perturbation equations reduce to two first-order
 equations for
 
     U = r^2 e^{lambda/2} xi_r        (radial displacement)
@@ -58,13 +58,22 @@ Both conditions hold only for discrete `omega`: that is the eigenvalue problem.
 Mode classification
 -------------------
 Integrating from the centre with the regular series always succeeds; the
-surface condition is what selects the spectrum. Sorting the roots is done by
-counting nodes of the radial eigenfunction `xi_r`, which shares its zeros with
-`U`. The f-mode has no node. The p-modes lie above it with one more node per
-overtone, and the g-modes lie below it, likewise gaining a node per overtone.
-So the *fundamental* g-mode is the highest-frequency root below the f-mode, and
-it has exactly one node. It is the one that matters observationally, being both
-the highest in frequency and the most strongly tidally coupled.
+surface condition is what selects the spectrum. The textbook labelling counts
+nodes of the radial eigenfunction `xi_r`, which shares its zeros with `U`: the
+f-mode has none, and the g_k and p_k overtones have k each, the g-branch lying
+below the f-mode and the p-branch above. So the *fundamental* g-mode is the
+highest-frequency root below the f-mode and has exactly one node. It is the one
+that matters observationally, being both the highest in frequency and the most
+strongly tidally coupled.
+
+In practice the branches are separated here by the buoyancy scale instead. A
+g-mode is trapped where buoyancy can restore the displacement, which needs
+omega < N, so the whole g-branch lies below max(N), while the f-mode sits near
+the dynamical frequency sqrt(M/R^3) -- typically several times higher. That
+separation is wide and numerically stable, whereas a node count can gain or
+lose an apparent zero near the surface depending on where the star is
+truncated. The node count is still reported on every `Mode` as a diagnostic,
+and for a well-resolved g_k it agrees.
 
 Finite reaction rates
 ---------------------
@@ -75,6 +84,14 @@ rate of the mode. The complex root is found by seeding from the real solution,
 which also fixes the mode's identity: node counting is not meaningful for a
 complex eigenfunction, so the mode is labelled by the real problem it
 continues from.
+
+**Sign convention.** The equations above contain omega only as omega^2, so they
+are blind to the sign convention in the time dependence; the dynamical sound
+speed is not, entering linearly through gamma/(i omega). We follow its source
+and use e^{+i omega t} throughout, in which an amplitude behaves as
+e^{-Im(omega) t} and a *damped* mode therefore has **Im(omega) > 0**. Mixing
+this with the opposite convention silently flips the sign of the damping while
+leaving the frequency untouched, so it is worth stating explicitly.
 
 Units follow `eos.gmode.background`: geometric, with `r` in km and `omega` in
 km^-1. Public results are also reported in Hz.
@@ -91,11 +108,13 @@ from eos.gmode.background import omega_to_hz, hz_to_omega
 class Mode:
     """One solved oscillation mode.
 
-    omega     : angular eigenfrequency [km^-1]; complex if the background was
+    omega     : angular eigenfrequency [km^-1]; complex when the background
+                carries a finite reaction rate. With the e^{+i omega t}
+                convention used here a damped mode has Im(omega) > 0.
     nu_hz     : ordinary frequency [Hz]; the real part if complex
-    tau_s     : damping time [s], or None when the background is real (the
-                Cowling approximation carries no gravitational-wave damping,
-                so a finite tau here is bulk-viscous only)
+    tau_s     : e-folding damping time [s], or None when the background is real
+                (the Cowling approximation carries no gravitational-wave
+                damping, so a finite tau here is bulk-viscous only)
     l         : spherical-harmonic degree
     n_nodes   : nodes of xi_r inside the star
     label     : 'f', 'g1', 'g2', ..., 'p1', ...
@@ -187,23 +206,33 @@ def integrate_mode(bg, omega, l=2, itp=None, dense=True, rtol=1e-8,
     return sol.t, U, V
 
 
-def surface_discriminant(bg, omega, l=2, itp=None, dense=True, **kw):
-    """Normalised surface condition; its zeros are the eigenfrequencies.
+def surface_discriminant(bg, omega, l=2, itp=None, dense=True,
+                         normalize=True, **kw):
+    """Surface condition; its zeros are the eigenfrequencies.
 
-        D = [V(R) - g(R) U(R) e^{-lambda(R)/2} / R^2] / (scale)
+        D_raw = V(R) - g(R) U(R) e^{-lambda(R)/2} / R^2
 
-    The denominator is the sum of the magnitudes of the two terms, which keeps
-    D of order unity whatever the eigenfunction's normalisation and makes it
-    safe to bracket sign changes across many decades in omega.
+    With `normalize=True` this is divided by the sum of the magnitudes of the
+    two terms, which keeps D of order unity whatever the eigenfunction's
+    normalisation and makes it safe to bracket sign changes across many decades
+    in omega. That is what the real-axis scan wants.
+
+    With `normalize=False` the raw difference is returned. The normalisation
+    involves absolute values and so is *not* an analytic function of omega;
+    the complex root finder needs the raw form, which is analytic, or its
+    secant steps are meaningless.
     """
     itp = itp if itp is not None else bg.interpolators()
     r, U, V = integrate_mode(bg, omega, l=l, itp=itp, dense=dense, **kw)
     R = float(r[-1])
     target = itp["g"](R) * U[-1] / np.sqrt(itp["e_lam"](R)) / R**2
+    raw = V[-1] - target
+    if not normalize:
+        return raw, r, U, V
     scale = abs(V[-1]) + abs(target)
     if scale == 0.0:
         return 0.0, r, U, V
-    return (V[-1] - target) / scale, r, U, V
+    return raw / scale, r, U, V
 
 
 def _nodes(U, rel_floor=1e-6):
@@ -362,27 +391,23 @@ def gmode_frequency(eos, cs2_eq, cs2_ad, e_c=None, M_target=1.4, l=2, order=1,
     difference is the buoyancy, and where they coincide there is no g-mode.
     """
     from eos.gmode.background import build_background
-    from eos.gmode.sound_speeds import cs2_dynamical
 
     bg = build_background(eos, cs2_eq, cs2_ad, e_c=e_c, M_target=M_target,
-                          n_points=n_points, **bg_kw)
+                          n_points=n_points, gamma=gamma, **bg_kw)
     mode = solve_gmode(bg, l=l, order=order, nu_min=nu_min, nu_max=nu_max,
                        n_scan=n_scan)
     if gamma is None:
         return mode
 
     # The dynamical sound speed depends on the frequency being solved for, so
-    # iterate: rebuild the background at the current omega and re-solve, until
-    # the frequency stops moving. Two or three passes is plenty in practice,
-    # because c_dy^2 depends on omega only through the ratio gamma/omega.
+    # iterate to self-consistency. Only the buoyancy has to be rebuilt each
+    # pass -- the stellar structure does not depend on the sound speeds -- so
+    # `at_frequency` is nearly free and the TOV equations are solved once.
     omega_s = 2.0 * np.pi * mode.nu_hz
-    for _ in range(8):
-        cs2_dy = cs2_dynamical(cs2_eq, cs2_ad, gamma, omega_s)
-        bg_c = build_background(eos, cs2_eq, cs2_dy, e_c=e_c,
-                                M_target=M_target, n_points=n_points, **bg_kw)
-        mode = _refine_complex(bg_c, mode, l=l)
+    for _ in range(12):
+        mode = _refine_complex(bg.at_frequency(omega_s), mode, l=l)
         new = 2.0 * np.pi * mode.nu_hz
-        if abs(new - omega_s) < 1e-6 * abs(new):
+        if abs(new - omega_s) < 1e-8 * abs(new):
             break
         omega_s = new
     return mode
@@ -401,38 +426,57 @@ def _refine_complex(bg, seed, l=2, rtol=1e-8, atol=1e-12):
     itp = bg.interpolators()
 
     def disc(w):
+        # Raw, unnormalised: the secant needs an analytic function.
         return surface_discriminant(bg, w, l=l, itp=itp, dense=False,
-                                    rtol=rtol, atol=atol)[0]
+                                    normalize=False, rtol=rtol, atol=atol)[0]
 
-    w0 = complex(np.real(seed.omega), 0.0)
-    # Offset the second point into the lower half plane: e^{-i omega t} decays
-    # for Im(omega) < 0, so that is the direction a damped mode lies in.
-    w1 = w0 * (1.0 - 1e-3j)
-    d0, d1 = disc(w0), disc(w1)
+    seed_w = complex(np.real(seed.omega), 0.0)
 
-    for _ in range(60):
-        if d1 == d0:
+    # Try progressively deeper starting offsets into the upper half plane: with
+    # the e^{+i omega t} convention an amplitude goes as e^{-Im(omega) t}, so a
+    # damped mode has Im(omega) > 0, and how far up depends on how strongly it
+    # is damped.
+    w = None
+    for offset in (1e-3, 1e-2, 5e-2, 0.2, 0.5):
+        w0 = seed_w
+        w1 = seed_w * (1.0 + 1j * offset)
+        d0, d1 = disc(w0), disc(w1)
+        for _ in range(80):
+            if d1 == d0:
+                break
+            w2 = w1 - d1 * (w1 - w0) / (d1 - d0)
+            if not np.isfinite(w2):
+                break
+            w0, d0, w1 = w1, d1, w2
+            d1 = disc(w1)
+            if abs(w1 - w0) <= 1e-11 * abs(w1):
+                w = w1
+                break
+        if w is not None:
             break
-        w2 = w1 - d1 * (w1 - w0) / (d1 - d0)
-        if not np.isfinite(w2):
-            raise RuntimeError("complex g-mode refinement diverged")
-        w0, d0, w1 = w1, d1, w2
-        d1 = disc(w1)
-        if abs(w1 - w0) < 1e-12 * abs(w1) or abs(d1) < 1e-13:
-            break
-    else:
-        raise RuntimeError("complex g-mode refinement did not converge")
 
-    if abs(d1) > 1e-6:
+    if w is None or np.real(w) <= 0.0:
         raise RuntimeError(
-            f"complex g-mode refinement stalled: |D| = {abs(d1):.2e}")
-    w = w1
+            "no damped g-mode found near the undamped one at "
+            f"{seed.nu_hz:.1f} Hz. This is a physical outcome as well as a "
+            "possible numerical one: once the equilibration rate reaches the "
+            "mode frequency, the composition re-equilibrates within a cycle, "
+            "the buoyancy that supports the mode is destroyed and the g-mode "
+            "ceases to exist. Check gamma/omega -- the mode survives while "
+            "gamma is below roughly half of omega.")
     _d, r, U, V = surface_discriminant(bg, w, l=l, itp=itp,
                                        rtol=rtol, atol=atol)
-    # e^{-i omega t} with omega = omega_R + i omega_I decays when omega_I < 0;
-    # report the damping time as a positive number of seconds.
+    # With e^{+i omega t} an amplitude goes as e^{-Im(omega) t}, so a damped
+    # mode has Im(omega) > 0 and its e-folding time is 1/Im(omega). Bulk
+    # viscosity can only remove energy, so a root on the other side is not a
+    # physical answer -- it means the search left the branch it was continuing.
     from eos.gmode.background import C_KM_S
-    omega_i = abs(float(np.imag(w))) * C_KM_S
+    omega_i = float(np.imag(w)) * C_KM_S
+    if omega_i < 0.0:
+        raise RuntimeError(
+            f"complex refinement returned a growing mode, Im(omega) = "
+            f"{np.imag(w):.3e} km^-1. Dissipation cannot amplify, so this is a "
+            "spurious branch rather than a physical instability.")
     tau = 1.0 / omega_i if omega_i > 0 else float("inf")
     xi_r = U / np.sqrt(itp["e_lam"](r)) / r**2
     return Mode(omega=w, nu_hz=float(omega_to_hz(np.real(w))), tau_s=tau,

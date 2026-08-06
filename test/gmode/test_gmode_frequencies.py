@@ -117,18 +117,58 @@ def test_gmode_frequency_scales_with_buoyancy(polytrope):
 def test_finite_reaction_rate_damps_and_lowers_the_mode(dd2_eos):
     """A finite gamma makes the eigenfrequency complex.
 
-    At gamma comparable to the mode frequency the composition partly
-    re-equilibrates within a cycle: buoyancy is reduced, so the real frequency
-    drops, and the lag dissipates energy, so a finite damping time appears.
+    When the composition partly re-equilibrates within a cycle the buoyancy is
+    reduced, so the real frequency drops, and the reaction lagging the
+    compression dissipates energy, so a finite damping time appears.
     """
     eos, ceq, cad, _n, _y = dd2_eos
-    cold = gmode_frequency(eos, ceq, cad, M_target=1.4, n_points=400,
-                           nu_min=40.0, nu_max=3000.0, n_scan=120)
-    warm = gmode_frequency(eos, ceq, cad, M_target=1.4, n_points=400,
-                           nu_min=40.0, nu_max=3000.0, n_scan=120,
-                           gamma=2.0 * np.pi * cold.nu_hz)
+    kw = dict(M_target=1.4, n_points=400, nu_min=40.0, nu_max=3000.0,
+              n_scan=120)
+    cold = gmode_frequency(eos, ceq, cad, **kw)
+    warm = gmode_frequency(eos, ceq, cad, gamma=0.3 * 2 * np.pi * cold.nu_hz,
+                           **kw)
 
+    assert cold.tau_s is None, "a real background carries no damping time"
     assert warm.tau_s is not None and np.isfinite(warm.tau_s)
     assert warm.tau_s > 0.0
+    assert np.imag(warm.omega) > 0.0, "with e^{+i omega t}, decay means Im > 0"
     assert warm.nu_hz < cold.nu_hz, "partial equilibration weakens buoyancy"
-    assert np.imag(warm.omega) != 0.0
+
+
+@pytest.mark.slow
+def test_damping_time_scales_inversely_with_the_reaction_rate(dd2_eos):
+    """For gamma << omega the dissipation is proportional to gamma.
+
+    In that regime Im[c_dy^2] -> (c_ad^2 - c_eq^2) gamma/omega, linear in
+    gamma, so the mode's damping rate is too and tau ~ 1/gamma. A decade in
+    gamma must buy a decade in tau; the frozen frequency is untouched.
+    """
+    eos, ceq, cad, _n, _y = dd2_eos
+    kw = dict(M_target=1.4, n_points=400, nu_min=40.0, nu_max=3000.0,
+              n_scan=120)
+    cold = gmode_frequency(eos, ceq, cad, **kw)
+    omega = 2.0 * np.pi * cold.nu_hz
+
+    slow_g = gmode_frequency(eos, ceq, cad, gamma=1e-3 * omega, **kw)
+    fast_g = gmode_frequency(eos, ceq, cad, gamma=1e-2 * omega, **kw)
+
+    assert slow_g.tau_s / fast_g.tau_s == pytest.approx(10.0, rel=0.05)
+    # deep in the frozen limit the real frequency is the undamped one
+    assert slow_g.nu_hz == pytest.approx(cold.nu_hz, rel=1e-4)
+
+
+@pytest.mark.slow
+def test_fast_equilibration_suppresses_the_mode(dd2_eos):
+    """Once gamma reaches omega the buoyancy is gone and so is the g-mode.
+
+    This is the suppression of composition g-modes in warm stars: the mode does
+    not merely shift, it ceases to exist, and the solver says so rather than
+    returning a number.
+    """
+    eos, ceq, cad, _n, _y = dd2_eos
+    kw = dict(M_target=1.4, n_points=400, nu_min=40.0, nu_max=3000.0,
+              n_scan=120)
+    cold = gmode_frequency(eos, ceq, cad, **kw)
+    with pytest.raises(RuntimeError, match="no damped g-mode"):
+        gmode_frequency(eos, ceq, cad, gamma=3.0 * 2 * np.pi * cold.nu_hz,
+                        **kw)

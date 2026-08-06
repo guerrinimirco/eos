@@ -253,7 +253,7 @@ NUCLEON_FLAGS = SpeciesFlags(hyperons=False, deltas=False, muons=True,
 # why stage 1 is no longer free and why the grid below is a few dozen cells
 # rather than a few hundred.
 SCAN_K_SAT = np.arange(210.0, 291.0, 20.0)        # MeV
-SCAN_Q_SAT = np.arange(50.0, 351.0, 50.0)         # MeV, independent of K_sat
+SCAN_Q_SAT = np.arange(250.0, 351.0, 50.0)         # MeV, independent of K_sat
 SCAN_L_SYM = [30.0, 50.0, 70.0, 90.0]             # free over 30-100
 
 # How many stage-1 survivors reach the expensive stages. The grid above is wide
@@ -261,7 +261,7 @@ SCAN_L_SYM = [30.0, 50.0, 70.0, 90.0]             # free over 30-100
 # would multiply that stage's cost by the number of survivors. They are thinned
 # evenly, so what goes forward still spans the region rather than clustering at
 # one corner of it.
-MAX_NMP = 4
+MAX_NMP = 10
 
 # ---- stage-2 axes: spend the budget where the sensitivity is ---------------
 # It is very uneven. x_wD alone moves the viable fraction by a factor of ~4 and
@@ -861,6 +861,7 @@ print(f"liquid-gas spinodal and has no stable solution; those points are skipped
 
 
 # %% [markdown]
+#
 # %% [markdown]
 # # Part II — tables
 #

@@ -277,17 +277,37 @@ def _drop_nonfinite(table: EOSTable_for_TOV, n_B_min: float = 1e-8) -> EOSTable_
 
 
 def _attach_crust(eos: EOSTable_for_TOV, crust: EOSTable_for_TOV, n_transition: float) -> EOSTable_for_TOV:
-    """Simple attachment at transition density."""
+    """Attach a crust below `n_transition`, keeping P monotone across the join.
+
+    Splitting on density alone is not enough. The crust and the core are
+    independent calculations that do not agree on P at the same n_B — BPS gives
+    P = 0.406 MeV/fm^3 at n_B = 0.080 fm^-3 where DD2 gives 0.225 — so a plain
+    concatenation at the transition density steps DOWN in pressure at the join.
+    An EOS table whose P decreases with n_B is not an EOS: eps(P) is then
+    double-valued, the implied cs^2 is negative there, and a TOV integration
+    crossing it diverges. The Numba backend used to turn that into confident
+    nonsense; it now returns NaN, which is honest but still not a star.
+
+    Crust points at or above the core's own starting pressure are therefore
+    dropped, which joins the two tables at the crossing of their P(n_B) curves
+    rather than at a density picked in advance. `n_transition` still sets the
+    upper bound on how much crust is considered.
+    """
     crust = _drop_nonfinite(crust)
     eos = _drop_nonfinite(eos)
     # Use crust below transition, EOS above
     crust_mask = crust.nB <= n_transition # generate a np list of bools
     eos_mask = eos.nB > n_transition # generate a np list of bools
-    
-    P = np.concatenate([crust.P[crust_mask], eos.P[eos_mask]])
+
+    P_core = eos.P[eos_mask]
+    if P_core.size:
+        # Keep only crust points the core branch does not already undercut.
+        crust_mask = crust_mask & (crust.P < P_core.min())
+
+    P = np.concatenate([crust.P[crust_mask], P_core])
     epsilon = np.concatenate([crust.epsilon[crust_mask], eos.epsilon[eos_mask]])
     nB = np.concatenate([crust.nB[crust_mask], eos.nB[eos_mask]])
-    
+
     return EOSTable_for_TOV(P=P, epsilon=epsilon, nB=nB)
 
 

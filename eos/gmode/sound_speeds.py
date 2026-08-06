@@ -72,7 +72,11 @@ interpolation between them,
 
     c_dy^2 = c_eq^2 + (c_ad^2 - c_eq^2) / (1 + gamma / (i omega))
 
-so gamma << omega recovers `c_ad^2` (frozen), gamma >> omega recovers `c_eq^2`
+written for a perturbation going as e^{+i omega t}, the convention
+`eos.gmode.cowling` therefore adopts as well. In it a damped mode has
+Im(omega) > 0.
+
+So gamma << omega recovers `c_ad^2` (frozen), gamma >> omega recovers `c_eq^2`
 (buoyancy destroyed, the mode is suppressed), and gamma ~ omega gives maximal
 dissipation. The imaginary part is bulk viscosity,
 zeta = (eps + P) Im[c_dy^2] / omega, and feeding `c_dy^2` into `N^2` turns the
