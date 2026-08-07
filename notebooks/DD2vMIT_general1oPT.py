@@ -270,11 +270,11 @@ MAX_NMP = 10
 # are held at one value each and the freed factor of four goes to the axes that
 # matter. U_Sigma is the least constrained hyperon potential (repulsive, but by
 # how much is genuinely open), so it gets an axis rather than a default.
-SCAN_U_LAMBDA = [-30.0]           # MeV, hyperon potentials in SNM at n_sat
+SCAN_U_LAMBDA = [-30.0,-25]           # MeV, hyperon potentials in SNM at n_sat
 SCAN_U_SIGMA = [0.0, 30.0]
-SCAN_U_XI = [-18.0]
-SCAN_U_DELTA = [-100.0, -83.0, -67.0, -50.0]   # from_delta_potential limits
-SCAN_X_WD = [0.9, 1.0, 1.1, 1.2]  # Delta vector ratio x_omegaDelta
+SCAN_U_XI = [-22.0,-10]
+SCAN_U_DELTA = [-100.0, -50.0]   # from_delta_potential limits
+SCAN_X_WD = [0.9, 1.2]  # Delta vector ratio x_omegaDelta
 SCAN_X_RD = [1.0]                 # x_rhoDelta; the isovector ratio moves least
 
 # a and B^1/4 both raise the onset density, so the viable combinations sit on
@@ -284,9 +284,9 @@ SCAN_X_RD = [1.0]                 # x_rhoDelta; the isovector ratio moves least
 # is why both axes are swept wide rather than finely. Outside 0.05 <= a <= 0.20
 # nothing survives: a = 0 leaves the quark phase too soft to reach 2 M_sun, and
 # by a = 0.25 the ordered window is gone for every B^1/4 from 120 to 200 MeV.
-SCAN2_B4 = [160.0, 170.0, 180.0, 190.0, 200.0]   # MeV
-SCAN2_A = [0.05, 0.10, 0.15, 0.20]               # fm^2
-SCAN2_MS = [150.0]                # MeV; the EoS is only weakly sensitive to it
+SCAN2_B4 = [160.0, 170.0, 180.0]   # MeV
+SCAN2_A = [0., 0.2, 0.4,  0.6,  0.8]               # fm^2
+SCAN2_MS = [50, 150.0]                # MeV; the EoS is only weakly sensitive to it
 
 FUNNEL_ETAS = [0.0, 0.3, 0.6, 1.0]
 #: One colour per eta for the funnel's own panels. Part III builds an equivalent
@@ -774,11 +774,12 @@ print(f"({time.time()-t0:.1f} s)")
 #   # 3. Delta: no SU(6) rule exists, so set x_iD = Gamma_iD/Gamma_iN by hand.
 #   PAR = replace(PAR, x_Delta_sigma=1.15, x_Delta_omega=1.0, x_Delta_rho=1.0)
 
-NMP = dict(n_sat=0.149065, E_sat=-16.02, m_eff_ratio=0.5625, K_sat=242.7, Q_sat=169.15, E_sym=31.67, L_sym=55.03)
+NMP = dict(n_sat=0.149077, E_sat=-16.02, m_eff_ratio=0.5625,
+           K_sat=290.0, Q_sat=300.00, E_sym=31.67, L_sym=50.00)
 PAR = Parametrization.from_nmp(NMP)
-PAR = Parametrization.from_hyperon_potentials(U_Lambda=-26., U_Sigma=15., U_Xi=-18., base=PAR)
-#PAR = Parametrization.from_delta_potential(U_Delta=-75.19, x_wD=1.0, x_rD=1.0, base=PAR)
-PAR = replace(PAR, x_Delta_sigma=1.0, x_Delta_omega=1.0, x_Delta_rho=1.0)
+PAR = Parametrization.from_hyperon_potentials(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-10.0, base=PAR)
+PAR = Parametrization.from_delta_potential(U_Delta=-50.0, x_wD=1.20, x_rD=1.00, base=PAR)
+VMIT = get_vmit_custom(B4=170.0, a=0.20, m_s=150.0)
 
 
 # ---- which degrees of freedom exist --------------------------------------
@@ -794,8 +795,6 @@ FLAGS = SpeciesFlags(
     include_thermal_vectors=True,   # thermal rho, omega, K*, phi
 )
 
-# ---- quark parametrization ------------------------------------------------
-VMIT = get_vmit_custom(B4=180.0, a=0.15, m_s=150.0)
 
 
 
@@ -1427,7 +1426,7 @@ plt.show()
 
 # %%
 ETA_COMP = 0.0
-T_COMP = 0.0
+T_COMP = 20.0
 Y_FLOOR = 1e-3
 
 d = full_eos(ETA_COMP, T_COMP)

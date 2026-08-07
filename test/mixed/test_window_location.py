@@ -140,6 +140,93 @@ def test_a_hint_only_accelerates_the_search(par, vmit, hint):
     assert w.n_offset == pytest.approx(1.1753, abs=4 * TOL)
 
 
+def test_a_dropped_probe_below_the_onset_does_not_hide_the_transition():
+    """The onset must be found even when no probe lands on the hadronic side.
+
+    `sweep_mixed` drops a density it cannot solve, and below the onset the
+    mixed system has no solution, so those probes vanish and the probe set can
+    begin above the onset with every chi > 0. There is then no sign change to
+    bracket and the transition is reported as absent — while its chi = 1 side
+    sits located at 1.04, which is the tell.
+
+    This parametrization does exactly that: its lowest surviving probe comes
+    out at chi = +0.0024, a hair above the crossing. Moving U_Lambda to -30
+    shifts the onset by ~0.005 fm^-3, the same probe lands at chi = -0.0009,
+    and the search succeeds — so the two differ only in which side of one
+    probe the boundary falls on, and both must give the same window.
+    """
+    grid = np.linspace(0.05, 1.6, 80)
+    vm = get_vmit_custom(B4=170.0, a=0.20, m_s=150.0)
+
+    def window_for(U_Lambda):
+        p = Parametrization.from_nmp(dict(
+            n_sat=0.149077, E_sat=-16.02, m_eff_ratio=0.5625, K_sat=290.0,
+            Q_sat=300.0, E_sym=31.67, L_sym=50.0))
+        p = Parametrization.from_hyperon_potentials(
+            U_Lambda=U_Lambda, U_Sigma=30.0, U_Xi=-10.0, base=p)
+        p = Parametrization.from_delta_potential(
+            U_Delta=-50.0, x_wD=1.20, x_rD=1.00, base=p)
+        return locate_window(p, FLAGS, grid, 0.0, beta_eq_neutrinoless(),
+                             vmit_params=vm, T=0.0)
+
+    tol = 0.5 * float(np.min(np.diff(grid)))
+    w25, w30 = window_for(-25.0), window_for(-30.0)
+    assert w30.exists, "the control case regressed"
+    assert w25.exists, (
+        f"onset lost: reason={w25.reason}, offset={w25.n_offset:.4f} was "
+        "located, so a transition exists")
+    # Same transition seen from either side of one probe: U_Lambda moves the
+    # onset a little, not by the probe spacing (0.14) the bug swung it by.
+    assert abs(w25.n_onset - w30.n_onset) < 6 * tol, (
+        f"{w25.n_onset:.4f} vs {w30.n_onset:.4f}")
+
+
+@pytest.mark.parametrize("n_probe", [8, 12, 20])
+@pytest.mark.parametrize("n_lo", [0.03, 0.05, 0.08])
+def test_the_boundaries_do_not_depend_on_where_the_probes_land(
+        par, vmit, n_probe, n_lo):
+    """The located window must be a property of the physics, not of the grid.
+
+    The failure this pins is invisible to any single-grid test: it turns on
+    whether some probe happens to fall below the onset, so it appears and
+    disappears as the grid start or the probe count is nudged. Invariance under
+    both is the property that actually holds, and asserting it is the only way
+    to catch a locator that is right by luck.
+
+    Reference values are the module's dense-sweep numbers, so this also pins
+    the walk fallback to the same answer the bracketing path gives.
+    """
+    grid = np.linspace(n_lo, 1.788924, 300)
+    w = locate_window(par, FLAGS, grid, 0.3, beta_eq_neutrinoless(),
+                      vmit_params=vmit, T=0.0, n_probe=n_probe)
+    assert w.exists, f"lost the window at n_probe={n_probe}, n_lo={n_lo}"
+    assert w.n_onset == pytest.approx(0.9989, abs=6 * TOL)
+    assert w.n_offset == pytest.approx(1.1753, abs=6 * TOL)
+
+
+def test_reason_separates_physics_from_a_failed_location(par, vmit):
+    """`no_transition` and the three locator failures must be distinguishable.
+
+    A scan that labels them all 'no window' cannot say how much of its reject
+    count is physics — which is what made a 27% bucket of unlocated onsets
+    indistinguishable from parametrizations that genuinely have no transition.
+    """
+    from eos.mixed.solvers.sweep import MixedWindow
+
+    assert MixedWindow(0.9, 1.2, []).reason == "ok"
+    assert MixedWindow(np.nan, np.nan, []).reason == "no_transition"
+    assert MixedWindow(np.nan, 1.2, []).reason == "onset_unbracketed"
+    assert MixedWindow(0.9, np.nan, []).reason == "offset_unbracketed"
+    assert MixedWindow(1.2, 0.9, []).reason == "crossings_out_of_order"
+
+    # A bag constant high enough that quark matter never pays: physics, and it
+    # must say so rather than reporting a location failure.
+    far = get_vmit_custom(B4=400.0, a=vmit.a, m_s=vmit.m_s)
+    w = locate_window(par, FLAGS, GRID, 0.3, beta_eq_neutrinoless(),
+                      vmit_params=far, T=0.0)
+    assert w.reason == "no_transition"
+
+
 def test_nH0_seeds_the_first_point_inside_the_window(par, vmit):
     """`sweep_mixed(nH0=...)` is what lets a sweep restart deep in the window.
 

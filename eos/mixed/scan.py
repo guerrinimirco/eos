@@ -354,10 +354,17 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
             `scan_parameters` does this for you.
 
     Returns one flat dict row. `status` is 'ok' when every requested check
-    passes, 'inversion_failed' when the NMPs are not representable, 'no_window'
-    when they are but chi never completes its crossing, 'tov_failed' when the
-    star sequence did not integrate, and 'error: ...' when the solve raised —
-    which is itself a finding, so it is recorded, not raised.
+    passes, 'inversion_failed' when the NMPs are not representable,
+    'tov_failed' when the star sequence did not integrate, and 'error: ...'
+    when the solve raised — which is itself a finding, so it is recorded, not
+    raised.
+
+    When there is no usable window the status is `MixedWindow.reason`, which
+    names *which* of the four ways it failed: 'no_transition' (a physics
+    outcome), 'onset_unbracketed', 'offset_unbracketed' or
+    'crossings_out_of_order' (all three locator failures). These were once a
+    single 'no_window' label, which made a scan unable to report how much of
+    its reject count was physics.
     """
     missing = [k for k in NMP_KEYS if k not in nmp]
     if missing:
@@ -396,7 +403,7 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
         row["window_exists"] = float(bool(window.exists))
         row["n_onset"] = float(window.n_onset)
         row["n_offset"] = float(window.n_offset)
-        row["status"] = "ok" if window.exists else "no_window"
+        row["status"] = window.reason
 
         if tov and window.exists:
             row.update(_tov_columns(par, flags, grid, eta, cs, params, T,

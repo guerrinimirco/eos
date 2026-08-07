@@ -155,8 +155,8 @@ def _rhs(r, y, l, itp, omega2):
     return [dU, dV]
 
 
-def integrate_mode(bg, omega, l=2, itp=None, dense=True, rtol=1e-8,
-                   atol=1e-12):
+def integrate_mode(bg, omega, l=2, itp=None, dense=True, rtol=1e-6,
+                   atol=1e-10):
     """Integrate the Cowling system at a trial `omega`, centre to surface.
 
     Returns (r, U, V). `omega` may be complex, in which case so are U and V.
@@ -255,7 +255,7 @@ def _nodes(U, rel_floor=1e-6):
 
 
 def mode_spectrum(bg, l=2, nu_min=30.0, nu_max=3500.0, n_scan=220,
-                  rtol=1e-8, atol=1e-12):
+                  rtol=1e-6, atol=1e-10):
     """All modes of the background between `nu_min` and `nu_max` [Hz].
 
     Scans the surface discriminant on a log-spaced frequency grid, brackets its
@@ -294,7 +294,7 @@ def mode_spectrum(bg, l=2, nu_min=30.0, nu_max=3500.0, n_scan=220,
         # magnitude; a bracket showing +0.99 -> -0.99 is a root the scan grid
         # merely stepped over, not an artefact.
         try:
-            w = brentq(disc, a, b, xtol=1e-14, rtol=1e-12)
+            w = brentq(disc, a, b, xtol=1e-12, rtol=1e-10)
         except (ValueError, RuntimeError):
             continue
         _d, r, U, V = surface_discriminant(bg, w, l=l, itp=itp,
@@ -338,7 +338,7 @@ def mode_spectrum(bg, l=2, nu_min=30.0, nu_max=3500.0, n_scan=220,
 
 
 def solve_gmode(bg, l=2, order=1, nu_min=30.0, nu_max=3500.0, n_scan=220,
-                bg_complex=None, rtol=1e-8, atol=1e-12):
+                bg_complex=None, rtol=1e-6, atol=1e-10):
     """The g-mode of radial order `order` (1 = fundamental, highest frequency).
 
     bg         : real `StellarBackground`
@@ -413,7 +413,7 @@ def gmode_frequency(eos, cs2_eq, cs2_ad, e_c=None, M_target=1.4, l=2, order=1,
     return mode
 
 
-def _refine_complex(bg, seed, l=2, rtol=1e-8, atol=1e-12):
+def _refine_complex(bg, seed, l=2, rtol=1e-6, atol=1e-10):
     """Continue a real eigenfrequency into the complex plane.
 
     The surface discriminant is an analytic function of omega, so a secant

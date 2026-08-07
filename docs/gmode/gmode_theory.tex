@@ -136,13 +136,17 @@ maximal at $\gamma=\omega$, is bulk viscosity,
 $\zeta=(\varepsilon+P)\,{\rm Im}\,c_{\rm dy}^{2}/\omega$. Substituting
 Eq.~(\ref{eq:cdy}) into Eq.~(\ref{eq:bv}) makes $N^{2}$ and hence the
 eigenfrequency complex, the imaginary part being the bulk-viscous damping rate.
-As $\gamma$ approaches $\omega$ the buoyancy is destroyed and the mode is
-suppressed outright, which is what happens in protoneutron stars and merger
-remnants at $T\gtrsim$ a few MeV. Using Fermi-surface Urca
-rates~\cite{AlfordHarris2018,Alford2020} with the DD2
-interaction~\cite{Typel2010} we find $\gamma=\omega$ at $T\simeq5$~MeV for a
-1~kHz oscillation, nearly independent of density, consistent
-with~\cite{AlfordHarris2019}. Cold stars, $T\ll1$~MeV, are firmly frozen.
+The suppression is progressive. For a $1.4\,M_{\odot}$ DD2~\cite{Typel2010}
+star whose undamped fundamental $g$-mode sits at $150$~Hz, we obtain a quality
+factor $Q=\mathrm{Re}\,\omega/2\,\mathrm{Im}\,\omega$ of $10.4$, $3.4$, $0.96$
+and $0.53$ at $\gamma/\omega=0.1$, $0.3$, $1$ and $3$, the mode frequency
+falling from $149$ to $27$~Hz as the buoyancy is eaten away; by
+$\gamma\simeq10\,\omega$ no mode remains. The crossing into critical damping,
+$Q\simeq1$, coincides with $\gamma\simeq\omega$ as expected. Using
+Fermi-surface Urca rates~\cite{AlfordHarris2018,Alford2020} we find
+$\gamma=\omega$ at $T\simeq5$~MeV for a 1~kHz oscillation, nearly independent
+of density, consistent with~\cite{AlfordHarris2019}. Cold stars, $T\ll1$~MeV,
+are firmly frozen, with $\gamma$ many orders of magnitude below $\omega$.
 
 \section{Convention dependence: a caveat}
 
@@ -233,9 +237,20 @@ $p$-branch above. In practice it is more robust to separate the branches by the
 buoyancy scale, since the $g$-branch is confined to $\omega<\max N$ while the
 $f$-mode sits near the dynamical frequency $\sqrt{GM/R^{3}}$; node counting near
 the surface is sensitive to where the star is truncated. For a complex $N^{2}$
-the eigenfrequency is found by continuing the real root into the lower half
-plane, which also fixes the mode's identity, node counting having no meaning for
-a complex eigenfunction.
+the eigenfrequency is found by continuing the real root off the real axis,
+which also fixes the mode's identity, node counting having no meaning for a
+complex eigenfunction. Note that Eqs.~(\ref{eq:cowling}) contain $\omega$ only
+as $\omega^{2}$ and so are blind to the sign convention, whereas
+Eq.~(\ref{eq:cdy}) is linear in $\omega$; with the $e^{+i\omega t}$ convention
+adopted here a damped mode has $\mathrm{Im}\,\omega>0$, and mixing conventions
+silently reverses the sign of the damping.
+
+As a check of the implementation, a $1.4\,M_{\odot}$ DD2 star built with both
+sound speeds evaluated consistently gives $\nu_{g_{1}}=150$~Hz, within the
+$130$--$270$~Hz spread of published cold nucleonic results collected in Table~I
+of Ref.~\cite{Jaikumar2021}, and an $f$-mode at $2.06$~kHz. An equation of
+state with a single sound speed returns the $f$-mode alone and no $g$-branch at
+all, as it must.
 
 \section{Prospects for detection}
 

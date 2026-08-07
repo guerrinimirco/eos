@@ -39,12 +39,13 @@ def test_unrepresentable_nmp_is_reported_not_raised(dd2_nmp):
 
 def test_large_bag_constant_removes_the_transition(dd2_nmp):
     """A high enough bag constant makes quark matter unfavourable everywhere.
-    'No window' is the correct physical answer, not a solver failure — the
-    scan must record it and carry on."""
+    'No transition' is the correct physical answer, not a solver failure — the
+    scan must record it, name it as physics rather than as a failed location,
+    and carry on."""
     row = scan_point(dd2_nmp, {"B4": 400.0}, FLAGS, GRID)
     assert row["inversion_ok"] == 1.0
     assert row["window_exists"] == 0.0
-    assert row["status"] == "no_window"
+    assert row["status"] == "no_transition"
 
 
 def test_onset_rises_with_the_bag_constant(dd2_nmp):

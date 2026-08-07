@@ -28,7 +28,7 @@ Usage:
 import numpy as np
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Tuple, Union
+from typing import Any, List, Optional, Dict, Tuple, Union
 
 from eos.alphabag.parameters import AlphaBagParams, get_alphabag_default, get_alphabag_custom
 

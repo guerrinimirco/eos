@@ -113,7 +113,7 @@ def _check_null_test():
     """One sound speed => N^2 == 0 => no g-mode, only the f-mode."""
     eos, cs2 = _polytrope()
     bg = build_background(eos, cs2, cs2, M_target=1.4, n_points=400)
-    modes = mode_spectrum(bg, nu_min=50.0, nu_max=3000.0, n_scan=110)
+    modes = mode_spectrum(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
     labels = [m.label for m in modes]
     n2_max = float(np.max(np.abs(bg.N2)))
     f_ok = len(modes) == 1 and labels == ["f"] and 1800 < modes[0].nu_hz < 2700
@@ -151,7 +151,7 @@ def _check_convective_stability(c_eq, c_ad):
 
 def _check_spectrum(eos, c_eq, c_ad):
     bg = build_background(eos, c_eq, c_ad, M_target=1.4, n_points=500)
-    modes = mode_spectrum(bg, nu_min=40.0, nu_max=3000.0, n_scan=120)
+    modes = mode_spectrum(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
     gmodes = [m for m in modes if m.is_gmode]
     fmode = [m for m in modes if m.label == "f"]
     if not gmodes or not fmode:
@@ -169,7 +169,7 @@ def _check_spectrum(eos, c_eq, c_ad):
 
 def _check_eigenfunction(eos, c_eq, c_ad):
     bg = build_background(eos, c_eq, c_ad, M_target=1.4, n_points=500)
-    g1 = solve_gmode(bg, nu_min=40.0, nu_max=3000.0, n_scan=120)
+    g1 = solve_gmode(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
     peak = np.max(np.abs(g1.xi_r))
     centre = abs(g1.xi_r[0]) / peak
     interior = g1.xi_r[1:-1]

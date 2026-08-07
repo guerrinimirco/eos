@@ -163,19 +163,34 @@ class StellarBackground:
         """True when a finite reaction rate has made the buoyancy complex."""
         return np.iscomplexobj(self.N2) or np.iscomplexobj(self.cs2_ad)
 
-    def interpolators(self):
-        """Monotone interpolants of every field needed by the mode equations.
+    def interpolators(self, refine=4):
+        """Interpolants of every field the mode equations need.
 
-        Returns a dict of callables of `r`. Complex fields are interpolated as
-        two real splines and recombined, since `PchipInterpolator` is real-only.
+        Returns a dict of callables of `r`. The mode solver evaluates these
+        several hundred thousand times per eigenvalue search, once per
+        Runge-Kutta stage, always on a scalar radius -- so per-call overhead,
+        not accuracy, is what dominates the cost. Each field is therefore
+        pre-sampled from a monotone `PchipInterpolator` onto a grid `refine`
+        times finer than the background and then evaluated with `np.interp`,
+        which is a single C call. The shape comes from the spline; the lookup
+        is linear between samples that are already several times denser than
+        the profile the spline was built from.
+
+        Complex fields are carried as two real tables and recombined, since
+        both `PchipInterpolator` and `np.interp` are real-only.
         """
+        fine = np.linspace(self.r[0], self.r[-1],
+                           max(int(refine * self.r.size), self.r.size))
+
         def build(y):
             y = np.asarray(y)
             if np.iscomplexobj(y):
-                re = PchipInterpolator(self.r, y.real, extrapolate=True)
-                im = PchipInterpolator(self.r, y.imag, extrapolate=True)
-                return lambda x: re(x) + 1j * im(x)
-            return PchipInterpolator(self.r, y, extrapolate=True)
+                re = PchipInterpolator(self.r, y.real, extrapolate=True)(fine)
+                im = PchipInterpolator(self.r, y.imag, extrapolate=True)(fine)
+                return lambda x: (np.interp(x, fine, re)
+                                  + 1j * np.interp(x, fine, im))
+            vals = PchipInterpolator(self.r, y, extrapolate=True)(fine)
+            return lambda x: np.interp(x, fine, vals)
 
         return {name: build(getattr(self, name)) for name in
                 ("m", "P", "eps", "e_lam", "e_nu", "g", "cs2_eq", "cs2_ad", "N2")}

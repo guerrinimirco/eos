@@ -19,6 +19,16 @@ a realistic grid is pure phase. `locate_window` finds the two boundaries first,
 using chi as the indicator (chi <= 0 hadronic, chi >= 1 quark, in between
 mixed), so the expensive mixed solve runs only where it is the answer.
 
+There is a trap in that second point worth stating plainly, because it produced
+silently missing transitions. chi is only readable where the mixed system has a
+solution, and below the onset it has none — so a density down there does not
+report chi <= 0, it drops out of the sweep entirely. The probe set can
+therefore begin *above* the onset with every chi > 0, whereupon no sign change
+exists to bracket and a real transition is reported as absent. `locate_window`
+answers that by walking to the boundary from a point known to be inside the
+window (`walk_to_crossing`), where a step that will not converge is itself the
+hadronic side rather than missing information.
+
 The empirical bracketing heuristics live here rather than in the residual,
 mirroring the Phase-1 split between physics and continuation.
 """
@@ -28,6 +38,12 @@ import numpy as np
 
 from eos.mixed.equilibrium.residual import mixed_slots
 from eos.mixed.solvers.point import solve_mixed
+
+#: Most single-tolerance steps `locate_window` will take when it has to walk to
+#: a boundary the probe set never bracketed. The walk normally ends within a
+#: few steps -- the probes that were dropped are the ones adjacent to the
+#: boundary -- so this is a cost ceiling, not a working limit.
+MAX_WALK = 64
 
 
 def _as_x0(result, slots):
@@ -139,6 +155,32 @@ class MixedWindow:
         location, and callers must not treat it as one."""
         return (np.isfinite(self.n_onset) and np.isfinite(self.n_offset)
                 and self.n_offset > self.n_onset)
+
+    @property
+    def reason(self):
+        """Why `exists` is False, as a distinct label; 'ok' when it is True.
+
+        The four outcomes below are not interchangeable, and reporting them as
+        one label costs the caller the ability to tell physics from failure: a
+        parametrization with no transition and one whose boundary was never
+        bracketed both look like 'no window' in a scan table, so a scan cannot
+        say how much of its reject count is real.
+
+          no_transition          chi never crossed either target on this grid
+          onset_unbracketed      chi = 1 was located, chi = 0 was not
+          offset_unbracketed     chi = 0 was located, chi = 1 was not
+          crossings_out_of_order both located, but offset <= onset
+        """
+        if self.exists:
+            return "ok"
+        on, off = np.isfinite(self.n_onset), np.isfinite(self.n_offset)
+        if on and off:
+            return "crossings_out_of_order"
+        if off:
+            return "onset_unbracketed"
+        if on:
+            return "offset_unbracketed"
+        return "no_transition"
 
     def contains(self, n_B):
         return self.exists and self.n_onset <= n_B <= self.n_offset
@@ -266,8 +308,57 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                 return bisect(target, a, b)
         return np.nan
 
+    def walk_to_crossing(target, direction):
+        """Step from the nearest mixed probe towards the chi = `target`
+        crossing, one `tol` at a time, when the probe set never bracketed it.
+
+        This covers the case the probe scan is blind to. `sweep_mixed` drops a
+        density it cannot solve, and below the onset the mixed system has no
+        solution at all, so the probe set that comes back can *begin above the
+        onset* with every chi > 0. `crossing` then finds no sign change and a
+        transition that plainly exists — its chi = 1 side is located — is
+        reported as absent. Which side of the lowest surviving probe the onset
+        falls on decides it, so the outcome moves with the parametrization, the
+        temperature and the probe count, for no physical reason.
+
+        Walking sees the boundary either way: chi crosses the target, or the
+        solve stops converging. Going down those are the same event, because
+        the formal mixed solution ceases to exist on the hadronic side — that
+        is what a dropped probe down there means. Going up, a failure is only a
+        failure; a missing pure-quark boundary is not evidence of one, so it
+        returns nan rather than inventing an offset.
+
+        Steps are `tol` and warm-started, which is the regime the mixed solve
+        is reliable in, and the answer lands already refined to `tol`, so no
+        bisection follows.
+        """
+        inside = [r for r in probes if r.in_mixed_phase]
+        if not inside:
+            return np.nan
+        r = (min(inside, key=lambda p: p.n_B) if direction < 0
+             else max(inside, key=lambda p: p.n_B))
+        for _ in range(MAX_WALK):
+            n_next = r.n_B + direction * tol
+            if not (lo <= n_next <= hi):
+                return np.nan                  # ran off the grid, not a crossing
+            stepped = sweep_mixed(par, flags, [r.n_B, n_next], eta, spec,
+                                  vmit_params=vmit_params, T=T,
+                                  x0=_as_x0(r, slots), nH0=r.th_H.n_B,
+                                  analytic_jac=analytic_jac)
+            if not stepped or abs(stepped[-1].n_B - n_next) > 1e-12:
+                return 0.5 * (n_next + r.n_B) if direction < 0 else np.nan
+            r = stepped[-1]
+            probes.append(r)
+            if (r.chi <= target) if direction < 0 else (r.chi >= target):
+                return r.n_B - 0.5 * direction * tol
+        return np.nan
+
     n_onset = crossing(0.0)
+    if not np.isfinite(n_onset):
+        n_onset = walk_to_crossing(0.0, -1)
     n_offset = crossing(1.0, above=n_onset)
+    if not np.isfinite(n_offset):
+        n_offset = walk_to_crossing(1.0, +1)
     # A crossing may be missing because the grid begins or ends inside the
     # window rather than because there is no transition; fall back to the
     # extent of the probes that actually came out mixed.

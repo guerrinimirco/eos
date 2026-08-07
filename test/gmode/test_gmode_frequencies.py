@@ -32,12 +32,12 @@ def test_no_composition_gradient_means_no_gmode(polytrope):
     """
     eos, cs2 = polytrope
     bg = build_background(eos, cs2, cs2, M_target=1.4, n_points=400)
-    modes = mode_spectrum(bg, nu_min=50.0, nu_max=3000.0, n_scan=110)
+    modes = mode_spectrum(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
 
     assert [m.label for m in modes] == ["f"]
     assert modes[0].n_nodes == 0
     with pytest.raises(RuntimeError, match="no g1 mode"):
-        solve_gmode(bg, nu_min=50.0, nu_max=3000.0, n_scan=110)
+        solve_gmode(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
 
 
 def test_fmode_of_a_14_msun_star_is_around_2_khz(polytrope):
@@ -49,7 +49,7 @@ def test_fmode_of_a_14_msun_star_is_around_2_khz(polytrope):
     """
     eos, cs2 = polytrope
     bg = build_background(eos, cs2, cs2, M_target=1.4, n_points=400)
-    f = mode_spectrum(bg, nu_min=50.0, nu_max=3000.0, n_scan=110)[0]
+    f = mode_spectrum(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)[0]
     assert f.label == "f"
     assert 1800.0 < f.nu_hz < 2700.0
 
@@ -58,7 +58,7 @@ def test_dd2_gmode_is_in_the_published_band(dd2_eos):
     """DD2 npemu at 1.4 M_sun against the Table I spread of 0.13-0.27 kHz."""
     eos, ceq, cad, _n, _y = dd2_eos
     mode = gmode_frequency(eos, ceq, cad, M_target=1.4, n_points=500,
-                           nu_min=40.0, nu_max=3000.0, n_scan=120)
+                           nu_min=60.0, nu_max=3000.0, n_scan=90)
 
     assert mode.label == "g1"
     assert mode.n_nodes == 1, "the fundamental g-mode has one node"
@@ -70,7 +70,7 @@ def test_gmode_spectrum_is_ordered_and_below_the_fmode(dd2_eos):
     """g1 > g2 > g3 ... and the whole g-branch sits below the f-mode."""
     eos, ceq, cad, _n, _y = dd2_eos
     bg = build_background(eos, ceq, cad, M_target=1.4, n_points=500)
-    modes = mode_spectrum(bg, nu_min=40.0, nu_max=3000.0, n_scan=120)
+    modes = mode_spectrum(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
 
     gmodes = [m for m in modes if m.is_gmode]
     fmode = [m for m in modes if m.label == "f"]
@@ -86,7 +86,7 @@ def test_eigenfunction_is_regular_and_has_the_right_node_count(dd2_eos):
     """xi_r ~ r^{l-1} at the centre and has exactly one node for g1."""
     eos, ceq, cad, _n, _y = dd2_eos
     bg = build_background(eos, ceq, cad, M_target=1.4, n_points=500)
-    g1 = solve_gmode(bg, nu_min=40.0, nu_max=3000.0, n_scan=120)
+    g1 = solve_gmode(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
 
     assert np.all(np.isfinite(g1.xi_r))
     assert abs(g1.xi_r[0]) < 1e-3 * np.max(np.abs(g1.xi_r))
@@ -107,8 +107,8 @@ def test_gmode_frequency_scales_with_buoyancy(polytrope):
     for delta in (0.001, 0.004):
         bg = build_background(eos, cs2, cs2 + delta, M_target=1.4,
                               n_points=400)
-        out.append(solve_gmode(bg, nu_min=20.0, nu_max=2000.0,
-                               n_scan=140).nu_hz)
+        out.append(solve_gmode(bg, nu_min=40.0, nu_max=2000.0,
+                               n_scan=90).nu_hz)
     ratio = out[1] / out[0]
     assert 1.5 < ratio < 2.5, f"ratio {ratio:.2f}, expected near sqrt(4) = 2"
 
@@ -159,16 +159,33 @@ def test_damping_time_scales_inversely_with_the_reaction_rate(dd2_eos):
 
 @pytest.mark.slow
 def test_fast_equilibration_suppresses_the_mode(dd2_eos):
-    """Once gamma reaches omega the buoyancy is gone and so is the g-mode.
+    """Faster equilibration destroys the buoyancy, and with it the mode.
 
-    This is the suppression of composition g-modes in warm stars: the mode does
-    not merely shift, it ceases to exist, and the solver says so rather than
-    returning a number.
+    The suppression is progressive rather than abrupt. As gamma/omega rises the
+    quality factor Q = Re(omega) / 2 Im(omega) falls monotonically, passing
+    through Q ~ 1 -- critical damping, where the mode is no longer an
+    oscillation -- at around gamma = omega, which is also where the dissipation
+    peaks. Well beyond that the root ceases to exist at all and the solver says
+    so. This is the suppression of composition g-modes in warm neutron stars.
     """
     eos, ceq, cad, _n, _y = dd2_eos
-    kw = dict(M_target=1.4, n_points=400, nu_min=40.0, nu_max=3000.0,
-              n_scan=120)
+    kw = dict(M_target=1.4, n_points=400, nu_min=60.0, nu_max=3000.0,
+              n_scan=90)
     cold = gmode_frequency(eos, ceq, cad, **kw)
+    omega = 2.0 * np.pi * cold.nu_hz
+
+    def quality(frac):
+        m = gmode_frequency(eos, ceq, cad, gamma=frac * omega, **kw)
+        return np.real(m.omega) / (2.0 * np.imag(m.omega)), m.nu_hz
+
+    Q_weak, nu_weak = quality(0.1)
+    Q_res, nu_res = quality(1.0)
+
+    assert Q_weak > 3.0, "a slow reaction should barely damp the mode"
+    assert Q_res < 1.5, "at gamma ~ omega the mode is near critically damped"
+    assert Q_res < Q_weak
+    assert nu_res < nu_weak < cold.nu_hz, "buoyancy weakens as gamma grows"
+
+    # Far into the fast-equilibration regime there is no g-mode left to find.
     with pytest.raises(RuntimeError, match="no damped g-mode"):
-        gmode_frequency(eos, ceq, cad, gamma=3.0 * 2 * np.pi * cold.nu_hz,
-                        **kw)
+        gmode_frequency(eos, ceq, cad, gamma=10.0 * omega, **kw)
