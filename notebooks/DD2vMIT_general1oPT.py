@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.4
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -117,7 +117,7 @@ from eos.dd2.solver import sweep_beta_eq_octet, sweep_octet
 from eos.vmit.parameters import get_vmit_custom
 from eos.vmit.eos import solve_vmit_beta_eq, solve_vmit_fixed_yc
 from eos.tov.solver import find_mmax_precise
-from eos.tov.rotating import (kepler_sequence, rotating_grid,
+from eos.tov.rotating import (kepler_sequence, rotating_grid, turning_point,
                               GRID_COLUMNS, KEPLER_COLUMNS)
 from eos.tov.rns_backend import have_rns
 from eos.mixed import (
@@ -130,7 +130,7 @@ from eos.mixed import (
 )
 
 from eos.general.figure_style import (
-    set_global_style, paper_grid, save_figure, particle_style,
+    set_global_style, set_paper_style, paper_grid, save_figure,
     LABELS, STANDARD_COLORS,
 )
 from eos.general.observational_constraints import (
@@ -890,10 +890,28 @@ TOV_ETAS = ETA_LIST     # TOV is beta-equilibrium, T = 0 only
 BUILD_JOBS = len(ETA_LIST)
 
 # ---- figures (Part III) ---------------------------------------------------
-# paper_grid builds at the true page width so 10 pt text lands as 10 pt on
-# paper. FIG_WIDTH overrides that when a panel is too dense to read at 7 in —
-# set it back to None for a figure going into the paper at 1:1.
-FIG_WIDTH = 9.0                 # inches, or None to use the true PRD width
+# TUNABLE: pt sizes for every paper figure, matching the 2fam_PNS_nucleation
+# set. fontsize = title/fallback, labelsize = axis names + tick numbers,
+# legendsize = legend, aspect = panel W/H. Every figure goes through
+# paper_grid(**PAPER_STYLE); no cell writes plt.rcParams directly.
+PAPER_STYLE = dict(fontsize=11, labelsize=11, legendsize=9, aspect=1.1)
+set_paper_style(**{k: v for k, v in PAPER_STYLE.items() if k != "aspect"})
+
+# paper_grid builds at the true page width, so the pt sizes above land as-is on
+# paper. None = that true width (7 in for mode='double'). The 3x2 composition
+# figures carry ~15 curves per panel and are unreadable at 7 in, so they alone
+# override it — at the cost of being rescaled in \includegraphics.
+FIG_WIDTH = None                # 2x2 and 1x2 figures: true PRD page width
+FIG_WIDE = 10.0                 # inches, the 3x2 figures only
+
+LW_MAIN = 1.8                   # model curves
+LW_THIN = 1.2                   # secondary curves (per-phase, pure branches)
+LW_GUIDE = 0.9                  # axis guides, causal bound, reference lines
+
+# Density axes are drawn in units of saturation density over this range. n_B
+# itself spans four decades once the crust is included, which compresses
+# everything that matters into the right-hand third of the panel.
+NB_LIM = (0.5, 10.0)            # n_B / n_sat
 Y_FLOOR = 1e-4                  # smallest particle fraction drawn
 
 # ---- parameter scan (II.4) ------------------------------------------------
@@ -1551,12 +1569,13 @@ COLOR_OF = {eta: ETA_COLORS[i] for i, eta in enumerate(ETA_LIST)}
 
 
 #: How each equilibrium mode is named in a panel title. The fixed-fraction
-#: modes say "fixed" and let the fraction that follows do the identifying.
+#: modes contribute nothing: the fraction that follows already identifies them,
+#: and "fixed Y_C = 0.1" is longer than "Y_C = 0.1" without saying more.
 MODE_LABEL = {
     "beta_eq_neutrinoless": r"$\beta$-eq",
     "beta_eq_neutrino_trapped": r"$\nu$-trapped",
-    "fixed_YC": "fixed",
-    "fixed_YC_YS": "fixed",
+    "fixed_YC": "",
+    "fixed_YC_YS": "",
 }
 
 
@@ -1573,9 +1592,23 @@ def panel_title(mode, fracs, T=None, eta=None):
         bits.append(rf"$T = {T:g}$ MeV")
     if eta is not None:
         bits.append(rf"$\eta = {eta:g}$")
-    # "fixed Y_C = 0.1" reads as one phrase; everything else is a list.
-    return (bits[0] + " " + ",  ".join(bits[1:])
-            if bits[0] == "fixed" else ",  ".join(bits))
+    return ",  ".join(b for b in bits if b)
+
+
+def xn(d):
+    """The density column of a table in units of saturation density.
+
+    Every density axis in Part III is n_B/n_sat: it is the dimensionless
+    number the physics is actually discussed in, and it lets panels built on
+    different parametrizations be compared without rescaling by eye.
+    """
+    return np.asarray(d["n_B"]) / N_SAT
+
+
+def set_nb_axis(ax):
+    """Label and bound a density axis. One call so every panel matches."""
+    ax.set_xlabel(LABELS["nB_n0"])
+    ax.set_xlim(*NB_LIM)
 
 
 def slice_at(cols, T, fracs, tol=1e-6):
@@ -1658,6 +1691,88 @@ def window_of(mode, fracs, T, eta):
     return np.nan, np.nan
 
 
+# --------------------------------------------------------------- completeness
+# II.2 wrote one row per (mode, fractions, T, eta) saying whether that slice
+# came out complete. The figures consult it, because an incomplete slice is not
+# merely missing a few points: the stitched equation of state then joins the
+# hadronic wing straight onto a window sampled at one or two densities, the
+# pressure is no longer monotone across the join, and every derivative taken
+# from it is wrong. A single such slice produced c_eq^2 = -1.4 before this gate
+# existed. Curves are dropped and counted rather than drawn.
+try:
+    _rep = report_rows                       # II.2 ran in this session
+except NameError:                            # or read what it wrote
+    _rep = []
+    _rep_path = OUT / "completeness.csv"
+    if _rep_path.is_file():
+        import csv as _csv
+        with open(_rep_path) as _fh:
+            for _r in _csv.DictReader(_fh):
+                _rep.append({k: (v if k in ("mode", "status", "reason")
+                                 else float(v)) for k, v in _r.items()})
+    else:
+        print("no completeness.csv and II.2 has not run — figures cannot check "
+              "which slices are complete and will draw everything")
+
+COMPLETE = {(r["mode"], frac_key({k: r[k] for k in ("Y_C", "Y_S", "Y_L")
+                                  if k in r and np.isfinite(r[k])}),
+             round(float(r["T"]), 6), round(float(r["eta"]), 6)): r["status"]
+            for r in _rep}
+
+
+def is_complete(mode, fracs, T, eta):
+    """Did this slice come out complete in II.2?
+
+    True also when there is simply no transition: a pure hadronic branch is a
+    perfectly good equation of state. What is rejected is a window that exists
+    but was sampled with holes.
+    """
+    if not COMPLETE:
+        return True                          # nothing to check against
+    s = COMPLETE.get((mode, frac_key(fracs), round(float(T), 6),
+                      round(float(eta), 6)))
+    return s is None or s in ("ok", "no_transition")
+
+
+def _edge_value(x, y, x0, k=3):
+    """`y` linearly extrapolated to `x0` from the k samples nearest that end.
+
+    np.interp would clamp to the first/last sample instead, which puts the
+    reported boundary up to a full grid spacing inside the true one — visible
+    in the (mu_B, T) plane as a step wherever the grid happens to fall.
+    """
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    if x.size < 2:
+        return float(y[0]) if x.size else np.nan
+    lo = x0 <= x[0]
+    xs, ys = (x[:k], y[:k]) if lo else (x[-k:], y[-k:])
+    if xs.size < 2:
+        return float(ys[0])
+    slope, inter = np.polyfit(xs, ys, 1)
+    return float(slope * x0 + inter)
+
+
+def mu_boundaries(mode, fracs, T, eta):
+    """(mu_B at the onset, mu_B at the offset) for one slice, or (nan, nan).
+
+    The mixed table holds exactly the window, so its first and last rows bracket
+    the two boundaries — but they are the nearest GRID points inside them, not
+    the boundaries themselves. `locate_window` bisected the crossings to much
+    better than a grid spacing, so mu_B is extrapolated onto those densities
+    rather than read off the end rows.
+    """
+    d = slice_at(loaded.get(mode, {}).get(eta, {}), T, fracs)
+    if not d or d["n_B"].size == 0:
+        return np.nan, np.nan
+    n_lo, n_hi = window_of(mode, fracs, T, eta)
+    if not (np.isfinite(n_lo) and np.isfinite(n_hi)):
+        return float(d["mu_B"][0]), float(d["mu_B"][-1])
+    return (_edge_value(d["n_B"], d["mu_B"], n_lo),
+            _edge_value(d["n_B"], d["mu_B"], n_hi))
+
+
+
+
 
 
 # %% [markdown]
@@ -1670,6 +1785,10 @@ def window_of(mode, fracs, T, eta):
 #
 # The two pure branches are drawn underneath in grey, continued past the transition where
 # they are metastable, so the gain from the transition is visible rather than implied.
+#
+# A slice II.2 flagged as incomplete is skipped and counted at the end of the cell, not
+# drawn: a window sampled with holes gives a pressure that is not monotone across the
+# join with its wing, which looks like a physical feature and is not one.
 
 # %%
 PANELS = [
@@ -1680,16 +1799,19 @@ PANELS = [
 ]
 LAYOUT = "2x2"
 SHOW_PURE = True
-LOG_P = True        # False to see the transition region on a linear scale
 
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.2)
+                       width=FIG_WIDTH, **PAPER_STYLE)
+skipped = []
 for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
     for eta in sorted(ETA_LIST):
+        if not is_complete(mode, fracs, T, eta):
+            skipped.append((mode, tuple(fracs.items()), T, eta))
+            continue
         d = full_eos(mode, fracs, T, eta)
         if not d:
             continue
-        ax.plot(d["n_B"], d["P"], "-", color=COLOR_OF[eta],
+        ax.plot(xn(d), d["P"], "-", lw=LW_MAIN, color=COLOR_OF[eta],
                 label=rf"$\eta = {eta:g}$")
 
     if SHOW_PURE:
@@ -1698,19 +1820,21 @@ for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
                                  (pure_quark.get(key), (0, (4, 2)),
                                   "pure quark")):
             if pure is not None and pure["n_B"].size:
-                ax.plot(pure["n_B"], pure["P"], ls=style, lw=1.0, zorder=0,
+                ax.plot(xn(pure), pure["P"], ls=style, lw=LW_THIN, zorder=0,
                         color=STANDARD_COLORS["Gray"], label=lab)
 
-    ax.set_xlabel(LABELS["nB"])
+    set_nb_axis(ax)
     ax.set_ylabel(LABELS["P"])
     ax.set_title(panel_title(mode, fracs, T))
-    if LOG_P:
-        ax.set_yscale("log")
 
 # One legend for the whole figure: every panel carries the same curves.
-axes.flat[0].legend(fontsize=6, ncol=2, loc="lower right")
+axes.flat[0].legend(ncol=2, loc="upper left")
 save_figure(fig, FIG_DIR / "fig01_P_vs_nB")
 plt.show()
+if skipped:
+    print(f"{len(skipped)} incomplete slice(s) not drawn:")
+    for s in skipped:
+        print("   ", s)
 
 
 # %% [markdown]
@@ -1735,22 +1859,25 @@ PANELS = [
 LAYOUT = "2x2"
 
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.2)
+                       width=FIG_WIDTH, **PAPER_STYLE)
 for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
     for eta in sorted(ETA_LIST):
+        if not is_complete(mode, fracs, T, eta):
+            continue
         d = full_eos(mode, fracs, T, eta)
         if not d:
             continue
-        ax.plot(d["n_B"], d["chi"], "-", color=COLOR_OF[eta],
+        ax.plot(xn(d), d["chi"], "-", lw=LW_MAIN, color=COLOR_OF[eta],
                 label=rf"$\eta = {eta:g}$")
     for y in (0.0, 1.0):
-        ax.axhline(y, color=STANDARD_COLORS["Gray"], lw=0.7, ls="--", zorder=0)
-    ax.set_xlabel(LABELS["nB"])
+        ax.axhline(y, color=STANDARD_COLORS["Gray"], lw=LW_GUIDE, ls="--",
+                   zorder=0)
+    set_nb_axis(ax)
     ax.set_ylabel(r"quark volume fraction  $\chi$")
     ax.set_ylim(-0.05, 1.05)
     ax.set_title(panel_title(mode, fracs, T))
 
-axes.flat[0].legend(fontsize=7, ncol=2, loc="center right")
+axes.flat[0].legend(ncol=2, loc="upper left")
 save_figure(fig, FIG_DIR / "fig02_chi_vs_nB")
 plt.show()
 
@@ -1775,7 +1902,8 @@ plt.show()
 INLINE_LABELS = True
 
 fig, axes = paper_grid("1x2", mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.0)
+                       width=FIG_WIDTH,
+                       **{**PAPER_STYLE, "aspect": 1.0})
 axMR, axL = axes[0]
 
 # Constraints first, so the model curves are drawn over them.
@@ -1787,10 +1915,11 @@ for eta in sorted(tov):
     idx, _, M_max = find_mmax_precise(r)
     M, R, Lam = r[:idx + 1, 4], r[:idx + 1, 3], r[:idx + 1, 6]
     c = COLOR_OF.get(eta, STANDARD_COLORS["Gray"])
-    axMR.plot(R, M, "-", color=c, zorder=4,
+    axMR.plot(R, M, "-", lw=LW_MAIN, color=c, zorder=4,
               label=rf"$\eta = {eta:g}$  ($M_{{\max}} = {M_max:.2f}\,M_\odot$)")
     axMR.plot(tov[eta]["R_Mmax"], M_max, "o", ms=5, color=c, zorder=5)
-    axL.plot(M, Lam, "-", color=c, zorder=4, label=rf"$\eta = {eta:g}$")
+    axL.plot(M, Lam, "-", lw=LW_MAIN, color=c, zorder=4,
+             label=rf"$\eta = {eta:g}$")
 
 axMR.set_xlabel(r"$R$  [km]")
 axMR.set_ylabel(r"$M$  [$M_\odot$]")
@@ -1799,9 +1928,8 @@ axMR.set_title("mass-radius")
 # wherever the widest posterior reaches.
 axMR.set_xlim(9.0, 16.0)
 axMR.set_ylim(0.5, 2.8)
-# Lower right: the lower-left corner is where the HESS blob and its inline
-# label sit.
-axMR.legend(fontsize=6.5, loc="lower right")
+# Lower right: the lower-left corner is where the HESS blob and its label sit.
+axMR.legend(fontsize=7, loc="lower right")
 
 axL.set_xlabel(r"$M$  [$M_\odot$]")
 axL.set_ylabel(r"$\Lambda$")
@@ -1809,7 +1937,7 @@ axL.set_title("tidal deformability")
 axL.set_yscale("log")
 axL.set_xlim(1.0, 2.2)
 axL.set_ylim(5.0, 3e3)
-axL.legend(fontsize=6.5, loc="lower left")
+axL.legend(fontsize=7, loc="lower left")
 
 save_figure(fig, FIG_DIR / "fig03_MR_and_tidal")
 plt.show()
@@ -1824,14 +1952,6 @@ plt.show()
 # charged leptons are tied to their own phase, and collapsing to the Maxwell density jump
 # at η = 1.
 #
-# The grey contours are lines of **constant entropy per baryon**. They are what a
-# supernova core or a merger remnant actually moves along — those are close to adiabatic,
-# not isothermal — so reading the phase diagram along an iso-S line rather than
-# horizontally tells you whether a collapsing or merging star crosses the transition at
-# all. They are built by contouring `S_per_B` from the tables already on disk, which is
-# why they cost nothing; they are drawn for `ETA_ISO` alone, since outside the window they
-# do not depend on η and inside it they shift by less than the line width.
-#
 # A panel whose curves stop short is one where the higher temperatures did not complete —
 # check `completeness.csv` from II.2 before reading anything into where a boundary ends.
 
@@ -1843,40 +1963,25 @@ PANELS = [
     ("fixed_YC",             {"Y_C": 0.5}),
 ]
 LAYOUT = "2x2"
-ISO_S = [0.5, 1.0, 2.0, 3.0, 4.0]     # entropy per baryon, k_B
-ETA_ISO = 0.0                          # the eta the iso-S contours are drawn for
 
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.2)
+                       width=FIG_WIDTH, **PAPER_STYLE)
 for ax, (mode, fracs) in zip(axes.flat, PANELS):
-    # ---- iso-entropy contours, underneath everything else -----------------
-    S = np.full((len(T_LIST), len(NB)), np.nan)
-    for i, T in enumerate(T_LIST):
-        d = full_eos(mode, fracs, T, ETA_ISO)
-        if d and d["n_B"].size > 2:
-            S[i] = np.interp(NB, d["n_B"], d["S_per_B"],
-                             left=np.nan, right=np.nan)
-    if np.isfinite(S).any():
-        cs = ax.contour(NB, T_LIST, S, levels=ISO_S, colors="0.55",
-                        linewidths=0.7, zorder=1)
-        ax.clabel(cs, fmt="%g", fontsize=5.5, inline=True)
-
-    # ---- the two boundaries, one colour per eta ---------------------------
     for eta in sorted(ETA_LIST):
         bounds = np.array([window_of(mode, fracs, T, eta) for T in T_LIST])
-        onset, offset = bounds[:, 0], bounds[:, 1]
+        onset, offset = bounds[:, 0] / N_SAT, bounds[:, 1] / N_SAT
         good = np.isfinite(onset) & np.isfinite(offset)
         if not good.any():
             continue
         c = COLOR_OF[eta]
         Ts = np.asarray(T_LIST, dtype=float)
-        ax.plot(onset[good], Ts[good], "-", color=c, zorder=3,
+        ax.plot(onset[good], Ts[good], "-", lw=LW_MAIN, color=c, zorder=3,
                 label=rf"$\eta = {eta:g}$")
-        ax.plot(offset[good], Ts[good], "--", color=c, zorder=3)
+        ax.plot(offset[good], Ts[good], "--", lw=LW_MAIN, color=c, zorder=3)
         ax.fill_betweenx(Ts[good], onset[good], offset[good], color=c,
                          alpha=0.10, lw=0, zorder=2)
 
-    ax.set_xlabel(LABELS["nB"])
+    set_nb_axis(ax)
     ax.set_ylabel(LABELS["T"])
     ax.set_title(panel_title(mode, fracs))
 
@@ -1884,13 +1989,82 @@ for ax, (mode, fracs) in zip(axes.flat, PANELS):
 # which at this width wraps over the entries.
 axes.flat[0].plot([], [], "-", color="0.3", label=r"onset ($\chi = 0$)")
 axes.flat[0].plot([], [], "--", color="0.3", label=r"offset ($\chi = 1$)")
-axes.flat[0].legend(fontsize=6, ncol=2, loc="upper left")
+axes.flat[0].legend(fontsize=7, ncol=2, loc="upper left")
 save_figure(fig, FIG_DIR / "fig04_boundaries_nB_T")
 plt.show()
 
 
 # %% [markdown]
-# ## III.5 Phase boundaries in the (μ_B, T) plane
+# ## III.5 The same boundaries against an adiabat
+#
+# Lines of **constant entropy per baryon**, drawn over the coexistence band of a single η.
+# They are separated from III.4 because they belong to one η and one only: an iso-S line
+# is a property of the equation of state, and inside the window that equation of state
+# depends on η, so overlaying one η's adiabats on four η's boundaries would be comparing
+# different systems in the same panel.
+#
+# They matter because a collapsing supernova core or a merger remnant evolves close to
+# adiabatically, not isothermally. Reading the diagram along an iso-S line rather than
+# horizontally is what says whether such a star crosses the transition at all: an adiabat
+# that runs parallel to the onset never enters the window however hot it gets.
+#
+# The contours cost nothing — they are `S_per_B` from the tables already on disk,
+# interpolated onto a common density grid and contoured.
+
+# %%
+PANELS = [
+    ("beta_eq_neutrinoless", {}),
+    ("fixed_YC",             {"Y_C": 0.1}),
+    ("fixed_YC",             {"Y_C": 0.3}),
+    ("fixed_YC",             {"Y_C": 0.5}),
+]
+LAYOUT = "2x2"
+ETA_ISO = 0.0                          # the single eta this figure is drawn for
+ISO_S = [0.5, 1.0, 2.0, 3.0, 4.0]      # entropy per baryon, k_B
+
+fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
+                       width=FIG_WIDTH, **PAPER_STYLE)
+_nb_axis = NB_LIM[0] + (NB_LIM[1] - NB_LIM[0]) * np.linspace(0, 1, 240)
+for ax, (mode, fracs) in zip(axes.flat, PANELS):
+    # ---- iso-entropy contours --------------------------------------------
+    S = np.full((len(T_LIST), _nb_axis.size), np.nan)
+    for i, T in enumerate(T_LIST):
+        d = full_eos(mode, fracs, T, ETA_ISO)
+        if d and d["n_B"].size > 2:
+            S[i] = np.interp(_nb_axis, xn(d), d["S_per_B"],
+                             left=np.nan, right=np.nan)
+    if np.isfinite(S).any():
+        cs = ax.contour(_nb_axis, T_LIST, S, levels=ISO_S, colors="0.45",
+                        linewidths=LW_GUIDE, zorder=1)
+        ax.clabel(cs, fmt="%g", fontsize=7.5, inline=True)
+
+    # ---- the coexistence band of the one eta ------------------------------
+    bounds = np.array([window_of(mode, fracs, T, ETA_ISO) for T in T_LIST])
+    onset, offset = bounds[:, 0] / N_SAT, bounds[:, 1] / N_SAT
+    good = np.isfinite(onset) & np.isfinite(offset)
+    if good.any():
+        c = COLOR_OF[ETA_ISO]
+        Ts = np.asarray(T_LIST, dtype=float)
+        ax.plot(onset[good], Ts[good], "-", lw=LW_MAIN, color=c, zorder=3)
+        ax.plot(offset[good], Ts[good], "--", lw=LW_MAIN, color=c, zorder=3)
+        ax.fill_betweenx(Ts[good], onset[good], offset[good], color=c,
+                         alpha=0.13, lw=0, zorder=2)
+
+    set_nb_axis(ax)
+    ax.set_ylabel(LABELS["T"])
+    ax.set_title(panel_title(mode, fracs, eta=ETA_ISO))
+
+axes.flat[0].plot([], [], "-", color="0.3", label=r"onset ($\chi = 0$)")
+axes.flat[0].plot([], [], "--", color="0.3", label=r"offset ($\chi = 1$)")
+axes.flat[0].plot([], [], "-", color="0.45", lw=LW_GUIDE,
+                  label=r"$S/n_B$ [$k_B$]")
+axes.flat[0].legend(fontsize=7, loc="upper left")
+save_figure(fig, FIG_DIR / "fig05_isentropes")
+plt.show()
+
+
+# %% [markdown]
+# ## III.6 Phase boundaries in the (μ_B, T) plane
 #
 # The same boundaries against baryon chemical potential rather than density — the plane a
 # QCD phase diagram is normally drawn in, and the one in which the two constructions look
@@ -1903,9 +2077,16 @@ plt.show()
 # so the band reopens. Comparing this figure with III.4 is the cleanest way to see that
 # the width of a mixed phase is a statement about density, not about chemical potential.
 #
-# The boundary values are read off the first and last converged row of each window in the
-# saved tables, so a window sampled with holes at its edges reports slightly inside its
-# true boundary. `completeness.csv` says which those are.
+# **The dot is the critical point** — the hottest slice that still has a window, drawn
+# only when a *hotter* tabulated slice has none, so that coexistence is seen to end rather
+# than merely to run out of table. If a curve reaches the top of the panel without a dot,
+# the transition has not closed by `max(T_LIST)` and the critical point is above the grid.
+# Where it is drawn it is resolved only as well as `T_LIST` is, so refine `T_LIST` around
+# it before quoting a number.
+#
+# μ_B at each boundary is *extrapolated* onto the bisected crossing density rather than
+# read off the nearest converged row, which is what the grid spacing would otherwise
+# quantise it to.
 
 # %%
 PANELS = [
@@ -1916,21 +2097,8 @@ PANELS = [
 ]
 LAYOUT = "2x2"
 
-
-def mu_boundaries(mode, fracs, T, eta):
-    """(mu_B at the onset, mu_B at the offset) for one slice, or (nan, nan).
-
-    The mixed table holds exactly the window, so its first and last rows in
-    density ARE the two boundaries.
-    """
-    d = slice_at(loaded.get(mode, {}).get(eta, {}), T, fracs)
-    if not d or d["n_B"].size == 0:
-        return np.nan, np.nan
-    return float(d["mu_B"][0]), float(d["mu_B"][-1])
-
-
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.2)
+                       width=FIG_WIDTH, **PAPER_STYLE)
 for ax, (mode, fracs) in zip(axes.flat, PANELS):
     for eta in sorted(ETA_LIST):
         bounds = np.array([mu_boundaries(mode, fracs, T, eta) for T in T_LIST])
@@ -1940,33 +2108,50 @@ for ax, (mode, fracs) in zip(axes.flat, PANELS):
             continue
         c = COLOR_OF[eta]
         Ts = np.asarray(T_LIST, dtype=float)
-        ax.plot(lo[good], Ts[good], "-", color=c, zorder=3,
+        ax.plot(lo[good], Ts[good], "-", lw=LW_MAIN, color=c, zorder=3,
                 label=rf"$\eta = {eta:g}$")
-        ax.plot(hi[good], Ts[good], "--", color=c, zorder=3)
+        ax.plot(hi[good], Ts[good], "--", lw=LW_MAIN, color=c, zorder=3)
         ax.fill_betweenx(Ts[good], lo[good], hi[good], color=c, alpha=0.10,
                          lw=0, zorder=2)
+        # The critical point, but ONLY if coexistence actually ends inside the
+        # tabulated range: the hottest slice with a window must have a hotter
+        # slice above it that has none. If the window survives to max(T_LIST)
+        # there is no critical point on this grid — the transition simply has
+        # not closed yet — and marking the last grid temperature would invent
+        # one out of where the table happens to stop.
+        T_hot = Ts[good].max()
+        if (Ts > T_hot).any():
+            j = int(np.argmax(Ts[good]))
+            ax.plot(0.5 * (lo[good][j] + hi[good][j]), T_hot, "o", ms=6,
+                    color=c, mec="k", mew=0.8, zorder=6)
 
     ax.set_xlabel(LABELS["mu_B"])
     ax.set_ylabel(LABELS["T"])
     ax.set_title(panel_title(mode, fracs))
 
-axes.flat[0].legend(fontsize=6.5, ncol=2, loc="upper left")
-save_figure(fig, FIG_DIR / "fig05_boundaries_muB_T")
+axes.flat[0].plot([], [], "o", ms=6, color="0.3", mec="k", mew=0.8,
+                  label="critical point")
+axes.flat[0].legend(fontsize=7, ncol=2, loc="upper right")
+save_figure(fig, FIG_DIR / "fig06_boundaries_muB_T")
 plt.show()
 
 
 # %% [markdown]
-# ## III.6 Composition through the transition
+# ## III.7 Composition through the transition
 #
 # Particle fractions from the corresponding densities: Y_h = (1−χ) n_h^H / n_B for the
 # hadrons and Y_q = χ n_q^Q / n_B for the quarks, so the curves sum consistently across
-# the mixed phase. Colour is the particle and linestyle the multiplet — nucleons solid,
-# hyperons dashed, Δ dash-dot, quarks densely dashed, leptons dotted — so the figure
-# survives being printed in black and white.
+# the mixed phase.
 #
-# `PANELS` entries here carry an η as well, because composition is the one place where η
-# acts visibly: it decides how much charge each phase has to carry on its own, and
-# therefore how the proton and the electron fractions behave through the window.
+# `SPECIES_STYLE` below is the whole colour/linestyle scheme, written out species by
+# species so it can be edited directly. Line style separates the multiplets — nucleons
+# solid, hyperons dashed, Δ dash-dot, quarks long-dashed, leptons dotted — so the figure
+# survives black and white, and within a multiplet the colours are chosen to be
+# distinguishable rather than to pair a quark with a hadron.
+#
+# `PANELS` entries carry an η as well, because composition is where η acts visibly: it
+# decides how much charge each phase must carry alone, and therefore how the proton and
+# electron fractions behave through the window.
 
 # %%
 PANELS = [
@@ -1979,52 +2164,77 @@ PANELS = [
 ]
 LAYOUT = "3x2"
 
+# species -> (colour, linestyle). Edit freely; anything not listed falls back
+# to grey solid. Linestyle = multiplet, colour = species within it.
+SPECIES_STYLE = {
+    # nucleons — solid
+    "n":       ("#000000", "-"),
+    "p":       ("#0072B2", "-"),
+    # hyperons — dashed
+    "Lambda":  ("#009E73", "--"),
+    "Sigma-":  ("#CC79A7", "--"),
+    "Sigma0":  ("#E69F00", "--"),
+    "Sigma+":  ("#8B4513", "--"),
+    "Xi-":     ("#56B4E9", "--"),
+    "Xi0":     ("#7570B3", "--"),
+    # Delta quartet — dash-dot
+    "Delta-":  ("#D55E00", "-."),
+    "Delta0":  ("#B22222", "-."),
+    "Delta+":  ("#FF69B4", "-."),
+    "Delta++": ("#8B008B", "-."),
+    # quarks — long dashed, and drawn heavier: above the offset they are the
+    # only thing left, so they should read as the dominant curves. Their three
+    # colours are chosen not to repeat any hadron's.
+    "u":       ("#E7298A", (0, (6, 2))),
+    "d":       ("#66A61E", (0, (6, 2))),
+    "s":       ("#E6AB02", (0, (6, 2))),
+    # leptons — dotted
+    "e":       ("#444444", ":"),
+    "mu-":     ("#999999", ":"),
+}
+QUARKS = ("u", "d", "s")
+
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.35)
+                       width=FIG_WIDE, **{**PAPER_STYLE, "aspect": 1.35})
 for ax, (mode, fracs, T, eta) in zip(axes.flat, PANELS):
     d = full_eos(mode, fracs, T, eta)
     if not d:
         ax.set_title(panel_title(mode, fracs, T, eta) + "  — no data")
         continue
 
-    # Only the species that actually appear: a curve pinned at the floor is
-    # noise, and with hyperons and Deltas on there are two dozen of them.
-    species = sorted(k[2:] for k in d if k.startswith("Y_")
-                     and k[2:] not in ("C", "S", "B_H", "B_Q", "C_H", "C_Q",
-                                       "S_H", "S_Q", "L_H", "L_Q", "L_G"))
-    for sp in species:
-        y = d[f"Y_{sp}"]
-        if not np.isfinite(y).any() or np.nanmax(y) < Y_FLOOR:
+    for sp, (colour, style) in SPECIES_STYLE.items():
+        y = d.get(f"Y_{sp}")
+        if y is None or not np.isfinite(y).any() or np.nanmax(y) < Y_FLOOR:
             continue
-        colour, style = particle_style(sp)
-        ax.plot(d["n_B"], y, ls=style, lw=1.2, color=colour, label=sp)
+        ax.plot(xn(d), y, ls=style, color=colour, label=sp,
+                lw=LW_MAIN if sp in QUARKS else LW_THIN)
 
     mixed = (d["chi"] > 0.0) & (d["chi"] < 1.0)
     if mixed.any():
-        ax.axvspan(d["n_B"][mixed].min(), d["n_B"][mixed].max(),
+        ax.axvspan(xn(d)[mixed].min(), xn(d)[mixed].max(),
                    color=STANDARD_COLORS["Gray"], alpha=0.15, lw=0, zorder=0)
 
     ax.set_yscale("log")
     ax.set_ylim(Y_FLOOR, 2.0)
-    ax.set_xlabel(LABELS["nB"])
+    set_nb_axis(ax)
     ax.set_ylabel(LABELS["Y_i"])
     ax.set_title(panel_title(mode, fracs, T, eta))
 
-# One legend for the figure, built from the union of what the panels drew:
-# a species below the floor in the first panel can still dominate a hotter one,
-# and a legend taken from panel (a) alone would silently omit it.
+# One legend for the figure, from the union of what the panels drew: a species
+# below the floor in the first panel can dominate a hotter one, and a legend
+# taken from panel (a) alone would silently omit it.
 handles = {}
 for ax in axes.flat:
     for h, lab in zip(*ax.get_legend_handles_labels()):
         handles.setdefault(lab, h)
-axes.flat[0].legend(handles.values(), handles.keys(), fontsize=5, ncol=3,
+axes.flat[0].legend(handles.values(), handles.keys(), fontsize=6, ncol=3,
                     loc="lower right")
-save_figure(fig, FIG_DIR / "fig06_composition")
+save_figure(fig, FIG_DIR / "fig07_composition")
 plt.show()
 
 
 # %% [markdown]
-# ## III.7 Where each conserved charge sits
+# ## III.8 Where each conserved charge sits
 #
 # The same six panels, but resolved by *charge* rather than by species: baryon number,
 # electric charge (non-leptonic), strangeness and lepton number, each split into the part
@@ -2062,7 +2272,7 @@ CHARGES = {
 }
 
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.35)
+                       width=FIG_WIDE, **{**PAPER_STYLE, "aspect": 1.35})
 for ax, (mode, fracs, T, eta) in zip(axes.flat, PANELS):
     d = full_eos(mode, fracs, T, eta)
     if not d:
@@ -2070,38 +2280,37 @@ for ax, (mode, fracs, T, eta) in zip(axes.flat, PANELS):
         continue
 
     for q, (tex, colour) in CHARGES.items():
-        H = d.get(f"Y_{q}_H")
-        Q = d.get(f"Y_{q}_Q")
+        H, Q = d.get(f"Y_{q}_H"), d.get(f"Y_{q}_Q")
         if H is None or Q is None:
             continue
         # Lepton number also has the global population, which belongs to
         # neither phase but does count towards the total.
         G = d.get("Y_L_G", 0.0) if q == "L" else 0.0
         total = np.nan_to_num(H) + np.nan_to_num(Q) + np.nan_to_num(G)
-        ax.plot(d["n_B"], total, "-", lw=1.4, color=colour, label=f"{tex} tot")
-        ax.plot(d["n_B"], H, "--", lw=1.0, color=colour, label=f"{tex} H")
-        ax.plot(d["n_B"], Q, ":", lw=1.2, color=colour, label=f"{tex} Q")
+        ax.plot(xn(d), total, "-", lw=LW_MAIN, color=colour, label=f"{tex} tot")
+        ax.plot(xn(d), H, "--", lw=LW_THIN, color=colour, label=f"{tex} H")
+        ax.plot(xn(d), Q, ":", lw=LW_THIN, color=colour, label=f"{tex} Q")
 
     mixed = (d["chi"] > 0.0) & (d["chi"] < 1.0)
     if mixed.any():
-        ax.axvspan(d["n_B"][mixed].min(), d["n_B"][mixed].max(),
+        ax.axvspan(xn(d)[mixed].min(), xn(d)[mixed].max(),
                    color=STANDARD_COLORS["Gray"], alpha=0.15, lw=0, zorder=0)
-    ax.axhline(0.0, color=STANDARD_COLORS["Gray"], lw=0.7, zorder=0)
+    ax.axhline(0.0, color=STANDARD_COLORS["Gray"], lw=LW_GUIDE, zorder=0)
 
-    ax.set_xlabel(LABELS["nB"])
+    set_nb_axis(ax)
     ax.set_ylabel(r"$Y_q$  (per baryon)")
     ax.set_title(panel_title(mode, fracs, T, eta))
     # Headroom above Y_B = 1 for the legend, and below 0 for the negative
-    # quark-phase charge that a Gibbs window produces.
+    # quark-phase charge a Gibbs window produces.
     ax.set_ylim(-0.35, 1.45)
 
-axes.flat[0].legend(fontsize=4.5, ncol=4, loc="upper center", columnspacing=1.0)
-save_figure(fig, FIG_DIR / "fig07_charges_by_phase")
+axes.flat[0].legend(fontsize=6, ncol=4, loc="upper center", columnspacing=1.0)
+save_figure(fig, FIG_DIR / "fig08_charges_by_phase")
 plt.show()
 
 
 # %% [markdown]
-# ## III.8 The two sound speeds
+# ## III.9 The two sound speeds
 #
 # The clearest single picture of what η does.
 #
@@ -2120,6 +2329,13 @@ plt.show()
 # The gap between the two is what a composition g-mode would measure: the Brunt-Väisälä
 # frequency is proportional to (1/c_eq² − 1/c_ad²), so it vanishes identically wherever
 # these two curves coincide and spikes wherever they separate.
+#
+# **c_eq is a numerical derivative of the stitched table, so it is only as good as the
+# table.** A window sampled with holes joins its wing at a pressure that is not monotone,
+# and dP/dε then comes out negative — c_eq² reached −1.4 on one such slice. Those slices
+# are skipped here, and anything that still leaves [0, 1] is reported rather than drawn,
+# because a causality violation is either a real defect in the equation of state or a
+# defect in the grid and both deserve to be looked at, not smoothed over.
 #
 # `frozen_along` re-solves both phases twice per point, so this is the only expensive cell
 # in Part III — budget a few seconds per (panel, η).
@@ -2146,11 +2362,16 @@ def spec_of(mode, fracs):
 
 t0 = time.time()
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.2)
+                       width=FIG_WIDTH, **PAPER_STYLE)
+problems = []
 for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
     spec = spec_of(mode, fracs)
     for eta in CS_ETAS:
         c = COLOR_OF.get(eta, STANDARD_COLORS["Gray"])
+        if not is_complete(mode, fracs, T, eta):
+            problems.append(f"{panel_title(mode, fracs, T, eta)}: incomplete "
+                            f"window, skipped")
+            continue
 
         # Equilibrium: straight off the stitched table built in Part II, which
         # already carries the right wings for THIS mode. (build_mixed_eos_table
@@ -2158,7 +2379,14 @@ for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
         # beta-eq panels.)
         d = full_eos(mode, fracs, T, eta)
         if d and d["n_B"].size > 3:
-            ax.plot(d["n_B"], sound_speed_eq(d["P"], d["eps"]), "--", lw=1.1,
+            cs2 = sound_speed_eq(d["P"], d["eps"])
+            bad = ~np.isfinite(cs2) | (cs2 < -1e-9) | (cs2 > 1.0)
+            if bad.any():
+                problems.append(
+                    f"{panel_title(mode, fracs, T, eta)}: c_eq^2 outside [0,1] "
+                    f"at {bad.sum()} of {cs2.size} points "
+                    f"(min {np.nanmin(cs2):+.3f}, max {np.nanmax(cs2):.3f})")
+            ax.plot(xn(d), np.where(bad, np.nan, cs2), "--", lw=LW_THIN,
                     color=c, label=rf"$\eta = {eta:g}$")
 
         # Frozen: only defined where there are two phases.
@@ -2171,13 +2399,15 @@ for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
         rs = sweep_mixed(PAR, FLAGS, inside, eta, spec, vmit_params=VMIT, T=T)
         if not rs:
             continue
-        ax.plot([r.n_B for r in rs],
-                frozen_along(PAR, FLAGS, rs, vmit_params=VMIT), "-", lw=1.6,
-                color=c)
+        ax.plot(np.array([r.n_B for r in rs]) / N_SAT,
+                frozen_along(PAR, FLAGS, rs, vmit_params=VMIT), "-",
+                lw=LW_MAIN, color=c)
 
-    ax.axhline(1.0, color=STANDARD_COLORS["Gray"], lw=0.8, ls="-.", zorder=0)
-    ax.axhline(0.0, color=STANDARD_COLORS["Gray"], lw=0.7, ls="--", zorder=0)
-    ax.set_xlabel(LABELS["nB"])
+    ax.axhline(1.0, color=STANDARD_COLORS["Gray"], lw=LW_GUIDE, ls="-.",
+               zorder=0)
+    ax.axhline(0.0, color=STANDARD_COLORS["Gray"], lw=LW_GUIDE, ls="--",
+               zorder=0)
+    set_nb_axis(ax)
     ax.set_ylabel(r"$c_s^2$  [$c^2$]")
     ax.set_ylim(-0.05, 1.05)
     ax.set_title(panel_title(mode, fracs, T))
@@ -2186,14 +2416,18 @@ for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
 # this width wraps over the entries.
 axes.flat[0].plot([], [], "--", color="0.3", label=r"$c_{\rm eq}^2$")
 axes.flat[0].plot([], [], "-", color="0.3", label=r"$c_{\rm ad}^2$")
-axes.flat[0].legend(fontsize=6, ncol=2, loc="upper left")
-save_figure(fig, FIG_DIR / "fig08_sound_speeds")
+axes.flat[0].legend(fontsize=7, ncol=2, loc="upper left")
+save_figure(fig, FIG_DIR / "fig09_sound_speeds")
 plt.show()
 print(f"({time.time()-t0:.1f} s)")
+if problems:
+    print("\nnot drawn / suspect:")
+    for p in problems:
+        print("   ", p)
 
 
 # %% [markdown]
-# ## III.9 Rotation
+# ## III.10 Rotation
 #
 # Uniformly rotating, axisymmetric models of the *same* stitched EOSs Part II.3 integrated,
 # computed with the Komatsu-Eriguchi-Hachisu self-consistent field method as implemented
@@ -2207,26 +2441,34 @@ print(f"({time.time()-t0:.1f} s)")
 # converged models**, not themselves converged models. Call `rotating_model` for a point
 # that has to be exact.
 #
-# **Why the constant-M_0 panel is the physically interesting one.** A real star spins down
-# at fixed *baryon* number, not at fixed gravitational mass, so a constant-M_0 curve is the
-# track it actually follows. Where such a curve turns over, the star has run out of stable
-# configurations and collapses: that is the supramassive branch, and its extent is set by
-# how much of the mixed phase sits inside the star.
+# **Every sequence is cut at its turning point.** Friedman, Ipser & Sorkin (1988, ApJ 325,
+# 722) showed that along a sequence of fixed angular momentum the model where M is
+# stationary in central density marks the onset of secular instability to axisymmetric
+# collapse: nothing beyond it is a star. Along a constant-M_0 sequence the same
+# configuration is where M stops falling and starts to rise, so the same routine finds it
+# with the sign flipped. `eos.tov.rotating.turning_point` takes the *first* stationary
+# point, not the largest, which matters here: with a first-order transition the mass can
+# turn over, dip and rise again into a twin branch whose peak is higher, and the first
+# branch still becomes unstable at its own turning point.
+#
+# The theorem is stated for constant J and constant M_0. A **constant-frequency** sequence
+# also has a mass maximum and it is *not* a stability boundary, so those curves are cut at
+# their maximum only to keep the panel readable, and the cut is marked differently.
 #
 # A target beyond the Keplerian limit of its central density comes back as NaN rather than
 # an error, which is why the fastest isolines simply stop at low n_B,c — those stars cannot
 # spin that fast without shedding mass at the equator.
 
 # %%
-# Baryonic masses [M_sun] for panel (d). A target outside the M_0 range a given
-# central density can reach comes back NaN, so pick values near the static M_0
-# spanned by ROT_NB_C: M_0 runs ~10-20% above the gravitational mass, so
-# n_B,c = 0.4-1.6 fm^-3 here reaches roughly M_0 = 1.6-2.9.
+# Baryonic masses [M_sun] for the constant-M_0 panel. A target outside the M_0
+# range a given central density can reach comes back NaN, so pick values near
+# the static M_0 spanned by ROT_NB_C: M_0 runs ~10-20% above the gravitational
+# mass, so n_B,c = 0.4-1.6 fm^-3 here reaches roughly M_0 = 1.6-2.9.
 ROT_M0 = [1.8, 2.1, 2.4, 2.7]
 
 rot_kepler, rot_iso = {}, {}
 if not have_rns():
-    print("No `rns` executable found — III.9 skipped.\n"
+    print("No `rns` executable found — III.10 skipped.\n"
           "eos.tov.rns_backend.find_rns_binary() looks on PATH and at the usual\n"
           "build locations; point it at your build or pass rns_path= to run it.")
 else:
@@ -2242,7 +2484,7 @@ else:
         extra = ""
         if eta == ROT_ETA_SHOW:
             # Only the displayed eta needs the isolines; every eta needs its
-            # Keplerian limit for III.9b.
+            # Keplerian limit for the ratio panel below.
             rot_iso["freq"] = rotating_grid(eos_rot, e_c, freq_grid=ROT_FREQ,
                                             n_scan=ROT_N_SCAN, parallel=True)
             rot_iso["M_0"] = rotating_grid(eos_rot, e_c, M_0_grid=ROT_M0,
@@ -2267,9 +2509,20 @@ if rot_iso:
     kep = rot_kepler[ROT_ETA_SHOW]
     f_grid = rot_iso["freq"].reshape(len(ROT_NB_C), len(ROT_FREQ), -1)
     m0_grid = rot_iso["M_0"].reshape(len(ROT_NB_C), len(ROT_M0), -1)
+    nb_c = ROT_NB_C / N_SAT
+
+    def stable_part(M, rising=False):
+        """Mask of the sequence up to its turning point, and that point.
+
+        `rising=True` for a constant-M_0 sequence, where the stationary
+        configuration is a mass MINIMUM rather than a maximum: negating M turns
+        one into the other, so one routine serves both.
+        """
+        m, x_c, M_c = turning_point(ROT_NB_C, -M if rising else M)
+        return m, x_c, (-M_c if rising and np.isfinite(M_c) else M_c)
 
     fig, axes = paper_grid("2x2", mode="double", placeholder=False,
-                           width=FIG_WIDTH, aspect=1.2)
+                           width=FIG_WIDTH, **PAPER_STYLE)
     axMR, axNB, axF, axM0 = axes.flat
     f_shades = plt.cm.viridis(np.linspace(0.12, 0.86, len(ROT_FREQ)))
     m0_shades = plt.cm.plasma(np.linspace(0.10, 0.80, len(ROT_M0)))
@@ -2279,74 +2532,87 @@ if rot_iso:
         density, so a star to the right of the band has a pure quark core, not
         no quark core."""
         if core.has_transition:
-            ax.axvspan(core.n_onset, core.n_offset,
+            ax.axvspan(core.n_onset / N_SAT, core.n_offset / N_SAT,
                        color=STANDARD_COLORS["Gray"], alpha=0.15, lw=0,
                        zorder=0, label="mixed core")
 
+    # The static sequence, cut at M_max: past it nothing is a star either.
+    i_stat, _, _ = find_mmax_precise(static)
+    st_nb, st_M, st_R = (static[:i_stat + 1, 1] / N_SAT,
+                         static[:i_stat + 1, 4], static[:i_stat + 1, 3])
+
     # (a) mass-radius: the static and Keplerian curves bound the family.
-    axMR.plot(static[:, 3], static[:, 4], color="black", lw=1.6, zorder=5,
+    axMR.plot(st_R, st_M, color="black", lw=LW_MAIN, zorder=5,
               label=r"static ($J=0$)")
     axMR.plot(kep[:, KCOL["R_e"]], kep[:, KCOL["M"]],
-              color=STANDARD_COLORS["Gray"], lw=1.6, ls="--", zorder=5,
+              color=STANDARD_COLORS["Gray"], lw=LW_MAIN, ls="--", zorder=5,
               label="Kepler limit")
     for k, f in enumerate(ROT_FREQ):
         M, R = f_grid[:, k, ICOL["M"]], f_grid[:, k, ICOL["R_e"]]
-        good = np.isfinite(M) & np.isfinite(R)
+        keep, _, _ = stable_part(M)
+        good = keep & np.isfinite(R)
         if good.any():
-            axMR.plot(R[good], M[good], "-", lw=1.2, color=f_shades[k],
+            axMR.plot(R[good], M[good], "-", lw=LW_THIN, color=f_shades[k],
                       zorder=4, label=rf"$f = {f:g}$ Hz")
     axMR.set_xlabel(r"$R_e$  [km]")
     axMR.set_ylabel(r"$M$  [$M_\odot$]")
     axMR.set_title("mass-radius, constant frequency")
-    axMR.legend(fontsize=5.5, loc="lower left")
+    axMR.legend(fontsize=6.5, loc="lower left")
 
-    # (b) M against central density, with the locus of the rotating maxima.
+    # (b) M against central density, with the locus of the turning points.
     _mixed_span(axNB)
-    axNB.plot(static[:, 1], static[:, 4], color="black", lw=1.6, zorder=5,
+    axNB.plot(st_nb, st_M, color="black", lw=LW_MAIN, zorder=5,
               label=r"static ($J=0$)")
-    axNB.plot(ROT_NB_C, kep[:, KCOL["M"]], color=STANDARD_COLORS["Gray"],
-              lw=1.6, ls="--", zorder=5, label="Kepler limit")
-    peak_nb, peak_M = [], []
+    axNB.plot(nb_c, kep[:, KCOL["M"]], color=STANDARD_COLORS["Gray"],
+              lw=LW_MAIN, ls="--", zorder=5, label="Kepler limit")
+    crit_nb, crit_M = [], []
     for k in range(len(ROT_FREQ)):
-        M = f_grid[:, k, ICOL["M"]]
-        if np.isfinite(M).any():
-            i = int(np.nanargmax(M))
-            peak_nb.append(ROT_NB_C[i])
-            peak_M.append(M[i])
-    if peak_nb:
-        axNB.plot(peak_nb, peak_M, "o-", ms=4, lw=1.4, zorder=6,
+        _, x_c, M_c = stable_part(f_grid[:, k, ICOL["M"]])
+        if np.isfinite(x_c):
+            crit_nb.append(x_c / N_SAT)
+            crit_M.append(M_c)
+    if crit_nb:
+        axNB.plot(crit_nb, crit_M, "o-", ms=4, lw=LW_THIN, zorder=6,
                   color=STANDARD_COLORS["Red"],
                   label=r"$M_{\max}$ at each $f$")
-    axNB.set_xlabel(LABELS["nB"] + "  (central)")
+    set_nb_axis(axNB)
+    axNB.set_xlabel(LABELS["nB_n0"] + "  (central)")
     axNB.set_ylabel(r"$M$  [$M_\odot$]")
     axNB.set_title("maximum mass against spin")
-    axNB.legend(fontsize=5.5, loc="lower right")
+    axNB.legend(fontsize=6.5, loc="lower right")
 
-    # (c) constant frequency, (d) constant baryonic mass.
-    for ax, key, targets, shades, fmt, title in (
-            (axF, "freq", ROT_FREQ, f_shades, lambda v: rf"$f = {v:g}$ Hz",
-             "constant frequency"),
-            (axM0, "M_0", ROT_M0, m0_shades,
-             lambda v: rf"$M_0 = {v:g}\,M_\odot$",
+    # (c) constant frequency, (d) constant baryonic mass. Only (d) is a genuine
+    # turning-point sequence; (c) is cut at its maximum for readability.
+    for ax, grid, targets, shades, fmt, rising, title in (
+            (axF, f_grid, ROT_FREQ, f_shades, lambda v: rf"$f = {v:g}$ Hz",
+             False, "constant frequency"),
+            (axM0, m0_grid, ROT_M0, m0_shades,
+             lambda v: rf"$M_0 = {v:g}\,M_\odot$", True,
              "constant baryonic mass")):
-        grid = f_grid if key == "freq" else m0_grid
         _mixed_span(ax)
-        ax.plot(static[:, 1], static[:, 4], color="black", lw=1.6, zorder=5,
+        ax.plot(st_nb, st_M, color="black", lw=LW_MAIN, zorder=5,
                 label=r"static ($J=0$)")
-        ax.plot(ROT_NB_C, kep[:, KCOL["M"]], color=STANDARD_COLORS["Gray"],
-                lw=1.6, ls="--", zorder=5, label="Kepler limit")
+        ax.plot(nb_c, kep[:, KCOL["M"]], color=STANDARD_COLORS["Gray"],
+                lw=LW_MAIN, ls="--", zorder=5, label="Kepler limit")
         for k, value in enumerate(targets):
             M = grid[:, k, ICOL["M"]]
-            good = np.isfinite(M)
-            if good.any():
-                ax.plot(ROT_NB_C[good], M[good], "-o", ms=3, lw=1.3,
+            keep, x_c, M_c = stable_part(M, rising=rising)
+            if keep.any():
+                ax.plot(nb_c[keep], M[keep], "-o", ms=3, lw=LW_THIN,
                         color=shades[k], zorder=4, label=fmt(value))
-        ax.set_xlabel(LABELS["nB"] + "  (central)")
+            if np.isfinite(x_c):
+                ax.plot(x_c / N_SAT, M_c, "*", ms=9, color=shades[k],
+                        mec="k", mew=0.7, zorder=7)
+        set_nb_axis(ax)
+        ax.set_xlabel(LABELS["nB_n0"] + "  (central)")
         ax.set_ylabel(r"$M$  [$M_\odot$]")
         ax.set_title(title + rf",  $\eta = {ROT_ETA_SHOW:g}$")
-        ax.legend(fontsize=5.5, loc="lower right")
+        ax.legend(fontsize=6.5, loc="lower right")
+    axM0.plot([], [], "*", ms=9, color="0.3", mec="k", mew=0.7,
+              label="turning point")
+    axM0.legend(fontsize=6.5, loc="lower right")
 
-    save_figure(fig, FIG_DIR / "fig09_rotation")
+    save_figure(fig, FIG_DIR / "fig10_rotation")
     plt.show()
 
 # %% [markdown]
@@ -2375,13 +2641,14 @@ if rot_kepler:
     M_tov = np.array([tov[e]["M_max"] for e in etas])
 
     fig, axes = paper_grid("1x2", mode="double", placeholder=False,
-                           width=FIG_WIDTH, aspect=1.2)
+                           width=FIG_WIDTH, **PAPER_STYLE)
     axR, axM = axes[0]
 
     axR.axhspan(1.203 - 0.022, 1.203 + 0.022, color=STANDARD_COLORS["Gray"],
                 alpha=0.25, lw=0, zorder=0, label="Breu & Rezzolla (2016)")
-    axR.axhline(1.203, color=STANDARD_COLORS["Gray"], ls="--", lw=1.1, zorder=1)
-    axR.plot(etas, M_kep / M_tov, "-", lw=1.3, zorder=3, color="black",
+    axR.axhline(1.203, color=STANDARD_COLORS["Gray"], ls="--", lw=LW_GUIDE,
+                zorder=1)
+    axR.plot(etas, M_kep / M_tov, "-", lw=LW_THIN, zorder=3, color="black",
              label="this model")
     for k, eta in enumerate(etas):
         axR.plot(eta, M_kep[k] / M_tov[k], "o", ms=6, zorder=4,
@@ -2391,21 +2658,21 @@ if rot_kepler:
     # autoscale the band would fill the frame and stop reading as a band.
     axR.set_ylim(1.15, 1.26)
     axR.set_title("rotational mass increase")
-    axR.legend(fontsize=6.5, loc="lower right")
+    axR.legend(fontsize=7, loc="lower right")
 
-    axM.plot(etas, M_kep, "-o", ms=5, color=STANDARD_COLORS["Blue"],
+    axM.plot(etas, M_kep, "-o", ms=5, lw=LW_MAIN, color=STANDARD_COLORS["Blue"],
              label=r"$M_{\max}^{\rm Kepler}$")
-    axM.plot(etas, M_tov, "-s", ms=5, color=STANDARD_COLORS["Orange"],
-             label=r"$M_{\max}^{\rm TOV}$")
-    axM.axhline(2.0, color=STANDARD_COLORS["Gray"], ls=":", lw=1.1,
+    axM.plot(etas, M_tov, "-s", ms=5, lw=LW_MAIN,
+             color=STANDARD_COLORS["Orange"], label=r"$M_{\max}^{\rm TOV}$")
+    axM.axhline(2.0, color=STANDARD_COLORS["Gray"], ls=":", lw=LW_GUIDE,
                 label=r"$2\,M_\odot$")
     axM.set_ylabel(r"$M_{\max}$  [$M_\odot$]")
     axM.set_title("maximum mass against the construction")
-    axM.legend(fontsize=6.5)
+    axM.legend(fontsize=7)
 
     for ax in (axR, axM):
         ax.set_xlabel(r"$\eta$")
-    save_figure(fig, FIG_DIR / "fig09b_kepler_ratio")
+    save_figure(fig, FIG_DIR / "fig10b_kepler_ratio")
     plt.show()
 
     print(f"{'eta':>5} {'M_TOV':>8} {'M_Kepler':>9} {'ratio':>7}")
@@ -2415,7 +2682,7 @@ if rot_kepler:
 
 
 # %% [markdown]
-# ## III.10 Quasi-universal relations
+# ## III.11 Quasi-universal relations
 #
 # Some combinations of neutron-star observables are nearly independent of the equation of
 # state. That is useful — it lets one measurement stand in for another — and it is exactly
@@ -2477,7 +2744,7 @@ def stable_branch(eta):
 
 
 fig, axes = paper_grid("2x2", mode="double", placeholder=False,
-                       width=FIG_WIDTH, aspect=1.2)
+                       width=FIG_WIDTH, **PAPER_STYLE)
 axC, axRes, axBin, axI = axes.flat
 
 for eta in sorted(tov):
@@ -2488,9 +2755,9 @@ for eta in sorted(tov):
     C = KM_PER_MSUN * M[ok] / R[ok]
     c = COLOR_OF.get(eta, STANDARD_COLORS["Gray"])
 
-    axC.plot(Lam[ok], C, "-", color=c, label=rf"$\eta = {eta:g}$")
-    axRes.plot(Lam[ok], C / c_love_fit(Lam[ok]) - 1.0, "-", color=c,
-               label=rf"$\eta = {eta:g}$")
+    axC.plot(Lam[ok], C, "-", lw=LW_MAIN, color=c, label=rf"$\eta = {eta:g}$")
+    axRes.plot(Lam[ok], C / c_love_fit(Lam[ok]) - 1.0, "-", lw=LW_MAIN,
+               color=c, label=rf"$\eta = {eta:g}$")
 
     # (c) binary Love at fixed chirp mass. m1 follows in closed form from
     # Mc = (m1 m2)^{3/5}/(m1+m2)^{1/5} with m2 = q m1.
@@ -2500,18 +2767,18 @@ for eta in sorted(tov):
     if inside.any():
         L1 = np.interp(m1[inside], M[ok], Lam[ok])
         L2 = np.interp(m2[inside], M[ok], Lam[ok])
-        axBin.plot((L1 + L2) / 2.0, (L2 - L1) / 2.0, "-", color=c,
+        axBin.plot((L1 + L2) / 2.0, (L2 - L1) / 2.0, "-", lw=LW_MAIN, color=c,
                    label=rf"$\eta = {eta:g}$")
 
 _L = np.logspace(np.log10(20.0), np.log10(2000.0), 200)
-axC.plot(_L, c_love_fit(_L), "k--", lw=1.2, zorder=5, label="Yagi & Yunes")
+axC.plot(_L, c_love_fit(_L), "k--", lw=LW_THIN, zorder=5, label="Yagi & Yunes")
 axC.set_xscale("log")
 axC.set_xlabel(r"$\Lambda$")
 axC.set_ylabel(r"$C = GM/Rc^2$")
 axC.set_title("C-Love")
-axC.legend(fontsize=6, loc="upper right")
+axC.legend(fontsize=7, loc="upper right")
 
-axRes.axhline(0.0, color="black", lw=1.0, zorder=5)
+axRes.axhline(0.0, color="black", lw=LW_GUIDE, zorder=5)
 axRes.axhspan(-0.065, 0.065, color=STANDARD_COLORS["Gray"], alpha=0.20, lw=0,
               zorder=0, label="quoted 6.5% accuracy")
 axRes.set_xscale("log")
@@ -2521,12 +2788,12 @@ axRes.set_title("C-Love residual")
 # Pinned to the scale of the quoted accuracy: on autoscale a single point at
 # the very stiff end sets the range and the 6.5% band stops being visible.
 axRes.set_ylim(-0.20, 0.20)
-axRes.legend(fontsize=6, loc="upper right")
+axRes.legend(fontsize=7, loc="upper right")
 
 axBin.set_xlabel(r"$\Lambda_s = (\Lambda_1 + \Lambda_2)/2$")
 axBin.set_ylabel(r"$\Lambda_a = (\Lambda_2 - \Lambda_1)/2$")
 axBin.set_title(rf"binary Love,  $\mathcal{{M}}_c = {MC_GW170817:g}\,M_\odot$")
-axBin.legend(fontsize=6, loc="upper left")
+axBin.legend(fontsize=7, loc="upper left")
 
 # (d) I-Love needs the moment of inertia, which only RNS provides here.
 if have_rns():
@@ -2552,28 +2819,28 @@ if have_rns():
             continue
         I_bar = (I_rot[ok] * 1e45 * C_CGS ** 4
                  / (G_CGS ** 2 * (M_rot[ok] * MSUN_G) ** 3))
-        axI.plot(L_at[ok], I_bar, "-o", ms=3,
+        axI.plot(L_at[ok], I_bar, "-o", ms=3, lw=LW_MAIN,
                  color=COLOR_OF.get(eta, STANDARD_COLORS["Gray"]),
                  label=rf"$\eta = {eta:g}$")
-    axI.plot(_L, i_love_fit(_L), "k--", lw=1.2, zorder=5,
+    axI.plot(_L, i_love_fit(_L), "k--", lw=LW_THIN, zorder=5,
              label="Yagi & Yunes")
     axI.set_xscale("log")
     # I_bar spans well under a decade here, so a linear y reads better than a
     # log one whose minor ticks would be sparse.
-    axI.legend(fontsize=6, loc="upper left")
+    axI.legend(fontsize=7, loc="upper left")
 else:
     axI.text(0.5, 0.5, "no RNS:\nno moment of inertia", ha="center",
-             va="center", transform=axI.transAxes, fontsize=8, color="0.4")
+             va="center", transform=axI.transAxes, color="0.4")
 axI.set_xlabel(r"$\Lambda$")
 axI.set_ylabel(r"$\bar{I} = I c^4 / G^2 M^3$")
 axI.set_title(rf"I-Love  ($f = {ROT_F_SLOW:g}$ Hz)")
 
-save_figure(fig, FIG_DIR / "fig10_universal_relations")
+save_figure(fig, FIG_DIR / "fig11_universal_relations")
 plt.show()
 
 
 # %% [markdown]
-# ## III.11 Parameter map — where the hybrid star lives
+# ## III.12 Parameter map — where the hybrid star lives
 #
 # The II.4 scan as a picture. Colour is the onset density where a complete transition
 # exists; crossed cells have none. With `SCAN_TOV` on, the contour marks
@@ -2592,8 +2859,8 @@ for r in scan_rows:
         _onset[i, j] = r["n_onset"]
     _mmax[i, j] = r.get("M_max", np.nan)
 
-fig, axes = paper_grid("1x2", mode="centered", placeholder=False,
-                       width=FIG_WIDTH * 0.6, aspect=1.0)
+fig, axes = paper_grid("1x2", mode="double", placeholder=False,
+                       width=FIG_WIDTH, **{**PAPER_STYLE, "aspect": 1.0})
 ax = axes[0, 0]
 axes[0, 1].remove()          # one map, but paper_grid always builds a grid
 # Sequential field -> viridis, per the palette convention in figure_style.
@@ -2606,14 +2873,15 @@ for i, a in enumerate(_A):
             ax.plot(b, a, "x", color=STANDARD_COLORS["Gray"], ms=7, mew=1.4)
 if SCAN_TOV and np.isfinite(_mmax).any():
     _red = STANDARD_COLORS["Red"]
-    ax.contour(_B4, _A, _mmax, levels=[2.0], colors=[_red], linewidths=1.8)
-    ax.plot([], [], "-", color=_red, lw=1.8, label=r"$M_{\max} = 2\,M_\odot$")
+    ax.contour(_B4, _A, _mmax, levels=[2.0], colors=[_red], linewidths=LW_MAIN)
+    ax.plot([], [], "-", color=_red, lw=LW_MAIN,
+            label=r"$M_{\max} = 2\,M_\odot$")
 ax.plot(VMIT.B4, VMIT.a, "*", color="white", ms=14, mec="k", mew=1.0,
         label="current vMIT")
 ax.set_xlabel(r"$B^{1/4}$  [MeV]")
 ax.set_ylabel(r"vector coupling  $a$  [fm$^2$]")
 ax.set_title("where a complete transition exists  (x = none)")
-ax.legend(fontsize=6.5, loc="upper left")
+ax.legend(fontsize=7, loc="upper left")
 
-save_figure(fig, FIG_DIR / "fig11_parameter_map")
+save_figure(fig, FIG_DIR / "fig12_parameter_map")
 plt.show()

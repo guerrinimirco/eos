@@ -214,6 +214,13 @@ def set_paper_style(fontsize=10, labelsize=None, legendsize=None, rc=None):
         'font.family': 'serif',
         'font.serif': ['CMU Serif', 'STIXGeneral', 'DejaVu Serif'],
         'mathtext.fontset': 'cm',                 # CM math to match CMU Serif
+        # Any glyph the math font lacks comes from Computer Modern instead of
+        # being replaced by a dummy box. Without this a U+2212 minus or a
+        # \times in an auto-generated tick label ("2x10^1" on a log axis)
+        # renders as a hollow square whenever an outer environment has reset
+        # mathtext.fontset -- which the Jupyter inline backend does.
+        'mathtext.fallback': 'cm',
+        'mathtext.default': 'it',
         'font.size': fontsize, 'axes.titlesize': fontsize,
         'axes.labelsize': labelsize,              # axis names
         'xtick.labelsize': labelsize, 'ytick.labelsize': labelsize,  # tick numbers
@@ -414,6 +421,11 @@ def set_global_style():
     plt.rcParams['mathtext.rm'] = 'serif'
     plt.rcParams['mathtext.it'] = 'serif:italic'
     plt.rcParams['mathtext.bf'] = 'serif:bold'
+    # Needed because axes.formatter.use_mathtext is switched on below: the
+    # formatter then renders tick labels through mathtext, and a U+2212 minus
+    # or the \times of "2x10^3" is missing from CMU Serif italic. Without a
+    # fallback matplotlib substitutes a hollow box and warns once per glyph.
+    plt.rcParams['mathtext.fallback'] = 'cm'
 
     # Font sizes
     plt.rcParams['font.size'] = FONTS['label']
