@@ -534,7 +534,7 @@ def solve_yl_octet(par, n_B, Y_L, flags, T=0.0, x0=None,
 
 def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
                         max_bisect=6, stop_at_boundary=False,
-                        analytic_jac=True):
+                        analytic_jac=True, max_skip=3):
     """
     Warm-started density sweep with step-bisection continuation.
     Each point seeds the next; through a sharp onset where the warm start
@@ -546,23 +546,41 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
     the valid prefix instead of raising once every sub-step past the boundary
     has failed; otherwise it raises (no silent truncation by default).
 
+    `max_skip` decides how many *consecutive* misses that prefix tolerates, so
+    an isolated failed density is a hole rather than the end of the branch —
+    see `sweep_octet`, which documents why the two must be told apart.
+
     Returns a list of EoSPoint in n_B_grid order.
     """
     return sweep_octet(par, n_B_grid, flags, T=T, include_photons=include_photons,
                        max_bisect=max_bisect, stop_at_boundary=stop_at_boundary,
-                       analytic_jac=analytic_jac)
+                       analytic_jac=analytic_jac, max_skip=max_skip)
 
 
 def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_L=0.0,
                 yc_leptons=False, include_photons=True, max_bisect=6,
-                stop_at_boundary=False, analytic_jac=True):
+                stop_at_boundary=False, analytic_jac=True, max_skip=3):
     """
     Warm-started density sweep for any octet mode, with the same
     step-bisection continuation and scalar-collapse boundary handling as the
     beta-eq sweep. See solve_octet for the mode arguments. analytic_jac selects
     the eos_fast (exact-Jacobian) backend, on by default; False is the
     finite-difference reference path.
+
+    `max_skip` is what separates the two reasons a point can fail, which
+    otherwise look identical from here. Past the scalar-collapse boundary there
+    is nothing left to solve, so EVERY remaining density fails and the sweep
+    should end; a single density that misses because the continuation lost the
+    basin is a hole, and ending there throws away a branch that is still there
+    above it. Up to `max_skip` consecutive misses are therefore skipped — the
+    next step is then a longer jump from the last good point, which `step`
+    bisects — and only a run of them ends the sweep. Set it to 0 for the old
+    stop-at-the-first-miss behaviour.
+
+    A caller that needs to know which happened should read `m_eff` at the last
+    returned point: at the boundary it has collapsed to ~0, and a sweep that
+    merely gave up ends with a healthy effective mass.
     """
     has_phi = flags.phi_field and flags.hyperons
     has_muS = (strange_mode == "fixed")
@@ -587,14 +605,18 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                         octet_warm_start(p_mid, has_phi, has_muS, has_muL),
                         depth + 1)
 
-    points, x0, n_prev = [], None, None
+    points, x0, n_prev, misses = [], None, None, 0
     for n_B in n_B_grid:
         try:
             p = step(n_prev, n_B, x0, 0)
         except RuntimeError:
-            if stop_at_boundary and points:
-                break
-            raise
+            if not (stop_at_boundary and points):
+                raise
+            misses += 1
+            if misses > max_skip:
+                break                  # a run of failures: this is the boundary
+            continue                   # one miss: a hole, not the end
+        misses = 0
         points.append(p)
         x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
         n_prev = n_B

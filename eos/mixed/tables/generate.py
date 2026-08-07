@@ -70,12 +70,33 @@ def composition_row(r):
     species weighted by its phase's volume fraction, Y_i = w n_i / n_B with
     w = 1-chi for hadrons and w = chi for quarks. Y_C and Y_S sum over both
     phases. Any global charge potential the mode carries is included.
+
+    The conserved charges are ALSO carried resolved by phase, as `Y_B_H`,
+    `Y_C_H`, `Y_S_H` and their `_Q` counterparts, on the same volume-weighted
+    convention. They say how each conserved charge is partitioned between the
+    two phases, which the global sums cannot: at fixed total Y_C the hadronic
+    phase can be far more positively charged than the average while the quark
+    phase carries the compensating negative charge, and that separation is
+    exactly what eta controls. The partition also gives three cheap invariants
+    for a solved point:
+
+        Y_B_H + Y_B_Q == 1        Y_C_H + Y_C_Q == Y_C
+        Y_S_H + Y_S_Q == Y_S
+
+    Leptons split three ways rather than two, because the local ones are tied
+    to a phase and the global one is not: `Y_L_H` and `Y_L_Q` are the local
+    populations (weight eta) and `Y_L_G` the global one (weight 1-eta), so
+    Y_L_H + Y_L_Q + Y_L_G == Y_e + Y_mu-.
     """
     row = dict(n_B=r.n_B, T=r.T, eta=r.eta, chi=r.chi, phase=r.phase,
                P=r.P, eps=r.eps, s=r.s, S_per_B=(r.s / r.n_B if r.n_B else 0.0),
                mu_B=r.mu_B,
                Y_C=((1 - r.chi) * r.th_H.n_C + r.chi * r.th_Q.n_C) / r.n_B,
                Y_S=((1 - r.chi) * r.th_H.n_S + r.chi * r.th_Q.n_S) / r.n_B)
+    for tag, th, w in (("H", r.th_H, 1.0 - r.chi), ("Q", r.th_Q, r.chi)):
+        row[f"Y_B_{tag}"] = w * th.n_B / r.n_B
+        row[f"Y_C_{tag}"] = w * th.n_C / r.n_B
+        row[f"Y_S_{tag}"] = w * th.n_S / r.n_B
     for key in ("mu_C", "mu_S", "mu_L", "mu_eL_H", "mu_eL_Q", "mu_eG"):
         if key in r.potentials:
             row[key] = r.potentials[key]
@@ -90,6 +111,12 @@ def composition_row(r):
         n_loc = (1 - r.chi) * getattr(L_H, attr) + r.chi * getattr(L_Q, attr)
         n_tot = r.eta * n_loc + (1 - r.eta) * getattr(G, attr)
         row[f"Y_{label}"] = n_tot / r.n_B
+    # The same leptons resolved by where they live: the two local populations
+    # each belong to one phase and the global one to neither.
+    for tag, dom, w in (("H", L_H, r.eta * (1 - r.chi)),
+                        ("Q", L_Q, r.eta * r.chi),
+                        ("G", G, 1 - r.eta)):
+        row[f"Y_L_{tag}"] = w * (dom.n_e + dom.n_mu) / r.n_B
     if r.extras["nu"] is not None:
         row["Y_nue"] = r.extras["nu"].n / r.n_B
     return row

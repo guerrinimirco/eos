@@ -1,21 +1,27 @@
 """
 observational_constraints.py
 ============================
-Observational mass-radius constraint overlays (NICER / HESS posteriors + mass
-bands) for any M-R figure.
+Observational constraint overlays for the two planes an equation of state is
+usually judged in:
+
+* **mass-radius** -- NICER / HESS credible regions plus mass-only bands, via
+  ``add_observational_constraints``;
+* **mass-tidal deformability** -- the per-component (m, Lambda) posteriors of
+  GW170817 and GW190425, via ``add_tidal_constraints``.
 
 The 68% / 95% credible contours are precomputed OFFLINE by
 ``plot/compute_contours.py`` (which rebuilds the KDEs from the raw posterior
 samples in ``plot/data/samples/``) and shipped inside this package as CSV files
 under ``eos/general/data/contours/``. Plotting therefore never rebuilds a KDE,
-and ``add_observational_constraints`` works straight from an installed wheel
-with no path argument.
+and both functions work straight from an installed wheel with no path argument.
 
 Usage::
 
-    from eos.general.observational_constraints import add_observational_constraints
+    from eos.general.observational_constraints import (
+        add_observational_constraints, add_tidal_constraints)
     add_observational_constraints(ax)                    # packaged contours
     add_observational_constraints(ax, contour_dir=other) # a custom set
+    add_tidal_constraints(ax_lambda)                     # M on x, Lambda on y
 """
 import csv
 from pathlib import Path
@@ -45,6 +51,22 @@ MR_CONSTRAINTS = {
 MASS_LABELS = {"J0952-0607": "PSR J0952-0607"}
 MASS_COLORS = {"J0952-0607": STANDARD_COLORS['Yellow']}
 MASS_TEXT = {"J0952-0607": STANDARD_COLORS['Brown']}
+
+# 2D per-component (m, Lambda) posteriors of the two BNS detections: event ->
+# (label, colour, csv stem). Each event contributes TWO blobs, one per star,
+# and they share a colour and a single legend entry because the two components
+# of one binary share one equation of state -- the Lambda(M) curve has to pass
+# through both. The stems resolve to <stem>_1_{68,95}.csv (primary) and
+# <stem>_2_{68,95}.csv (secondary).
+#
+# These are NOT the GW170817_*.csv / GW190425_*.csv files, which hold Lambda-
+# tilde against chirp mass: that is a property of the binary as a whole and
+# cannot be drawn against a single sequence without first choosing a mass
+# ratio. Both sets are built by plot/compute_contours.py.
+TIDAL_CONSTRAINTS = {
+    "GW170817": ("GW170817", STANDARD_COLORS['Blue'],    "GW170817ML"),
+    "GW190425": ("GW190425", STANDARD_COLORS['Magenta'], "GW190425ML"),
+}
 
 
 def _smooth_closed(x, y, frac=0.04):
@@ -130,6 +152,57 @@ def add_observational_constraints(ax, contour_dir=None, show_mass_bands=True,
                     zorder=3, clip_on=True)
 
 
+def add_tidal_constraints(ax, contour_dir=None, inline_labels=False):
+    """Overlay the GW170817 / GW190425 per-component (m, Lambda) posteriors
+    *behind* the model curves -- the tidal counterpart of
+    :func:`add_observational_constraints`.
+
+    Each event draws two blobs, one per neutron star, in one colour with one
+    legend entry: both components of a binary share an equation of state, so a
+    single Lambda(M) sequence has to thread through both. Fills and zorder
+    follow the M-R overlay exactly, so the two panels of a figure read the same.
+
+    Parameters
+    ----------
+    ax : matplotlib Axes
+        Axes with gravitational mass [M_sun] on x and the dimensionless tidal
+        deformability Lambda on y.
+    contour_dir : str, Path or None
+        Directory holding the ``<stem>_<component>_68.csv`` / ``_95.csv``
+        contour files. None (default) uses the contours shipped with the
+        package. Missing files are silently skipped.
+    inline_labels : bool
+        True  -> write the event name near its primary blob (no legend entry).
+        False -> draw the 68% boundary of the primary as a labelled line.
+    """
+    contour_dir = Path(DEFAULT_CONTOUR_DIR if contour_dir is None else contour_dir)
+    for label, colour, stem in TIDAL_CONSTRAINTS.values():
+        for comp in ("1", "2"):
+            f95 = contour_dir / f"{stem}_{comp}_95.csv"
+            f68 = contour_dir / f"{stem}_{comp}_68.csv"
+            if not f95.exists():
+                continue
+            M95, L95 = _smooth_closed(*np.loadtxt(f95, delimiter=",",
+                                                  skiprows=1).T)
+            ax.fill(M95, L95, color=colour, alpha=0.20, lw=0, zorder=0)
+            Mc, Lc = M95, L95
+            if f68.exists():
+                M68, L68 = _smooth_closed(*np.loadtxt(f68, delimiter=",",
+                                                      skiprows=1).T)
+                ax.fill(M68, L68, color=colour, alpha=0.40, lw=0, zorder=1)
+                Mc, Lc = M68, L68
+            # Only the primary carries the annotation, so one event gives one
+            # legend entry rather than two identical ones.
+            if comp != "1":
+                continue
+            if inline_labels:
+                ax.text(Mc.mean(), Lc.max(), label, color=colour,
+                        fontsize=MR_LABEL_FS, fontweight='bold',
+                        ha='center', va='bottom', zorder=3, clip_on=True)
+            else:
+                ax.plot(Mc, Lc, color=colour, lw=1.2, zorder=1, label=label)
+
+
 if __name__ == '__main__':
     # ponytail: smallest check that the packaged contours are actually shipped
     # and parse -- catches a broken package-data config, which an editable
@@ -142,8 +215,17 @@ if __name__ == '__main__':
     for _k in MR_CONSTRAINTS:
         assert f"{_k}_95.csv" in _found, f"no 95% contour for {_k}"
     assert "mass_bounds.csv" in _found
+    for _, _, _stem in TIDAL_CONSTRAINTS.values():
+        for _c in ("1", "2"):
+            assert f"{_stem}_{_c}_95.csv" in _found, f"no contour for {_stem}_{_c}"
     _fig, _ax = plt.subplots()
     add_observational_constraints(_ax)
     assert _ax.patches or _ax.lines, "nothing was drawn"
+    plt.close(_fig)
+    _fig, _ax = plt.subplots()
+    add_tidal_constraints(_ax)
+    # Two events x two components x two credible levels, Lambda never negative.
+    assert len(_ax.patches) == 8, f"expected 8 tidal fills, got {len(_ax.patches)}"
+    assert min(p.get_xy()[:, 1].min() for p in _ax.patches) >= 0.0
     plt.close(_fig)
     print(f"observational_constraints self-check ok ({len(_found)} CSVs)")

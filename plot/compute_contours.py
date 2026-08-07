@@ -173,6 +173,30 @@ def compute_tidal_contour():
         print(f"{name}: {len(a)} samples → M-Λ̃ contours")
 
 
+# 3a. Per-component mass-tidal, (m, Λ) for each star separately.  This is the
+#     plane an EoS curve Λ(M) lives in, whereas the Λ̃(M_chirp) contours above
+#     are a property of the BINARY and cannot be drawn against a single
+#     sequence without first choosing a mass ratio.  Both components of an
+#     event share one EoS, so downstream they share a colour and one legend
+#     entry, exactly as plot_component_tidal.py already draws them.
+def compute_component_tidal_contour():
+    for name, (fname, (cM1, cM2, cL1, cL2)) in TIDAL_SOURCES.items():
+        if not (SAMPLES / fname).exists():
+            print(f"  {name}: {fname} missing — run fetch_gw190425.py; skipping")
+            continue
+        a = np.loadtxt(SAMPLES / fname)
+        for tag, cM, cL in ((f"{name}ML_1", cM1, cL1), (f"{name}ML_2", cM2, cL2)):
+            paths = extract_2d_contour(a[:, cM], a[:, cL])   # x=m, y=Lambda
+            # The KDE pads its grid 15% past the data, and these posteriors pile
+            # up against Lambda = 0, so the raw contour dips below it. Lambda is
+            # non-negative by definition; clip rather than ship a blob that
+            # hangs under the axis and has to be hidden with set_ylim.
+            paths = {f: np.column_stack([p[:, 0], np.clip(p[:, 1], 0.0, None)])
+                     for f, p in paths.items()}
+            _save_contour(tag, paths, header="M_sun,Lambda")
+        print(f"{name}: {len(a)} samples → 2 component m-Lambda contours")
+
+
 # 3b. GW170817 mass-radius: header-less; cols 0=M1 1=M2 2=Λ1 3=Λ2 4=R1 5=R2
 #     (verified by column stats).  One contour per NS component (the two share
 #     the same EoS → same R(M) band, so they get the same colour downstream).
@@ -229,6 +253,7 @@ def main():
     print("Mass-only bounds:");     compute_mass_bounds()
     print("Mass-radius contours:"); compute_mr_contours()
     print("Tidal contour:");        compute_tidal_contour()
+    print("Component m-Lambda contours:"); compute_component_tidal_contour()
     print("GW170817 M-R contour:"); compute_gw170817_mr_contour()
     print("Nuclear bands (local):"); convert_band_files()
     print("Nuclear bands (nucleardatapy):"); fetch_nucleardatapy_bands()

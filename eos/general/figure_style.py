@@ -236,7 +236,8 @@ def set_paper_style(fontsize=10, labelsize=None, legendsize=None, rc=None):
 
 
 def paper_grid(layout='2x2', mode='single', placeholder=True, square=True,
-               aspect=1.2, fontsize=10, labelsize=None, legendsize=None, rc=None):
+               aspect=1.2, fontsize=10, labelsize=None, legendsize=None, rc=None,
+               width=None):
     """Build a PRD panel grid with the publication style applied.
 
     Physics: each panel is forced to a fixed box aspect (W/H = `aspect`) so a
@@ -247,14 +248,21 @@ def paper_grid(layout='2x2', mode='single', placeholder=True, square=True,
     `fontsize`-pt fonts from set_paper_style() land as PRD body text.
 
     Mechanics:
-      layout   : '2x2' (four panels) or '1x2' (a two-panel row = the 2x2 top row).
+      layout   : 'RxC' - rows x columns, e.g. '2x2' (four panels), '1x2' (a
+                 two-panel row = the 2x2 top row), '3x2' (six panels).
       mode     : sets the figure width W -
                    'single'   -> W = PRD_COL_W      (3.375", one column)
                    'centered' -> W = PRD_CENTERED_W (4.75",  mid-size)
                    'double'   -> W = PRD_FULL_W     (7.0",   two columns)
                  The height is derived from `aspect` so panels come out at that
-                 W/H with minimal slack: 2x2 is (W, W/aspect); 1x2 is
-                 (W, (W/2)/aspect) so its panels match a 2x2 top row.
+                 W/H with minimal slack: one panel is W/C wide, hence
+                 (W/C)/aspect tall, and R of them stack. So 2x2 is (W, W/aspect)
+                 and 1x2 is (W, (W/2)/aspect), matching a 2x2 top row.
+      width    : override W in inches, ignoring `mode`. The presets are true
+                 page widths, which is what makes the pt sizes land correctly;
+                 override only when a dense panel (a composition plot with a
+                 dozen species) is unreadable at true width and you accept that
+                 the figure will be rescaled in \\includegraphics.
       aspect   : panel width/height. 1.2 (default) = mild landscape; 1.0 = square.
       fontsize : base text size in pt (default 10 = PRD body; title + fallback).
       labelsize: axis-name + tick-number size (default = fontsize).
@@ -279,27 +287,44 @@ def paper_grid(layout='2x2', mode='single', placeholder=True, square=True,
     widths = {'single': PRD_COL_W, 'centered': PRD_CENTERED_W, 'double': PRD_FULL_W}
     if mode not in widths:
         raise ValueError(f"mode must be one of {sorted(widths)}, got {mode!r}")
-    if layout not in ('2x2', '1x2'):
-        raise ValueError(f"layout must be '2x2' or '1x2', got {layout!r}")
+    try:
+        nrows, ncols = (int(v) for v in layout.split('x'))
+    except ValueError:
+        raise ValueError(f"layout must be 'RxC', e.g. '2x2', got {layout!r}")
+    if nrows < 1 or ncols < 1:
+        raise ValueError(f"layout needs at least one row and column, got {layout!r}")
     if aspect <= 0:
         raise ValueError(f"aspect must be > 0, got {aspect!r}")
+    if width is not None and width <= 0:
+        raise ValueError(f"width must be > 0 in, got {width!r}")
 
     set_paper_style(fontsize=fontsize, labelsize=labelsize,
                     legendsize=legendsize, rc=rc)
-    w = widths[mode]
-    nrows = 2 if layout == '2x2' else 1
-    # Height follows the panel aspect: one panel is w/2 wide, so w/2/aspect tall;
-    # 2x2 stacks two of those (~ w/aspect), 1x2 is a single row.
-    fig_h = w / aspect if layout == '2x2' else (w / 2) / aspect
-    figsize = (w, fig_h)
+    w = widths[mode] if width is None else float(width)
+    # Height follows the panel aspect: one panel is w/ncols wide, so
+    # (w/ncols)/aspect tall, and nrows of them stack.
+    figsize = (w, nrows * (w / ncols) / aspect)
 
     # squeeze=False -> axes always 2-D, so callers unpack uniformly.
     # sharex/sharey default False: independent axes per panel.
-    fig, axes = plt.subplots(nrows, 2, figsize=figsize, layout='constrained',
-                             squeeze=False)
+    # `layout=` is matplotlib >= 3.5; 3.4 spells the same thing
+    # `constrained_layout=True`. Both give constrained layout, so the figure is
+    # identical -- only the keyword moved.
+    try:
+        fig, axes = plt.subplots(nrows, ncols, figsize=figsize,
+                                 layout='constrained', squeeze=False)
+    except TypeError:
+        fig, axes = plt.subplots(nrows, ncols, figsize=figsize,
+                                 constrained_layout=True, squeeze=False)
     # Tighten the constrained-layout padding so panels sit closer together and to
     # the figure edge (less whitespace); edit here to rescale for all figures.
-    fig.get_layout_engine().set(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
+    # The layout-engine object is matplotlib >= 3.6; before that the pads were
+    # set on the figure directly.
+    _pads = dict(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
+    if hasattr(fig, 'get_layout_engine'):
+        fig.get_layout_engine().set(**_pads)
+    else:
+        fig.set_constrained_layout_pads(**_pads)
     for ax in axes.flat:
         if square:
             ax.set_box_aspect(1 / aspect)    # fixed W/H box, independent of labels
@@ -542,14 +567,16 @@ if __name__ == '__main__':
     mpl.use('Agg')
     _W = {'single': PRD_COL_W, 'centered': PRD_CENTERED_W, 'double': PRD_FULL_W}
     for _asp in (1.0, 1.2):
-        for _lay in ('2x2', '1x2'):
+        for _lay in ('2x2', '1x2', '3x2', '1x3'):
+            _nr, _nc = (int(v) for v in _lay.split('x'))
             for _m, _w in _W.items():
                 _fig, _ax = paper_grid(_lay, _m, aspect=_asp, fontsize=11,
                                        labelsize=9, legendsize=8)
                 _fw, _fh = _fig.get_size_inches()
-                _exp_h = _w / _asp if _lay == '2x2' else (_w / 2) / _asp
+                _exp_h = _nr * (_w / _nc) / _asp
                 assert abs(_fw - _w) < 1e-9
                 assert abs(_fh - _exp_h) < 1e-9
+                assert _ax.shape == (_nr, _nc)
                 assert all(abs(a.get_box_aspect() - 1 / _asp) < 1e-9 for a in _ax.flat)
                 assert abs(mpl.rcParams['font.size'] - 11) < 1e-9
                 assert abs(mpl.rcParams['axes.labelsize'] - 9) < 1e-9

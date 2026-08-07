@@ -11,14 +11,17 @@ The stitched core equation of state and its TOV integration.
     window — so there is nothing to correct;
   - eos/tov integrates the table to a physical maximum mass and radii, and the
     construction softens the equation of state smoothly;
-  - the tidal deformability Lambda(M) comes out without any special flag.
+  - the tidal deformability Lambda(M) comes out without any special flag;
+  - a table row partitions every conserved charge between the two phases, and
+    the parts add back up to the totals the same row reports.
 """
 import numpy as np
 import pytest
 
 from eos.dd2 import Parametrization, SpeciesFlags
-from eos.mixed import beta_eq_neutrinoless
+from eos.mixed import beta_eq_neutrinoless, solve_mixed
 from eos.mixed.tables.core_eos import build_mixed_eos_table, mass_radius_mixed
+from eos.mixed.tables.generate import composition_row
 from eos.tov.solver import _detect_maxwell_construction
 
 
@@ -104,6 +107,39 @@ def test_construction_softens_smoothly(mr):
     smoothly (the two constructions are the endpoints of one continuous eta)."""
     assert mr[0.0]["M_max"] <= mr[1.0]["M_max"] + 0.02
     assert mr[1.0]["M_max"] - mr[0.0]["M_max"] < 0.5   # not a wild jump
+
+
+# ------------------------------------------------------- table row composition
+@pytest.mark.parametrize("eta", [0.0, 0.5, 1.0])
+def test_row_partitions_every_conserved_charge_between_the_phases(
+        par, flags, tables, eta):
+    """`composition_row` splits B, C, S and the leptons by phase, and the parts
+    must add back up to the global totals the same row reports.
+
+    This is the cheapest statement that the volume weighting is right, and it
+    is not implied by the solve: the residual only constrains the totals, so a
+    weight applied to the wrong phase leaves every equilibrium condition
+    satisfied and only the reported partition wrong.
+    """
+    t = tables[eta]
+    n_B = 0.5 * (t.n_onset + t.n_offset)
+    r = solve_mixed(par, flags, n_B, eta, beta_eq_neutrinoless())
+    assert 0.0 < r.chi < 1.0, "midpoint of the window is not mixed"
+    row = composition_row(r)
+
+    assert row["Y_B_H"] + row["Y_B_Q"] == pytest.approx(1.0, abs=1e-12)
+    assert row["Y_C_H"] + row["Y_C_Q"] == pytest.approx(row["Y_C"], abs=1e-12)
+    assert row["Y_S_H"] + row["Y_S_Q"] == pytest.approx(row["Y_S"], abs=1e-12)
+    leptons = row["Y_e"] + row.get("Y_mu-", 0.0)
+    assert (row["Y_L_H"] + row["Y_L_Q"] + row["Y_L_G"]
+            == pytest.approx(leptons, abs=1e-12))
+
+    # eta is the local/global lepton split by definition, so the endpoints are
+    # exact: Gibbs has no local population, Maxwell has no global one.
+    if eta == 0.0:
+        assert row["Y_L_H"] == 0.0 and row["Y_L_Q"] == 0.0
+    if eta == 1.0:
+        assert row["Y_L_G"] == 0.0
 
 
 if __name__ == "__main__":

@@ -679,6 +679,7 @@ def rotating_grid(eos: Union[str, EOSTable_for_TOV],
                   freq_grid: Optional[Sequence[float]] = None,
                   J_grid: Optional[Sequence[float]] = None,
                   M_grid: Optional[Sequence[float]] = None,
+                  M_0_grid: Optional[Sequence[float]] = None,
                   r_ratio_grid: Optional[Sequence[float]] = None,
                   n_scan: int = 20,
                   parallel: bool = True,
@@ -686,8 +687,8 @@ def rotating_grid(eos: Union[str, EOSTable_for_TOV],
                   crust: str = "BPS",
                   **run_kwargs) -> np.ndarray:
     """
-    Constant-frequency, constant-J, constant-mass or constant-axis-ratio
-    sequences over a grid of central densities.
+    Constant-frequency, constant-J, constant-mass, constant-baryonic-mass or
+    constant-axis-ratio sequences over a grid of central densities.
 
     One axis-ratio scan is run per central density and every requested target
     is read off it by monotone interpolation. Unlike :func:`rotating_model`,
@@ -709,6 +710,11 @@ def rotating_grid(eos: Union[str, EOSTable_for_TOV],
         Angular momenta, dimensionless cJ/(G M_sun^2).
     M_grid : sequence of float, optional
         Gravitational masses [M_sun].
+    M_0_grid : sequence of float, optional
+        Rest (baryonic) masses [M_sun]. This is the sequence a star actually
+        evolves along as it spins down, since baryon number is conserved while
+        the gravitational mass is not; a constant-M_0 curve that turns over is
+        what makes a supramassive star collapse.
     r_ratio_grid : sequence of float, optional
         Axis ratios; these need no inversion and are interpolated directly.
     n_scan : int
@@ -729,12 +735,13 @@ def rotating_grid(eos: Union[str, EOSTable_for_TOV],
         that overhangs the limit stays rectangular and plottable.
     """
     requested = [(k, v) for k, v in (("freq", freq_grid), ("J", J_grid),
-                                     ("M", M_grid), ("r_ratio", r_ratio_grid))
+                                     ("M", M_grid), ("M_0", M_0_grid),
+                                     ("r_ratio", r_ratio_grid))
                  if v is not None]
     if len(requested) != 1:
         raise ValueError(
-            "Give exactly one of freq_grid, J_grid, M_grid, r_ratio_grid; got "
-            f"{[k for k, _ in requested] or 'none'}."
+            "Give exactly one of freq_grid, J_grid, M_grid, M_0_grid, "
+            f"r_ratio_grid; got {[k for k, _ in requested] or 'none'}."
         )
     (quantity, targets), = requested
     targets = np.asarray(targets, dtype=float)
