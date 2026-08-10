@@ -1,14 +1,23 @@
 #!/usr/bin/env python
-"""Precompute 68% / 95% confidence contours for NS-EOS constraint plots.
+"""Turn raw posterior samples into the contours this package ships.
 
-Reads raw posterior samples from  eos/plot/data/samples/  and writes ready-to-plot
-CSV contours to  eos/plot/data/contours/  so plotting scripts never rebuild KDEs
-on the fly.
+Reads the raw posterior samples in ``plot/data/samples/`` and writes
+ready-to-plot CSVs (and the coarse density grids the gradient rendering uses)
+into ``data/`` next to this file, so nothing rebuilds a KDE at plot time.
 
-    python compute_contours.py
+    python -m eos.general.constraints.build
 
-Everything is deliberately kept as small, single-purpose functions so individual
-constraints can be regenerated or added without touching the rest.
+This lives with the constraints rather than off in a scripts folder because
+producing a contour and drawing it are the same job seen from two ends: a new
+observation becomes an overlay by adding its samples, running this, and adding
+one registry entry in ``__init__.py``.
+
+The raw samples are NOT tracked in git -- they are ~160 MB and only this module
+needs them. Fetch them with ``python plot/fetch_samples.py``; the derived CSVs
+in ``data/`` are what everything else reads.
+
+Everything is deliberately kept as small, single-purpose functions so
+individual constraints can be regenerated or added without touching the rest.
 
 Physics note: "68%" / "95%" here are the *enclosed-probability* contours of the
 2D posterior (1σ / 2σ credible regions), not per-axis error bars.  For the
@@ -22,12 +31,14 @@ matplotlib.use("Agg")            # headless: we only harvest contour paths, neve
 import matplotlib.pyplot as plt
 
 HERE = Path(__file__).resolve().parent
-SAMPLES = HERE / "data" / "samples"
-# The generated CSVs live INSIDE the package (shipped as package-data) so that
-# eos.general.observational_constraints can read them from an installed wheel.
-# The raw posterior samples stay out here: they are ~160 MB and only this
-# script needs them.
-CONTOURS = HERE.parent / "eos" / "general" / "data" / "contours"
+# Derived contours live beside this module and ship as package-data, so the
+# overlay API reads them straight from an installed wheel.
+CONTOURS = HERE / "data"
+# Raw posterior samples stay in the repo, outside the package: ~160 MB, and
+# only this module needs them. HERE is eos/eos/general/constraints, so the
+# repo root is four levels up.
+REPO_ROOT = HERE.parent.parent.parent
+SAMPLES = REPO_ROOT / "plot" / "data" / "samples"
 
 FRACTIONS = (0.68, 0.95)         # 1σ / 2σ enclosed probability
 KDE_NMAX = 8000                  # subsample cap: gaussian_kde is O(n_samples * n_grid)
@@ -71,6 +82,32 @@ def _density_levels(Z, fractions):
     csum = np.cumsum(z)
     csum /= csum[-1]
     return [float(z[np.searchsorted(csum, f)]) for f in fractions]
+
+
+#: Density grids are stored coarser than the contour KDE: the gradient is a
+#: smooth backdrop, not a measurement, and 120x120 float32 keeps each source
+#: around 57 kB so the whole set still ships inside the wheel.
+GRADIENT_GRID = 120
+
+
+def save_density_grid(name, x, y, weights=None, gridsize=GRADIENT_GRID):
+    """Store the KDE itself, so the gradient rendering needs no raw samples.
+
+    The 68/95 CSVs are level sets and cannot be interpolated back into a
+    density: two nested rings say nothing about how probability is distributed
+    between them. Rendering a posterior as a continuous shade therefore needs
+    the field, and a fresh clone has no samples to rebuild it from -- so it is
+    computed here, once, and shipped.
+    """
+    x, y = _subsample([np.asarray(x, float), np.asarray(y, float)], weights=weights)
+    X, Y, Z = _kde_grid(x, y, gridsize)
+    out = CONTOURS / f"{name}_density.npz"
+    np.savez_compressed(out,
+                        x=X[0, :].astype(np.float32),
+                        y=Y[:, 0].astype(np.float32),
+                        z=(Z / Z.max()).astype(np.float32))
+    print(f"  wrote {out.name}  ({gridsize}x{gridsize})")
+    return out
 
 
 def extract_2d_contour(x, y, weights=None, levels=FRACTIONS, gridsize=GRID):
@@ -130,13 +167,15 @@ MR_SOURCES = {
     "J0614": ("J0614.dat", 1, 0, None),   # header-less: col0=M, col1=R
 }
 
-def compute_mr_contours():
+def compute_mr_contours(density_grids=True):
     for name, (fname, cR, cM, cW) in MR_SOURCES.items():
         a = np.loadtxt(SAMPLES / fname)               # '#' comments skipped by default
         R, M = a[:, cR], a[:, cM]
         W = a[:, cW] if cW is not None else None
         paths = extract_2d_contour(R, M, weights=W)   # x=R, y=M → save (R, M)
         _save_contour(name, paths, header="R_km,M_sun")
+        if density_grids:
+            save_density_grid(name, R, M, weights=W)
         print(f"{name}: {len(a)} samples → contours")
 
 

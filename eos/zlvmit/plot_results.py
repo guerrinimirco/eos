@@ -54,6 +54,8 @@ SPECIES GROUPS (for plot_composition)
 import numpy as np
 import matplotlib.pyplot as plt
 
+from eos.general.figure_style import set_paper_style
+
 
 # ==============================================================================
 #                              CONSTANTS
@@ -172,34 +174,29 @@ SPECIES_GROUPS = {
 
 def setup_matplotlib_style():
     """
-    Configure matplotlib for publication-quality plots with CMU Serif font.
+    Configure matplotlib for the large-format ZLvMIT figures.
 
     Call this once at the start of your notebook/script:
         from eos.zlvmit.plot_results import setup_matplotlib_style
         setup_matplotlib_style()
+
+    Styling itself comes from eos.general.figure_style, the one module that
+    sets rcParams. Only what is peculiar to these figures is passed in: the
+    25/20 pt text they were drawn at, and DejaVu Serif ahead of CMU Serif.
+    That font order is deliberate — these plots are the published
+    first-generation hybrid results, DejaVu ships with matplotlib and carries
+    the full glyph range, and some installs of CMU Serif are partial, so
+    letting CMU win here would silently restyle figures that are already in
+    print.
     """
-    plt.rcParams['font.family'] = 'serif'
-    # DejaVu Serif first: it ships with matplotlib and has the full Unicode
-    # range we need (minus sign, superscripts, etc.). Some local installs of
-    # CMU Serif ship as a partial font and trigger "missing glyph" warnings.
-    plt.rcParams['font.serif'] = ['DejaVu Serif', 'CMU Serif', 'Computer Modern Roman']
-    # 'dejavuserif' ships with matplotlib and includes U+2212 (the typographic
-    # minus). The original 'cm' fontset on some installs lacks that glyph and
-    # produces "Font 'default' does not have a glyph for '−'" warnings on
-    # log-scale tick labels (e.g. "10^{-3}").
-    plt.rcParams['mathtext.fontset'] = 'dejavuserif'
-    plt.rcParams['mathtext.default'] = 'regular'   # use the regular text font in math
-    plt.rcParams['axes.unicode_minus'] = False     # ASCII '-' in regular tick labels
-    # Safety net: silence the matplotlib mathtext "missing U+2212 glyph"
-    # warning if it still fires on this install.
-    import logging
-    logging.getLogger('matplotlib._mathtext').setLevel(logging.ERROR)
-    logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
-    plt.rcParams['axes.labelsize'] = 25
-    plt.rcParams['xtick.labelsize'] = 25
-    plt.rcParams['ytick.labelsize'] = 25
-    plt.rcParams['legend.fontsize'] = 20
-    plt.rcParams['axes.titlesize'] = 25
+    set_paper_style(
+        fontsize=25, labelsize=25, legendsize=20,
+        rc={
+            'font.serif': ['DejaVu Serif', 'CMU Serif', 'Computer Modern Roman'],
+            'mathtext.fontset': 'dejavuserif',
+            'mathtext.default': 'regular',
+        },
+    )
 
 
 # ==============================================================================

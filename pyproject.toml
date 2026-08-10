@@ -17,12 +17,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["eos*"]
 
-# Ship the precomputed observational M-R contours inside the package, so
-# eos.general.observational_constraints.add_observational_constraints() works
-# from an installed wheel with no path argument. Listed explicitly rather than
-# relying on include-package-data inference.
+# Ship the precomputed constraint contours, bands and density grids inside the
+# package, so eos.general.constraints.overlay() works from an installed wheel
+# with no path argument. Listed explicitly rather than relying on
+# include-package-data inference.
 [tool.setuptools.package-data]
-"eos.general" = ["data/contours/*.csv"]
+"eos.general.constraints" = ["data/*.csv", "data/*.npz"]
 
 [tool.pytest.ini_options]
 markers = ["slow: long-running (excluded with -m 'not slow')"]
