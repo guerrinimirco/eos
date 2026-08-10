@@ -11,9 +11,14 @@ take. Entries are removed when closed, not marked "done".
 
 ## Cross-cutting
 
-### mu_S is undetermined when no strange species is populated
+### A potential is only pinned as tightly as its conjugate density responds
 
-**Models:** sfho (observed), and any model exposing `fixed_YC_YS`.
+**Models:** sfho and vmit (observed), and any model exposing `fixed_YC_YS` or
+a charge-neutral mode at Y_C = 0.
+
+Two cases, one cause. A chemical potential is fixed by the residual only
+through the density it conjugates, so where that density is zero the solver
+has little or nothing to go on.
 
 In `fixed_YC_YS` with Y_S = 0 — symmetric nuclear matter, the heavy-ion slice —
 no strange species is thermally populated at the densities and temperatures
@@ -27,11 +32,18 @@ to reach. Recompiling the Numba integral kernels moves it by ~10 MeV.
 Seen at n_B = 0.16, 0.32, 0.64 fm^-3, T = 10 MeV, SFHo-Y (Fortin) with the
 full baryon octet. `eps`, `P`, `mu_B` and every density are unaffected.
 
-Closing it means deciding what the API should say when a conserved charge is
-carried by no populated species. Options: report mu_S as undefined (NaN) with
-a status flag; pin it by convention (mu_S = 0) and document that; or have the
-mode raise. Until then `test/baseline` does not freeze mu_S where n_S is zero,
-because there is nothing there to freeze.
+**mu_e where no electrons are present** — a charge-neutral phase at Y_C = 0.
+Here mu_e = 0 IS the answer, so it is determined rather than free, but only
+weakly: dn_e/dmu_e is of order T^2/(hbar c)^3, about 4e-6 fm^-3 MeV^-1 at
+T = 10 MeV, so a residual gate at 1e-10 on the density leaves mu_e loose at
+the 1e-5 MeV level. Its landing point is round-off. Seen in vmit, dd2, sfho,
+zl and alphabag, in every `fixed_YC` slice at Y_C = 0.
+
+Closing either means deciding what the API should say when a conserved charge
+is carried by no populated species. Options: report the potential as undefined
+(NaN) with a status flag; pin it by convention (mu = 0) and document that; or
+have the mode raise. Until then `test/baseline` does not freeze mu_S where n_S
+is zero, or mu_e where n_e is zero, because there is nothing there to freeze.
 
 ### The pure-Python integral fallback is not a bit-exact reference
 
@@ -125,14 +137,46 @@ in `eos/` and in `nucleation/` now goes through
 - No `compute_nmp` / `invert_nmp`. dd2 has both; sfho needs the same forward
   and inverse nuclear-matter-parameter maps.
 
-### zl, vmit
+### zl
 - Convergence is judged on a sum of squares against a loose 0.01 gate rather
   than a residual norm. Tightening it reclassifies rows near the edges of the
-  tables, so it is a baseline-moving change.
-
-### zl
+  tables, so it is a baseline-moving change. (vmit had the same gate; it now
+  uses a scaled residual norm at 1e-10, and `eos/vmit/eos.py` shows the
+  shape zl's should take.)
 - `fixed_YC_YS` is physically meaningless (no strangeness in the model) and
   must raise rather than silently ignore Y_S.
+
+### vmit
+- `eos_response` implements the freeze `equilibrium` only, and computes it by
+  central differences along the mode's own sequence (c_s^2 = dP/deps at fixed
+  T, C_V = (T/n_B) ds/dT at fixed n_B) because vMIT has no analytic Jacobian
+  in this repository. Frozen composition, frozen conserved fractions and the
+  leptonic re-neutralization variants all raise naming this file. An analytic
+  Jacobian is straightforward here -- the model has one algebraic mean field
+  and no scalar sector -- and would give the susceptibility matrix chi_ab as
+  well.
+- The muon lepton family is not wired: `SpeciesFlags(muons=True)` raises, and
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) only.
+- `thermal_neutrinos` -- flavours not tracked in the composition, carried as
+  mu = 0 gases -- is not wired and raises.
+- `eos_point` takes the entropy-per-baryon axis; `TableSpec` does not, and
+  raises for `axes={'SnB': ...}`. The outer solve exists
+  (`eos.general.tabulate.temperature_at_entropy`); wiring it into the table
+  driver is what is left.
+- The flavour densities are not constrained positive. At exotic fixed
+  fractions (Y_C well above 1, say) the equations have solutions with net
+  ANTI-down and anti-strange densities, and the solver returns them as
+  converged. They are genuine states of the model at finite temperature, not
+  solver failures, but nothing in the API says so; a scan over fractions
+  should either filter them or the result should carry a flag.
+
+### zl, vmit, alphabag
+- `eos/general/tabulate.py` is the shared line-grid driver (warm-started
+  density sweep, skipping, progress callback). vmit uses it; zl and alphabag
+  still carry their own copies of the same loop in `compute_tables.py`, and
+  dd2's `table.py` has a richer version with bisected continuation through
+  onsets. When the second and third consumers arrive, the continuation tactics
+  should move into the shared driver too rather than being reimplemented.
 
 ### enjl
 - Finite temperature is not implemented; the model is T = 0 only.
@@ -152,3 +196,12 @@ in `eos/` and in `nucleation/` now goes through
 - Crust table paths are absolute and machine-specific. A missing crust file
   currently degrades to no crust, which shifts M_max by ~1%; it must instead
   be an explicit argument with an informative error.
+- The two TOV backends differ by about 2% in the tidal deformability on a
+  hybrid EoS, and that difference converges with the resolution of the EoS
+  table rather than with the central-density grid: doubling the density grid
+  from 220 to 440 points takes the gap from 6.3% to 2.2% at eta = 1 and leaves
+  M_max agreeing to 4e-4 Msun. Neither backend is wrong, but 2% is large for
+  two integrators on the same table, and where the remaining difference comes
+  from has not been chased down — the interpolation of eps(P) near the
+  transition is the first suspect. `test/mixed/test_tov_backend_parity.py`
+  pins the measured numbers.

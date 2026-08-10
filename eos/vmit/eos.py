@@ -1,39 +1,103 @@
-"""
-vmit_eos.py
-===========
-Single-point solvers for vector-enhanced MIT bag model (vMIT) quark matter.
+"""Single-point equilibrium solvers for vMIT quark matter.
 
-This module provides solvers for different equilibrium conditions:
-- Beta equilibrium (charge neutrality, beta eq)
-- Fixed charge fraction Y_C
-- Fixed charge+strangeness fractions Y_C, Y_S
-- Trapped neutrinos (fixed Y_L)
+One solver per equilibrium mode. Every mode enforces the vector-field
+self-consistency n_q(mu_eff_q, T, m_q) = n_q for the three flavours and fixes
+the baryon density; the mode supplies the rest:
 
-All thermodynamic functions are in vmit_thermodynamics_quarks.py.
-All table generation is in vmit_compute_tables.py.
+    beta equilibrium (neutrinoless)   mu_C + mu_e = 0, mu_S = 0, n_C = n_e
+    beta equilibrium (trapped)        ... with mu_nu kept and Y_L fixed
+    fixed Y_C                         n_C = Y_C n_B, mu_S = 0
+    fixed Y_C and Y_S                 n_C = Y_C n_B, n_S = Y_S n_B
+
+The unknowns are the physical potentials together with the densities that
+source the vector field, (mu_u, mu_d, mu_s, n_u, n_d, n_s), extended by mu_e
+where a lepton condition is present and by mu_nu in the trapped mode. Keeping
+the densities as unknowns rather than substituting V = a hbar c sum_q n_q is
+what makes the residual polynomial in the mean field instead of nesting the
+Fermi integrals inside it.
+
+The thermodynamic kernels are in `thermodynamics_quarks.py`; the table driver
+is in `table.py`; the spec API (eos_point / eos_table) is in `api.py`. See
+`vmit.tex` for the physics.
 
 Usage:
-    from eos.vmit.eos import solve_vmit_beta_eq, solve_vmit_fixed_yc
-    
+    from eos.vmit.eos import solve_vmit_beta_eq
     result = solve_vmit_beta_eq(n_B=0.32, T=50.0)
-    print(f"P = {result.P_total} MeV/fm³")
+    print(result.converged, result.P_total)
 """
 import numpy as np
-from dataclasses import dataclass, field
-from typing import Optional, Tuple, List
+from dataclasses import dataclass
+from typing import Optional
 from scipy.optimize import root
 
 from eos.vmit.parameters import VMITParams, get_vmit_default
 from eos.vmit.thermodynamics_quarks import (
-    compute_quark_thermo, compute_quark_density, compute_vector_field, 
-    compute_vector_pressure, compute_bag_pressure, compute_bag_energy, 
-    compute_mu_effective, compute_mu_physical, compute_effective_mu_quarks,
-    compute_vmit_thermo_from_mu_n, compute_quark_dentities_for_solver, G_QUARK
+    compute_quark_densities_for_solver, compute_vmit_thermo_from_mu_n, G_QUARK,
 )
-from eos.general.thermodynamics_leptons import electron_thermo, neutrino_thermo, photon_thermo
-from eos.general.fermi_integrals import invert_fermi_density
-from eos.general.physics_constants import hc, hc3, PI2
-from eos.general import particles
+from eos.general.thermodynamics_leptons import (
+    electron_thermo, neutrino_thermo, photon_thermo,
+)
+from eos.general.physics_constants import hc, PI2
+
+
+#: Post-solve gate on the equilibrium residuals, each divided by the scale of
+#: the quantity its equation balances. Matches the tolerance eos/dd2/solver.py
+#: accepts its own solves at.
+RESIDUAL_TOL = 1.0e-10
+
+#: Floor on the potential scale, so a pathological iterate passing through
+#: mu_B = 0 cannot divide by zero. Physical quark matter has mu_B ~ 10^3 MeV.
+MU_SCALE_FLOOR = 1.0
+
+
+def scaled_residual_max(residuals, scales):
+    """The largest residual once each is divided by its own scale.
+
+    The equations of a mode carry mixed units: flavour densities and charge
+    conditions in fm^-3, of order 10^-1, and equalities between chemical
+    potentials in MeV, of order 10^3. A norm of the raw vector is therefore
+    dominated by whichever equation happens to be largest, and accepts states
+    that satisfy the others only loosely. Dividing each residual by the scale
+    of the quantity it balances -- n_B for a density, mu_B for a potential --
+    makes the components comparable, so one tolerance means the same thing for
+    all of them.
+    """
+    return max(abs(r) / s for r, s in zip(residuals, scales))
+
+
+def solve_system(equations, x0, scales_at, x0_fallback=None):
+    """Solve one equilibrium system and judge it on its scaled residual.
+
+    Powell's hybrid method first, Levenberg-Marquardt if that does not reach
+    the gate, and -- when the caller passed a warm start -- one more hybrid
+    attempt from the mode's own default guess, since a warm start carried
+    across a threshold can land outside the basin. Three attempts at most: a
+    parameter scan must always get an answer back, and every attempt is
+    bounded internally.
+
+    `scales_at(x)` returns the per-equation scales at the point x, so the
+    residual is judged in dimensionless terms (see `scaled_residual_max`).
+
+    Returns (x, scaled residual, converged) for the best attempt made.
+    """
+    attempts = [('hybr', x0), ('lm', x0)]
+    if x0_fallback is not None:
+        attempts.append(('hybr', x0_fallback))
+
+    best_x, best_err = np.asarray(x0, dtype=float), np.inf
+    for method, guess in attempts:
+        sol = root(equations, guess, method=method)
+        err = scaled_residual_max(equations(sol.x), scales_at(sol.x))
+        if err < best_err:
+            best_x, best_err = sol.x, err
+        if best_err <= RESIDUAL_TOL:
+            break
+    return best_x, best_err, bool(best_err <= RESIDUAL_TOL)
+
+
+def _mu_scale(mu_u, mu_d):
+    """The scale a potential equality is judged against: mu_B = mu_u + 2 mu_d."""
+    return max(abs(mu_u + 2.0 * mu_d), MU_SCALE_FLOOR)
 
 
 # =============================================================================
@@ -41,11 +105,18 @@ from eos.general import particles
 # =============================================================================
 @dataclass
 class VMITEOSResult:
-    """Complete result from vMIT EOS calculation at one point."""
+    """One solved vMIT state, with the status a caller must test first.
+
+    `converged` is judged on `error`, the largest equilibrium residual after
+    each has been divided by the scale of the quantity it balances (see
+    `scaled_residual_max`); it is dimensionless, and the gate is
+    `RESIDUAL_TOL`. When `converged` is False every other field holds the best
+    iterate reached, which is not a physical state.
+    """
     # Convergence info
     converged: bool = False
-    error: float = 0.0
-    
+    error: float = 0.0     # largest scaled residual, dimensionless
+
     # Inputs
     n_B: float = 0.0       # Baryon density (fm⁻³)
     T: float = 0.0         # Temperature (MeV)
@@ -247,21 +318,19 @@ def solve_vmit_beta_eq(
     
     result = VMITEOSResult(n_B=n_B, T=T)
     
-    g_q = particles.get_particle("quark").g_degen
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    if initial_guess is None:
-        x0 = get_default_guess_beta_eq(n_B, T, params)
-    else:
-        x0 = initial_guess
-    
+    default_guess = get_default_guess_beta_eq(n_B, T, params)
+    x0 = default_guess if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else default_guess
+
     def equations(x):
         mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
-        
+
         # Compute effective μ and densities
-        qmd = compute_quark_dentities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+        qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
         n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
-        
+
         eq1 = qmd.n_u_calc - n_u
         eq2 = qmd.n_d_calc - n_d
         eq3 = qmd.n_s_calc - n_s
@@ -269,20 +338,19 @@ def solve_vmit_beta_eq(
         eq5 = qmd.n_C - n_e
         eq6 = mu_u + mu_e - mu_d
         eq7 = mu_d - mu_s
-        
+
         return [eq1, eq2, eq3, eq4, eq5, eq6, eq7]
-    
-    sol = root(equations, x0, method='hybr')
-    if not sol.success:
-        sol = root(equations, x0, method='lm')
-    
-    mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = sol.x
-    
-    residuals = equations(sol.x)
-    error = sum(r**2 for r in residuals)
-    result.converged = (error < 0.01)
+
+    def scales_at(x):
+        """Five densities against n_B, two potential equalities against mu_B."""
+        return [n_B, n_B, n_B, n_B, n_B, _mu_scale(x[0], x[1]),
+                _mu_scale(x[0], x[1])]
+
+    x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
+    mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
+    result.converged = converged
     result.error = error
-    
+
     # Store results
     result.mu_u, result.mu_d, result.mu_s, result.mu_e = mu_u, mu_d, mu_s, mu_e
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
@@ -342,21 +410,20 @@ def solve_vmit_fixed_yc(
     
     result = VMITEOSResult(n_B=n_B, T=T, Y_C=Y_C)
     
-    g_q = particles.get_particle("quark").g_degen
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    if initial_guess is None:
-        x0 = get_default_guess_fixed_yc(n_B, Y_C, T, params, include_electrons)
-    else:
-        x0 = initial_guess
-    
+    default_guess = get_default_guess_fixed_yc(n_B, Y_C, T, params,
+                                               include_electrons)
+    x0 = default_guess if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else default_guess
+
     if include_electrons:
         # Solve 7 equations with electron charge neutrality
         def equations(x):
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = compute_quark_dentities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
             eq1 = qmd.n_u_calc - n_u
@@ -368,57 +435,53 @@ def solve_vmit_fixed_yc(
             eq7 = n_e - qmd.n_C  # Charge neutrality: n_e = n_C
             
             return [eq1, eq2, eq3, eq4, eq5, eq6, eq7]
-        
-        sol = root(equations, x0, method='hybr')
-        if not sol.success:
-            sol = root(equations, x0, method='lm')
-        
-        mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = sol.x
-        
-        residuals = equations(sol.x)
-        error = sum(r**2 for r in residuals)
-        result.converged = (error < 0.01)
+
+        def scales_at(x):
+            """Six densities against n_B, the mu_s = mu_d equality against mu_B."""
+            return [n_B, n_B, n_B, n_B, n_B, _mu_scale(x[0], x[1]), n_B]
+
+        x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
+        mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
+        result.converged = converged
         result.error = error
-        
+
         result.mu_u, result.mu_d, result.mu_s, result.mu_e = mu_u, mu_d, mu_s, mu_e
         result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
-        
+
         # Compute electron quantities
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
         result.n_e = e_thermo.n
         result.Y_e = result.n_e / n_B
-        
+
     else:
         # Solve 6 equations without electrons
         def equations(x):
             mu_u, mu_d, mu_s, n_u, n_d, n_s = x
-            
+
             # Compute effective μ and densities
-            qmd = compute_quark_dentities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
-            
+            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+
             eq1 = qmd.n_u_calc - n_u
             eq2 = qmd.n_d_calc - n_d
             eq3 = qmd.n_s_calc - n_s
             eq4 = qmd.n_B - n_B
             eq5 = qmd.n_C - n_B * Y_C
             eq6 = mu_d - mu_s
-            
+
             return [eq1, eq2, eq3, eq4, eq5, eq6]
-        
-        sol = root(equations, x0, method='hybr')
-        if not sol.success:
-            sol = root(equations, x0, method='lm')
-        
-        mu_u, mu_d, mu_s, n_u, n_d, n_s = sol.x
-        
-        residuals = equations(sol.x)
-        error = sum(r**2 for r in residuals)
-        result.converged = (error < 0.01)
+
+        def scales_at(x):
+            """Five densities against n_B, the mu_s = mu_d equality against mu_B."""
+            return [n_B, n_B, n_B, n_B, n_B, _mu_scale(x[0], x[1])]
+
+        x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
+        mu_u, mu_d, mu_s, n_u, n_d, n_s = x
+        result.converged = converged
         result.error = error
-        
+
         result.mu_u, result.mu_d, result.mu_s = mu_u, mu_d, mu_s
         result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
-    
+
     result.Y_u = n_u / n_B 
     result.Y_d = n_d / n_B 
     result.Y_s = n_s / n_B 
@@ -471,13 +534,12 @@ def solve_vmit_fixed_yc_ys(
     
     result = VMITEOSResult(n_B=n_B, T=T, Y_C=Y_C, Y_S=Y_S)
     
-    g_q = particles.get_particle("quark").g_degen
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    if initial_guess is None:
-        x0 = get_default_guess_fixed_yc_ys(n_B, Y_C, Y_S, T, params, include_electrons)
-    else:
-        x0 = initial_guess
+    default_guess = get_default_guess_fixed_yc_ys(n_B, Y_C, Y_S, T, params,
+                                                  include_electrons)
+    x0 = default_guess if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else default_guess
     
     if include_electrons:
         # Solve 7 equations with electron charge neutrality
@@ -485,7 +547,7 @@ def solve_vmit_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = compute_quark_dentities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
             eq1 = qmd.n_u_calc - n_u
@@ -497,16 +559,14 @@ def solve_vmit_fixed_yc_ys(
             eq7 = n_e - qmd.n_C  # Charge neutrality: n_e = n_C
             
             return [eq1, eq2, eq3, eq4, eq5, eq6, eq7]
-        
-        sol = root(equations, x0, method='hybr')
-        if not sol.success:
-            sol = root(equations, x0, method='lm')
-        
-        mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = sol.x
-        
-        residuals = equations(sol.x)
-        error = sum(r**2 for r in residuals)
-        result.converged = (error < 0.01)
+
+        def scales_at(x):
+            """Every equation of this mode is a density: all against n_B."""
+            return [n_B] * 7
+
+        x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
+        mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
+        result.converged = converged
         result.error = error
         
         result.mu_u, result.mu_d, result.mu_s, result.mu_e = mu_u, mu_d, mu_s, mu_e
@@ -523,7 +583,7 @@ def solve_vmit_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s = x
             
             # Compute effective μ and densities
-            qmd = compute_quark_dentities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
             
             eq1 = qmd.n_u_calc - n_u
             eq2 = qmd.n_d_calc - n_d
@@ -533,16 +593,14 @@ def solve_vmit_fixed_yc_ys(
             eq6 = qmd.n_S - n_B * Y_S
             
             return [eq1, eq2, eq3, eq4, eq5, eq6]
-        
-        sol = root(equations, x0, method='hybr')
-        if not sol.success:
-            sol = root(equations, x0, method='lm')
-        
-        mu_u, mu_d, mu_s, n_u, n_d, n_s = sol.x
-        
-        residuals = equations(sol.x)
-        error = sum(r**2 for r in residuals)
-        result.converged = (error < 0.01)
+
+        def scales_at(x):
+            """Every equation of this mode is a density: all against n_B."""
+            return [n_B] * 6
+
+        x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
+        mu_u, mu_d, mu_s, n_u, n_d, n_s = x
+        result.converged = converged
         result.error = error
         
         result.mu_u, result.mu_d, result.mu_s = mu_u, mu_d, mu_s
@@ -574,7 +632,8 @@ def solve_vmit_fixed_yc_ys(
     
     result.mu_B = q_thermo.mu_B
     result.mu_C = q_thermo.mu_C
-    
+    result.mu_S = q_thermo.mu_S
+
     return result
 
 
@@ -596,19 +655,17 @@ def solve_vmit_trapped_neutrinos(
     
     result = VMITEOSResult(n_B=n_B, T=T, Y_L=Y_L)
     
-    g_q = particles.get_particle("quark").g_degen
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    if initial_guess is None:
-        x0 = get_default_guess_trapped_neutrinos(n_B, Y_L, T, params)
-    else:
-        x0 = initial_guess
-    
+    default_guess = get_default_guess_trapped_neutrinos(n_B, Y_L, T, params)
+    x0 = default_guess if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else default_guess
+
     def equations(x):
         mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
         
         # Compute effective μ and densities
-        qmd = compute_quark_dentities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+        qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_thermo = neutrino_thermo(mu_nu, T, include_antiparticles=True)
         
@@ -624,18 +681,18 @@ def solve_vmit_trapped_neutrinos(
         eq8 = n_L / n_B - Y_L  # Lepton fraction
         
         return [eq1, eq2, eq3, eq4, eq5, eq6, eq7, eq8]
-    
-    sol = root(equations, x0, method='hybr')
-    if not sol.success:
-        sol = root(equations, x0, method='lm')
-    
-    mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = sol.x
 
-    residuals = equations(sol.x)
-    error = sum(r**2 for r in residuals)
-    result.converged = (error < 0.01)
+    def scales_at(x):
+        """Five densities against n_B, two potential equalities against mu_B;
+        the lepton-fraction equation is already dimensionless."""
+        mu_B = _mu_scale(x[0], x[1])
+        return [n_B, n_B, n_B, n_B, n_B, mu_B, mu_B, 1.0]
+
+    x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
+    mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
+    result.converged = converged
     result.error = error
-    
+
     result.mu_u, result.mu_d, result.mu_s, result.mu_e, result.mu_nu = mu_u, mu_d, mu_s, mu_e, mu_nu
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
     
@@ -699,38 +756,3 @@ def result_to_guess(result: VMITEOSResult, eq_type: str, include_electrons: bool
     else:
         return np.array([result.mu_u, result.mu_d, result.mu_s,
                          result.n_u, result.n_d, result.n_s])
-
-
-# =============================================================================
-# SELF-TEST
-# =============================================================================
-if __name__ == "__main__":
-    print("vMIT EOS Solvers Test")
-    print("=" * 50)
-    
-    params = get_vmit_default()
-    n_B = 0.32
-    T = 50.0
-    
-    print(f"\nTest at n_B={n_B} fm⁻³, T={T} MeV")
-    print(f"Parameters: B^1/4={params.B4} MeV, a={params.a} fm²")
-    
-    # Beta equilibrium
-    r = solve_vmit_beta_eq(n_B, T, params)
-    print(f"\nBeta equilibrium:")
-    print(f"  converged={r.converged}, error={r.error:.2e}")
-    print(f"  Y_e={r.Y_e:.4f}, P={r.P_total:.2f} MeV/fm³")
-    
-    # Fixed Y_C
-    r = solve_vmit_fixed_yc(n_B, 0.0, T, params)
-    print(f"\nFixed Y_C=0:")
-    print(f"  converged={r.converged}, error={r.error:.2e}")
-    print(f"  P={r.P_total:.2f} MeV/fm³")
-    
-    # Trapped neutrinos
-    r = solve_vmit_trapped_neutrinos(n_B, 0.4, T, params)
-    print(f"\nTrapped neutrinos Y_L=0.4:")
-    print(f"  converged={r.converged}, error={r.error:.2e}")
-    print(f"  Y_e={r.Y_e:.4f}, P={r.P_total:.2f} MeV/fm³")
-    
-    print("\nOK!")

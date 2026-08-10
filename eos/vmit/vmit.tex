@@ -1,0 +1,265 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nC}{n_C}
+\newcommand{\nS}{n_S}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\mueff}[1]{\mu^{\mathrm{eff}}_{#1}}
+
+\begin{document}
+
+\title{vMIT: the vector-interaction MIT bag model for quark matter \\
+       --- as implemented in \texttt{eos/vmit}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/vmit} subpackage implements the MIT bag model of
+Chodos et al.~\cite{Chodos1974} augmented by a repulsive vector interaction
+between quarks, in the form used by Gomes et al.~\cite{Gomes2019} and by
+Constantinou et al.~\cite{Constantinou2021,Constantinou2023}. The model has
+four parameters --- the bag constant $B$, the vector coupling
+$a = g_V^2/m_V^2$, and the current quark masses --- and no scalar
+self-consistency: the quark masses are fixed, so the only mean field to solve
+for is the vector one. This note states the Lagrangian, the thermodynamics,
+the conserved-charge bookkeeping, and the closure of each equilibrium mode the
+code supports. It is written from the code, as its specification: every
+equation here is asserted by the \texttt{verify/} suite or by
+\texttt{test/vmit/}.
+\end{abstract}
+
+\maketitle
+
+\section{Lagrangian and mean field}
+
+Three quark flavours $q \in \{u, d, s\}$, confined by a bag of constant energy
+density $B$, interact through an isoscalar--vector field $V^\mu$:
+%
+\begin{equation}
+\mathcal{L} = \sum_q \bar\psi_q \big[ \gamma_\mu \big( i\partial^\mu
+      - g_V V^\mu \big) - m_q \big] \psi_q
+      - \tfrac14 V_{\mu\nu} V^{\mu\nu} + \tfrac12 m_V^2\, V_\mu V^\mu
+      - B ,
+\label{eq:lagrangian}
+\end{equation}
+%
+with $V_{\mu\nu} = \partial_\mu V_\nu - \partial_\nu V_\mu$. The quark masses
+are the \emph{current} masses; unlike a Nambu--Jona-Lasinio model there is no
+scalar condensate and no gap equation, so $m_q$ is a parameter and not a
+solved quantity.
+
+In uniform matter at rest only $V^0$ survives, and its equation of motion is
+algebraic:
+%
+\begin{equation}
+m_V^2\, V^0 = g_V \sum_q n_q
+\qquad\Longrightarrow\qquad
+V \;\equiv\; g_V V^0 \;=\; \frac{g_V^2}{m_V^2} \sum_q n_q
+        \;=\; a\, (\hbar c) \sum_q n_q ,
+\label{eq:vectorfield}
+\end{equation}
+%
+which is the only self-consistency in the model. The coupling is carried as
+the single combination $a = g_V^2/m_V^2$, quoted in $\mathrm{fm}^2$; the
+factor $\hbar c$ converts $a \sum_q n_q$ ($\mathrm{fm}^{-1}$) to MeV. The two
+couplings are not separately identifiable at mean-field level, so the code
+never carries them apart.
+
+Because $V$ couples to the quark \emph{number} density and is flavour blind,
+it shifts all three chemical potentials by the same amount. The kinetic
+(effective) potential that enters the Fermi integrals is
+%
+\begin{equation}
+\mueff{q} = \mu_q - V ,
+\label{eq:mueff}
+\end{equation}
+%
+and the mean-field problem is the fixed point $n_q = n_q(\mueff{q}, T, m_q)$
+with $V$ given by Eq.~(\ref{eq:vectorfield}).
+
+\section{Thermodynamics}
+
+Each flavour contributes as a free Fermi gas of mass $m_q$ and degeneracy
+$g = 2_{\mathrm{spin}} \times 3_{\mathrm{colour}} = 6$, evaluated at $\mueff{q}$
+with its antiparticles included:
+%
+\begin{align}
+n_q &= \frac{g}{2\pi^2} \int_0^\infty \! dk\, k^2
+       \left[ f(E_k - \mueff{q}) - f(E_k + \mueff{q}) \right] ,
+       & E_k &= \sqrt{k^2 + m_q^2} ,
+\label{eq:nq} \\
+P_q &= \frac{g}{6\pi^2} \int_0^\infty \! dk\, \frac{k^4}{E_k}
+       \left[ f(E_k - \mueff{q}) + f(E_k + \mueff{q}) \right] ,
+\label{eq:Pq} \\
+\varepsilon_q &= \frac{g}{2\pi^2} \int_0^\infty \! dk\, k^2 E_k
+       \left[ f(E_k - \mueff{q}) + f(E_k + \mueff{q}) \right] ,
+\label{eq:epsq}
+\end{align}
+%
+with $f(x) = [1 + e^{x/T}]^{-1}$ and $s_q = (\varepsilon_q + P_q -
+\mueff{q} n_q)/T$. These integrals are \emph{not} implemented here: they come
+from \texttt{eos.general.fermi\_integrals}, which evaluates them through the
+Johns--Ellis--Lattimer analytic approximation~\cite{JohnsEllisLattimer1996},
+uniformly valid from the degenerate to the non-degenerate limit and exact at
+$T = 0$.
+
+The vector field and the bag add
+%
+\begin{equation}
+P_V = \varepsilon_V = \tfrac12\, a\, (\hbar c) \Big( \sum_q n_q \Big)^{\!2} ,
+\qquad
+P_B = -\,\frac{B}{(\hbar c)^3} , \qquad
+\varepsilon_B = +\,\frac{B}{(\hbar c)^3} ,
+\label{eq:vectorbag}
+\end{equation}
+%
+so that the totals are
+%
+\begin{equation}
+P = \sum_q P_q + P_V + P_B , \qquad
+\varepsilon = \sum_q \varepsilon_q + \varepsilon_V + \varepsilon_B , \qquad
+s = \sum_q s_q .
+\label{eq:totals}
+\end{equation}
+%
+A vector field contributes with the \emph{same} sign to $P$ and
+$\varepsilon$, whereas the bag contributes with opposite signs; the bag is
+what makes $P$ negative --- and the matter unbound --- below the deconfinement
+density. $B$ is stored as $B^{1/4}$ in MeV, the form in which it is quoted;
+the code holds $B = (B^{1/4})^4$ in $\mathrm{MeV}^4$ and divides by
+$(\hbar c)^3$ at the one place it enters an $\mathrm{MeV}\,\mathrm{fm}^{-3}$
+quantity.
+
+\paragraph{Euler relation.} With Eqs.~(\ref{eq:mueff}),
+(\ref{eq:vectorfield}) and (\ref{eq:vectorbag}) the identity
+$\varepsilon + P = Ts + \sum_q \mu_q n_q$ holds \emph{identically}, not just
+numerically: the $\pm B$ terms cancel between $\varepsilon$ and $P$, the
+kinetic sector satisfies $\varepsilon_{\mathrm{kin}} + P_{\mathrm{kin}} =
+T s + \sum_q \mueff{q} n_q$, and the remaining
+$2 P_V = a (\hbar c) (\sum_q n_q)^2 = V \sum_q n_q$ is exactly the shift
+$\sum_q (\mu_q - \mueff{q}) n_q$. The \texttt{verify/} suite asserts it at
+$10^{-8}$ relative, which is therefore a test of the Fermi integrals and of
+the assembly, with no cancellation left to hide an error.
+
+\section{Conserved charges}
+
+Bookkeeping follows the conventions of the repository: $C$ is the electric
+charge of strongly-interacting matter only (leptons excluded), and strangeness
+counts $S = +1$ per $s$ quark, the opposite of the PDG sign. From the quark
+quantum numbers,
+%
+\begin{equation}
+\nB = \frac{n_u + n_d + n_s}{3} , \qquad
+\nC = \frac{2 n_u - n_d - n_s}{3} , \qquad
+\nS = n_s ,
+\label{eq:charges}
+\end{equation}
+%
+and, since species potentials are projections of the conserved ones,
+$\mu_q = B_q \muB + C_q \muC + S_q \muS$, which inverts to
+%
+\begin{equation}
+\muB = \mu_u + 2\mu_d , \qquad
+\muC = \mu_u - \mu_d , \qquad
+\muS = \mu_s - \mu_d .
+\label{eq:potentials}
+\end{equation}
+%
+The plus sign on $\muS$ in $\mu_s = \muB/3 - \muC/3 + \muS$ is the
+$S = +1$ convention; under the PDG sign it would be a minus. Neither
+Eq.~(\ref{eq:charges}) nor Eq.~(\ref{eq:potentials}) is written out in this
+subpackage: both come from \texttt{eos.general.basis}, which builds them from
+the quantum-number table, so a quark phase and a hadronic phase cannot drift
+apart in a hybrid construction.
+
+\section{Equilibrium modes}
+
+A mode fixes the independent variables and supplies the missing conditions.
+In every mode the three flavour equations
+%
+\begin{equation}
+n_q\big(\mueff{q}, T, m_q\big) - n_q = 0 , \qquad q = u, d, s
+\label{eq:selfconsistency}
+\end{equation}
+%
+enforce the vector-field self-consistency, and one equation fixes the density,
+$\nB(n_u, n_d, n_s) = \nB^{\mathrm{target}}$. The remaining conditions are:
+
+\begin{description}
+\item[\texttt{beta\_eq\_neutrinoless}] $(\nB, T)$. Weak equilibrium with
+  free-streaming neutrinos ($\mu_\nu = 0$): $d \leftrightarrow u + e + \bar\nu_e$
+  gives $\mu_d = \mu_u + \mu_e$, i.e.\ $\muC + \mu_e = 0$, and
+  $s \leftrightarrow d$ gives $\mu_s = \mu_d$, i.e.\ $\muS = 0$. Electric
+  neutrality of the total system closes it: $\nC = n_e$.
+
+\item[\texttt{beta\_eq\_neutrino\_trapped}] $(\nB, Y_{L_e}, T)$. The same,
+  with the neutrino potential retained,
+  $\mu_u + \mu_e = \mu_d + \mu_{\nu_e}$, and the lepton number fixed,
+  $(n_e + n_{\nu_e})/\nB = Y_{L_e}$, in place of $\mu_{\nu_e} = 0$.
+  Strangeness stays equilibrated, $\muS = 0$.
+
+\item[\texttt{fixed\_YC}] $(\nB, Y_C, T)$. The non-leptonic charge fraction is
+  imposed, $\nC = Y_C \nB$, and strangeness remains equilibrated,
+  $\muS = 0$; there is no weak-equilibrium condition on $\mu_e$, because
+  $Y_C$ has replaced it.
+
+\item[\texttt{fixed\_YC\_YS}] $(\nB, Y_C, Y_S, T)$. Both fractions imposed,
+  $\nC = Y_C \nB$ and $\nS = Y_S \nB$; $\muS$ is then an output, determined by
+  how much strangeness was demanded.
+\end{description}
+
+The \texttt{leptons} flag is orthogonal to the two fixed-fraction modes. With
+\texttt{leptons=True} an electron gas is added at whatever $\mu_e$ makes the
+total system neutral, $n_e = \nC$, and contributes to $\varepsilon$, $P$ and
+$s$. With \texttt{leptons=False} the result is charged quark matter, with no
+leptons at all --- which is what a mixed-phase construction needs for each
+pure phase before imposing \emph{global} neutrality. In the two
+$\beta$-equilibrium modes leptons are always present, since they are what
+$\beta$ equilibrium is about.
+
+Photons are an independent flag and contribute to $\varepsilon$, $P$ and $s$
+only. Wherever a temperature is accepted, entropy per baryon $s/\nB$ is
+accepted in its place, through an outer one-dimensional solve for $T$.
+
+\section{Numerics}
+
+The unknown vector is the physical potentials together with the densities that
+source the vector field, $(\mu_u, \mu_d, \mu_s, n_u, n_d, n_s)$, extended by
+$\mu_e$ where a lepton condition is present and by $\mu_{\nu_e}$ in the
+trapped mode --- six to eight unknowns, solved with a Powell hybrid method.
+Carrying $n_q$ as unknowns rather than substituting
+Eq.~(\ref{eq:vectorfield}) is what makes the system smooth: the residual is
+then polynomial in the mean field instead of nesting the Fermi integrals
+inside it.
+
+Convergence is judged on the residual vector, not on the solver's own report,
+and the residual is made dimensionless before it is judged: the equations of
+Eq.~(\ref{eq:selfconsistency}) and the charge conditions are divided by
+$\nB$, the potential equalities by $\muB$. A state is accepted when the
+largest scaled residual is below $10^{-10}$. This matters because the
+equations carry mixed units --- densities of order $10^{-1}\,\mathrm{fm}^{-3}$
+and potentials of order $10^{3}\,\mathrm{MeV}$ --- so a gate on the raw sum of
+squares is dominated by whichever equation happens to be largest and accepts
+states that satisfy the others only loosely.
+
+Non-convergence is reported, never raised: the model is used inside parameter
+scans that walk into regions where no positive-density solution exists, and a
+scan must be able to score such a point and move on.
+
+Along a density sweep each solved point seeds the next. The natural
+continuation variables are the potentials and densities themselves, which vary
+smoothly with $\nB$ even where the strange-quark population turns on.
+
+\begin{acknowledgments}
+Written as the specification of \texttt{eos/vmit}.
+\end{acknowledgments}
+
+\bibliography{../../docs/eos}
+
+\end{document}
