@@ -13,81 +13,66 @@ build/
 venv/
 env/
 
-# IDE
+# IDE / editor
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Output directories (large data, regenerated)
-output/
-sfho_tables_output/
-eos_plots/
-compose_comparison_plots/
+# OS
+.DS_Store
 
 # Jupyter
 .ipynb_checkpoints/
+**/*-checkpoint.ipynb
 
-# OS
-.DS_Store
-notebooks/zlvmit_test.ipynb
-test/zlvmit/phase_boundaries_eta0.00_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.10_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.11_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.20_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.22_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.30_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.33_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.40_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.44_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.50_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.56_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.60_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.67_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.70_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.78_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.80_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.89_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta0.90_betaeq_B165_a0.2.dat
-test/zlvmit/phase_boundaries_eta1.00_betaeq_B165_a0.2.dat
-test/zlvmit/pure_H_table_beta.dat
-test/zlvmit/pure_Q_table_beta_B165_a0.2.dat
-test/zlvmit/table_hybrid_betaeq_eta0.00_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.00_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.10_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.10_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.11_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.11_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.20_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.20_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.22_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.22_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.30_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.30_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.33_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.33_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.40_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.40_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.44_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.44_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.50_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.50_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.56_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.56_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.60_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.60_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.67_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.67_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.70_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.70_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.78_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.78_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.80_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.80_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.89_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.89_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta0.90_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta0.90_B165_a0.2_result.dat
-test/zlvmit/table_hybrid_betaeq_eta1.00_B165_a0.2_complete.dat
-test/zlvmit/table_hybrid_betaeq_eta1.00_B165_a0.2_result.dat
+# Test caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated tables, plots and scratch output.
+# output/ is the one home for these; output/public/ is the curated subset
+# meant to be shared on GitHub, so it is un-ignored.
+output/
+!output/public/
+!output/public/**
+sfho_tables_output/
+eos_plots/
+compose_comparison_plots/
+# Written by the DD2vMIT notebook next to wherever it is run from. The
+# top-level copy predates this rule and is still tracked; moving it under
+# output/ belongs with the notebook rework.
 notebooks/eos_tables_DD2vMIT/
+
+# Tables and phase boundaries written by the solvers while exploring.
+# Ignored by LOCATION, not by extension: `*.dat` would also swallow
+# test/enjl/reference/*.dat (the ENJL author tables, which are golden
+# reference values) and plot/data/samples/*.dat (observational input).
+# This one glob replaces ~60 individually listed test/zlvmit paths.
+test/zlvmit/*.dat
+test/**/table_hybrid_*.dat
+test/**/phase_boundaries_*.dat
+
+# Raw posterior samples (~160 MB). Build inputs for the contours, not runtime
+# data: everything at run time reads the derived CSVs in
+# eos/general/data/contours/. Re-fetch with `python plot/fetch_samples.py`,
+# which verifies each download against a recorded sha256. Provenance is in
+# plot/data/samples/SOURCES.md, which stays tracked along with the small
+# extracted tables and the heavy-ion / chiral-EFT bands.
+plot/data/samples/J0030.txt
+plot/data/samples/J0740.txt
+plot/data/samples/HESS.txt
+plot/data/samples/J0614.dat
+plot/data/samples/GW190425_nocosmo.h5
+plot/data/samples/GW170817_GWTC-1.hdf5
+plot/data/samples/*.part
+plot/data/samples/*.mismatch
+
+# The test suite is kept local and not published. The Phase-1 regression
+# baseline lives in test/baseline/ and is regenerated with
+# `python test/baseline/generate_baseline.py`.
+/test/
+
+# Notebook scratch
+notebooks/zlvmit_test.ipynb
