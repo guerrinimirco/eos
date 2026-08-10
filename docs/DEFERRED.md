@@ -48,6 +48,50 @@ together. Worth deciding during the `general/` refactor whether to add a
 parity check at a documented tolerance, or to drop `fastmath` on the kernels
 where the speed gain does not justify it.
 
+### ASY-EOS band columns are headed "low"/"up" but are stiff/soft edges
+
+`plot/data/samples/ASYEOS_2016_Esym.txt` and the CSV derived from it carry the
+header `rho_fm3 Esym_low_MeV Esym_up_MeV`, but the two curves cross at
+saturation: below n_0 the "low" column is the larger of the two, above it the
+smaller. That is the physics — the constraint bounds the SLOPE of E_sym, so
+the band is pinned where E_sym is already known and fans out either side — but
+the column names invite exactly the wrong fix, which is to sort them.
+
+Drawing is unaffected (`fill_between` fills between two curves in any order)
+and both the crossing and the pivot are pinned by tests. What is left is to
+rename the columns to something like `Esym_stiff` / `Esym_soft` in SOURCES.md
+and the converter, so the file stops implying an ordering it does not have.
+
+### The CompOSE reader creates a cycle, and moving it is not just a move
+
+`eos/sfho/compose_loader.py` imports `EOSTable_for_TOV` from `eos.tov.solver`,
+and `eos.tov.solver` imports `SFHOComposeLookup` back from it — a genuine
+import cycle, currently worked around with a lazy import inside the function
+and a comment saying so. On top of that, `eos/dd2/verify/compose.py` imports
+the same module, so a model depends on another model.
+
+Both are violations of the layering in CLAUDE.md section 1, and the plan's
+remedy — move it to `general/compose.py` — cannot be applied literally,
+because `general/` may import nothing else in the repository and the reader
+currently returns an `EOSTable_for_TOV`.
+
+The shape the move has to take: `general/compose.py` reads a CompOSE table and
+returns plain arrays (P, eps, n_B); the crust-table wrapper `to_crust_table`
+moves to `astro/tov`, which is the layer entitled to know about
+`EOSTable_for_TOV`. That resolves the cycle in the right direction — general
+produces data, astro consumes it — and drops the `dd2 -> sfho` edge. It should
+be done in the `astro/tov` session, where the crust path has test cover: a
+silent fall back to no crust shifts M_max by about 1%.
+
+### One notebook still sets rcParams
+
+`notebooks/ENJL_usage.py` sets `figure.dpi` and `figure.figsize` directly. It
+is a per-notebook display preference rather than house style, and the file is
+jupytext-paired, so changing it means changing the .ipynb in the same edit.
+Left for the notebook rework, which rewrites both halves anyway. Every module
+in `eos/` and in `nucleation/` now goes through
+`eos.general.figure_style`.
+
 ---
 
 ## Per model
