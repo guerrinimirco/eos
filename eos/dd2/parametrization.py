@@ -278,10 +278,14 @@ class Parametrization:
     @classmethod
     def from_nmp(cls, nmp, m_sigma=546.212459, return_status=False):
         """
-        Invert nuclear-matter parameters to DD2 nucleon couplings (
-        cascade). nmp: dict with {n_sat, E_sat, m_eff_ratio, K_sat, Q_sat,
-        E_sym, L_sym}. Returns the Parametrization, or (Parametrization,
-        InversionStatus) if return_status.
+        Invert nuclear-matter parameters to DD2 nucleon couplings.
+        nmp: dict with {n_sat, E_sat, m_eff_ratio, K_sat, E_sym, L_sym}, and
+        optionally Q_sat. Without Q_sat the inversion uses the structural
+        closure (cross-constraint + pinned c_omega) and reports Q_sat and
+        K_sym as predictions in the status; with Q_sat present it is imposed
+        instead of the pin (see nmp_inverter.invert_nmp). Returns the
+        Parametrization, or (Parametrization, InversionStatus) if
+        return_status.
 
         Hyperon/Δ sectors attach on top (same SU(6)+U_Y recipe as
         from_dd2y_defaults / the x_Delta_* fields) once the nucleon sector is

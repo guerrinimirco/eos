@@ -1,63 +1,76 @@
-"""
-nmp_inverter.py
-====================
-Inverse map: nuclear-matter parameters -> DD2 couplings.
+"""Inverse map: nuclear-matter parameters -> DD2 couplings.
 
 The forward map (nmp.compute_nmp) extracts {n_sat, E_sat, m*/m, K_sat, Q_sat,
-E_sym, L_sym} from a Parametrization. This inverts it:
+K_sym, E_sym, L_sym} from a Parametrization. This inverts it.
 
-  1. Isoscalar (6x6 root at FIXED n_sat, so no P=0 bracket search in the loop):
-     free {Gamma_sigma, Gamma_omega, b_sigma, c_sigma, b_omega, c_omega} matched to
-     {P(n_sat)=0, E_sat, m*/m, K_sat, Q_sat, and the closing cross-constraint
-     f_sigma''(1)=f_omega''(1)}. m_sigma is fixed: with it fixed, the five
-     isoscalar NMPs plus the cross-constraint
-     close the sector). a_i, d_i are derived internally (from_microscopic).
-  2. Isovector (near-analytic): Gamma_rho(n_sat) from E_sym in closed form, then
-     a_rho from L_sym by a 1-D root.
-  3. Feasibility flags: m*/m too small, no real isoscalar solution,
-     a_rho driving Gamma_rho non-monotonic / negative.
+The imposed set is {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}:
 
-The isoscalar cross-constraint is DD2's own (it holds on the published table to
-2.2e-3, not exactly), so a round trip reproduces the NMPs exactly but the shape
-coefficients to ~2e-3 — see the M8 gate test.
+  1. Isoscalar (5x5 root at FIXED n_sat, so no P=0 bracket search in the
+     loop): free {Gamma_sigma, b_sigma, c_sigma, Gamma_omega, b_omega}
+     matched to {P(n_sat)=0, E_sat, m*/m, K_sat, and the cross-constraint
+     f_sigma''(1) = f_omega''(1)}. The sixth coupling, c_omega, is PINNED at
+     its published value — that pin plus the cross-constraint are the model's
+     structural closure of the isoscalar sector. m_sigma is fixed; a_i, d_i
+     are derived internally (from_microscopic).
+  2. Isovector (near-analytic): Gamma_rho(n_sat) from E_sym in closed form,
+     then a_rho from L_sym by a 1-D root.
+  3. The higher derivatives NOT imposed — Q_sat and K_sym — are computed
+     forward from the recovered couplings and reported in
+     InversionStatus.predictions. They are predictions of the closure, not
+     inputs.
+
+Why c_omega is the pinned coefficient: Q_sat is carried almost entirely by
+the omega shape. Pinning c_omega anchors it — on DD2's own NMPs the round
+trip returns the published couplings unchanged and predicts Q_sat within the
+0.1 MeV stencil noise — while pinning a sigma-side coefficient lets the
+cross-constraint drag the omega shape and moves the predicted Q_sat by
+20-30 MeV.
+
+Imposing Q_sat instead of the pin remains available (impose_Q_sat=True): the
+isoscalar system is then the 6x6 {P, E_sat, m*/m, K_sat, Q_sat, cross} over
+all six couplings. When the caller does not say, the presence of "Q_sat" in
+the target dict decides — so existing callers that always supplied it keep
+the closure they were written against.
+
+The isoscalar cross-constraint is DD2's own, and the published table obeys it
+to 2.2e-3, not exactly. The 5x5 residual therefore has a floor of that order
+at DD2-like targets (the physics rows hold the couplings at the published
+values and the cross row reports the table's own violation); ISO_GATE covers
+it. A round trip reproduces the imposed NMPs exactly; shape coefficients to
+~2e-3 in the 6x6 path.
 
 What limits which NMPs invert: the seed, not the physics
 --------------------------------------------------------
-A single solve from the published DD2 couplings converges only for targets near
-DD2's own (K_sat, Q_sat), and the set it reaches traces a narrow band through
-that seed point. That band is a picture of one basin of attraction, NOT of the
-feasible set, and reading it as physics is the mistake this module exists to
-prevent. Measured on a 187-cell (K_sat, Q_sat) grid over K_sat = 200-300 and
-Q_sat = 0-400 MeV:
+A single solve from the published DD2 couplings converges only for targets
+near DD2's own values, and the set it reaches traces a narrow band through
+that seed point. That band is a picture of one basin of attraction, NOT of
+the feasible set, and reading it as physics is the mistake this module exists
+to prevent. Measured on a 187-cell (K_sat, Q_sat) grid over K_sat = 200-300
+and Q_sat = 0-400 MeV with the 6x6 closure:
 
     restarts     0      32      64
     inverting    7/187  68/187  115/187
 
 The single seed reports 4% of the plane as representable; sixty-four restarts
 find 61% of it, still without saturating, and the remaining failures are
-scattered rather than bounding a region — so they are very likely further seed
-failures too. The residual surface has a spurious basin in which the
-cross-constraint is satisfied but Q_sat is wrong, and which basin a solve lands
-in is a property of where it started. Hence N_RESTARTS.
-
-Do NOT infer a (K_sat, Q_sat) constraint curve from a scan run at low
-`n_restarts`. Six couplings against six conditions makes the system square,
-which bounds how much freedom there is in principle, but it does not put the
-feasible set on a curve, and the numbers above are what that looks like in
-practice.
+scattered rather than bounding a region — so they are very likely further
+seed failures too. The residual surface has a spurious basin in which the
+cross-constraint is satisfied but Q_sat is wrong, and which basin a solve
+lands in is a property of where it started. Hence N_RESTARTS. Do NOT infer a
+(K_sat, Q_sat) constraint curve from a scan run at low `n_restarts`.
 
 The remaining numerical limit is the stencil
 --------------------------------------------
 Q_sat is a third finite difference of E/A, which is itself the output of a
-nonlinear solve, and the h = 1e-4 step used here and in the forward map is just
-past the truncation/roundoff optimum (~3e-4 to 1e-3): Q_sat carries ~0.1 MeV of
-stencil noise at h = 1e-4 and diverges outright by h = 1e-6. ISO_GATE is set by
-that noise. The forward map (nmp.compute_nmp) uses the IDENTICAL stencil on
-purpose, so the finite-difference bias cancels exactly on a round trip; any
-change to h must be made in both places together or the round trip stops
-reproducing its own inputs.
+nonlinear solve, and the h = 1e-4 step used here and in the forward map is
+just past the truncation/roundoff optimum (~3e-4 to 1e-3): Q_sat carries
+~0.1 MeV of stencil noise at h = 1e-4 and diverges outright by h = 1e-6.
+The forward map (nmp.compute_nmp) uses the IDENTICAL stencil on purpose, so
+the finite-difference bias cancels exactly on a round trip; any change to h
+must be made in both places together or the round trip stops reproducing its
+own inputs. The same applies to the predicted Q_sat this module reports.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.optimize import brentq, root
@@ -69,22 +82,26 @@ from eos.dd2.physics.thermo import kF_from_n
 from eos.dd2.solver import solve_snm
 
 
-#: Gate on the isoscalar residual. It is set by the finite-difference third
-#: derivative that produces Q_sat, not by the physics: with the h = 1e-4 stencil
-#: used here and in the forward map, Q_sat carries ~0.1 MeV of stencil noise
-#: (scaled by 1e-2 in the residual vector), and a tighter gate would start
-#: rejecting converged solutions for a reason that has nothing to do with
+#: Gate on the isoscalar residual. Two floors meet here, both below it: the
+#: finite-difference third derivative behind Q_sat in the 6x6 path (~0.1 MeV,
+#: scaled by 1e-2 in the residual), and the published table's own 2.2e-3
+#: violation of the cross-constraint in the 5x5 path. A tighter gate would
+#: reject converged solutions for reasons that have nothing to do with
 #: whether the NMPs are representable.
 ISO_GATE = 2e-2
 
-#: Perturbed restarts attempted when the first isoscalar solve misses the gate.
-#: They run ONLY on a miss, so an NMP set that inverts from the DD2 seed costs
-#: exactly what it did before. What they buy is large and does not saturate —
-#: on a 187-cell (K_sat, Q_sat) grid, 7 cells invert from the single seed, 68 at
-#: 32 restarts and 115 at 64 — so this default is a compromise with scan cost
-#: (a miss costs ~n_restarts x 40 ms) and not a converged answer. Raise it when
-#: mapping a boundary matters more than the wall clock.
+#: Perturbed restarts attempted when the first isoscalar solve misses the
+#: gate. They run ONLY on a miss, so an NMP set that inverts from the DD2 seed
+#: costs exactly what it did before. What they buy is large and does not
+#: saturate — see the module docstring — so this default is a compromise with
+#: scan cost (a miss costs ~n_restarts x 40 ms), not a converged answer.
+#: Raise it when mapping a boundary matters more than the wall clock.
 N_RESTARTS = 32
+
+#: The pinned isoscalar shape coefficient of the default closure, at its
+#: published DD2 value (Typel et al. 2010). See the module docstring for why
+#: it is c_omega and not a sigma-side coefficient.
+PINNED_COEFF = "c_omega"
 
 
 @dataclass
@@ -93,6 +110,10 @@ class InversionStatus:
     message: str
     isoscalar_residual: float
     isovector_residual: float
+    #: Higher derivatives the closure does not impose, computed forward from
+    #: the recovered couplings with the same stencils as nmp.compute_nmp:
+    #: {"Q_sat": MeV, "K_sym": MeV}. Empty only if the build itself failed.
+    predictions: dict = field(default_factory=dict)
 
 
 def _f2_at1(b, c):
@@ -110,30 +131,88 @@ def _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma, Grho=3.0, a_rho=0.5):
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
 
 
-def _isoscalar_quantities(par, n_sat, h=1e-4):
-    """{P, E/A, m*/m, K_sat, Q_sat} of SNM at n_sat (no P=0 search)."""
+def _isoscalar_quantities(par, n_sat, h=1e-4, want_Q=True):
+    """{P, E/A, m*/m, K_sat, (Q_sat)} of SNM at n_sat (no P=0 search).
+
+    want_Q=False skips the third-difference stencil and its four extra
+    solves — the default closure does not impose Q_sat, so its residual
+    never needs it.
+    """
     EA = lambda n: solve_snm(par, n).eps / n - par.m_nucleon
     at = solve_snm(par, n_sat)
     d2 = (EA(n_sat + h) - 2 * EA(n_sat) + EA(n_sat - h)) / h ** 2
-    d3 = (EA(n_sat + 2 * h) - 2 * EA(n_sat + h)
-          + 2 * EA(n_sat - h) - EA(n_sat - 2 * h)) / (2 * h ** 3)
-    return dict(P=at.P, E_sat=EA(n_sat), m_ratio=at.m_eff / par.m_nucleon,
-                K_sat=9 * n_sat ** 2 * d2, Q_sat=27 * n_sat ** 3 * d3)
+    out = dict(P=at.P, E_sat=EA(n_sat), m_ratio=at.m_eff / par.m_nucleon,
+               K_sat=9 * n_sat ** 2 * d2)
+    if want_Q:
+        d3 = (EA(n_sat + 2 * h) - 2 * EA(n_sat + h)
+              + 2 * EA(n_sat - h) - EA(n_sat - 2 * h)) / (2 * h ** 3)
+        out["Q_sat"] = 27 * n_sat ** 3 * d3
+    return out
 
 
-def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS):
+def _restart_loop(iso_residual, seed, first, n_restarts, gate=ISO_GATE):
+    """Keep the best of the first solve and up to n_restarts jittered ones.
+
+    Deterministic by construction: the same NMP must invert identically on
+    every run and in every parallel worker, so the generator is seeded with a
+    constant rather than left to entropy.
     """
-    Recover DD2 couplings from a target NMP dict with keys
-    {n_sat, E_sat, m_eff_ratio, K_sat, Q_sat, E_sym, L_sym}. Returns
-    (Parametrization, InversionStatus). Raises ValueError only on a hard
-    infeasibility; a soft failure is reported via status.ok=False.
+    best_x = first.x
+    best_res = float(np.max(np.abs(iso_residual(best_x))))
+    if best_res >= gate and n_restarts:
+        rng = np.random.default_rng(0)
+        base = np.asarray(seed, dtype=float)
+        for _ in range(n_restarts):
+            try:
+                trial = root(iso_residual,
+                             base * rng.uniform(0.75, 1.35, base.size),
+                             method="hybr", tol=1e-12)
+                res = float(np.max(np.abs(iso_residual(trial.x))))
+            except Exception:      # a jittered seed that will not build a
+                continue           # trial parametrization is not a finding
+            if res < best_res:
+                best_x, best_res = trial.x, res
+            if best_res < gate:
+                break
+    return best_x, best_res
 
-    `n_restarts` perturbed seeds are tried when the first isoscalar solve misses
-    `ISO_GATE`. This is not a refinement: it is what separates "these NMPs have
-    no DD-RMF realisation" from "this seed could not find it", and it changes
-    the answer for most of the (K_sat, Q_sat) plane — see the note on
-    N_RESTARTS. Set it to 0 for the old single-seed behaviour.
+
+def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
+               impose_Q_sat=None):
+    """Recover DD2 couplings from a target NMP dict.
+
+    nmp needs {n_sat, E_sat, m_eff_ratio, K_sat, E_sym, L_sym}; "Q_sat" is
+    consumed only when it is imposed. Returns (Parametrization,
+    InversionStatus). Raises ValueError only on a hard infeasibility — m*/m
+    outside the physical window, or E_sym below the kinetic symmetry energy
+    at a CONVERGED isoscalar solution. A soft failure (the isoscalar solve
+    missing its gate) is reported via status.ok=False, and the returned
+    parametrization is then None: there is no meaningful coupling set to
+    hand back, and the isovector sector is never fitted on a garbage point.
+
+    impose_Q_sat selects the isoscalar closure:
+      False — the default convention: Q_sat is a PREDICTION. 5x5 over
+              {Gamma_sigma, b_sigma, c_sigma, Gamma_omega, b_omega} with
+              c_omega pinned at its published value; conditions
+              {P(n_sat)=0, E_sat, m*/m, K_sat, cross-constraint}.
+      True  — Q_sat is imposed: 6x6 over all six couplings, the pin replaced
+              by the Q_sat condition.
+      None  — decided by the dict: True iff "Q_sat" is present, so a caller
+              that always supplied Q_sat keeps the closure it was written
+              against.
+
+    Either way the recovered couplings' Q_sat and K_sym are computed forward
+    (same stencils as nmp.compute_nmp) and reported in status.predictions.
+
+    `n_restarts` perturbed seeds are tried when the first isoscalar solve
+    misses ISO_GATE. This is not a refinement: it is what separates "these
+    NMPs have no DD-RMF realisation" from "this seed could not find it" —
+    see the module docstring. Set it to 0 for single-seed behaviour.
     """
+    if impose_Q_sat is None:
+        impose_Q_sat = "Q_sat" in nmp
+    if impose_Q_sat and "Q_sat" not in nmp:
+        raise ValueError("impose_Q_sat=True but the NMP dict carries no Q_sat")
     n_sat = nmp["n_sat"]
     # Feasibility: m*/m too small drives Gamma_sigma sigma -> m_N
     # (scalar collapse); outside a physical RMF window there is no DD2-form fit.
@@ -141,61 +220,85 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS):
         raise ValueError(
             f"NMP inversion infeasible: m*/m = {nmp['m_eff_ratio']} outside the "
             f"physical (0.35, 0.95) window (scalar collapse / no DD2-form fit)")
-    tgt = np.array([0.0, nmp["E_sat"], nmp["m_eff_ratio"],
-                    nmp["K_sat"], nmp["Q_sat"]])
 
-    # --- isoscalar 6x6 (5 NMP conditions + cross-constraint) ----------------
-    # Seed from the published DD2 couplings: DD2-class NMPs sit near them, and
-    # the residual surface has a spurious basin (cross-constraint satisfied but
-    # Q_sat wrong) that a generic seed can fall into. The tolerance floor is set
-    # by the finite-difference 3rd derivative (Q_sat), ~1e-2.
+    ref = Parametrization.from_dd2_defaults()
+    pinned_value = getattr(ref, PINNED_COEFF)
     if seed is None:
-        ref = Parametrization.from_dd2_defaults()
+        # DD2-class NMPs sit near the published couplings, and the residual
+        # surface has a spurious basin (cross-constraint satisfied but the
+        # omega shape wrong) that a generic seed can fall into.
         seed = [ref.gamma_sigma, ref.b_sigma, ref.c_sigma,
-                ref.gamma_omega, ref.b_omega, ref.c_omega]
+                ref.gamma_omega, ref.b_omega]
+        if impose_Q_sat:
+            seed = seed + [ref.c_omega]
 
-    def iso_residual(p):
-        Gs, bS, cS, Gw, bW, cW = p
-        if cS <= 0 or cW <= 0 or Gs <= 0 or Gw <= 0:
-            return [1e3] * 6
-        try:
-            par = _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma)
-            q = _isoscalar_quantities(par, n_sat)
-        except (ValueError, RuntimeError):
-            return [1e3] * 6
-        cross = _f2_at1(bS, cS) - _f2_at1(bW, cW)
-        return [q["P"] - tgt[0], q["E_sat"] - tgt[1], q["m_ratio"] - tgt[2],
-                (q["K_sat"] - tgt[3]) * 1e-2, (q["Q_sat"] - tgt[4]) * 1e-2,
-                cross]
+    if impose_Q_sat:
+        tgt = np.array([0.0, nmp["E_sat"], nmp["m_eff_ratio"],
+                        nmp["K_sat"], nmp["Q_sat"]])
 
-    sol = root(iso_residual, seed, method="hybr", tol=1e-12)
-    best_x = sol.x
-    iso_res = float(np.max(np.abs(iso_residual(best_x))))
-
-    # A miss is more often the spurious basin than an NMP set with no DD-RMF
-    # realisation, so retry from jittered seeds and keep the best. Deterministic
-    # by construction: the same NMP must invert identically on every run and in
-    # every parallel worker, so the generator is seeded with a constant rather
-    # than left to entropy.
-    if iso_res >= ISO_GATE and n_restarts:
-        rng = np.random.default_rng(0)
-        base = np.asarray(seed, dtype=float)
-        for _ in range(n_restarts):
+        def iso_residual(p):
+            Gs, bS, cS, Gw, bW, cW = p
+            if cS <= 0 or cW <= 0 or Gs <= 0 or Gw <= 0:
+                return [1e3] * 6
             try:
-                trial = root(iso_residual, base * rng.uniform(0.75, 1.35, 6),
-                             method="hybr", tol=1e-12)
-                res = float(np.max(np.abs(iso_residual(trial.x))))
-            except Exception:      # a jittered seed that will not build a
-                continue           # trial parametrization is not a finding
-            if res < iso_res:
-                best_x, iso_res = trial.x, res
-            if iso_res < ISO_GATE:
-                break
+                par = _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma)
+                q = _isoscalar_quantities(par, n_sat)
+            except (ValueError, RuntimeError):
+                return [1e3] * 6
+            cross = _f2_at1(bS, cS) - _f2_at1(bW, cW)
+            return [q["P"] - tgt[0], q["E_sat"] - tgt[1],
+                    q["m_ratio"] - tgt[2], (q["K_sat"] - tgt[3]) * 1e-2,
+                    (q["Q_sat"] - tgt[4]) * 1e-2, cross]
 
-    Gs, bS, cS, Gw, bW, cW = best_x
+        def couplings_of(x):
+            return tuple(x)                     # (Gs, bS, cS, Gw, bW, cW)
+    else:
+        tgt = np.array([0.0, nmp["E_sat"], nmp["m_eff_ratio"], nmp["K_sat"]])
+
+        def iso_residual(p):
+            Gs, bS, cS, Gw, bW = p
+            cW = pinned_value
+            if cS <= 0 or Gs <= 0 or Gw <= 0:
+                return [1e3] * 5
+            try:
+                par = _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma)
+                q = _isoscalar_quantities(par, n_sat, want_Q=False)
+            except (ValueError, RuntimeError):
+                return [1e3] * 5
+            cross = _f2_at1(bS, cS) - _f2_at1(bW, cW)
+            return [q["P"] - tgt[0], q["E_sat"] - tgt[1],
+                    q["m_ratio"] - tgt[2], (q["K_sat"] - tgt[3]) * 1e-2,
+                    cross]
+
+        def couplings_of(x):
+            Gs, bS, cS, Gw, bW = x
+            return Gs, bS, cS, Gw, bW, pinned_value
+
+    first = root(iso_residual, seed, method="hybr", tol=1e-12)
+    best_x, iso_res = _restart_loop(iso_residual, seed, first, n_restarts)
+    Gs, bS, cS, Gw, bW, cW = couplings_of(best_x)
+
+    if iso_res >= ISO_GATE:
+        # The isoscalar sector did not converge. Fitting the isovector sector
+        # on top would read the Dirac mass off a meaningless point, and the
+        # "E_sym below the kinetic symmetry energy" hard-infeasibility test
+        # would then fire or not fire depending on numerical garbage. A miss
+        # here is a SOFT failure by contract — the caller scores it and moves
+        # on — so report it and return no parametrization.
+        return None, InversionStatus(
+            ok=False,
+            message=f"isoscalar residual {iso_res:.2e} above the "
+                    f"{ISO_GATE:.0e} floor after {n_restarts} restarts (the "
+                    f"targets are probably inconsistent with the closure at "
+                    f"this K_sat)",
+            isoscalar_residual=iso_res, isovector_residual=float("nan"))
 
     # --- isovector: Gamma_rho analytic, a_rho by 1-D root -------------------
-    par_iso = _trial_par(n_sat, *sol.x, m_sigma)
+    # Built from best_x — the restart winner — not the first solve: the
+    # kinetic symmetry energy below reads m_eff off this parametrization, and
+    # evaluating it on a rejected solution would fit Gamma_rho to the wrong
+    # Dirac mass.
+    par_iso = _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma)
     at = solve_snm(par_iso, n_sat)
     kF = kF_from_n(n_sat * hc3, 4.0)
     EFs = float(np.sqrt(kF ** 2 + at.m_eff ** 2))
@@ -226,11 +329,20 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS):
         n_sat=n_sat, gamma_sigma=Gs, b_sigma=bS, c_sigma=cS,
         gamma_omega=Gw, b_omega=bW, c_omega=cW,
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
+
+    # --- report what the closure predicts, with the forward map's stencils --
+    from eos.dd2.nmp import esym
+    q_final = _isoscalar_quantities(par, n_sat, want_Q=True)
+    h = 1e-4
+    d2Es = (esym(par, n_sat + h) - 2 * esym(par, n_sat)
+            + esym(par, n_sat - h)) / h ** 2
+    predictions = {"Q_sat": q_final["Q_sat"],
+                   "K_sym": 9.0 * n_sat ** 2 * d2Es}
+
     status = InversionStatus(
-        ok=(iso_res < ISO_GATE and isov_res < 1e-3),
-        message="converged" if iso_res < ISO_GATE else
-        f"isoscalar residual {iso_res:.2e} above the {ISO_GATE:.0e} FD floor "
-        f"after {n_restarts} restarts (Q_sat is probably inconsistent with the "
-        f"cross-constraint at this K_sat)",
-        isoscalar_residual=iso_res, isovector_residual=float(isov_res))
+        ok=(isov_res < 1e-3),                # isoscalar gate already passed
+        message="converged" if isov_res < 1e-3 else
+        f"isovector residual {isov_res:.2e} above 1e-3",
+        isoscalar_residual=iso_res, isovector_residual=float(isov_res),
+        predictions=predictions)
     return par, status

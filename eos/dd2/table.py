@@ -173,7 +173,17 @@ def _cs2_along(points):
     return np.gradient(P, eps)
 
 
-def build_table(spec, skip_errors=False, rows=False):
+def _print_progress(info):
+    """The built-in progress printer (verbose=True)."""
+    fracs = "".join(f" {k}={v:g}" for k, v in info["fracs"].items())
+    print(f"[{info['line']}/{info['n_lines']}] {info['mode']} "
+          f"{info['temp_key']}={info['temp']:g}{fracs}: "
+          f"{info['n_solved']}/{info['n_requested']} points "
+          f"in {info['elapsed_s']:.1f}s")
+
+
+def build_table(spec, skip_errors=False, rows=False, progress=None,
+                verbose=False):
     """
     Solve the TableSpec grid over the product of its temperature and fraction
     axes. Within each combination an n_B sweep is warm-started along density
@@ -196,14 +206,25 @@ def build_table(spec, skip_errors=False, rows=False):
     start resets on a skip). This is expected for constrained modes at low T /
     low density inside the liquid-gas spinodal, where uniform matter has no
     stable solution; the returned lines are then shorter than ``nB``.
+
+    progress: optional callable, invoked once per completed line with a dict
+    {mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,
+    elapsed_s} — the same shape every table builder in this repository uses.
+    Default is silent; verbose=True installs the built-in one-line printer.
+    Deep solver code never prints.
     """
+    import time
+
     from eos.dd2.solver import octet_warm_start
+    if verbose and progress is None:
+        progress = _print_progress
     nB = np.asarray(spec.axes["nB"], dtype=float)
     temp = np.asarray(spec.axes[spec._temp_key], dtype=float)
     flags = spec.include
     frac_keys = spec._frac_keys
     frac_grids = [np.atleast_1d(np.asarray(spec.axes[k], float))
                   for k in frac_keys]
+    n_lines = len(temp) * max(1, int(np.prod([len(g) for g in frac_grids])))
 
     points, combos = [], []
     for tv in temp:
@@ -224,24 +245,31 @@ def build_table(spec, skip_errors=False, rows=False):
                                               **mode_kw)
 
             combos.append((float(tv), dict(zip(frac_keys, map(float, combo)))))
+            t_line = time.time()
             # Fast path: the whole line in one warm-started sweep (T axis only).
             if spec._temp_key == "T" and not skip_errors:
-                points.append(sweep_octet(spec.parametrization, nB, flags,
-                                          T=float(tv), **mode_kw))
-                continue
-            # Tolerant / entropy path: per-point, warm-started, may skip.
-            line, x0 = [], None
-            for n in nB:
-                try:
-                    p = solve_at(n, x0)
-                except RuntimeError:
-                    if not skip_errors:
-                        raise
-                    x0 = None          # reset the warm start past the gap
-                    continue
-                line.append(p)
-                x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
+                line = sweep_octet(spec.parametrization, nB, flags,
+                                   T=float(tv), **mode_kw)
+            else:
+                # Tolerant / entropy path: per-point, warm-started, may skip.
+                line, x0 = [], None
+                for n in nB:
+                    try:
+                        p = solve_at(n, x0)
+                    except RuntimeError:
+                        if not skip_errors:
+                            raise
+                        x0 = None      # reset the warm start past the gap
+                        continue
+                    line.append(p)
+                    x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
             points.append(line)
+            if progress is not None:
+                progress(dict(mode=spec.mode, line=len(points),
+                              n_lines=n_lines, temp_key=spec._temp_key,
+                              temp=float(tv), fracs=combos[-1][1],
+                              n_solved=len(line), n_requested=len(nB),
+                              elapsed_s=time.time() - t_line))
 
     cs2 = [_cs2_along(line) for line in points] if spec.want_coeffs else None
     result = TableResult(spec=spec, nB=nB, temp_values=temp,

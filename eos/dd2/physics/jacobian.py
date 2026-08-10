@@ -10,11 +10,11 @@ makes the octet solve a true Newton step (dense J via MINPACK hybrj) and gives
 M10 the analytic thermodynamic derivatives (susceptibilities, exact c_s^2)
 without table finite-differencing.
 
-Kinetic derivatives d{n,ns}/d{nu,m*} are closed-form at T=0 and a per-species
+Kinetic derivatives d{n,ns}/d{mu_eff,m*} are closed-form at T=0 and a per-species
 finite difference of kinetic_thermo at T>0 (the JEL routine exposes no exact
 derivative; differencing one species is far cleaner than differencing the whole
 residual). Everything else — the field-equation structure, the chain rule
-m*(sigma) / nu(fields, potentials), and the algebraic lepton/constraint rows —
+m*(sigma) / mu_eff(fields, potentials), and the algebraic lepton/constraint rows —
 is analytic.
 
 Kernel kept in the xp namespace so a Numba/JAX wrapper is a drop-in later
@@ -28,38 +28,38 @@ from eos.dd2.physics.thermo import kinetic_thermo
 _PI2 = np.pi ** 2
 
 
-def kinetic_derivs(nu, m, g, T=0.0):
+def kinetic_derivs(mu_eff, m, g, T=0.0):
     """
-    (dn/dnu, dn/dm*, dns/dnu, dns/dm*) for one fermion species [natural units].
+    (dn/dmu_eff, dn/dm*, dns/dmu_eff, dns/dm*) for one fermion species [natural units].
 
     T=0: closed form (validated to ~1e-9 vs finite difference). Note the
-    Maxwell-like symmetry dns/dnu = -dn/dm* = g kF m*/(2 pi^2). Massless
+    Maxwell-like symmetry dns/dmu_eff = -dn/dm* = g kF m*/(2 pi^2). Massless
     (neutrino) has no scalar response.
     """
     if T == 0.0:
-        kF2 = nu * nu - m * m
-        if kF2 <= 0.0 or nu <= 0.0:
+        kF2 = mu_eff * mu_eff - m * m
+        if kF2 <= 0.0 or mu_eff <= 0.0:
             return 0.0, 0.0, 0.0, 0.0
         kF = xp.sqrt(kF2)
         if m == 0.0:
-            return g * nu * nu / (2.0 * _PI2), 0.0, 0.0, 0.0
-        dn_dnu = g * kF * nu / (2.0 * _PI2)
+            return g * mu_eff * mu_eff / (2.0 * _PI2), 0.0, 0.0, 0.0
+        dn_dmu = g * kF * mu_eff / (2.0 * _PI2)
         dn_dm = -g * kF * m / (2.0 * _PI2)
-        L = xp.log((kF + nu) / m)          # EF = nu at T=0
-        dns_dm = (g / (4.0 * _PI2)) * (kF * nu - 3.0 * m * m * L)
-        return dn_dnu, dn_dm, -dn_dm, dns_dm
+        L = xp.log((kF + mu_eff) / m)      # EF = mu_eff at T=0
+        dns_dm = (g / (4.0 * _PI2)) * (kF * mu_eff - 3.0 * m * m * L)
+        return dn_dmu, dn_dm, -dn_dm, dns_dm
     # T>0: central difference of the JEL kinetic thermo (per species).
-    hn = 1e-3 * max(abs(nu), 1.0)
+    hn = 1e-3 * max(abs(mu_eff), 1.0)
     hm = 1e-3 * max(m, 1.0)
-    np1 = kinetic_thermo(nu + hn, m, g, T)
-    nm1 = kinetic_thermo(nu - hn, m, g, T)
-    mp1 = kinetic_thermo(nu, m + hm, g, T)
-    mm1 = kinetic_thermo(nu, m - hm, g, T)
-    dn_dnu = (np1[0] - nm1[0]) / (2.0 * hn)
-    dns_dnu = (np1[4] - nm1[4]) / (2.0 * hn)
+    np1 = kinetic_thermo(mu_eff + hn, m, g, T)
+    nm1 = kinetic_thermo(mu_eff - hn, m, g, T)
+    mp1 = kinetic_thermo(mu_eff, m + hm, g, T)
+    mm1 = kinetic_thermo(mu_eff, m - hm, g, T)
+    dn_dmu = (np1[0] - nm1[0]) / (2.0 * hn)
+    dns_dmu = (np1[4] - nm1[4]) / (2.0 * hn)
     dn_dm = (mp1[0] - mm1[0]) / (2.0 * hm)
     dns_dm = (mp1[4] - mm1[4]) / (2.0 * hm)
-    return dn_dnu, dn_dm, dns_dnu, dns_dm
+    return dn_dmu, dn_dm, dns_dmu, dns_dm
 
 
 def _dmeson(ctx, col, n, omega0, rho0, muQ, muS, which):
@@ -135,24 +135,24 @@ def octet_jacobian(x, ctx):
     dcharge = np.zeros(n)
     dstrange = np.zeros(n)
 
-    for (spec, nu, ms, n_i, ns_i, eps_i, P_i, s_i) in kin:
+    for (spec, mu_eff, ms, n_i, ns_i, eps_i, P_i, s_i) in kin:
         mass, Q, t3, g, xs, xw, xr, xphi, S = spec
-        A, B, C, D = kinetic_derivs(nu, ms, g, ctx.T)   # dn/dnu,dn/dm,dns/dnu,dns/dm
+        A, B, C, D = kinetic_derivs(mu_eff, ms, g, ctx.T)   # dn/dmu,dn/dm,dns/dmu,dns/dm
 
-        dnu = np.zeros(n)
-        dnu[col["omega0"]] = -xw * ctx.Gw_N
-        dnu[col["rho0"]] = -xr * ctx.Gr_N * t3
+        dmu_eff = np.zeros(n)
+        dmu_eff[col["omega0"]] = -xw * ctx.Gw_N
+        dmu_eff[col["rho0"]] = -xr * ctx.Gr_N * t3
         if ctx.has_phi:
-            dnu[col["phi0"]] = -xphi * ctx.Gw_N
-        dnu[col["mutB"]] = 1.0
-        dnu[col["muQ"]] = Q
+            dmu_eff[col["phi0"]] = -xphi * ctx.Gw_N
+        dmu_eff[col["mutB"]] = 1.0
+        dmu_eff[col["muQ"]] = Q
         if ctx.has_muS:
-            dnu[col["muS"]] = S
+            dmu_eff[col["muS"]] = S
         dm = np.zeros(n)
         dm[col["sigma"]] = -xs * ctx.Gs_N
 
-        dn_i = A * dnu + B * dm
-        dns_i = C * dnu + D * dm
+        dn_i = A * dmu_eff + B * dm
+        dns_i = C * dmu_eff + D * dm
 
         dsrc_s += xs * ctx.Gs_N * dns_i
         dsrc_w += xw * ctx.Gw_N * dn_i

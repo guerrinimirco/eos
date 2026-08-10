@@ -36,31 +36,31 @@ _PI2 = np.pi ** 2
 
 
 @njit(cache=True)
-def _n_ns_t0(nu, m, g):
+def _n_ns_t0(mu_eff, m, g):
     """(n, ns) at T=0 [natural units]; massless has no scalar density."""
-    kF2 = nu * nu - m * m
-    if kF2 <= 0.0 or nu <= 0.0:
+    kF2 = mu_eff * mu_eff - m * m
+    if kF2 <= 0.0 or mu_eff <= 0.0:
         return 0.0, 0.0
     kF = np.sqrt(kF2)
     n = g * kF * kF2 / (6.0 * _PI2)
     if m == 0.0:
         return n, 0.0
-    ns = (g * m / (4.0 * _PI2)) * (kF * nu - m * m * np.log((kF + nu) / m))
+    ns = (g * m / (4.0 * _PI2)) * (kF * mu_eff - m * m * np.log((kF + mu_eff) / m))
     return n, ns
 
 
 @njit(cache=True)
-def _derivs_t0(nu, m, g):
-    """(dn/dnu, dn/dm, dns/dnu, dns/dm) at T=0 (closed form)."""
-    kF2 = nu * nu - m * m
-    if kF2 <= 0.0 or nu <= 0.0:
+def _derivs_t0(mu_eff, m, g):
+    """(dn/dmu_eff, dn/dm, dns/dmu_eff, dns/dm) at T=0 (closed form)."""
+    kF2 = mu_eff * mu_eff - m * m
+    if kF2 <= 0.0 or mu_eff <= 0.0:
         return 0.0, 0.0, 0.0, 0.0
     kF = np.sqrt(kF2)
     if m == 0.0:
-        return g * nu * nu / (2.0 * _PI2), 0.0, 0.0, 0.0
-    A = g * kF * nu / (2.0 * _PI2)
+        return g * mu_eff * mu_eff / (2.0 * _PI2), 0.0, 0.0, 0.0
+    A = g * kF * mu_eff / (2.0 * _PI2)
     B = -g * kF * m / (2.0 * _PI2)
-    D = (g / (4.0 * _PI2)) * (kF * nu - 3.0 * m * m * np.log((kF + nu) / m))
+    D = (g / (4.0 * _PI2)) * (kF * mu_eff - 3.0 * m * m * np.log((kF + mu_eff) / m))
     return A, B, -B, D
 
 
@@ -95,9 +95,9 @@ def meson_sources_t0(spec, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S,
         ms = mass - Gs * sigma
         if ms <= 0.0:
             return 0.0, 0.0, 0.0, 0.0, -1.0
-        nu = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
-              - Gr * t3 * rho0 - Gphi * phi0)
-        n, ns = _n_ns_t0(nu, ms, g)
+        mu_eff = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
+                  - Gr * t3 * rho0 - Gphi * phi0)
+        n, ns = _n_ns_t0(mu_eff, ms, g)
         src_s += xs * Gs_N * ns
         src_w += xw * Gw_N * n
         src_r += xr * Gr_N * t3 * n
@@ -140,9 +140,9 @@ def residual_t0_jit(x, spec, params, flags):
             for k in range(n_unk):
                 res[k] = 1.0e6
             return res
-        nu = (mutB + Q * muQ + S * muS - xw * Gw_N * omega0
-              - xr * Gr_N * t3 * rho0 - xphi * Gw_N * phi0)
-        n, ns = _n_ns_t0(nu, ms, g)
+        mu_eff = (mutB + Q * muQ + S * muS - xw * Gw_N * omega0
+                  - xr * Gr_N * t3 * rho0 - xphi * Gw_N * phi0)
+        n, ns = _n_ns_t0(mu_eff, ms, g)
         src_s += xs * Gs_N * ns
         src_w += xw * Gw_N * n
         src_r += xr * Gr_N * t3 * n
@@ -219,9 +219,9 @@ def jacobian_t0_jit(x, spec, params, flags):
             for k in range(n_unk):
                 J2[k, k] = 1.0
             return J2
-        nu = (mutB + Q * muQ + S * muS - xw * Gw_N * omega0
-              - xr * Gr_N * t3 * rho0 - xphi * Gw_N * phi0)
-        A, B, C, D = _derivs_t0(nu, ms, g)
+        mu_eff = (mutB + Q * muQ + S * muS - xw * Gw_N * omega0
+                  - xr * Gr_N * t3 * rho0 - xphi * Gw_N * phi0)
+        A, B, C, D = _derivs_t0(mu_eff, ms, g)
 
         dnu = np.zeros(n_unk)
         dnu[1] = -xw * Gw_N

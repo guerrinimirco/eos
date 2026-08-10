@@ -32,7 +32,7 @@ from eos.dd2.xp import xp
 from eos.dd2.physics.thermo import kF_from_n, kinetic_thermo
 from eos.dd2.physics.fields import vector_fields, rearrangement, field_eps_P
 from eos.dd2.physics.residual import (
-    beta_eq_nucleon_nus, beta_eq_residual, make_beta_ctx,
+    beta_eq_nucleon_mu_eff, beta_eq_residual, make_beta_ctx,
 )
 from eos.dd2.physics.octet import (
     assemble_octet, build_octet_ctx, octet_residual,
@@ -62,8 +62,8 @@ class EoSPoint:
     rho0: float         # MeV
     m_eff: float        # MeV (Dirac effective nucleon mass)
     Sigma_R: float      # MeV (rearrangement self-energy)
-    nu_n: float         # MeV (kinetic potential mu_n - Sigma0_n)
-    nu_p: float         # MeV
+    mu_eff_n: float     # MeV (effective potential mu_n - Sigma0_n)
+    mu_eff_p: float     # MeV
     mu_n: float         # MeV
     mu_p: float         # MeV
     eps: float          # MeV/fm^3 (total, incl. leptons/photons when present)
@@ -107,18 +107,18 @@ class EoSPoint:
         return self.eps - self.T * self.s
 
 
-def _nucleon_nus(n_n, n_p, ms_n, ms_p, T):
-    """Kinetic potentials hitting the target densities [fm^-3]."""
+def _nucleon_mu_effs(n_n, n_p, ms_n, ms_p, T):
+    """Effective potentials hitting the target densities [fm^-3]."""
     if T == 0.0:
-        nu_n = float(xp.sqrt(kF_from_n(n_n * hc3, 2.0) ** 2 + ms_n ** 2)) \
+        mu_eff_n = float(xp.sqrt(kF_from_n(n_n * hc3, 2.0) ** 2 + ms_n ** 2)) \
             if n_n > 0.0 else 0.0
-        nu_p = float(xp.sqrt(kF_from_n(n_p * hc3, 2.0) ** 2 + ms_p ** 2)) \
+        mu_eff_p = float(xp.sqrt(kF_from_n(n_p * hc3, 2.0) ** 2 + ms_p ** 2)) \
             if n_p > 0.0 else 0.0
-        return nu_n, nu_p
+        return mu_eff_n, mu_eff_p
     from eos.general.fermi_integrals import invert_fermi_density
-    nu_n = invert_fermi_density(n_n, T, ms_n, 2.0) if n_n > 0.0 else 0.0
-    nu_p = invert_fermi_density(n_p, T, ms_p, 2.0) if n_p > 0.0 else 0.0
-    return nu_n, nu_p
+    mu_eff_n = invert_fermi_density(n_n, T, ms_n, 2.0) if n_n > 0.0 else 0.0
+    mu_eff_p = invert_fermi_density(n_p, T, ms_p, 2.0) if n_p > 0.0 else 0.0
+    return mu_eff_n, mu_eff_p
 
 
 def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
@@ -137,16 +137,16 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
 
     def gap(sig):
         ms_n, ms_p = m_kn - Gs * sig, m_kp - Gs * sig
-        nu_n, nu_p = _nucleon_nus(n_n, n_p, ms_n, ms_p, T)
-        ns = (kinetic_thermo(nu_n, ms_n, 2.0, T)[4]
-              + kinetic_thermo(nu_p, ms_p, 2.0, T)[4])
+        mu_eff_n, mu_eff_p = _nucleon_mu_effs(n_n, n_p, ms_n, ms_p, T)
+        ns = (kinetic_thermo(mu_eff_n, ms_n, 2.0, T)[4]
+              + kinetic_thermo(mu_eff_p, ms_p, 2.0, T)[4])
         return sig - Gs * ns / par.m_sigma ** 2
 
     sigma = brentq(gap, 0.0, 0.999 * min(m_kn, m_kp) / Gs, xtol=1e-12)
     ms_n, ms_p = m_kn - Gs * sigma, m_kp - Gs * sigma
-    nu_n, nu_p = _nucleon_nus(n_n, n_p, ms_n, ms_p, T)
-    tn = kinetic_thermo(nu_n, ms_n, 2.0, T)
-    tp = kinetic_thermo(nu_p, ms_p, 2.0, T)
+    mu_eff_n, mu_eff_p = _nucleon_mu_effs(n_n, n_p, ms_n, ms_p, T)
+    tn = kinetic_thermo(mu_eff_n, ms_n, 2.0, T)
+    tp = kinetic_thermo(mu_eff_p, ms_p, 2.0, T)
 
     # Assemble everything from ONE consistent density set (the evaluated
     # densities; at T=0 they equal the targets, at T>0 to inversion tol).
@@ -166,8 +166,8 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
     s_nat = tn[3] + tp[3]
 
     vector_shift = Gw * omega0 + Sig_R
-    mu_n = nu_n + vector_shift + Gr * Neutron.t3 * rho0
-    mu_p = nu_p + vector_shift + Gr * Proton.t3 * rho0
+    mu_n = mu_eff_n + vector_shift + Gr * Neutron.t3 * rho0
+    mu_p = mu_eff_p + vector_shift + Gr * Proton.t3 * rho0
 
     hvh_rel = (eps_nat + P_nat - T * s_nat
                - (mu_n * nn_nat + mu_p * np_nat)) / eps_nat
@@ -182,7 +182,7 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
         n_n=float(nn_nat / hc3), n_p=float(np_nat / hc3),
         sigma=float(sigma), omega0=float(omega0), rho0=float(rho0),
         m_eff=float(0.5 * (ms_n + ms_p)), Sigma_R=float(Sig_R),
-        nu_n=float(nu_n), nu_p=float(nu_p),
+        mu_eff_n=float(mu_eff_n), mu_eff_p=float(mu_eff_p),
         mu_n=float(mu_n), mu_p=float(mu_p),
         eps=float(eps_nat / hc3), P=float(P_nat / hc3),
         s=float(s_nat / hc3), hvh_rel=float(hvh_rel),
@@ -207,17 +207,17 @@ def solve_snm_t0(par, n_B, check_consistency=True):
 
 
 def beta_warm_start(point):
-    """Warm-start vector [sigma, rho0, nu_n, mu_Q] from a solved EoSPoint."""
-    return [point.sigma, point.rho0, point.nu_n, -point.mu_e]
+    """Warm-start vector [sigma, rho0, mu_eff_n, mu_Q] from a solved EoSPoint."""
+    return [point.sigma, point.rho0, point.mu_eff_n, -point.mu_e]
 
 
 def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
     """
-    Starting vector [sigma, rho0, nu_n, mu_Q] from an exactly solved
+    Starting vector [sigma, rho0, mu_eff_n, mu_Q] from an exactly solved
     fixed-composition point at Y_p: only the charge closure is off.
     """
     base = solve_composition(par, (1.0 - Y_p) * n_B, Y_p * n_B, T=T)
-    return [base.sigma, base.rho0, base.nu_n, -(base.mu_n - base.mu_p)]
+    return [base.sigma, base.rho0, base.mu_eff_n, -(base.mu_n - base.mu_p)]
 
 
 def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
@@ -227,7 +227,7 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
     [fm^-3] and temperature T [MeV] ( mode 1: mu_S = mu_L = 0,
     charge neutrality). Photons contribute at T > 0 when include_photons.
 
-    x0: optional warm-start vector [sigma, rho0, nu_n, mu_Q], e.g. from
+    x0: optional warm-start vector [sigma, rho0, mu_eff_n, mu_Q], e.g. from
     beta_warm_start() of a neighbouring solution. Falls back to the default
     guess if the warm start stalls; raises RuntimeError on non-convergence
     — no silent failures.
@@ -253,9 +253,9 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
 
     # Converged composition -> assemble the hadronic sector through the same
     # path as the fixed-composition solve (one source of truth).
-    nu_n, nu_p, ms_n, ms_p = beta_eq_nucleon_nus(sol.x, ctx)
-    n_n = kinetic_thermo(nu_n, ms_n, 2.0, T)[0] / hc3
-    n_p = kinetic_thermo(nu_p, ms_p, 2.0, T)[0] / hc3
+    mu_eff_n, mu_eff_p, ms_n, ms_p = beta_eq_nucleon_mu_eff(sol.x, ctx)
+    n_n = kinetic_thermo(mu_eff_n, ms_n, 2.0, T)[0] / hc3
+    n_p = kinetic_thermo(mu_eff_p, ms_p, 2.0, T)[0] / hc3
     base = solve_composition(par, n_n, n_p, T=T,
                              check_consistency=check_consistency)
 
@@ -446,7 +446,8 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
         n_B=n_B, T=T, n_n=dmap.get("n", 0.0), n_p=dmap.get("p", 0.0),
         sigma=st["sigma"], omega0=st["omega0"], rho0=st["rho0"],
         phi0=st["phi0"], m_eff=st["m_eff_n"], Sigma_R=st["Sigma_R"],
-        nu_n=st["nu_n"], nu_p=st["nu_p"], mu_n=st["mu_n"], mu_p=st["mu_p"],
+        mu_eff_n=st["mu_eff_n"], mu_eff_p=st["mu_eff_p"],
+        mu_n=st["mu_n"], mu_p=st["mu_p"],
         eps=st["eps"] / hc3, P=st["P"] / hc3, s=st["s"] / hc3,
         hvh_rel=float(hvh_rel), n_e=st["n_e"] / hc3, n_mu=st["n_mu"] / hc3,
         mu_e=st["mu_e"], mu_S=st["mu_S"], mu_L=st["mu_L"],

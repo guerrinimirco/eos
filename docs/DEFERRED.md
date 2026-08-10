@@ -96,6 +96,24 @@ in `eos/` and in `nucleation/` now goes through
 
 ## Per model
 
+### dd2
+- `eos_response` implements the freezes `equilibrium` (beta_eq_neutrinoless
+  only: c_s^2, C_V, C_P, chi_ab) and `composition` (nucleonic Y_p: adiabatic
+  c_s^2 and Gamma). Not yet wired: frozen conserved fractions (Y_C, Y_S fixed
+  with species re-equilibrating), the leptonic re-neutralization variants,
+  the thermal index through the API, and `equilibrium` for the other modes.
+  All raise naming this file.
+- The muon lepton family is not tracked in the trapped mode:
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) and Y_Lmu raises.
+- `fixed_YC_YS` with neutralizing leptons (`leptons=True`) is not wired; the
+  flag applies to `fixed_YC` only.
+- Species-flag naming: the spec calls the meson switch `thermal_mesons`;
+  dd2's `SpeciesFlags` carries the finer `include_pseudoscalars` /
+  `include_thermal_vectors` pair (and `neutrinos` for the trapped mode, where
+  the spec name `thermal_neutrinos` means the untracked mu = 0 gas, which dd2
+  does not implement). Unifying the names across models is deferred until the
+  other models reach the spec API, so it lands as one rename, not five.
+
 ### sfho
 - Eta-meson energy density is dropped when `include_pseudoscalar_mesons=True`
   at T > 0 (`thermodynamics_hadrons.py`, in the total-energy accumulation).

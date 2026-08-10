@@ -24,8 +24,8 @@ Beta equilibrium is charge='neutral', strange='eq'; mu_L / neutrinos (fixed
 Y_L) are handled by the trapped lepton mode.
 
 mu_tilde_B = mu_B - Sigma^R absorbs the species-independent rearrangement term
-(and its density circularity) out of the iteration; the baryon kinetic
-potential is nu_i = mu_tilde_B*B_i + mu_Q*Q_i - Gamma_omega_i omega0
+(and its density circularity) out of the iteration; the baryon effective
+potential is mu_eff_i = mu_tilde_B*B_i + mu_Q*Q_i - Gamma_omega_i omega0
 - Gamma_rho_i t3_i rho0 - Gamma_phi_i phi0. mu_B = mu_tilde_B + Sigma^R is
 restored at assembly.
 
@@ -216,8 +216,8 @@ def _unpack(x, ctx):
 
 def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S):
     """
-    Per-baryon (nu, m*, n, ns, eps, P, s) at the current fields.
-    Returns list of (spec, nu, ms, n, ns, eps, P, s) in natural units, or
+    Per-baryon (mu_eff, m*, n, ns, eps, P, s) at the current fields.
+    Returns list of (spec, mu_eff, ms, n, ns, eps, P, s) in natural units, or
     None if any effective mass is non-positive (outside the physical domain).
     """
     out = []
@@ -228,10 +228,10 @@ def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S):
         ms = mass - Gs * sigma
         if ms <= 0.0:
             return None
-        nu = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
-              - Gr * t3 * rho0 - Gphi * phi0)
-        n, P, eps, s, ns = kinetic_thermo(nu, ms, g, ctx.T)
-        out.append((spec, nu, ms, n, ns, eps, P, s))
+        mu_eff = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
+                  - Gr * t3 * rho0 - Gphi * phi0)
+        n, P, eps, s, ns = kinetic_thermo(mu_eff, ms, g, ctx.T)
+        out.append((spec, mu_eff, ms, n, ns, eps, P, s))
     return out
 
 
@@ -245,7 +245,7 @@ def octet_residual(x, ctx):
 
     src_s = src_w = src_r = src_phi = 0.0
     n_tot = charge = strangeness = 0.0
-    for (spec, nu, ms, n, ns, eps, P, s) in kin:
+    for (spec, mu_eff, ms, n, ns, eps, P, s) in kin:
         mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         src_s += xs * ctx.Gs_N * ns
         src_w += xw * ctx.Gw_N * n
@@ -301,9 +301,9 @@ def assemble_octet(x, ctx):
     eps_b = P_b = s_b = 0.0
     Sig_R = 0.0
     n_tot = charge_had = strangeness = 0.0
-    m_eff_n = nu_n = nu_p = None
+    m_eff_n = mu_eff_n = mu_eff_p = None
     densities = {}
-    for (spec, nu, ms, n, ns, eps, P, s), b in zip(kin, ctx.baryons):
+    for (spec, mu_eff, ms, n, ns, eps, P, s), b in zip(kin, ctx.baryons):
         mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         eps_b += eps
         P_b += P
@@ -318,9 +318,9 @@ def assemble_octet(x, ctx):
                   + xphi * ctx.dGw_N * phi0 * n
                   - xs * ctx.dGs_N * sigma * ns)
         if b.name == "n":
-            m_eff_n, nu_n = ms, nu
+            m_eff_n, mu_eff_n = ms, mu_eff
         elif b.name == "p":
-            nu_p = nu
+            mu_eff_p = mu_eff
 
     # meson field energies: scalars minus in P, vectors plus
     s2 = ctx.m_sigma2 * sigma ** 2
@@ -376,7 +376,7 @@ def assemble_octet(x, ctx):
 
     return dict(
         sigma=sigma, omega0=omega0, rho0=rho0, phi0=phi0,
-        m_eff_n=m_eff_n, nu_n=nu_n, nu_p=nu_p,
+        m_eff_n=m_eff_n, mu_eff_n=mu_eff_n, mu_eff_p=mu_eff_p,
         Sigma_R=Sig_R, mu_B=mu_B, mu_Q=mu_Q, mu_S=mu_S, mu_L=mu_L,
         mu_e=mu_e, mu_nue=mu_L,
         mu_n=mu_B, mu_p=mu_B + mu_Q,

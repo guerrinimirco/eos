@@ -37,8 +37,11 @@ def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
     """
     Nuclear-matter parameters at saturation.
 
-    Returns dict with n_sat [fm^-3], E_sat, K_sat, Q_sat, E_sym, L_sym [MeV],
-    m_eff_ratio, and P_sat [MeV/fm^3] (diagnostic, ~0 by construction).
+    Returns dict with n_sat [fm^-3], E_sat, K_sat, Q_sat, E_sym, L_sym,
+    K_sym [MeV], m_eff_ratio, and P_sat [MeV/fm^3] (diagnostic, ~0 by
+    construction). K_sym = 9 n^2 E_sym''(n) is reported because the NMP
+    inversion treats it, like Q_sat, as a prediction of the closure rather
+    than an input.
     """
     n_sat = brentq(lambda n: solve_snm_t0(par, n).P, n_lo, n_hi, xtol=1e-12)
     at_sat = solve_snm_t0(par, n_sat)
@@ -48,6 +51,8 @@ def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
     d3 = (EA(n_sat + 2 * h) - 2.0 * EA(n_sat + h)
           + 2.0 * EA(n_sat - h) - EA(n_sat - 2 * h)) / (2.0 * h ** 3)
     dEs = (esym(par, n_sat + h) - esym(par, n_sat - h)) / (2.0 * h)
+    d2Es = (esym(par, n_sat + h) - 2.0 * esym(par, n_sat)
+            + esym(par, n_sat - h)) / h ** 2
 
     return {
         "n_sat": n_sat,
@@ -57,5 +62,6 @@ def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
         "Q_sat": 27.0 * n_sat ** 3 * d3,
         "E_sym": esym(par, n_sat),
         "L_sym": 3.0 * n_sat * dEs,
+        "K_sym": 9.0 * n_sat ** 2 * d2Es,
         "P_sat": at_sat.P,
     }

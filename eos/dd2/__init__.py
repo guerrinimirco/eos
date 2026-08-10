@@ -33,6 +33,10 @@ from eos.dd2.coefficients import (
     heat_capacity_V, snm_sound_speed,
 )
 from eos.dd2.coefficients_jac import susceptibilities, SUSCEPT_LABELS
+from eos.dd2.api import (
+    eos_point, eos_table, eos_response, PointResult,
+    RESPONSE_FREEZES,
+)
 
 __all__ = [
     "Parametrization", "SpeciesFlags", "active_baryons",

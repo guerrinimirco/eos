@@ -4,22 +4,22 @@ physics/residual.py
 Backend-agnostic residual for the potential-driven DD2 solve.
 
 Unknown vector for beta-equilibrium npemu (the two-charge case):
-    x = [sigma, rho0, nu_n, mu_Q]
+    x = [sigma, rho0, mu_eff_n, mu_Q]
 
-nu_n is the neutron KINETIC potential. Chemical potentials follow the
+mu_eff_n is the neutron effective (kinetic) potential. Chemical potentials follow the
 conserved-charge decomposition mu_i = B_i mu_B + Q_i mu_Q (so mu_n = mu_B,
 mu_p = mu_B + mu_Q, mu_e = -mu_Q; beta equilibrium is automatic), and the
-kinetic potentials are nu_i = mu_i - Sigma0_i. Two consequences of using
-nu_n instead of mu_B as the unknown:
+effective potentials are mu_eff_i = mu_i - Sigma0_i. Two consequences of
+using mu_eff_n instead of mu_B as the unknown:
   * the species-independent rearrangement term Sigma^R (and the large
     Gamma_omega*omega0 shift) cancel out of the iteration entirely —
-    mu_B = nu_n + Sigma0_n is restored at assembly;
-  * nu_n varies smoothly with n_B, so warm-starting a density sweep from
+    mu_B = mu_eff_n + Sigma0_n is restored at assembly;
+  * mu_eff_n varies smoothly with n_B, so warm-starting a density sweep from
     the previous solution is well-conditioned (mu-based unknowns are not:
     the omega shift, evaluated at the target n_B, jumps between sweep
     points and can throw the trial state into the vacuum kF = 0 plateau).
-From nu_p - nu_n = mu_Q - Gamma_rho*rho0*(t3_p - t3_n) the proton potential
-is nu_p = nu_n + mu_Q - 2*Gamma_rho*rho0.
+From mu_eff_p - mu_eff_n = mu_Q - Gamma_rho*rho0*(t3_p - t3_n) the proton
+potential is mu_eff_p = mu_eff_n + mu_Q - 2*Gamma_rho*rho0.
 
 The isoscalar couplings and omega_0 are evaluated at the TARGET n_B; the
 baryon-number residual enforces sum n_i = n_B at the solution, where they
@@ -66,13 +66,13 @@ def make_beta_ctx(par, n_B, T=0.0, include_muons=True):
     )
 
 
-def beta_eq_nucleon_nus(x, ctx):
-    """Kinetic potentials and effective masses from the unknown vector."""
-    sigma, rho0, nu_n, muQ = x
+def beta_eq_nucleon_mu_eff(x, ctx):
+    """Effective potentials and effective masses from the unknown vector."""
+    sigma, rho0, mu_eff_n, muQ = x
     ms_n = ctx.m_kn - ctx.Gs * sigma
     ms_p = ctx.m_kp - ctx.Gs * sigma
-    nu_p = nu_n + muQ - (Proton.t3 - Neutron.t3) * ctx.Gr * rho0
-    return nu_n, nu_p, ms_n, ms_p
+    mu_eff_p = mu_eff_n + muQ - (Proton.t3 - Neutron.t3) * ctx.Gr * rho0
+    return mu_eff_n, mu_eff_p, ms_n, ms_p
 
 
 def beta_eq_residual(x, ctx):
@@ -81,12 +81,12 @@ def beta_eq_residual(x, ctx):
     charge neutrality]. Zero exactly at the solved state.
     """
     sigma, rho0, _, muQ = x
-    nu_n, nu_p, ms_n, ms_p = beta_eq_nucleon_nus(x, ctx)
+    mu_eff_n, mu_eff_p, ms_n, ms_p = beta_eq_nucleon_mu_eff(x, ctx)
     if min(ms_n, ms_p) <= 0.0:
         return [1.0e6, 0.0, 0.0, 0.0]   # outside physical domain
 
-    n_n, _, _, _, ns_n = kinetic_thermo(nu_n, ms_n, 2.0, ctx.T)
-    n_p, _, _, _, ns_p = kinetic_thermo(nu_p, ms_p, 2.0, ctx.T)
+    n_n, _, _, _, ns_n = kinetic_thermo(mu_eff_n, ms_n, 2.0, ctx.T)
+    n_p, _, _, _, ns_p = kinetic_thermo(mu_eff_p, ms_p, 2.0, ctx.T)
     mu_e = -muQ
     n_e = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)[0]
     n_mu = (kinetic_thermo(mu_e, ctx.m_mu, 2.0, ctx.T)[0]
