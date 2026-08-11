@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from eos.dd2 import Parametrization, SpeciesFlags
-from eos.dd2.coefficients import sound_speed_eq
+from eos.dd2.responses import sound_speed_eq
 from eos.dd2.solver import sweep_beta_eq_octet, solve_beta_eq_octet
 from eos.tov.solver import (
     EOSTable_for_TOV, solve_tov_single, _create_interpolators,

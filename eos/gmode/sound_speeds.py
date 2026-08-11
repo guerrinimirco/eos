@@ -55,7 +55,7 @@ answer:
 
 2. ``"equal_compression"``. Both phases are scaled by the same density factor
    at fixed chi and the pressures are volume-averaged. This is the convention
-   already in `eos.mixed.coefficients.sound_speed_frozen`, and it is delegated
+   already in `eos.mixed.responses.sound_speed_frozen`, and it is delegated
    to unchanged. It does not hold the two phases at a common pressure under the
    perturbation, so it is not the one the mode equations assume; it is offered
    so the two can be compared on the same star.
@@ -93,7 +93,7 @@ from dataclasses import replace
 
 from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon
-from eos.mixed.coefficients import sound_speed_eq, sound_speed_frozen
+from eos.mixed.responses import sound_speed_eq, sound_speed_frozen
 
 ISOBARIC = "isobaric"
 EQUAL_COMPRESSION = "equal_compression"
@@ -135,15 +135,15 @@ def cs2_frozen_nucleonic(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3,
     leptons : include the neutralising lepton gas (the default, and the
               physically right choice for stellar matter)
 
-    Why this exists rather than `eos.dd2.coefficients.sound_speed_adiabatic`:
+    Why this exists rather than `eos.dd2.responses.sound_speed_adiabatic`:
     that function is deliberately leptonless, being a probe of the nucleonic
-    sector alone, whereas `eos.dd2.coefficients.sound_speed_eq` follows the
+    sector alone, whereas `eos.dd2.responses.sound_speed_eq` follows the
     beta-equilibrium sequence *with* leptons. Differencing the two would
     compare different fluids, and since the lepton contribution to c_ad is a
     few per cent of c_ad -- comparable to the whole c_ad^2 - c_eq^2 signal that
     drives the g-mode -- the mismatch is a leading-order error in N^2, not a
     refinement. Setting `leptons=False` reproduces
-    `eos.dd2.coefficients.sound_speed_adiabatic` exactly.
+    `eos.dd2.responses.sound_speed_adiabatic` exactly.
 
     Frozen here means fixed Y_p, hence fixed lepton fractions too: the star is
     compressed faster than the Urca processes can convert neutrons to protons.
@@ -181,7 +181,7 @@ def cs2_frozen_point(par, flags, result, vmit_params=None,
     vmit_params : the `VMITParams` the state used
     convention  : "isobaric" or "equal_compression" — see the module docstring
     leptons     : re-neutralise each phase with leptons, as
-                  `eos.mixed.coefficients.sound_speed_frozen` does
+                  `eos.mixed.responses.sound_speed_frozen` does
 
     The per-phase sound speeds the isobaric relation needs are obtained by
     evaluating the existing `sound_speed_frozen` at the same state with chi
@@ -211,7 +211,7 @@ def cs2_frozen_along(par, flags, results, vmit_params=None,
 
     Non-convergent points come back nan rather than aborting the sequence, so a
     single bad density leaves a gap in the curve instead of destroying it. This
-    mirrors `eos.mixed.coefficients.frozen_along`.
+    mirrors `eos.mixed.responses.frozen_along`.
     """
     out = []
     for r in results:

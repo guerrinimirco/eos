@@ -1,13 +1,13 @@
 """
-coefficients_jac.py
-====================
-Thermodynamic coefficients wired onto the analytic Jacobian,
-the "analytic" half of the M10 cross-check (§3.7 check 5). The finite-
-difference versions in coefficients.py are the independent oracle.
+responses_jac.py
+================
+Thermodynamic responses wired onto the analytic Jacobian: the fast flavor of
+what `responses.py` computes by finite difference, which is the independent
+oracle it is validated against.
 
 Two Jacobian products:
 
-- **Susceptibilities** chi_ab = dn_a/dmu_b (a,b in B,Q,S) — the CompOSE
+- **Susceptibilities** chi_ab = dn_a/dmu_b (a,b in B,C,S) — the CompOSE
   second-derivative block — are read straight off octet_jacobian via the
   field-response identity chi = dn/dmu|_F - (dn/dF)(dG/dF)^-1(dG/dmu).
 
@@ -16,7 +16,7 @@ Two Jacobian products:
   predicted by one Newton step dx = -J^-1 R_perturbed(x0) (the tangent
   predictor) instead of a full re-solve, then assembled. Central differences in
   n_B and T give d(P,eps,s)/d(n_B,T), and the standard thermodynamic
-  combinations give the three coefficients.
+  combinations give the three responses.
 """
 import numpy as np
 
@@ -89,13 +89,13 @@ def heat_capacity_P(par, n_B, flags, T, dT=0.05):
 
 
 #: conserved-charge labels for the susceptibility matrix rows/cols.
-SUSCEPT_LABELS = ("B", "Q", "S")
+SUSCEPT_LABELS = ("B", "C", "S")
 
 
 def susceptibilities(par, n_B, flags, T=0.0):
     """
     Charge susceptibility matrix chi_ab = dn_a/dmu_b [MeV^2, natural units],
-    a,b in (B, Q, S), from octet_jacobian's field-response block. Symmetric
+    a,b in (B, C, S), from octet_jacobian's field-response block. Symmetric
     (chi = -d^2 Omega / dmu_a dmu_b). Evaluated at the beta-eq state (mu_S = 0).
     Returns a 3x3 numpy array in SUSCEPT_LABELS order.
     """

@@ -97,8 +97,8 @@ from eos.mixed.api import (
     PointResult, eos_point, eos_table, eos_response, RESPONSE_FREEZES,
 )
 
-# --- thermodynamic coefficients --------------------------------------------
-from eos.mixed.coefficients import (
+# --- thermodynamic responses --------------------------------------------
+from eos.mixed.responses import (
     sound_speed_eq, sound_speed_frozen, sound_speed_frozen_hadronic,
     sound_speed_frozen_quark, adiabatic_index, frozen_along,
 )
@@ -132,7 +132,7 @@ __all__ = [
     # the uniform model API
     "eos_point", "eos_table", "eos_response", "PointResult",
     "RESPONSE_FREEZES",
-    # coefficients
+    # responses
     "sound_speed_eq", "sound_speed_frozen", "sound_speed_frozen_hadronic",
     "sound_speed_frozen_quark", "adiabatic_index", "frozen_along",
     # parameter-space scan

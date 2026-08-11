@@ -10,7 +10,7 @@ Why this module exists
 `eos.tov.solver` integrates the TOV equations and returns scalars (M, R, k2,
 Lambda); the profiles are discarded and the metric function `nu(r)` is never
 formed, because a static structure calculation does not need it. A g-mode does:
-the Cowling system is an ODE *in* `r` whose coefficients are the background
+the Cowling system is an ODE *in* `r` whose responses are the background
 fields. This module therefore re-integrates the same equations keeping the
 profiles, and adds `nu`. It imports the equation-of-state plumbing from
 `eos.tov.solver` rather than duplicating it, and does not modify it.
@@ -288,7 +288,7 @@ def build_background(eos, cs2_eq, cs2_ad, e_c=None, M_target=None,
     eos       : `EOSTable_for_TOV` (P, epsilon in MeV/fm^3, nB in fm^-3), or any
                 object with those three attributes. Must be ascending in P.
     cs2_eq    : equilibrium c^2 = dP/deps, one value per row of `eos`,
-                dimensionless. `eos.mixed.coefficients.sound_speed_eq` produces
+                dimensionless. `eos.mixed.responses.sound_speed_eq` produces
                 exactly this from the table's own P and eps columns.
     cs2_ad    : frozen c^2 = (dP/deps)_x on the same grid. Set it equal to
                 `cs2_eq` wherever composition is unavailable (a tabulated crust,

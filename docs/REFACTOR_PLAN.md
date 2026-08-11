@@ -183,8 +183,10 @@ their tests in CLAUDE.md §5.
   residual — this is the one part that is surgery rather than a move, and it
   pays for itself at `mixed/adapters.py`, which currently passes a
   `charge_mode="fixed", Y_C=0.0, Y_S=0.0` it never uses. Also:
-  coefficients.py + coefficients_jac.py merge into responses.py (FD flavor =
-  reference, Jacobian flavor = fast); nmp.py + nmp_inverter.py merge into
+  coefficients.py becomes responses.py and coefficients_jac.py becomes
+  backends/responses_jac.py — two files, not one, because §9 makes them the
+  reference and fast flavors of one set of quantities and `backends/` is
+  defined by being deletable; nmp.py + nmp_inverter.py merge into
   nmp.py with `from_nmp` a free function there rather than a classmethod on
   Parametrization (which today needs three deferred imports to break the
   cycle); `xp.py` (the dead JAX namespace shim) and `notebook_api.py` go;

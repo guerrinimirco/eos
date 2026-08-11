@@ -1,6 +1,6 @@
 """
-mixed/coefficients.py
-=====================
+mixed/responses.py
+==================
 The two speeds of sound of a hadron-quark mixture, and the adiabatic index.
 
 *Public API* (re-exported from `eos.mixed`): `sound_speed_eq`,
@@ -29,7 +29,7 @@ verification suite checks.
 **Frozen (adiabatic)**, `c_ad^2 = dP/deps` at fixed composition. The mixture is
 compressed faster than the phases can convert, so the pressure has to rise and
 `c_ad` does *not* collapse in the window. This mirrors what
-`eos/dd2/coefficients.py:sound_speed_adiabatic` means for nucleonic matter,
+`eos/dd2/responses.py:sound_speed_adiabatic` means for nucleonic matter,
 carried over to a two-phase mixture.
 
 What "frozen" means here — this is a convention, and a different one gives
@@ -47,13 +47,13 @@ different numbers
    or Deltas active it is weaker than a full freeze: the individual species
    still re-equilibrate among themselves at fixed total Y_C and Y_S. For
    nucleonic matter the two coincide, and the result then reduces exactly to
-   `eos.dd2.coefficients.sound_speed_adiabatic`.
+   `eos.dd2.responses.sound_speed_adiabatic`.
 4. **Leptons are re-neutralised** against the frozen total charge, so the
    mixture stays electrically neutral under the perturbation. This is the
    physical choice for stellar matter and it is not a small effect — dropping
    the leptons changes c_ad by several percent. `leptons=False` turns it off,
    which is what makes the chi = 0 limit directly comparable with
-   `eos.dd2.coefficients.sound_speed_adiabatic`, a nucleonic-matter probe that
+   `eos.dd2.responses.sound_speed_adiabatic`, a nucleonic-matter probe that
    carries no leptons.
 5. **Photons and trapped neutrinos are omitted.** At fixed T they contribute
    identically at both perturbation points, so they cancel out of dP and deps
@@ -221,7 +221,7 @@ def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
     leptons      : re-neutralise with leptons (the physical choice for stellar
                    matter, and the default). False gives the matter-only value,
                    which at chi = 0 reproduces
-                   `eos.dd2.coefficients.sound_speed_adiabatic` exactly.
+                   `eos.dd2.responses.sound_speed_adiabatic` exactly.
 
     Read the module docstring before comparing this to a number from elsewhere:
     "frozen" is a convention, and this one freezes chi and each phase's Y_C and

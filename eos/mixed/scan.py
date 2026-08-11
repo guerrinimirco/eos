@@ -442,7 +442,7 @@ def eos_is_physical(table, tol=1e-9):
 
     Returns (ok, reason).
     """
-    from eos.mixed.coefficients import sound_speed_eq
+    from eos.mixed.responses import sound_speed_eq
 
     if table.P.size < 10:
         return False, "too_few_points"
@@ -496,7 +496,7 @@ def _tov_columns(par, flags, grid, eta, spec, params, T, window, tov_parallel):
     central energy density and the transition boundaries are in n_B.
     """
     from eos.mixed.tables.core_eos import build_mixed_eos_table, mass_radius_mixed
-    from eos.mixed.coefficients import sound_speed_eq
+    from eos.mixed.responses import sound_speed_eq
 
     table = build_mixed_eos_table(par, flags, grid, float(eta), spec,
                                   vmit_params=params, T=float(T),

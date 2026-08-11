@@ -28,11 +28,11 @@ from eos.general.table_io import save_table, load_table, export_csv
 from eos.dd2.physics.jacobian import octet_jacobian, kinetic_derivs
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
-from eos.dd2.coefficients import (
+from eos.dd2.responses import (
     sound_speed_eq, sound_speed_adiabatic, adiabatic_index, thermal_index,
     heat_capacity_V, snm_sound_speed,
 )
-from eos.dd2.coefficients_jac import susceptibilities, SUSCEPT_LABELS
+from eos.dd2.responses_jac import susceptibilities, SUSCEPT_LABELS
 from eos.dd2.api import (
     eos_point, eos_table, eos_response, PointResult,
     RESPONSE_FREEZES,

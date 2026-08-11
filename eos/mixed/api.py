@@ -46,7 +46,7 @@ import numpy as np
 
 from eos.general.tabulate import temperature_at_entropy
 from eos.dd2.species import SpeciesFlags
-from eos.mixed.coefficients import sound_speed_frozen
+from eos.mixed.responses import sound_speed_frozen
 from eos.mixed.equilibrium.residual import mixed_slots
 from eos.mixed.solvers.point import MixedResult, solve_mixed
 from eos.mixed.tables.generate import (
@@ -270,7 +270,7 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     frozen='chi' -- the quark volume fraction is held fixed, and with it each
         phase's charge and strangeness fractions; `leptons` chooses whether the
         mixture is re-neutralised under the perturbation. Delegates to
-        `eos.mixed.coefficients.sound_speed_frozen`, whose module docstring
+        `eos.mixed.responses.sound_speed_frozen`, whose module docstring
         states the convention in full -- read it before comparing the number
         with one from elsewhere. Returns cs2_frozen. Defined at every density:
         outside the window chi is clipped and the answer is the pure phase's

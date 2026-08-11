@@ -197,13 +197,13 @@ def plot_sound_speed(par, flags=NUCLEONIC, grid=None, T=0.0):
 def _heat_capacity_P(par, n_B, flags, T, cv_vol, rel_dn=1e-3, dT=1e-2):
     """
     Per-baryon C_P from the Mayer relation at the frozen (local β-eq)
-    composition — coefficients.py ships only C_V, so C_P is assembled here:
+    composition — responses.py ships only C_V, so C_P is assembled here:
 
         c_P - c_V = T (dP/dT)_n^2 / (n^2 (dP/dn)_T)   (per baryon, fixed Y_p)
 
     ``cv_vol`` is the volumetric heat_capacity_V; both are returned per baryon.
     # ponytail: frozen-composition Mayer relation; swap for an analytic C_P if
-    # coefficients_jac ever grows one.
+    # responses_jac ever grows one.
     """
     Y_p = solve_beta_eq_octet(par, n_B, flags, T=T, include_photons=False).Y_p
     P = lambda n, t: solve_composition(par, (1 - Y_p) * n, Y_p * n, T=t).P

@@ -42,9 +42,9 @@ Quick start
 
 The two sound speeds are the entire physics input. Supply them from wherever
 the equation of state lives: `eos.gmode.sound_speeds.cs2_frozen_nucleonic` and
-`eos.dd2.coefficients.sound_speed_eq` for a nucleonic star,
+`eos.dd2.responses.sound_speed_eq` for a nucleonic star,
 `eos.gmode.sound_speeds.cs2_frozen_along` and
-`eos.mixed.coefficients.sound_speed_eq` for a DD2 + vMIT hybrid.
+`eos.mixed.responses.sound_speed_eq` for a DD2 + vMIT hybrid.
 
 Everything is in the relativistic Cowling approximation, which gives real
 eigenfrequencies accurate to a few per cent for g-modes but no

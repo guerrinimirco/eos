@@ -21,7 +21,7 @@ import numpy as np
 from eos.dd2 import (
     Parametrization, SpeciesFlags, solve_snm, solve_beta_eq_octet, solve_octet,
 )
-from eos.dd2.coefficients import sound_speed_eq, thermal_index
+from eos.dd2.responses import sound_speed_eq, thermal_index
 from eos.dd2.verify.tov import mass_radius
 
 
@@ -83,7 +83,7 @@ def _check_tov(par, flags):
                        f"M_max={r['M_max']:.3f} R_1.4={r['R_1p4']:.2f}km")
 
 
-def _check_coefficients(par, flags, grid):
+def _check_responses(par, flags, grid):
     worst_cs = 0.0
     bad = False
     for n_B in grid:
@@ -93,15 +93,15 @@ def _check_coefficients(par, flags, grid):
         worst_cs = max(worst_cs, cs2)
     gth = thermal_index(par, 0.16, flags, T=10.0)
     ok = (not bad) and (1.0 < gth < 2.5)
-    return CheckResult("coefficients", ok, worst_cs,
+    return CheckResult("responses", ok, worst_cs,
                        f"max c_s^2={worst_cs:.3f} Gamma_th={gth:.3f}")
 
 
 def _check_coeff_cross(par, flags, grid):
     """Analytic-from-Jacobian c_s^2 vs finite-difference:
     independent-method agreement on the equilibrium sound speed."""
-    from eos.dd2 import coefficients_jac as _jc
-    from eos.dd2.coefficients import sound_speed_eq as _cs_fd
+    from eos.dd2 import responses_jac as _jc
+    from eos.dd2.responses import sound_speed_eq as _cs_fd
     worst = 0.0
     for n_B in grid:
         cj = _jc.sound_speed_eq(par, float(n_B), flags)
@@ -147,7 +147,7 @@ def run_full_check(par=None, flags=None, grid=None, include_tov=True):
     report = FullCheckReport()
     report.results.append(_check_golden(par))
     report.results.append(_check_identities(par, flags, grid))
-    report.results.append(_check_coefficients(par, flags, grid))
+    report.results.append(_check_responses(par, flags, grid))
     report.results.append(_check_coeff_cross(par, flags, grid))
     report.results.append(_check_backend_parity(par, flags, grid))
     report.results.append(_check_compose(par))

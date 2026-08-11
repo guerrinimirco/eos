@@ -115,12 +115,15 @@ names mandatory and their existence conditional. Two renames are done
 `thermodynamics.py`). The rest are outstanding, each belonging in its model's
 own session where the baseline and `test_imports.py` are already being run:
 
-    dd2       physics/ -> backends/{jacobian, kernel_numba};
-              physics/{thermo, fields} + the non-residual half of
-              physics/octet -> thermodynamics.py; octet_residual and
-              physics/residual.py -> solver.py; coefficients.py +
-              coefficients_jac.py -> responses.py; nmp.py + nmp_inverter.py
-              -> nmp.py; delete xp.py and notebook_api.py
+    dd2       physics/ -> backends/{jacobian, kernel_numba, responses_jac};
+              the non-residual half of physics/octet -> thermodynamics.py;
+              octet_residual and physics/residual.py -> solver.py;
+              delete notebook_api.py
+              (done: physics/{thermo, fields, mesons} -> thermodynamics.py;
+               coefficients.py -> responses.py and coefficients_jac.py ->
+               responses_jac.py, kept as two files because §9 makes them the
+               reference and fast flavors of one thing, not one module;
+               nmp.py + nmp_inverter.py -> nmp.py; xp.py deleted)
     sfho      eos.py -> solver.py, compute_tables.py -> table.py,
               nuclear_saturation_properties.py -> nmp.py,
               thermodynamics_hadrons.py -> thermodynamics.py
@@ -131,7 +134,6 @@ own session where the baseline and `test_imports.py` are already being run:
               thermodynamics_quarks.py -> thermodynamics.py
     abpr      eos.py -> solver.py
     enjl      eos_beta.py + uniform.py -> solver.py (a merge, not a rename)
-    mixed     coefficients.py -> responses.py
 
 Function names go with them, per the §13 vocabulary: no name repeats its
 package (`compute_zl_thermo_from_mu` -> `thermo_from_mu`), and the same job
@@ -260,6 +262,24 @@ both touch the same code.
   at T > 0, so it is a deliberate physics-changing fix: its own commit, the
   before/after quoted, and the affected baseline entries regenerated. It must
   not be folded into a refactor, which is why it is still here.
+- `eos/dd2/__init__.py` re-exports four names that live in the accelerated
+  half of the model — `octet_jacobian` and `kinetic_derivs` from
+  `physics/jacobian.py`, `susceptibilities` and `SUSCEPT_LABELS` from
+  `responses_jac.py`. CLAUDE.md §5 defines `backends/` by the property that
+  deleting it changes no number, so once those files move there `import
+  eos.dd2` would fail on a deleted `backends/` and the property would be a
+  claim rather than a fact. Either the exports come off the package surface
+  (callers reach them at `eos.dd2.backends.jacobian`, which is where a reader
+  looking for the analytic Jacobian would go anyway) or the import is guarded.
+  It belongs in the commit that creates `backends/`, alongside a check that
+  actually deletes the directory and re-runs `test/dd2`.
+- `susceptibilities` exists only in the analytic-Jacobian flavor. §9 says the
+  fast flavor is validated against a reference, and for chi_ab there is none:
+  the sound speeds and heat capacities have their finite-difference twins in
+  `responses.py`, chi_ab does not. `thermo_at_potentials` now makes the
+  reference cheap to write — perturb mu_B, mu_C, mu_S, re-solve, read
+  (n_B, n_C, n_S) — but writing it is new physics, not a rename, so it waits
+  for the response-function session.
 - `eos_response` implements the freezes `equilibrium` (beta_eq_neutrinoless
   only: c_s^2, C_V, C_P, chi_ab) and `composition` (nucleonic Y_p: adiabatic
   c_s^2 and Gamma). Not yet wired: frozen conserved fractions (Y_C, Y_S fixed
@@ -399,6 +419,16 @@ both touch the same code.
   eta = 0 or eta = 1 solution.
 
 ### astro/tov
+- The fast backend returns a silently wrong tidal deformability when the table
+  it is handed is not monotone in pressure. On the eta = 1 hybrid table, whose
+  Maxwell plateau produced a few dozen round-off inversions of order
+  1e-13 MeV/fm^3, it gave Lambda = 14 for a 0.94 Msun star where the scipy
+  reference gave 2.8e6 — while M and R still agreed to 1e-4, so nothing else
+  flagged it. CLAUDE.md §6 says non-convergence is a return value: meeting a
+  non-monotone table is exactly that case and must come back as a status, not
+  as a number. The cause has been removed upstream — `build_mixed_eos_table`
+  now enforces §8 before the table is delivered — but the backend is still
+  fragile to any other caller that hands it one.
 - Crust table paths are absolute and machine-specific. A missing crust file
   currently degrades to no crust, which shifts M_max by ~1%; it must instead
   be an explicit argument with an informative error.

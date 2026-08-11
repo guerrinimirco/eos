@@ -182,7 +182,7 @@ def _check_backend_parity(par, flags, vp, n_B=0.6):
 
 
 def _check_causality(par, flags, vp, grid):
-    from eos.mixed.coefficients import sound_speed_eq
+    from eos.mixed.responses import sound_speed_eq
     t = build_mixed_eos_table(par, flags, grid, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
     cs2 = sound_speed_eq(t.P, t.eps)
     mono = np.all(np.diff(t.P) > -1e-6)
@@ -199,7 +199,7 @@ def _check_sound_speeds(par, flags, vp, grid):
     along the plateau — stays finite. Getting this the wrong way round means
     the freeze is not actually freezing anything.
     """
-    from eos.mixed.coefficients import sound_speed_eq, frozen_along
+    from eos.mixed.responses import sound_speed_eq, frozen_along
     from eos.mixed.solvers.sweep import locate_window, sweep_mixed
 
     spec = beta_eq_neutrinoless()

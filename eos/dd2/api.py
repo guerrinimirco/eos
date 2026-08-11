@@ -171,7 +171,7 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
                 f"eos_response(frozen='equilibrium') is wired for "
                 f"beta_eq_neutrinoless only, not {mode!r} "
                 f"(see docs/DEFERRED.md)")
-        from eos.dd2.coefficients_jac import (
+        from eos.dd2.responses_jac import (
             sound_speed_eq, heat_capacity_V, heat_capacity_P, susceptibilities,
         )
         out = {"cs2_eq": sound_speed_eq(par, n_B, species, T=T),
@@ -183,7 +183,7 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
     if frozen == "composition":
         if Y_p is None:
             raise ValueError("frozen='composition' needs Y_p")
-        from eos.dd2.coefficients import sound_speed_adiabatic, adiabatic_index
+        from eos.dd2.responses import sound_speed_adiabatic, adiabatic_index
         return {"cs2_ad": sound_speed_adiabatic(par, n_B, Y_p, T=T),
                 "Gamma": adiabatic_index(par, n_B, Y_p, T=T)}
     raise NotImplementedError(
