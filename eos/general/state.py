@@ -166,7 +166,8 @@ class PhaseThermo(_PicklableFrozenMaps):
 
     @classmethod
     def assemble(cls, T, mu_B, mu_C, mu_S, fields, densities, mu_eff_i,
-                 m_eff_i, P, eps, s, mu_dot_n, Sigma_R=0.0):
+                 m_eff_i, P, eps, s, mu_dot_n, Sigma_R=0.0,
+                 extra_charges=(0.0, 0.0, 0.0)):
         """Build a state, deriving everything section 2 says is derived.
 
         The caller supplies what only the model knows -- its fields, its
@@ -175,13 +176,25 @@ class PhaseThermo(_PicklableFrozenMaps):
         here, from `eos.general.basis`, so that no model carries its own copy
         of those algebraic maps and two models cannot disagree about what
         n_C means.
+
+        `extra_charges` is (n_B, n_C, n_S) carried by species that contribute
+        conserved charge but are not listed individually in `densities`. It
+        exists for one reason: a thermal meson gas carries charge and
+        strangeness, and most of its members (the vector nonet, K0bar) are not
+        yet in `eos.general.particles`, so they cannot be summed through the
+        quantum-number table. Once they are, the gas becomes ordinary species
+        entries and this argument goes -- see docs/DEFERRED.md. Species that
+        carry NO conserved charge (pi0, eta, omega, and photons) are never
+        listed either way; they contribute to eps, P and s alone.
         """
         n_B, n_C, n_S = charges_from_densities(densities)
+        extra_B, extra_C, extra_S = extra_charges
         mu_i = {name: species_potential(name, mu_B, mu_C, mu_S)
                 for name in densities}
         return cls(T=T, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, fields=fields,
                    densities=densities, mu_i=mu_i, mu_eff_i=mu_eff_i,
-                   m_eff_i=m_eff_i, n_B=n_B, n_C=n_C, n_S=n_S,
+                   m_eff_i=m_eff_i, n_B=n_B + extra_B, n_C=n_C + extra_C,
+                   n_S=n_S + extra_S,
                    P=P, eps=eps, s=s, mu_dot_n=mu_dot_n, Sigma_R=Sigma_R)
 
 
