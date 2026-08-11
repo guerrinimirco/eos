@@ -224,10 +224,14 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_Q, mu_S=0.0, T=0.0,
     converged potentials and fields exactly as `eos/dd2/solver.solve_octet`
     does: an additive ideal Bose gas contributing P, eps, s and its own
     mu*_j n_j to the chemical-potential sum.
-    # ponytail: the meson gas is a spectator to neutrality here, matching the
-    # DD2 sector convention — its net charge/strangeness do not enter n_C/n_S.
-    # Fold them in only if the DD2 side starts doing so too, or the two engines
-    # will disagree.
+
+    The gas is NOT a spectator to the charge bookkeeping. A thermal pi/K gas
+    carries net electric charge and strangeness, so it enters n_C and n_S --
+    and hence neutrality, the fixed-Y_C condition and the mixed-phase charge
+    residuals -- not only eps, P and s. The returned n_C and n_S come from
+    `assemble_octet`'s totals, which count it, matching the DD2 sector and
+    CLAUDE.md section 2. At T = 40 MeV the pion gas carries about 15% of the
+    non-leptonic charge, so treating it as a spectator is not a small error.
 
     `x0` is the starting field configuration; pass the (constant, per-solve)
     result of `hadronic_seed` rather than letting this rebuild it every call.

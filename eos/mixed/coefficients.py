@@ -68,7 +68,6 @@ import numpy as np
 from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon
 from eos.dd2.solver import solve_octet, octet_warm_start
-from eos.dd2.species import hadronic_charges
 from eos.dd2.physics.octet import _yc_neutralizing_leptons
 from eos.vmit.thermodynamics_quarks import compute_quark_matter_thermo_from_n
 from eos.mixed.equilibrium.charges import quark_charges
@@ -274,11 +273,18 @@ def sound_speed_frozen_hadronic(par, flags, point, rel_dn=1e-3, leptons=True):
     composition follows beta equilibrium (or the fixed-Y_C condition) as the
     density changes, and the gap between the two is exactly what drives a
     composition g-mode in the pure hadronic phase.
+
+    The fractions held are the point's own Y_C and Y_S, which are the TOTAL
+    non-leptonic ones -- baryons plus any thermal meson gas. Summing the baryon
+    densities instead would freeze a different composition from the one the
+    fixed-Y_C solve then imposes, since that condition is stated on the total:
+    at T = 40 MeV with a pion gas the two differ by about 16%, and the curve
+    would step at the onset instead of joining the mixture's.
     """
-    n_B, n_C, n_S = hadronic_charges(flags, point.composition_map)
+    n_B = point.n_B
     if n_B <= 0.0:
         return float("nan")
-    Y_C, Y_S, T = n_C / n_B, n_S / n_B, point.T
+    Y_C, Y_S, T = point.Y_C, point.Y_S, point.T
     x0 = octet_warm_start(point, flags.phi_field and flags.hyperons,
                           has_muS=flags.has_strange_baryons)
 

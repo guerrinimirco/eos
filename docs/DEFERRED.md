@@ -187,10 +187,32 @@ in `eos/` and in `nucleation/` now goes through
   a single sweep cannot do.
 
 ### mixed
-- The hadronic phase adapter treats the thermal meson gas as a spectator in
-  the charge and strangeness bookkeeping, while dd2 counts it. CLAUDE.md §2
-  fixes the convention: mesons carry C and S. Fixing the adapter moves numbers
-  at T > 0 with `thermal_mesons=True`.
+- (The entry claiming the hadronic phase adapter treated the thermal meson gas
+  as a spectator in the charge and strangeness bookkeeping was WRONG, and is
+  removed. `hadronic_phase` takes n_C and n_S from `assemble_octet`'s totals,
+  which count the gas, and the mixed residual uses those totals throughout, so
+  the engine has always agreed with dd2 and with CLAUDE.md §2. A comment in
+  `phases.py` asserted the opposite and has been corrected; a test now pins
+  the behaviour. Nothing moved.)
+- `build_mixed_table`'s progress callback does not use the shared key names.
+  It reports `fractions` / `n_points` / `seconds` where dd2 and vmit report
+  `fracs` / `n_solved` / `n_requested` / `elapsed_s`, and it omits `mode`,
+  `line` and `n_lines`. CLAUDE.md §5 asks for one shape across models, so the
+  keys should be renamed and the mixed-specific extras (`eta`, `window`) kept
+  alongside them. It is a public callback, so any notebook reading those keys
+  changes in the same commit.
+- The three spec entry points are not present under their spec names.
+  `solve_mixed`, `build_mixed_table` and the `coefficients` module already do
+  the work — and `build_mixed_table` already returns `(rows, windows)`, which
+  is the composite-engine requirement that the windows are part of the result
+  — but `eos_point` / `eos_table` / `eos_response` do not exist, so a caller
+  cannot drive mixed the way it drives dd2 and vmit. `eos_response` should
+  dispatch the freezes onto the existing `sound_speed_eq` /
+  `sound_speed_frozen` pair plus the `chi`-frozen variant.
+- The phase-adapter contract lives in `solvers/phases.py` and is documented
+  there, but the plan calls for it under `adapters.py` as its own named
+  surface, so a new hadron-quark pairing is visibly "write an adapter" rather
+  than "edit the solver's helpers".
 
 ### astro/tov
 - Crust table paths are absolute and machine-specific. A missing crust file

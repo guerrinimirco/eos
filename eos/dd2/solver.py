@@ -78,6 +78,14 @@ class EoSPoint:
     n_nu: float = 0.0   # fm^-3 (net electron-neutrino density; trapped only)
     phi0: float = 0.0   # MeV (hidden-strange vector; 0 without hyperons)
     composition: tuple = ()  # ((name, n_i [fm^-3]), ...) all active baryons
+    #: The TOTAL non-leptonic charge and strangeness fractions of the state --
+    #: baryons PLUS any thermal meson gas, which carries both. They are what
+    #: the fixed-Y_C / fixed-Y_S conditions are stated in terms of, so a state
+    #: re-solved at these fractions reproduces this one. Summing
+    #: `composition` instead gives the BARYON fractions, which at T > 0 with a
+    #: pion gas differ by 10-20 percent.
+    Y_C: float = 0.0
+    Y_S: float = 0.0
 
     @property
     def Y_p(self):
@@ -186,6 +194,7 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
         mu_n=float(mu_n), mu_p=float(mu_p),
         eps=float(eps_nat / hc3), P=float(P_nat / hc3),
         s=float(s_nat / hc3), hvh_rel=float(hvh_rel),
+        Y_C=float(np_nat / nB_nat), Y_S=0.0,
     )
 
 
@@ -452,6 +461,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
         hvh_rel=float(hvh_rel), n_e=st["n_e"] / hc3, n_mu=st["n_mu"] / hc3,
         mu_e=st["mu_e"], mu_S=st["mu_S"], mu_L=st["mu_L"],
         n_nu=st["n_nue"] / hc3, composition=tuple(sorted(dmap.items())),
+        Y_C=st["Y_C"], Y_S=st["Y_S"],
     )
 
 

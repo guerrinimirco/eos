@@ -105,6 +105,23 @@ class ChargeSpec:
         object.__setattr__(self, "targets",
                            MappingProxyType(dict(self.targets)))
 
+    # A mappingproxy cannot be pickled, and a ChargeSpec has to survive being
+    # sent to a worker process: `eos.mixed.scan` runs a parameter scan across
+    # processes, and CLAUDE.md section 6 requires model objects to be
+    # picklable so multiprocessing and MPI work. Unwrap for the wire and
+    # re-wrap on arrival, so the immutability holds in every process without
+    # costing the portability.
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["targets"] = dict(state["targets"])
+        return state
+
+    def __setstate__(self, state):
+        for name, value in state.items():
+            object.__setattr__(self, name, value)
+        object.__setattr__(self, "targets",
+                           MappingProxyType(dict(state["targets"])))
+
 
 # =============================================================================
 # QUANTUM NUMBERS
