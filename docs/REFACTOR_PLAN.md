@@ -41,8 +41,8 @@ before publication.
     │   ├── zlvmit/               legacy, kept as own code; hygiene only
     │   └── astro/
     │       ├── tov/              MOVED from eos/tov: solver.py (reference),
-    │       │                     solver_fast.py, crust.py (split out of solver.py),
-    │       │                     rotating.py, rns_backend.py
+    │       │                     crust.py, rotating.py, rns_backend.py,
+    │       │                     backends/ (the fast integrator, §9)
     │       └── gmode/            MOVED from eos/gmode, unchanged internally
     ├── notebooks/                one usage notebook per model (.ipynb <-> .py, jupytext);
     │                             dd2/notebook_api.py DELETED, its recipes inlined
@@ -83,6 +83,13 @@ the new eos standard. The core -> tables -> analysis -> figure layering stays.
 
 ## 3. API gap and work estimate per model
 
+The table below is the ORIGINAL Phase-0 estimate and is kept as the record of
+what each model was judged to need. It is not a status board: `general`, `dd2`,
+`vmit` and `mixed` are done (and their rows describe work already delivered —
+including one item, the mixed "meson-neutrality fix", that turned out not to
+exist; see §4.1). What remains open per model is `docs/DEFERRED.md`, and the
+retrofit those four still need is under §5 below.
+
 | model    | today                                            | to reach spec | estimate |
 |----------|--------------------------------------------------|---------------|----------|
 | general  | styling/constraints/table_io in place            | basis.py; thermal_mesons.py (generalize dd2's); compose.py move; tabulate.py; constraints: gradient rendering + P-n_B/eps-n_B planes + build/fetch merged in | 2-3 days |
@@ -102,19 +109,31 @@ the new eos standard. The core -> tables -> analysis -> figure layering stays.
 Phase 4 order: general -> dd2 -> vmit -> mixed -> sfho -> zl -> alphabag ->
 abpr -> enjl -> zlvmit (hygiene) -> astro/tov -> astro/gmode.
 
+The §5 layout and the §13 naming vocabulary were settled after general, dd2,
+vmit and mixed were already done, so those four are RETROFITTED before the
+order resumes at sfho: dd2 first (it is the template sfho is reshaped to),
+then vmit and mixed, which are small. Building six more models against a
+shape that is about to change would cost more than the retrofit, and would
+leave two conventions live in the repository at the same time — which is the
+single thing §13 exists to prevent.
+
 Recorded for Phase 5: the README states this repository is a rewrite of the
 Mathematica and Python code written across the author's master's thesis and
 PhD, carried out with the help of Claude Code.
 
 ## 4. Risk list — ranked by "could silently change a physics number"
 
-1. Planned physics-changing fixes vs the Phase-1 baseline. Three intentional
-   changes WILL move numbers: the sfho eta-energy bug fix, the zl/vmit
-   convergence-gate tightening (reclassifies rows), and the mixed
-   meson-neutrality fix (T>0 with thermal mesons). Protocol: the Phase-1
-   baseline freezes today's behaviour; each fix regenerates the affected
-   baseline entries in its own commit, with the before/after delta quoted in
-   the commit body. Everything else reproduces at rtol 1e-10.
+1. Planned physics-changing fixes vs the Phase-1 baseline. Two intentional
+   changes WILL move numbers: the sfho eta-energy bug fix, and the zl
+   convergence-gate tightening (it reclassifies rows). The vmit gate
+   tightening is done and moved nothing — the roots it now accepts are seven
+   orders tighter, not different. The third originally listed here, a "mixed
+   meson-neutrality fix", was DISPROVED and must not be attempted: the
+   hadronic adapter always counted the thermal gas in n_C and n_S, and only a
+   comment claimed otherwise. Protocol: the Phase-1 baseline freezes today's
+   behaviour; each fix regenerates the affected baseline entries in its own
+   commit, with the before/after delta quoted in the commit body. Everything
+   else reproduces at rtol 1e-10.
 2. nu_* -> mu_eff_* rename inside dd2 kernels touches the analytic Jacobian
    and the Numba kernel — the highest-value code in the repo. Pure rename,
    zero numeric change; guarded by the golden SNM point, the backend-parity
@@ -145,22 +164,58 @@ PhD, carried out with the help of Claude Code.
 
 ## 5. Internal structure per model (proposed)
 
-Standard shape (CLAUDE.md §5): parameters.py / thermodynamics*.py / solver.py
-/ api.py (the three spec entry points) / verify/ / <model>.tex+.md.
+Standard shape (CLAUDE.md §5), mandatory names, conditional existence:
 
-- dd2: keeps physics/ (residual, jacobian, kernel_numba, octet);
+    parameters.py  species.py  thermodynamics.py  solver.py  table.py  api.py
+    verify/  <model>.tex+.md
+    couplings.py*  nmp.py*  responses.py*  backends/*
+
+The two rules that decide what goes where — *thermodynamics computes from the
+state, solver finds the state*, and *backends/ is deletable* — are stated with
+their tests in CLAUDE.md §5.
+
+- dd2 is the template and is retrofitted FIRST, because sfho is reshaped to
+  it. `physics/` becomes `backends/{jacobian, kernel_numba}`; `physics/thermo`
+  + `fields` + the non-residual half of `octet` become `thermodynamics.py`;
+  `octet_residual` and `beta_eq_residual` join `solver.py`. The mode block
+  (`charge_mode`, `Y_C`, `strange_mode`, `Y_S`, `lepton_mode`, `Y_L`,
+  `yc_leptons`) comes off `OctetCtx` and becomes an explicit argument to the
+  residual — this is the one part that is surgery rather than a move, and it
+  pays for itself at `mixed/adapters.py`, which currently passes a
+  `charge_mode="fixed", Y_C=0.0, Y_S=0.0` it never uses. Also:
   coefficients.py + coefficients_jac.py merge into responses.py (FD flavor =
-  reference, Jacobian flavor = fast).
+  reference, Jacobian flavor = fast); nmp.py + nmp_inverter.py merge into
+  nmp.py with `from_nmp` a free function there rather than a classmethod on
+  Parametrization (which today needs three deferred imports to break the
+  cycle); `xp.py` (the dead JAX namespace shim) and `notebook_api.py` go;
+  `_yc_neutralizing_leptons` is model-independent and moves to
+  `general/thermodynamics_leptons.py`.
 - sfho: reshaped to the dd2 pattern — nuclear_saturation_properties.py
-  becomes nmp.py + nmp_inverter.py; comparison logic becomes
-  verify/compose.py; meson gas through general/thermal_mesons.py.
+  becomes nmp.py; comparison logic becomes verify/compose.py; meson gas
+  through general/thermal_mesons.py. No couplings.py: SFHo's g_i are
+  constants and its density dependence is nonlinear self-interaction terms,
+  which are thermodynamics.
 - zl / vmit / alphabag: lose their private table stacks to general/tabulate.py
   and gain a minimal verify/run_full_check.py each.
-- abpr: one eos.py + api.py.
-- enjl: keeps its layout; thermodynamics.py grows finite-T; gains verify/.
-- mixed: gains adapters.py; coefficients stay (they are the response-function
-  reference for the freeze-spec API).
-- astro/tov: crust handling split out of the 1288-line solver.py into
-  crust.py; rotating/RNS stay inside tov (shared EOSTable_for_TOV type, crust
-  plumbing, and the static cross-check that validates RNS).
+- abpr: solver.py + api.py.
+- enjl: eos_beta.py + uniform.py merge into solver.py; thermodynamics.py grows
+  finite-T; gains verify/.
+- mixed: has adapters.py and api.py; coefficients.py becomes responses.py
+  (same role, same name as dd2's); the internal `Y_L` is renamed to the spec's
+  `Y_Le`.
+- astro/tov: crust handling split out of solver.py into crust.py — not
+  because solver.py is long (§13 forbids that reason) but because stitching a
+  crust EoS onto a core table is separable physics from integrating the TOV
+  equations, and the crust is what a caller chooses per run. The fast
+  integrator moves to `backends/` for the same reason a model's does (§9),
+  since the two are pinned against each other by a parity test. Rotating/RNS
+  stay inside tov (shared EOSTable_for_TOV type, crust plumbing, and the
+  static cross-check that validates RNS).
 - astro/gmode: unchanged.
+
+Function names are the §13 vocabulary — `thermo_from_mu`, `thermo_from_n`,
+`kinetic_thermo`, `assemble`, `residual`, `default_guess`, `warm_start`,
+`solve_<mode>`, `build_table`, `Parameters.default()` — and no name repeats its
+package (`compute_zl_thermo_from_mu` -> `thermo_from_mu`). These are public
+names: each model's renames land in that model's own commit with every call
+site fixed alongside, no aliases. `nucleation`'s imports follow in Phase 6.

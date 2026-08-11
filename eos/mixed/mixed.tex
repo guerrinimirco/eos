@@ -33,7 +33,9 @@ A continuous parameter $\eta \in [0,1]$ selects how much of electric-charge
 neutrality is imposed phase by phase rather than on the mixture as a whole,
 so that $\eta = 0$ is the Gibbs construction~\cite{Glendenning1992},
 $\eta = 1$ is Maxwell, and intermediate values interpolate between them in
-the sense of Constantinou et al.~\cite{Constantinou2023}. This note states
+the sense of Constantinou et al.~\cite{Constantinou2023,Constantinou2025},
+the second of which extends the framework to finite temperature. This note
+states
 the contract, the equilibrium conditions, how the unknown vector and the
 residual are \emph{derived} from a per-charge regime declaration rather than
 enumerated per mode, and what a mixed table reports beyond a point equation
@@ -343,7 +345,12 @@ The \emph{frozen} (adiabatic) speed $c_{\mathrm{ad}}^2$ holds $\chi$ fixed.
 The mixture is compressed faster than the phases can convert, the pressure has
 to rise, and $c_{\mathrm{ad}}$ does not collapse in the window. Freezing
 $\chi$ is the part that matters: freezing only the charge fractions would let
-the solve readjust $\chi$ and return to the plateau. In addition each phase is
+the solve readjust $\chi$ and return to the plateau. Which \emph{compositional}
+variables are held alongside it is the further choice that separates the fast
+and slow propagation limits of Ref.~\cite{Constantinou2025} --- every particle
+fraction in the first, only the lepton fraction in the second, since there
+every chemical equilibrium but the $\beta$ one is imposed before
+differentiating. In addition each phase is
 compressed by the same factor, each keeps its own $Y_C$ and $Y_S$, and the
 leptons are re-neutralised against the frozen total charge. That convention is
 stated in full in the module documentation, because a different one gives a

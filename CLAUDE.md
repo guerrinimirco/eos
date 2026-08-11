@@ -144,11 +144,15 @@ no-op.
 
 Every model exposes the same entry points with the same signatures:
 
-    eos_point(mode, species, **conditions)     -> quantities at one point
-    eos_table(mode, species, grid)             -> tabulated EoS over a grid
-    eos_response(mode, species, frozen=...,
-                 **conditions)                 -> second derivatives and
-                                                  response functions
+    eos_point(par, mode, species, **conditions)  -> quantities at one point
+    eos_table(par, mode, species, axes)          -> tabulated EoS over a grid
+    eos_response(par, mode, species, frozen=...,
+                 **conditions)                   -> second derivatives and
+                                                    response functions
+
+`par` comes first and is never optional: model parameters are arguments (§6),
+so there is no entry point that reaches for a default set on the caller's
+behalf.
 
 `conditions` are the independent variables of the mode, named exactly
 **n_B, T, Y_C, Y_S, Y_Le, Y_Lmu**. Every public boundary is fm-based:
@@ -161,11 +165,18 @@ tables are warm-started: each solved point seeds the next, with the
 continuation tactics (bisected steps through onsets) documented where used.
 
 **Progress reporting.** Every table builder accepts an optional `progress`
-callback, with the same shape across models: invoked once per completed line
-(or axis combination) with a small dict — the axis values, points
-solved/skipped, elapsed time. Default is silent; passing a callback (or
-`verbose=True` for the built-in printer) turns it on. Deep solver code never
-prints.
+callback, invoked once per completed line — one temperature and one
+combination of the fractions the mode fixes — with the SAME dictionary in
+every model, so one printer serves them all:
+
+    {mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,
+     elapsed_s}
+
+`fracs` carries every fraction the line was solved at, swept or fixed. An
+engine with more to report adds keys alongside these (the mixed builder adds
+`eta` and the located `window`); it does not rename them. Default is silent;
+passing a callback, or `verbose=True` for the built-in printer, turns it on.
+Deep solver code never prints.
 
 **Response functions.** `eos_response` computes the second-derivative
 quantities of the CompOSE manual (Typel et al.): heat capacities C_V and C_P,
@@ -173,12 +184,23 @@ equilibrium and frozen sound speeds, adiabatic and thermal indices, and the
 susceptibility matrix chi_ab = dn_a/dmu_b for a,b in (B, C, S). Because a
 second derivative is only defined once one says WHAT IS HELD FIXED — and that
 choice encodes which reactions are faster than the perturbation timescale —
-the freeze is an explicit argument, selectable case by case: full equilibrium
-(everything re-equilibrates), frozen per-species composition (all Y_i fixed),
-frozen conserved fractions (Y_C, Y_S fixed, species re-equilibrate within
-them), and, in a mixed phase, frozen quark volume fraction chi; each with
-leptonic re-neutralization on or off. The choices a function implements are
-named in its docstring, never implied.
+the conditioning is explicit, and it has THREE independent axes:
+
+- **what composition is held.** A *set* of quantity names, not a choice from a
+  menu: any of the species fractions Y_i, the conserved fractions Y_C and Y_S,
+  and in a mixed phase the quark volume fraction chi. Named freezes are
+  presets that expand to a set — `equilibrium` holds nothing, `fast` holds
+  every Y_i and chi, `slow` holds Y_C and chi — and a caller may always pass
+  the set instead, so a combination nobody anticipated (chi free at fixed
+  Y_C, say) is reachable without new code.
+- **what thermal variable is held**: T (isothermal) or entropy per baryon
+  (adiabatic). These differ at T > 0 by the factor C_P/C_V, so a returned name
+  says which — `cs2_isothermal` against `cs2_adiabatic`, never a bare `cs2`
+  whose meaning depends on the arguments.
+- **whether leptons re-neutralize** against the held charge.
+
+The combinations a function implements are named in its docstring, never
+implied, and one it does not implement raises saying so.
 
 **Composite engines return more than a point EoS.** The mixed-phase API also
 reports the transition observables: the phase boundaries (n_onset, n_offset
@@ -202,38 +224,85 @@ the template — a single-file model is fine — but where it has one of these
 parts, that part has this name:
 
     parameters.py       the parameter dataclass + named published sets
-    species.py          the SpeciesFlags: which degrees of freedom are active
-    thermodynamics.py   the model's kinetic/mean-field kernels
-    solver.py           the equilibrium solves, one per mode family
+    species.py          the SpeciesFlags, and the model's quantum numbers
+    thermodynamics.py   quantities computed FROM the state (see below)
+    solver.py           the equilibrium conditions and the solves that close
+                        them, one per mode family
     table.py            the grid driver: warm-started sweep + progress callback
-    api.py              eos_point / eos_table / eos_response (§5)
+    api.py              eos_point / eos_table / eos_response
     verify/             the model's physics-invariant checks
     <model>.tex, .md    the paper-style description (§11)
 
 and, only where the physics has that part:
 
-    nmp.py,             forward and inverse nuclear-matter-parameter maps
-    nmp_inverter.py
+    couplings.py        a coupling that is a FUNCTION of the state, e.g. the
+                        density-dependent Gamma_i(n_B) of a DD-RMF. A model
+                        whose couplings are constants has none: the numbers
+                        go in parameters.py.
+    nmp.py              the nuclear-matter-parameter map, forward AND inverse
     responses.py        second-derivative quantities, when they outgrow api.py
-    couplings.py        a non-trivial coupling functional
-    physics/            when the kernels genuinely split — residual, analytic
-                        Jacobian, jitted backend (§9)
+    backends/           the SAME equations written more than once — the
+                        analytic Jacobian, the jitted kernel (§9)
 
 Not `eos.py`: since `api.py` holds `eos_point` and `eos_table`, a module named
 `eos.py` that is not the eos API misleads, and `eos.<model>.eos` was never a
-good import line. Not `thermodynamics_<sector>.py` either, unless a model
-genuinely carries two sectors — the package name already says which it is.
+good import line. Not `thermodynamics_<sector>.py` either **unless the model
+genuinely carries two or more sectors, in which case every one of them takes
+the suffix**: a package holding exactly one suffixed file is wrong, because
+the suffix only restates the package name.
+
+**thermodynamics.py computes quantities from the state; solver.py finds the
+state.** `thermodynamics.py` takes chemical potentials, fields, T, the
+parameters and the species flags, and returns densities, P, eps, s and their
+sums — including any self-consistency internal to the model (the mean fields,
+a bag model's flavour densities). `solver.py` takes n_B, T and a mode's
+conditions and finds the potentials and fields that satisfy them. The test is
+that **thermodynamics.py never knows which mode it is in**: grep it for
+`beta`, `Y_C`, `neutral` or `trapped` and find nothing. This is the same
+boundary as the phase-adapter contract above, seen from inside a model — which
+is why `eos/mixed` can consume the thermodynamics half of a model and nothing
+else.
+
+**backends/ is deletable.** Remove it and the model still gives the same
+numbers, only slower: the reference path is `thermodynamics.py` + `solver.py`
+and is complete on its own. That is §9's split stated as a directory, and it
+is what keeps the readable implementation readable — a physicist checking the
+equations never has to walk past a jitted kernel.
 
 A composite engine (§5) is not a model and does not take this list. It carries
-`adapters.py`, `api.py`, `verify/` and its own `<name>.tex`, plus whatever
-subpackages its solve needs.
+`adapters.py`, `api.py`, `responses.py`, `verify/` and its own `<name>.tex`,
+plus whatever subpackages its solve needs.
+
+**Layer order inside a model.** Imports run one way only:
+
+    couplings.py → parameters.py → thermodynamics.py → solver.py → nmp.py
+                                                                 → table.py → api.py
+
+`parameters.py` is at the bottom and imports nothing above `couplings.py`;
+`nmp.py` is near the top because computing nuclear-matter parameters requires
+solving symmetric matter at saturation. A constructor that inverts NMPs is
+therefore a free function in `nmp.py`, not a classmethod on the parameter
+dataclass — putting it there forces a deferred import, which is the cycle
+announcing itself.
 
 Differences between models come from the physics (an RMF has field
 equations, a bag model does not), never from style drift.
 
+**Parameter or coupling?** A parameter takes no arguments; a coupling is a
+function of the state. `Gamma_sigma(n_sat)` is a parameter — a stored number,
+what an inference run varies. `Gamma_sigma(n_B)` is a coupling — evaluated at
+every density, never stored. So `couplings.py` holds the functional *form*
+(pure mathematics, no model numbers in it), `parameters.py` holds the numbers
+that pin it down, and the evaluation lives on the parameter object. Coupling
+*ratios* (`x_sigma_Lambda`, `x_omega_Delta`) are parameters even though they
+multiply a density-dependent coupling. A mean field is neither: it is a
+dynamical variable and belongs to `thermodynamics.py`.
+
 **Nuclear-matter parameters.** Models with a nuclear sector (`dd2`, `sfho`)
 expose the forward map (couplings → NMPs, `compute_nmp`) and the inverse
-(NMPs → couplings, `invert_nmp` / `from_nmp`). The inversion imposes
+(NMPs → couplings, `invert_nmp` / `from_nmp`) — both in `nmp.py`, since they
+are two directions of one map and share the NMP list, its ordering and the
+residual. The inversion imposes
 {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}: E_sym and L_sym close the
 isovector sector; the isoscalar sector is closed by the model's structural
 conditions (for DD2, the cross-constraint f''_sigma(1) = f''_omega(1) plus
@@ -330,7 +399,8 @@ Where a solver exists in two flavors, the pattern is preserved:
   bypassed or removed.
 - the **fast** flavor — Numba-jitted and/or analytic-Jacobian accelerated,
   selected by a backend argument, validated against the reference by
-  backend-parity checks in `verify/`.
+  backend-parity checks in `verify/`. It lives in the model's `backends/`,
+  which §5 defines by the property that deleting it changes no number.
 
 ## 10. Figures and observational constraints
 
@@ -416,6 +486,49 @@ analytic Jacobian, a jitted backend, an inverse map. Two models that do the
 same job have the same files. A line count is a property of the text and says
 nothing about where the physics separates; splitting on one drives models
 apart, which costs more than the length ever did.
+
+**Names.** Three rules, so that a physicist who has read one model can read
+the next without a translation table:
+
+1. **A name never repeats its package.** `eos.zl.compute_zl_thermo_from_mu`
+   says "zl" twice; it is `eos.zl.thermo_from_mu`. Same disease as a
+   `thermodynamics_quarks.py` inside a quark model.
+2. **The same job carries the same name in every model.** The list below is
+   the vocabulary; a model uses these names or explains in its docstring why
+   its physics is a different job.
+3. **A name says what the function takes and returns, not that it computes.**
+   In a file called `thermodynamics.py` everything computes; `thermo_from_mu`
+   against `thermo_from_n` tells the reader which variables they are handing
+   over. Drop `compute_` where it carries nothing.
+
+    Parameters                the parameter dataclass, this name in EVERY
+                              model — `VMITParams` says "vmit" twice in
+                              `eos.vmit.VMITParams`, and two models with one
+                              job carry one name
+    Parameters.default()      the published parameter set
+    Parameters.named(name)    another published set
+    kinetic_thermo(...)       one species as an ideal gas
+    mean_fields(...)          the model's mean fields at the current state
+    thermo_from_mu(...)       the block at given chemical potentials
+    thermo_from_n(...)        the block at given densities
+    assemble(...)             the sums: n_B, n_C, n_S, P, eps, s, sum mu_i n_i
+    residual(x, ...)          the equations that must vanish
+    default_guess(mode, ...)  the cold start
+    warm_start(point)         the seed taken from the previous point
+    solve_<mode>(...)         one equilibrium solve, with <mode> the §3 mode
+                              name lowercased: solve_beta_eq_neutrinoless,
+                              solve_fixed_yc, ... — so there is no second list
+                              of names to drift out of step with §3
+    build_table(spec, ...)    the warm-started grid
+    compute_nmp / invert_nmp  the nuclear-matter-parameter map, both directions
+    eos_point / eos_table / eos_response     the uniform API (§5)
+    verify/run_full_check.py  the model's invariant suite, one entry point
+
+**Order functions by the physics, not alphabetically and not by call depth.**
+`thermodynamics.py` reads single species → mean fields → the per-species loop
+→ the sums; `solver.py` reads guesses → residual → the solve → the modes →
+the sweep. The same reading order in every model is most of what makes the
+second model quick to read.
 
 **Docstrings stand on their own.** This is a public repository, so a comment
 may not depend on a document that is not in it. State the physics, name the

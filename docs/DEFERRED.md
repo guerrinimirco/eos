@@ -115,6 +115,12 @@ names mandatory and their existence conditional. Two renames are done
 `thermodynamics.py`). The rest are outstanding, each belonging in its model's
 own session where the baseline and `test_imports.py` are already being run:
 
+    dd2       physics/ -> backends/{jacobian, kernel_numba};
+              physics/{thermo, fields} + the non-residual half of
+              physics/octet -> thermodynamics.py; octet_residual and
+              physics/residual.py -> solver.py; coefficients.py +
+              coefficients_jac.py -> responses.py; nmp.py + nmp_inverter.py
+              -> nmp.py; delete xp.py and notebook_api.py
     sfho      eos.py -> solver.py, compute_tables.py -> table.py,
               nuclear_saturation_properties.py -> nmp.py,
               thermodynamics_hadrons.py -> thermodynamics.py
@@ -125,6 +131,22 @@ own session where the baseline and `test_imports.py` are already being run:
               thermodynamics_quarks.py -> thermodynamics.py
     abpr      eos.py -> solver.py
     enjl      eos_beta.py + uniform.py -> solver.py (a merge, not a rename)
+    mixed     coefficients.py -> responses.py
+
+Function names go with them, per the §13 vocabulary: no name repeats its
+package (`compute_zl_thermo_from_mu` -> `thermo_from_mu`), and the same job
+carries the same name everywhere (`get_<model>_default` -> `Parameters.default()`,
+`get_default_guess_*` -> `default_guess(mode, ...)`, `result_to_guess` /
+`*_warm_start` -> `warm_start(point)`, `compute_<model>_table` ->
+`build_table(spec)`). These are public names, so each model's renames land in
+its own commit with every call site fixed alongside — no aliases, since two
+names for one thing is what the rule removes.
+
+`dd2/parameters.py` carries three function-level imports, two of them
+commented "local import breaks the cycle", because `Parametrization.from_nmp`
+and two saturation helpers reach up to `solver.py` from the bottom layer.
+Making `from_nmp` a free function in `nmp.py` removes all three; the deferred
+imports are the layering announcing itself and should not be left in place.
 
 `vmit/eos.py` is held back only because `notebooks/DD2vMIT_general1oPT`
 imports from it directly and that notebook has uncommitted work in it; the
@@ -163,6 +185,49 @@ alongside the notebook rework; individual lines are corrected only where a
 rename in this phase would otherwise leave them newly wrong.
 
 ---
+
+### The freeze selector of `eos_response` is a fixed menu, not a selection
+
+CLAUDE.md §5 requires the freeze to be selectable case by case. Today each
+model takes a single string from a short hard-coded list — dd2
+`('equilibrium', 'composition')`, vmit `('equilibrium',)`, mixed
+`('equilibrium', 'chi')` — so a combination nobody anticipated cannot be
+asked for. The target is a *set* of held quantities, with the named freezes as
+presets that expand to one:
+
+    "equilibrium"  frozenset()                    nothing held
+    "fast"         {every species Y_i} | {"chi"}  no reaction has time
+    "slow"         {"Y_C", "chi"}                 all chemical equilibria but beta
+    "conserved"    {"Y_C", "Y_S", "chi"}          strong imposed, both weak frozen
+
+so that `frozen={"Y_C", "Y_S"}` (chi free), `frozen={"chi"}` and
+`frozen=set(species)` are all reachable. The names come from Constantinou,
+Guerrini et al., arXiv:2506.20418 §IV, whose fast and slow limits are taken at
+fixed (y_i, chi) and fixed (Y_e, chi) respectively — the {y_i} there are
+PARTICLE fractions, and the conserved-charge description appears only in the
+slow limit, where imposing every equilibrium but beta collapses them to Y_C.
+
+A second, orthogonal axis is missing entirely: the thermal condition. Every
+`eos_response` in the repository differentiates at fixed T, while the adiabatic
+sound speed of the CompOSE manual and of that paper is taken at fixed entropy
+per baryon. At T = 0 they agree; at T = 50 MeV they do not. Returned names
+should say which — `cs2_isothermal` against `cs2_adiabatic`, never a bare
+`cs2` whose meaning depends on the arguments.
+
+---
+
+### The response functions are three finite-difference stencils, not one derivation
+
+C_V, C_P, Gamma and c_s^2 are all second derivatives of the same free energy
+per baryon F(T, n_B, Y_C), and the CompOSE manual (arXiv:2203.03209 §3.6)
+derives every one of them from d2F/dT2, d2F/dn_B dT and d2F/dn_B^2. The code
+instead takes a separate central difference per quantity at a relative step of
+1e-3, which is the least accurate step in the response path. Constantinou,
+Guerrini et al. arXiv:2506.20418 Eq. (76)-(77) closes the loop:
+(dP/dn_B)_S = (C_P/C_V) (dP/dn_B)_T, so the adiabatic sound speed follows
+algebraically from the isothermal one and the heat-capacity ratio — one
+stencil instead of two. Worth doing when the freeze selector is built, since
+both touch the same code.
 
 ## Per model
 
@@ -243,6 +308,15 @@ rename in this phase would otherwise leave them newly wrong.
   differ where more than one branch exists — that difference is the branch
   structure, and choosing between branches needs a Maxwell construction that
   a single sweep cannot do.
+
+### general
+- `_yc_neutralizing_leptons` — the electron/muon gas at the chemical potential
+  that neutralises a given charge density — lives in `dd2/physics/octet.py`
+  but is fully model-independent: its arguments are (target charge, m_e, m_mu,
+  include_muons, T) and no model parameter enters. CLAUDE.md §7 makes lepton
+  thermodynamics a `general/` responsibility, and `eos/mixed/coefficients.py`
+  already imports it out of dd2's kernels to build its own lepton block. It
+  belongs in `general/thermodynamics_leptons.py`.
 
 ### mixed
 - (The entry claiming the hadronic phase adapter treated the thermal meson gas
