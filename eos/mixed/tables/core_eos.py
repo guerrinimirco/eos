@@ -64,6 +64,51 @@ class MixedEoSTable:
         return EOSTable_for_TOV(P=self.P, epsilon=self.eps, nB=self.n_B)
 
 
+#: Largest pressure inversion treated as round-off, relative to the local P.
+#: A Maxwell plateau is EXACTLY constant, so consecutive solves there differ
+#: only in the last bits: on a 440-point grid the observed inversions are
+#: 1e-16 to 5e-15 of P. Anything larger is not round-off and is left alone for
+#: the caller to see.
+_P_ROUNDOFF = 1.0e-12
+
+
+def _enforce_monotone_pressure(P, n_B):
+    """Remove round-off pressure inversions before the table reaches TOV.
+
+    CLAUDE.md section 8: a table DELIVERED to a structure solver has P
+    non-decreasing in n_B. A Maxwell plateau makes that hard to satisfy by
+    accident -- P is physically constant across the whole mixed window, so the
+    sign of the difference between neighbours is pure floating-point noise, and
+    a 440-point grid produces a few dozen inversions of order 1e-13 MeV/fm^3.
+
+    They are not harmless. The fast TOV backend returns a garbage tidal
+    deformability when it meets one -- for a 0.94 Msun star, Lambda = 14
+    against the reference's 2.8e6 -- while the masses and radii still agree, so
+    nothing else flags it. Clamping restores what the physics already says the
+    plateau is.
+
+    A genuinely non-monotone branch is different physics -- mechanical
+    instability inside a first-order transition is real, and section 8 says a
+    construction must resolve it before TOV. Inversions too large to be
+    round-off are therefore left in place rather than smoothed away.
+    """
+    P = np.asarray(P, dtype=float)
+    drop = np.diff(P)
+    scale = np.maximum(np.abs(P[:-1]), 1.0)
+    roundoff = (drop < 0.0) & (np.abs(drop) <= _P_ROUNDOFF * scale)
+    if not roundoff.any():
+        return P
+    real = (drop < 0.0) & ~roundoff
+    if real.any():
+        i = int(np.argmax(real))
+        raise ValueError(
+            f"pressure decreases by {abs(drop[i]):.3e} MeV/fm^3 at "
+            f"n_B = {n_B[i]:.4f} fm^-3, far beyond round-off: the branch is "
+            f"mechanically unstable and no construction has resolved it "
+            f"(CLAUDE.md section 8)")
+    return np.maximum.accumulate(P)
+
+
 def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
                           T=0.0, analytic_jac=False, window=None):
     """Stitch pure hadronic, eta-mixed and pure quark segments into one core EoS.
@@ -122,6 +167,8 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
     eps = np.array([r[2] for r in rows])
     chi = np.array([r[3] for r in rows])
     phase = np.array([r[4] for r in rows])
+
+    P = _enforce_monotone_pressure(P, n_B)
 
     mixed_rows = phase == "mix"
     P_trans = (float(np.mean(P[mixed_rows]))

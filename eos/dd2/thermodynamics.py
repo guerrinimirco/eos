@@ -36,6 +36,7 @@ from eos.general.particles import Electron, Muon
 from eos.general.physics_constants import hc3
 from eos.general.state import PhaseThermo
 from eos.general import thermal_mesons as _gas
+from eos.dd2.physics.kernel_numba import meson_sources_t0, _NUMBA_OK
 from eos.dd2.species import active_baryons
 
 _PI2 = np.pi ** 2
@@ -527,7 +528,7 @@ def assemble(par, ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S):
 RESIDUAL_TOL = 1.0e-10
 
 
-def _self_consistency_residual(x, par, ctx, mu_tilde_B, mu_C, mu_S):
+def self_consistency_residual(x, par, ctx, mu_tilde_B, mu_C, mu_S, fast=True):
     """Meson field gaps plus baryon-density self-consistency.
 
     Unknowns x = [sigma, omega0, rho0, (phi0), nB_nat]. The density is an
@@ -538,6 +539,12 @@ def _self_consistency_residual(x, par, ctx, mu_tilde_B, mu_C, mu_S):
 
     There is no charge, strangeness or neutrality row: the potentials are
     inputs. That is what makes this thermodynamics rather than a mode.
+
+    `fast` selects the backend (CLAUDE.md section 9). At T = 0 the per-species
+    loop runs in the jitted `meson_sources_t0` kernel, the same closed form the
+    NumPy path evaluates and about four times quicker -- which matters because
+    a mixed-phase solve calls this once per residual evaluation. `fast=False`
+    is the plain NumPy reference, and the two agree to machine precision.
     """
     sigma, omega0, rho0 = x[0], x[1], x[2]
     i = 3
@@ -552,11 +559,22 @@ def _self_consistency_residual(x, par, ctx, mu_tilde_B, mu_C, mu_S):
     ctx.dGs_N, ctx.dGw_N, ctx.dGr_N = dGs, dGw, dGr
     ctx.nB_nat = nB_nat
 
-    kin = baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
-                          mu_tilde_B, mu_C, mu_S)
-    if kin is None:                              # m* <= 0: outside the domain
-        return [1.0e6] * len(x)
-    src_s, src_w, src_r, src_phi, n_tot = _field_sources(ctx, kin, phi0)
+    if fast and ctx.T == 0.0 and _NUMBA_OK:
+        spec_arr = getattr(ctx, "_spec_arr", None)
+        if spec_arr is None:                     # built once per solve
+            spec_arr = np.asarray(ctx.specs, dtype=np.float64)
+            ctx._spec_arr = spec_arr
+        src_s, src_w, src_r, src_phi, n_tot = meson_sources_t0(
+            spec_arr, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S,
+            Gs, Gw, Gr)
+        if n_tot < 0.0:                          # m* <= 0: outside the domain
+            return [1.0e6] * len(x)
+    else:
+        kin = baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
+                              mu_tilde_B, mu_C, mu_S)
+        if kin is None:                          # m* <= 0: outside the domain
+            return [1.0e6] * len(x)
+        src_s, src_w, src_r, src_phi, n_tot = _field_sources(ctx, kin, phi0)
     if not np.isfinite([src_s, src_w, src_r, src_phi, n_tot]).all():
         # A non-finite residual is worse than a large one: the solver cannot
         # back off from NaN, it just stops. Report the same penalty the
@@ -575,7 +593,8 @@ def _self_consistency_residual(x, par, ctx, mu_tilde_B, mu_C, mu_S):
 
 
 def thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
-                         n_B_guess=0.2, x0=None, return_state=False):
+                         n_B_guess=0.2, x0=None, x0_fallback=None,
+                         return_state=False, fast=True):
     """DD2's matter at fixed conserved-charge potentials, fields solved.
 
     The self-consistent layer: given (mu_tilde_B, mu_C, mu_S, T) it solves the
@@ -594,18 +613,40 @@ def thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
     point would make this function's output depend on the path taken to reach
     it and corrupt the Jacobian.
 
-    Returns a `PhaseThermo`, or (PhaseThermo, x) with `return_state`, so a
-    caller can feed the converged vector back as the next `x0`.
+    Returns a `PhaseThermo`, or (PhaseThermo, {x_phase, ctx}) with
+    `return_state`, so a caller can feed the converged vector back as the next
+    `x0` or differentiate the phase without re-solving it.
     """
     from scipy.optimize import root
 
     ctx = build_matter_ctx(par, n_B_guess, flags, T=T)
-    guess = (list(x0) if x0 is not None
-             else _cold_start(par, ctx, mu_tilde_B, mu_C, mu_S))
-    args = (par, ctx, mu_tilde_B, mu_C, mu_S)
-    sol = root(_self_consistency_residual, guess, args=args, method="hybr",
-               tol=1e-13)
-    res_max = max(abs(r) for r in _self_consistency_residual(sol.x, *args))
+    args = (par, ctx, mu_tilde_B, mu_C, mu_S, fast)
+
+    # Try the caller's warm start, then whatever stronger seed it offered, then
+    # a seed built here from the field equations.
+    # The fallback is what makes a warm-started sweep robust: a previous
+    # point's vector is an excellent guess right up until the composition
+    # changes under it -- a hyperon threshold, or a meson gas turning on --
+    # and then it is a bad one, in a region where the residual answers with a
+    # constant penalty and the solver has no gradient to follow. Without the
+    # retry those points are simply lost.
+    def guesses():
+        if x0 is not None:
+            yield list(x0)
+        if x0_fallback is not None:
+            # Callable, so a caller whose fallback is expensive (eos/mixed
+            # builds it from a full beta-equilibrium solve) pays for it only
+            # when the warm start actually misses.
+            yield list(x0_fallback() if callable(x0_fallback) else x0_fallback)
+        yield _cold_start(par, ctx, mu_tilde_B, mu_C, mu_S)
+
+    sol = None
+    for guess in guesses():
+        sol = root(self_consistency_residual, guess, args=args, method="hybr",
+                   tol=1e-13)
+        res_max = max(abs(r) for r in self_consistency_residual(sol.x, *args))
+        if res_max <= RESIDUAL_TOL:
+            break
     if res_max > RESIDUAL_TOL:
         raise RuntimeError(
             f"DD2 self-consistency failed at mu_tilde_B={mu_tilde_B}, "
@@ -619,7 +660,11 @@ def thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
     # converged values on its last call, so ctx is already the assembly context.
     state = assemble(par, ctx, sigma, omega0, rho0, phi0,
                      mu_tilde_B, mu_C, mu_S)
-    return (state, list(sol.x)) if return_state else state
+    if return_state:
+        # Shaped for a caller differentiating this phase without re-solving it:
+        # `eos.mixed`'s analytic Jacobian re-runs the residual on this same ctx.
+        return state, dict(x_phase=list(sol.x), ctx=ctx)
+    return state
 
 
 #: Damping and sweep count for the Picard seed below. Enough to land inside

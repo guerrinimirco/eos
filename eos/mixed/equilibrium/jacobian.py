@@ -44,12 +44,14 @@ import numpy as np
 
 from eos.general.physics_constants import hc, hc3
 from eos.general.thermodynamics_leptons import muon_thermo, neutrino_thermo
-from eos.dd2.physics.octet import assemble_octet
+from eos.dd2.thermodynamics import (
+    assemble as dd2_assemble, self_consistency_residual,
+)
 from eos.mixed.equilibrium.charges import Regime
 from eos.mixed.equilibrium.residual import (
     charged_leptons, has_leptons, _quark_mus_from_charges,
 )
-from eos.mixed.adapters import hadronic_phase, quark_phase, _hadronic_residual
+from eos.mixed.adapters import hadronic_phase, quark_phase
 from eos.vmit.thermodynamics import compute_quark_density
 
 #: mu_flavor = _M @ mu_charge for mu_charge = (mu_B, mu_C, mu_S). Since
@@ -124,20 +126,25 @@ def _hadronic_block(par, flags, mu_tB, mu_C, mu_S, T, state):
     n_f = len(x0) - 1                                   # field count (nB_nat last)
 
     def R(xp, mu):
-        return np.array(_hadronic_residual(list(xp), ctx, par, flags,
-                                           mu[0], mu[1], mu[2]))
+        return np.array(self_consistency_residual(list(xp), par, ctx,
+                                                  mu[0], mu[1], mu[2]))
 
     def Out(xp, mu):
         # Re-run the residual first so ctx carries this trial point's
         # density-dependent couplings, then assemble on the same ctx.
-        _hadronic_residual(list(xp), ctx, par, flags, mu[0], mu[1], mu[2])
-        x_oct = list(xp[:n_f]) + [mu[0], mu[1]]
-        if ctx.has_muS:
-            x_oct.append(mu[2])
-        st = assemble_octet(x_oct, ctx)
+        self_consistency_residual(list(xp), par, ctx, mu[0], mu[1], mu[2])
+        fields = list(xp[:n_f]) + [0.0] * (4 - n_f)     # sigma, omega0, rho0, phi0
+        st = dd2_assemble(par, ctx, fields[0], fields[1], fields[2], fields[3],
+                          mu[0], mu[1], mu[2])
+        # The density row is the UNKNOWN nB_nat, not the species sum the
+        # assembly reports. The two coincide at the solution -- that is what
+        # the density row of the residual imposes -- but this is a finite
+        # difference taken AWAY from it, and the implicit function theorem
+        # wants the outputs as functions of the unknowns. Using the species
+        # sum here changes the Jacobian, and shows up downstream as a tidal
+        # deformability that disagrees between TOV backends.
         nB = xp[n_f] / hc3
-        return np.array([nB, st["Y_C"] * nB, st["Y_S"] * nB,
-                         st["P"] / hc3, st["mu_B"]])
+        return np.array([nB, st.Y_C * nB, st.Y_S * nB, st.P, st.mu_B])
 
     mu0 = [mu_tB, mu_C, mu_S]
     nx = len(x0)
