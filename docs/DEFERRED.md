@@ -242,6 +242,24 @@ both touch the same code.
 ## Per model
 
 ### dd2
+- `table.hadronic_row` emits a Y_C and Y_S that are BARYONS ONLY, while the
+  `EoSPoint` it flattens carries the totals. It recomputes them itself:
+
+      _, n_C, n_S = hadronic_charges(flags, p.composition_map)
+
+  and `composition_map` holds baryons alone, so a thermal meson gas is dropped.
+  Its own docstring says the row is "keyed exactly the way
+  `eos.mixed.composition_row` keys a mixed point, so a pure-hadronic table and
+  a hybrid table concatenate without renaming anything" — but the mixed side
+  uses the totals, so the same column name carries different physics on the
+  two sides, differing by 10–20 percent at T = 40 MeV with pions. This is the
+  defect class already fixed once in `sound_speed_frozen_hadronic` (b83d162),
+  in the sibling that was not checked then, and it contradicts CLAUDE.md §2.
+
+  The fix is one line — `Y_C=p.Y_C, Y_S=p.Y_S` — but it CHANGES TABLE COLUMNS
+  at T > 0, so it is a deliberate physics-changing fix: its own commit, the
+  before/after quoted, and the affected baseline entries regenerated. It must
+  not be folded into a refactor, which is why it is still here.
 - `eos_response` implements the freezes `equilibrium` (beta_eq_neutrinoless
   only: c_s^2, C_V, C_P, chi_ab) and `composition` (nucleonic Y_p: adiabatic
   c_s^2 and Gamma). Not yet wired: frozen conserved fractions (Y_C, Y_S fixed
@@ -320,6 +338,20 @@ both touch the same code.
   a single sweep cannot do.
 
 ### general
+- Most of the thermal meson gas is missing from `general/particles.py`, so it
+  cannot be summed as species. `pi+`, `pi-`, `pi0`, `K+`, `K-`, `K0` and `eta`
+  are registered; `K0bar`, `eta'` and the whole vector nonet (`rho+-0`,
+  `omega`, `phi`, `K*`) are not. Because `PhaseThermo.assemble` derives n_C and
+  n_S from the species table, a gas listed in `densities` would land in the
+  charge totals automatically — which is exactly what §2 wants and what the
+  baryons-only bug class keeps coming from. Until the entries exist, the gas
+  reaches the totals through `assemble`'s `extra_charges` argument instead: a
+  second summation, correct today because `thermal_meson_charges` is
+  validated, but a second path all the same. Adding the entries retires the
+  argument. Watch the sign convention when doing it: S = +1 per s quark, so
+  K+ = u sbar has S = -1 and K0bar = dbar s has S = +1. The check that the
+  entries are right is that summing C_i n_i over the gas reproduces
+  `thermal_meson_charges`.
 - `_yc_neutralizing_leptons` — the electron/muon gas at the chemical potential
   that neutralises a given charge density — lives in `dd2/physics/octet.py`
   but is fully model-independent: its arguments are (target charge, m_e, m_mu,

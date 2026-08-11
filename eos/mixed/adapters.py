@@ -49,9 +49,8 @@ import numpy as np
 from scipy.optimize import root
 
 from eos.general.physics_constants import hc3
-from eos.dd2.physics.octet import (
-    build_octet_ctx, _baryon_kinetics, assemble_octet,
-)
+from eos.dd2.physics.octet import build_octet_ctx, assemble_octet
+from eos.dd2.thermodynamics import baryon_kinetics
 from eos.dd2.physics.kernel_numba import meson_sources_t0, _NUMBA_OK
 from eos.dd2.thermodynamics import thermal_meson_thermo
 from eos.dd2.solver import solve_beta_eq_octet
@@ -196,13 +195,13 @@ def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_C, mu_S):
         if n_tot < 0.0:                              # m* <= 0: outside domain
             return [1.0e6] * len(x)
     else:
-        kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
+        kin = baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
                                mu_tilde_B, mu_C, mu_S)
         if kin is None:                              # m* <= 0: outside domain
             return [1.0e6] * len(x)
 
         src_s = src_w = src_r = src_phi = n_tot = 0.0
-        for (spec, nu, ms, n, ns, eps, P, s) in kin:
+        for (_name, spec, nu, ms, n, ns, eps, P, s) in kin:
             _mass, _Q, t3, _g, xs, xw, xr, xphi, _S = spec
             src_s += xs * Gs * ns
             src_w += xw * Gw * n

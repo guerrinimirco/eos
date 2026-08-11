@@ -39,8 +39,11 @@ from scipy.optimize import brentq
 
 from eos.general.particles import Electron, Muon
 from eos.general.physics_constants import hc3
-from eos.dd2.thermodynamics import kinetic_thermo
-from eos.dd2.thermodynamics import lambda_omega_ratio, thermal_meson_charges
+from eos.dd2.thermodynamics import (
+    baryon_kinetics as _baryon_kinetics, build_baryon_specs, kinetic_thermo,
+    lambda_omega_ratio, meson_charges_nat,
+    neutralizing_leptons as _yc_neutralizing_leptons,
+)
 from eos.dd2.species import active_baryons
 
 # Each baryon spec: (mass, Q, t3, g, x_sigma, x_omega, x_rho, x_phi, S)
@@ -48,36 +51,6 @@ _BaryonSpec = tuple
 
 #: Neutrino degeneracy (one helicity; antineutrino handled by kinetic_thermo).
 _G_NU = 1.0
-
-
-def _yc_neutralizing_leptons(target_nat, m_e, m_mu, include_muons, T):
-    """
-    Fixed-Y_C flavor 2b: populate leptons so the total system is
-    charge-neutral, n_e(+n_mu) = target (= hadronic charge, natural units).
-    Muons (if on) are in leptonic equilibrium mu_mu = mu_e, so a single common
-    mu closes n_e(mu) [+ n_mu(mu)] = target. Since leptons don't source the
-    mean fields this is exact post-hoc (the hadronic solve is flavor 2a).
-
-    Returns (mu_e, (n,P,eps,s)_e, (n,P,eps,s)_mu), all natural units.
-    """
-    zero = (0.0, 0.0, 0.0, 0.0)
-    if target_nat <= 0.0:                       # no positive charge to neutralize
-        return 0.0, zero, zero
-
-    def f(mu):
-        ne = kinetic_thermo(mu, m_e, 2.0, T)[0]
-        nmu = kinetic_thermo(mu, m_mu, 2.0, T)[0] if include_muons else 0.0
-        return ne + nmu - target_nat
-
-    hi = 200.0
-    while f(hi) < 0.0:
-        hi *= 2.0
-    mu_e = brentq(f, 0.0, hi, xtol=1e-10)
-    ne, Pe, ee, se, _ = kinetic_thermo(mu_e, m_e, 2.0, T)
-    if include_muons:
-        nmu, Pmu, emu, smu, _ = kinetic_thermo(mu_e, m_mu, 2.0, T)
-        return mu_e, (ne, Pe, ee, se), (nmu, Pmu, emu, smu)
-    return mu_e, (ne, Pe, ee, se), zero
 
 
 @dataclass
@@ -129,35 +102,6 @@ class OctetCtx:
         return self.lepton_mode == "trapped"
 
 
-def build_baryon_specs(par, flags):
-    """
-    (mass, Q, t3, g, x_sigma, x_omega, x_rho, x_phi, S) per active baryon.
-    x_phi = g_phiY/g_omegaN inherits f_omega, so Γ_phiY = x_phi·Γ_omegaN(n_B)
-    (DD2Y density-dependent φ). Hyperon masses are the DD2Y values from the
-    coupling map; nucleons use the kernel mass, Δ the PDG mass.
-    """
-    m_kn, m_kp = par.kernel_masses()
-    hyp = par.hyperon_coupling_map
-    specs = []
-    for b in active_baryons(flags):
-        if b.name == "n":
-            mass, xs, xw, xr, xphi = m_kn, 1.0, 1.0, 1.0, 0.0
-        elif b.name == "p":
-            mass, xs, xw, xr, xphi = m_kp, 1.0, 1.0, 1.0, 0.0
-        elif b.name.startswith("Delta"):
-            # Δ: S=0 so no φ; ratio couplings from the parametrization.
-            mass = b.mass
-            xs, xw, xr, xphi = (par.x_Delta_sigma, par.x_Delta_omega,
-                                par.x_Delta_rho, 0.0)
-        else:
-            mass, xs, xw, xr, xphi = hyp[b.name]
-        if b.t3 is None:
-            raise ValueError(f"baryon {b.name} has no t3 set (needed for rho)")
-        specs.append((mass, b.charge, b.t3, b.g_degen, xs, xw, xr, xphi,
-                      b.strangeness))
-    return tuple(specs)
-
-
 def build_octet_ctx(par, n_B, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                     strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
                     Y_L=0.0, yc_leptons=False):
@@ -188,19 +132,6 @@ def build_octet_ctx(par, n_B, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
     )
 
 
-def meson_charges_nat(ctx, mu_C, mu_S, omega0, rho0):
-    """(n_C, n_S) of the thermal meson gas in NATURAL units [MeV^3].
-
-    Zero unless a thermal-meson flag is on and T > 0, so every caller can
-    add it unconditionally.
-    """
-    n_C, n_S = thermal_meson_charges(
-        ctx.Gw_N, ctx.Gr_N, ctx.x_omega_L, mu_C, mu_S, omega0, rho0, ctx.T,
-        include_pseudoscalars=ctx.include_pseudoscalars,
-        include_thermal_vectors=ctx.include_thermal_vectors)
-    return n_C * hc3, n_S * hc3
-
-
 def _unpack(x, ctx):
     sigma, omega0, rho0 = x[0], x[1], x[2]
     i = 3
@@ -214,27 +145,6 @@ def _unpack(x, ctx):
     return sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_L
 
 
-def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S):
-    """
-    Per-baryon (mu_eff, m*, n, ns, eps, P, s) at the current fields.
-    Returns list of (spec, mu_eff, ms, n, ns, eps, P, s) in natural units, or
-    None if any effective mass is non-positive (outside the physical domain).
-    """
-    out = []
-    for spec in ctx.specs:
-        mass, Q, t3, g, xs, xw, xr, xphi, S = spec
-        Gs, Gw, Gr = xs * ctx.Gs_N, xw * ctx.Gw_N, xr * ctx.Gr_N
-        Gphi = xphi * ctx.Gw_N          # φ inherits f_omega (DD2Y)
-        ms = mass - Gs * sigma
-        if ms <= 0.0:
-            return None
-        mu_eff = (mu_tilde_B + Q * mu_C + S * mu_S - Gw * omega0
-                  - Gr * t3 * rho0 - Gphi * phi0)
-        n, P, eps, s, ns = kinetic_thermo(mu_eff, ms, g, ctx.T)
-        out.append((spec, mu_eff, ms, n, ns, eps, P, s))
-    return out
-
-
 def octet_residual(x, ctx):
     """Dimensionless residual vector (the unified charge/strangeness scheme)."""
     sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_L = _unpack(x, ctx)
@@ -245,7 +155,7 @@ def octet_residual(x, ctx):
 
     src_s = src_w = src_r = src_phi = 0.0
     n_tot = charge = strangeness = 0.0
-    for (spec, mu_eff, ms, n, ns, eps, P, s) in kin:
+    for (_name, spec, mu_eff, ms, n, ns, eps, P, s) in kin:
         mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         src_s += xs * ctx.Gs_N * ns
         src_w += xw * ctx.Gw_N * n
@@ -303,7 +213,7 @@ def assemble_octet(x, ctx):
     n_tot = charge_had = strangeness = 0.0
     m_eff_n = mu_eff_n = mu_eff_p = None
     densities = {}
-    for (spec, mu_eff, ms, n, ns, eps, P, s), b in zip(kin, ctx.baryons):
+    for (_name, spec, mu_eff, ms, n, ns, eps, P, s), b in zip(kin, ctx.baryons):
         mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         eps_b += eps
         P_b += P

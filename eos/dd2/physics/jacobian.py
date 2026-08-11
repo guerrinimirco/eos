@@ -65,7 +65,7 @@ def _dmeson(ctx, col, n, omega0, rho0, muC, muS, which):
     Central differences in the four unknowns the gas actually depends on;
     identically zero when the gas is off, so the caller can add it blind.
     """
-    from eos.dd2.physics.octet import meson_charges_nat
+    from eos.dd2.thermodynamics import meson_charges_nat
 
     d = np.zeros(n)
     if ctx.T <= 0.0 or not (ctx.include_pseudoscalars
@@ -110,7 +110,8 @@ def octet_jacobian(x, ctx):
     benign fallback when x is outside the physical domain (m*<=0), where the
     residual itself returns its 1e6 sentinel and MINPACK damps the step.
     """
-    from eos.dd2.physics.octet import _unpack, _baryon_kinetics
+    from eos.dd2.physics.octet import _unpack
+    from eos.dd2.thermodynamics import baryon_kinetics as _baryon_kinetics
 
     n = ctx.n_unknowns
     sigma, omega0, rho0, phi0, mutB, muC, muS, muL = _unpack(x, ctx)
@@ -130,7 +131,7 @@ def octet_jacobian(x, ctx):
     dcharge = np.zeros(n)
     dstrange = np.zeros(n)
 
-    for (spec, mu_eff, ms, n_i, ns_i, eps_i, P_i, s_i) in kin:
+    for (_name, spec, mu_eff, ms, n_i, ns_i, eps_i, P_i, s_i) in kin:
         mass, Q, t3, g, xs, xw, xr, xphi, S = spec
         A, B, C, D = kinetic_derivs(mu_eff, ms, g, ctx.T)   # dn/dmu,dn/dm,dns/dmu,dns/dm
 
