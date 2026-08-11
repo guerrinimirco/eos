@@ -31,7 +31,7 @@ from typing import Optional
 from scipy.optimize import root
 
 from eos.vmit.parameters import VMITParams, get_vmit_default
-from eos.vmit.thermodynamics_quarks import (
+from eos.vmit.thermodynamics import (
     compute_quark_densities_for_solver, compute_vmit_thermo_from_mu_n, G_QUARK,
 )
 from eos.general.thermodynamics_leptons import (

@@ -12,7 +12,7 @@ of.
 """
 from eos.vmit.parameters import VMITParams, get_vmit_default, get_vmit_custom
 from eos.vmit.species import SpeciesFlags
-from eos.vmit.thermodynamics_quarks import (
+from eos.vmit.thermodynamics import (
     QuarkThermo, VMITThermo, QuarkMuDensity,
     compute_quark_thermo, compute_quark_density,
     compute_vector_field, compute_vector_pressure, compute_vector_energy,

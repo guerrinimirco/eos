@@ -7,7 +7,7 @@ Which degrees of freedom are active is declared explicitly through
 `SpeciesFlags`; the equilibrium condition is chosen through the mode names in
 `table.py`. See `eos.mixed` for the hybrid hadron-quark extension.
 """
-from eos.dd2.parametrization import Parametrization
+from eos.dd2.parameters import Parametrization
 from eos.dd2.species import (
     SpeciesFlags, active_baryons, hadronic_qn, hadronic_charges,
 )

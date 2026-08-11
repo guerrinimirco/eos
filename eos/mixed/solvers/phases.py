@@ -41,7 +41,7 @@ from eos.dd2.physics.kernel_numba import meson_sources_t0, _NUMBA_OK
 from eos.dd2.physics.mesons import thermal_meson_thermo
 from eos.dd2.solver import solve_beta_eq_octet
 from eos.vmit.parameters import get_vmit_default
-from eos.vmit.thermodynamics_quarks import (
+from eos.vmit.thermodynamics import (
     compute_quark_matter_thermo_from_mu, compute_vmit_thermo_from_mu_n,
 )
 

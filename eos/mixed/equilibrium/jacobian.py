@@ -50,7 +50,7 @@ from eos.mixed.equilibrium.residual import (
     charged_leptons, has_leptons, _quark_mus_from_charges,
 )
 from eos.mixed.solvers.phases import hadronic_phase, quark_phase, _hadronic_residual
-from eos.vmit.thermodynamics_quarks import compute_quark_density
+from eos.vmit.thermodynamics import compute_quark_density
 
 #: mu_flavor = _M @ mu_charge for mu_charge = (mu_B, mu_C, mu_S). Since
 #: n_charge = _M^T n_flavor, the charge susceptibility is _M^T chi_flavor _M.

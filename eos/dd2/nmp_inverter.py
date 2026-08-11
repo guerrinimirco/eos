@@ -77,7 +77,7 @@ from scipy.optimize import brentq, root
 
 from eos.general.physics_constants import hc3
 from eos.dd2.couplings import rational_d2f, derived_a, derived_d
-from eos.dd2.parametrization import Parametrization
+from eos.dd2.parameters import Parametrization
 from eos.dd2.physics.thermo import kF_from_n
 from eos.dd2.solver import solve_snm
 

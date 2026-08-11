@@ -26,7 +26,7 @@ from eos.zl.parameters import ZLParams, get_zl_default
 from eos.zl.thermodynamics_nucleons import compute_zl_thermo_from_mu_n
 
 from eos.vmit.parameters import VMITParams, get_vmit_default
-from eos.vmit.thermodynamics_quarks import compute_vmit_thermo_from_mu_n
+from eos.vmit.thermodynamics import compute_vmit_thermo_from_mu_n
 
 from eos.general.thermodynamics_leptons import electron_thermo, neutrino_thermo, photon_thermo
 

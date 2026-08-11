@@ -70,7 +70,7 @@ import time
 
 import numpy as np
 
-from eos.dd2.parametrization import Parametrization
+from eos.dd2.parameters import Parametrization
 from eos.dd2.solver import sweep_beta_eq_octet
 from eos.vmit.parameters import get_vmit_custom
 from eos.mixed.equilibrium.charges import beta_eq_neutrinoless

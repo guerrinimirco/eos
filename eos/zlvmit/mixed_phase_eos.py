@@ -105,7 +105,7 @@ from eos.zl.eos import (
 
 # vMIT (quark) modules
 from eos.vmit.parameters import VMITParams, get_vmit_default
-from eos.vmit.thermodynamics_quarks import compute_vmit_thermo_from_mu_n
+from eos.vmit.thermodynamics import compute_vmit_thermo_from_mu_n
 from eos.vmit.eos import (
     get_default_guess_beta_eq as get_vmit_guess,
     result_to_guess as vmit_result_to_guess,

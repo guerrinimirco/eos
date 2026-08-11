@@ -106,6 +106,37 @@ in `eos/` and in `nucleation/` now goes through
 
 ---
 
+### The module names are standardised, and most models have not been renamed
+
+CLAUDE.md §5 fixes one name per role — `parameters.py`, `species.py`,
+`thermodynamics.py`, `solver.py`, `table.py`, `api.py`, `verify/` — with the
+names mandatory and their existence conditional. Two renames are done
+(`dd2/parametrization.py` → `parameters.py`, `vmit/thermodynamics_quarks.py` →
+`thermodynamics.py`). The rest are outstanding, each belonging in its model's
+own session where the baseline and `test_imports.py` are already being run:
+
+    sfho      eos.py -> solver.py, compute_tables.py -> table.py,
+              nuclear_saturation_properties.py -> nmp.py,
+              thermodynamics_hadrons.py -> thermodynamics.py
+    vmit      eos.py -> solver.py
+    zl        eos.py -> solver.py, compute_tables.py -> table.py,
+              thermodynamics_nucleons.py -> thermodynamics.py
+    alphabag  eos.py -> solver.py, compute_tables.py -> table.py,
+              thermodynamics_quarks.py -> thermodynamics.py
+    abpr      eos.py -> solver.py
+    enjl      eos_beta.py + uniform.py -> solver.py (a merge, not a rename)
+
+`vmit/eos.py` is held back only because `notebooks/DD2vMIT_general1oPT`
+imports from it directly and that notebook has uncommitted work in it; the
+rename and the notebook's import line have to move together.
+
+`vmit/compute_tables.py` is the one deliberate exception to the scheme: it is
+the first-generation settings-object interface, kept because the ZLvMIT
+notebook drives vMIT through it, and it now sits beside `table.py` as a shim
+over the shared driver rather than being renamed to it.
+
+---
+
 ## Per model
 
 ### dd2
