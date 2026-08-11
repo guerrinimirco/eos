@@ -125,6 +125,7 @@ from eos.mixed import (
     MixedTableSpec, build_mixed_table, build_mixed_eos_table,
     mass_radius_mixed, save_table, load_table, export_csv,
     sweep_mixed, sound_speed_eq, frozen_along,
+    sound_speed_frozen_hadronic, sound_speed_frozen_quark,
     scan_parameters, scan_hadronic, grid_samples,
     build_parametrization, NMP_KEYS,
 )
@@ -812,10 +813,12 @@ DELTA_U = dict(U_Delta=-50.0, x_wD=1.20, x_rD=1.00)
 # Q_sat together; a pair that is inconsistent with that constraint is silently
 # realised as the nearest pair that is. I.4 measures how much room there is.
 PAR, _status = Parametrization.from_nmp(NMP, return_status=True)
-PAR = Parametrization.from_hyperon_potentials(base=PAR, **HYPERON_U)
-PAR = Parametrization.from_delta_potential(base=PAR, **DELTA_U)
+#PAR = Parametrization.from_hyperon_potentials(base=PAR, **HYPERON_U)
+#PAR = Parametrization.from_delta_potential(base=PAR, **DELTA_U)
+#VMIT = get_vmit_custom(B4=170.0, a=0.20, m_s=150.0)
+PAR = Parametrization.from_hyperon_potentials(U_Lambda=-25.0, U_Sigma=30.0, U_Xi=-10.0, base=PAR)
+PAR = Parametrization.from_delta_potential(U_Delta=-100.0, x_wD=1.20, x_rD=1.00, base=PAR)
 VMIT = get_vmit_custom(B4=170.0, a=0.20, m_s=150.0)
-
 NMP_REALISED = compute_nmp(PAR)
 if not _status.ok:
     print("WARNING: the NMP inversion did not converge — the model below is "
@@ -1328,11 +1331,11 @@ def _build_one(mode, axes, eta):
         w = info["window"]
         records.append(dict(
             mode=mode, eta=float(eta), T=float(info["temp"]),
-            fractions=dict(info["fractions"]),
+            fractions=dict(info["fracs"]),
             reason=(w.reason if w is not None else "no_window_located"),
             n_onset=(w.n_onset if w is not None else np.nan),
             n_offset=(w.n_offset if w is not None else np.nan),
-            n_found=int(info["n_points"]), seconds=float(info["seconds"])))
+            n_found=int(info["n_solved"]), seconds=float(info["elapsed_s"])))
 
     rows, windows = build_mixed_table(spec, progress=progress)
     path = OUT / f"mixed_{mode}_eta{eta:.2f}.h5"
@@ -1400,7 +1403,10 @@ for r in records:
     if r["reason"] != "ok":
         status = r["reason"]
     elif r["n_found"] < n_exp:
-        status = f"sparse ({r['n_found']}/{n_exp})"
+        # No space in the status: export_csv writes whitespace-separated
+        # columns, so a space here would split one field into two and make the
+        # file unreadable by column.
+        status = f"sparse:{r['n_found']}/{n_exp}"
     else:
         status = "ok"
     # The pure wings for the same slice: a hole there is just as much a hole in
@@ -1423,7 +1429,7 @@ bad = [r for r in report_rows if r["status"] != "ok"]
 print(f"{len(report_rows) - len(bad)}/{len(report_rows)} combinations complete; "
       f"{len(bad)} are not\n")
 print(f"  status breakdown: "
-      f"{dict(Counter(r['status'].split(' ')[0] for r in report_rows))}\n")
+      f"{dict(Counter(r['status'].split(':')[0] for r in report_rows))}\n")
 
 if bad:
     _fkeys = sorted({k for r in bad for k in r
@@ -1438,7 +1444,9 @@ if bad:
               f"| {r['status']}")
 
 # The compact view: for each (mode, fractions, eta), the temperature range that
-# IS complete, which is what a figure can safely be drawn over.
+# came out perfect. This is the strict count — Part III draws a slightly wider
+# set, since a window missing one point in thirty is still fine to
+# differentiate; `COVER_MIN` there is the threshold it actually applies.
 print(f"\n  complete temperature range per (mode, fractions, eta):")
 _by = defaultdict(list)
 for r in report_rows:
@@ -1692,46 +1700,96 @@ def window_of(mode, fracs, T, eta):
 
 
 # --------------------------------------------------------------- completeness
-# II.2 wrote one row per (mode, fractions, T, eta) saying whether that slice
-# came out complete. The figures consult it, because an incomplete slice is not
+# II.2 wrote one row per (mode, fractions, T, eta) saying how well that slice
+# came out. The figures consult it, because a badly sampled window is not
 # merely missing a few points: the stitched equation of state then joins the
 # hadronic wing straight onto a window sampled at one or two densities, the
 # pressure is no longer monotone across the join, and every derivative taken
 # from it is wrong. A single such slice produced c_eq^2 = -1.4 before this gate
-# existed. Curves are dropped and counted rather than drawn.
+# existed.
+#
+# TUNABLE. What matters is not whether a slice is perfect but whether the
+# window is resolved well enough to differentiate: one missing point out of
+# thirty is invisible in dP/deps, one point out of three is the whole curve.
+# COVER_MIN is that fraction, MIN_WINDOW_PTS the floor below which no coverage
+# fraction can rescue a window (np.gradient needs three points to mean
+# anything). Slices that fail are dropped and counted, never drawn.
+COVER_MIN = 0.90
+MIN_WINDOW_PTS = 5
+
+
+def _read_completeness(path):
+    """Rows back from `export_csv`'s whitespace format ('#' header line).
+
+    Not csv.reader: `export_csv` writes columns separated by double spaces, not
+    commas. Numbers come back as floats, everything else as text.
+    """
+    rows, names = [], None
+    for line in open(path):
+        if line.startswith("#"):
+            names = line[1:].split()         # the last '#' line is the header
+            continue
+        vals = line.split()
+        if not vals or names is None or len(vals) != len(names):
+            continue
+        row = {}
+        for k, v in zip(names, vals):
+            try:
+                row[k] = float(v)
+            except ValueError:
+                row[k] = v
+        rows.append(row)
+    return rows
+
+
 try:
     _rep = report_rows                       # II.2 ran in this session
 except NameError:                            # or read what it wrote
-    _rep = []
     _rep_path = OUT / "completeness.csv"
-    if _rep_path.is_file():
-        import csv as _csv
-        with open(_rep_path) as _fh:
-            for _r in _csv.DictReader(_fh):
-                _rep.append({k: (v if k in ("mode", "status", "reason")
-                                 else float(v)) for k, v in _r.items()})
-    else:
+    _rep = _read_completeness(_rep_path) if _rep_path.is_file() else []
+    if not _rep:
         print("no completeness.csv and II.2 has not run — figures cannot check "
               "which slices are complete and will draw everything")
 
 COMPLETE = {(r["mode"], frac_key({k: r[k] for k in ("Y_C", "Y_S", "Y_L")
                                   if k in r and np.isfinite(r[k])}),
-             round(float(r["T"]), 6), round(float(r["eta"]), 6)): r["status"]
+             round(float(r["T"]), 6), round(float(r["eta"]), 6)): r
             for r in _rep}
 
 
 def is_complete(mode, fracs, T, eta):
-    """Did this slice come out complete in II.2?
+    """Is this slice resolved well enough to draw and to differentiate?
 
     True also when there is simply no transition: a pure hadronic branch is a
     perfectly good equation of state. What is rejected is a window that exists
-    but was sampled with holes.
+    and was sampled too thinly to mean anything.
     """
-    if not COMPLETE:
-        return True                          # nothing to check against
-    s = COMPLETE.get((mode, frac_key(fracs), round(float(T), 6),
+    r = COMPLETE.get((mode, frac_key(fracs), round(float(T), 6),
                       round(float(eta), 6)))
-    return s is None or s in ("ok", "no_transition")
+    if r is None:                            # nothing to check against
+        return True
+    if r["reason"] != "ok":                  # unbracketed / out of order
+        return r["reason"] == "no_transition"
+    found, expected = r["n_found"], r["n_expected"]
+    return found >= max(MIN_WINDOW_PTS, COVER_MIN * expected)
+
+
+def coverage(mode, fracs, T, eta):
+    """'30/31' for one slice, and which rule rejected it if one did."""
+    r = COMPLETE.get((mode, frac_key(fracs), round(float(T), 6),
+                      round(float(eta), 6)))
+    if r is None:
+        return "?"
+    if r["reason"] != "ok":
+        return r["reason"]
+    found, expected = int(r["n_found"]), int(r["n_expected"])
+    why = ""
+    if found < MIN_WINDOW_PTS:
+        why = f" (under MIN_WINDOW_PTS = {MIN_WINDOW_PTS}: too few to "
+        why += "differentiate, whatever the coverage)"
+    elif found < COVER_MIN * expected:
+        why = f" (under COVER_MIN = {COVER_MIN:.0%})"
+    return f"{found}/{expected}{why}"
 
 
 def _edge_value(x, y, x0, k=3):
@@ -1786,16 +1844,18 @@ def mu_boundaries(mode, fracs, T, eta):
 # The two pure branches are drawn underneath in grey, continued past the transition where
 # they are metastable, so the gain from the transition is visible rather than implied.
 #
-# A slice II.2 flagged as incomplete is skipped and counted at the end of the cell, not
-# drawn: a window sampled with holes gives a pressure that is not monotone across the
-# join with its wing, which looks like a physical feature and is not one.
+# A slice whose window II.2 sampled more thinly than `COVER_MIN` is skipped and named at
+# the end of the cell, not drawn: a window sampled with holes gives a pressure that is not
+# monotone across the join with its wing, which looks like a physical feature and is not
+# one. The message says the coverage, e.g. `sampled 29/31`, so you can see at a glance
+# whether the slice is badly broken or just one point short of the threshold.
 
 # %%
 PANELS = [
     ("beta_eq_neutrinoless", {},            0.0),
     ("beta_eq_neutrinoless", {},           50.0),
     ("fixed_YC",             {"Y_C": 0.1},  0.0),
-    ("fixed_YC",             {"Y_C": 0.4},  0.1),
+    ("fixed_YC",             {"Y_C": 0.4},  0.0),
 ]
 LAYOUT = "2x2"
 SHOW_PURE = True
@@ -1806,7 +1866,8 @@ skipped = []
 for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
     for eta in sorted(ETA_LIST):
         if not is_complete(mode, fracs, T, eta):
-            skipped.append((mode, tuple(fracs.items()), T, eta))
+            skipped.append(f"{panel_title(mode, fracs, T, eta)}: window "
+                           f"sampled {coverage(mode, fracs, T, eta)}")
             continue
         d = full_eos(mode, fracs, T, eta)
         if not d:
@@ -1832,7 +1893,8 @@ axes.flat[0].legend(ncol=2, loc="upper left")
 save_figure(fig, FIG_DIR / "fig01_P_vs_nB")
 plt.show()
 if skipped:
-    print(f"{len(skipped)} incomplete slice(s) not drawn:")
+    print(f"{len(skipped)} slice(s) below COVER_MIN = {COVER_MIN:.0%}, "
+          f"not drawn:")
     for s in skipped:
         print("   ", s)
 
@@ -2184,7 +2246,7 @@ SPECIES_STYLE = {
     "Delta++": ("#8B008B", "-."),
     # quarks — long dashed, and drawn heavier: above the offset they are the
     # only thing left, so they should read as the dominant curves. Their three
-    # colours are chosen not to repeat any hadron's.
+    # colours are chosen not to repeat any hadron's (s and Xi0 collided).
     "u":       ("#E7298A", (0, (6, 2))),
     "d":       ("#66A61E", (0, (6, 2))),
     "s":       ("#E6AB02", (0, (6, 2))),
@@ -2323,22 +2385,33 @@ plt.show()
 # **c_ad² (frozen, solid)** holds χ fixed — the mixture is compressed faster than one phase
 # can convert into the other — so the pressure has to rise and c_ad does *not* collapse.
 # Freezing χ is the part that matters; freezing only the charge fractions would let the
-# solve slide back onto the plateau. It is defined only where two phases coexist, so it is
-# drawn across the window alone.
+# solve slide back onto the plateau.
 #
-# The gap between the two is what a composition g-mode would measure: the Brunt-Väisälä
-# frequency is proportional to (1/c_eq² − 1/c_ad²), so it vanishes identically wherever
-# these two curves coincide and spikes wherever they separate.
+# **c_ad exists outside the window too**, and is drawn there: below the onset it is pure
+# hadronic matter compressed at frozen Y_C and Y_S, above the offset pure quark matter with
+# its three flavour densities rescaled together. Nothing about "frozen" needs two phases —
+# what it needs is a composition to hold, and every phase has one. The wings are the same
+# curve for every η (η only acts where the two phases coexist), so they are drawn once per
+# panel in grey and each η's coloured curve takes over inside its own window. That the
+# coloured curves leave and rejoin the grey one continuously is the check that the window
+# and the wings are freezing the same thing.
+#
+# The gap between c_ad and c_eq is what a composition g-mode would measure: the
+# Brunt-Väisälä frequency is proportional to (1/c_eq² − 1/c_ad²), so it vanishes identically
+# wherever these two curves coincide and spikes wherever they separate. Note it does **not**
+# vanish in the pure hadronic wing: hyperon and Δ thresholds make the equilibrium
+# composition density-dependent there too, which is the ordinary nucleonic g-mode.
 #
 # **c_eq is a numerical derivative of the stitched table, so it is only as good as the
 # table.** A window sampled with holes joins its wing at a pressure that is not monotone,
-# and dP/dε then comes out negative — c_eq² reached −1.4 on one such slice. Those slices
-# are skipped here, and anything that still leaves [0, 1] is reported rather than drawn,
-# because a causality violation is either a real defect in the equation of state or a
-# defect in the grid and both deserve to be looked at, not smoothed over.
+# and dP/dε then comes out negative — c_eq² reached −1.4 on one such slice. Slices below
+# `COVER_MIN` are skipped here, and anything that still leaves [0, 1] is reported rather
+# than drawn, because a causality violation is either a real defect in the equation of
+# state or a defect in the grid and both deserve to be looked at, not smoothed over.
 #
-# `frozen_along` re-solves both phases twice per point, so this is the only expensive cell
-# in Part III — budget a few seconds per (panel, η).
+# Everything frozen re-solves the phase twice per point, so this is the most expensive cell
+# in Part III — budget a few seconds per (panel, η) plus the two wings per panel.
+# `WING_EVERY` subsamples the wings, which are smooth and slowly varying.
 
 # %%
 PANELS = [
@@ -2349,6 +2422,7 @@ PANELS = [
 ]
 LAYOUT = "2x2"
 CS_ETAS = [e for e in (0.0, 0.3, 1.0) if e in ETA_LIST]   # subset: this is slow
+WING_EVERY = 6          # subsample the wings: smooth, and two solves per point
 
 
 def spec_of(mode, fracs):
@@ -2360,17 +2434,60 @@ def spec_of(mode, fracs):
     raise NotImplementedError(f"no ChargeSpec wired for mode {mode!r}")
 
 
+def wing_frozen(mode, fracs, T, grid):
+    """c_ad^2 of each PURE phase on `grid`: (n_H, c_H), (n_Q, c_Q).
+
+    Independent of eta — the two phases only see each other inside a window —
+    so this is computed once per panel and drawn under every eta's curve.
+    The hadronic sweep warm-starts along the grid, so it must run in one go
+    rather than point by point.
+    """
+    if mode == "beta_eq_neutrinoless":
+        pts = sweep_beta_eq_octet(PAR, grid, FLAGS, T=T, stop_at_boundary=True)
+    else:
+        pts = sweep_octet(PAR, grid, FLAGS, T=T, charge_mode="fixed",
+                          Y_C=fracs["Y_C"], yc_leptons=True,
+                          stop_at_boundary=True)
+    n_H = np.array([p.n_B for p in pts])
+    c_H = np.array([sound_speed_frozen_hadronic(PAR, FLAGS, p) for p in pts])
+
+    n_Q, c_Q = [], []
+    for n in grid:
+        try:
+            if mode == "beta_eq_neutrinoless":
+                q = solve_vmit_beta_eq(float(n), T, params=VMIT)
+            else:
+                q = solve_vmit_fixed_yc(float(n), fracs["Y_C"], T, params=VMIT,
+                                        include_electrons=True)
+            n_Q.append(float(n))
+            c_Q.append(sound_speed_frozen_quark(q.n_u, q.n_d, q.n_s, T=T,
+                                                vmit_params=VMIT,
+                                                muons=FLAGS.muons))
+        except Exception:
+            continue
+    return (n_H, c_H), (np.array(n_Q), np.array(c_Q))
+
+
 t0 = time.time()
 fig, axes = paper_grid(LAYOUT, mode="double", placeholder=False,
                        width=FIG_WIDTH, **PAPER_STYLE)
 problems = []
 for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
     spec = spec_of(mode, fracs)
+
+    # The two pure branches, frozen, under everything else. Same curve for
+    # every eta, so each eta's coloured curve should leave and rejoin these.
+    (nH, cH), (nQ, cQ) = wing_frozen(mode, fracs, T, NB[::WING_EVERY])
+    for n_w, c_w, lab in ((nH, cH, "pure H"), (nQ, cQ, "pure Q")):
+        if n_w.size:
+            ax.plot(n_w / N_SAT, c_w, "-", lw=LW_THIN, zorder=1,
+                    color=STANDARD_COLORS["Gray"], label=lab)
+
     for eta in CS_ETAS:
         c = COLOR_OF.get(eta, STANDARD_COLORS["Gray"])
         if not is_complete(mode, fracs, T, eta):
-            problems.append(f"{panel_title(mode, fracs, T, eta)}: incomplete "
-                            f"window, skipped")
+            problems.append(f"{panel_title(mode, fracs, T, eta)}: window "
+                            f"sampled {coverage(mode, fracs, T, eta)}, skipped")
             continue
 
         # Equilibrium: straight off the stitched table built in Part II, which
@@ -2387,9 +2504,9 @@ for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
                     f"at {bad.sum()} of {cs2.size} points "
                     f"(min {np.nanmin(cs2):+.3f}, max {np.nanmax(cs2):.3f})")
             ax.plot(xn(d), np.where(bad, np.nan, cs2), "--", lw=LW_THIN,
-                    color=c, label=rf"$\eta = {eta:g}$")
+                    color=c, label=rf"$\eta = {eta:g}$", zorder=3)
 
-        # Frozen: only defined where there are two phases.
+        # Frozen, through the window, where chi is what gets held fixed.
         n_lo, n_hi = window_of(mode, fracs, T, eta)
         if not (np.isfinite(n_lo) and np.isfinite(n_hi)):
             continue
@@ -2399,9 +2516,13 @@ for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
         rs = sweep_mixed(PAR, FLAGS, inside, eta, spec, vmit_params=VMIT, T=T)
         if not rs:
             continue
-        ax.plot(np.array([r.n_B for r in rs]) / N_SAT,
-                frozen_along(PAR, FLAGS, rs, vmit_params=VMIT), "-",
-                lw=LW_MAIN, color=c)
+        c_ad = frozen_along(PAR, FLAGS, rs, vmit_params=VMIT)
+        if not np.all(np.isfinite(c_ad)):
+            problems.append(
+                f"{panel_title(mode, fracs, T, eta)}: c_ad^2 failed at "
+                f"{int(np.isnan(c_ad).sum())} of {c_ad.size} window points")
+        ax.plot(np.array([r.n_B for r in rs]) / N_SAT, c_ad, "-",
+                lw=LW_MAIN, color=c, zorder=4)
 
     ax.axhline(1.0, color=STANDARD_COLORS["Gray"], lw=LW_GUIDE, ls="-.",
                zorder=0)
@@ -2416,7 +2537,7 @@ for ax, (mode, fracs, T) in zip(axes.flat, PANELS):
 # this width wraps over the entries.
 axes.flat[0].plot([], [], "--", color="0.3", label=r"$c_{\rm eq}^2$")
 axes.flat[0].plot([], [], "-", color="0.3", label=r"$c_{\rm ad}^2$")
-axes.flat[0].legend(fontsize=7, ncol=2, loc="upper left")
+axes.flat[0].legend(fontsize=7, ncol=3, loc="upper left")
 save_figure(fig, FIG_DIR / "fig09_sound_speeds")
 plt.show()
 print(f"({time.time()-t0:.1f} s)")
@@ -2512,14 +2633,24 @@ if rot_iso:
     nb_c = ROT_NB_C / N_SAT
 
     def stable_part(M, rising=False):
-        """Mask of the sequence up to its turning point, and that point.
+        """(x, M) of the sequence up to its turning point, plus that point.
 
         `rising=True` for a constant-M_0 sequence, where the stationary
         configuration is a mass MINIMUM rather than a maximum: negating M turns
         one into the other, so one routine serves both.
+
+        The turning point is appended to the returned curve. `turning_point`
+        refines it by interpolating between the two bracketing grid models, so
+        it generally lies just past the last grid model that is still stable,
+        and without this the marker floats free of the curve it terminates.
         """
         m, x_c, M_c = turning_point(ROT_NB_C, -M if rising else M)
-        return m, x_c, (-M_c if rising and np.isfinite(M_c) else M_c)
+        if rising and np.isfinite(M_c):
+            M_c = -M_c
+        x, y = ROT_NB_C[m] / N_SAT, np.asarray(M)[m]
+        if np.isfinite(x_c) and (x.size == 0 or x_c / N_SAT > x[-1]):
+            x, y = np.append(x, x_c / N_SAT), np.append(y, M_c)
+        return x, y, x_c, M_c
 
     fig, axes = paper_grid("2x2", mode="double", placeholder=False,
                            width=FIG_WIDTH, **PAPER_STYLE)
@@ -2549,7 +2680,9 @@ if rot_iso:
               label="Kepler limit")
     for k, f in enumerate(ROT_FREQ):
         M, R = f_grid[:, k, ICOL["M"]], f_grid[:, k, ICOL["R_e"]]
-        keep, _, _ = stable_part(M)
+        # M-R needs the mask rather than the (x, M) curve: the abscissa here is
+        # the radius, which stable_part does not carry.
+        keep, _, _ = turning_point(ROT_NB_C, M)
         good = keep & np.isfinite(R)
         if good.any():
             axMR.plot(R[good], M[good], "-", lw=LW_THIN, color=f_shades[k],
@@ -2567,7 +2700,7 @@ if rot_iso:
               lw=LW_MAIN, ls="--", zorder=5, label="Kepler limit")
     crit_nb, crit_M = [], []
     for k in range(len(ROT_FREQ)):
-        _, x_c, M_c = stable_part(f_grid[:, k, ICOL["M"]])
+        _, _, x_c, M_c = stable_part(f_grid[:, k, ICOL["M"]])
         if np.isfinite(x_c):
             crit_nb.append(x_c / N_SAT)
             crit_M.append(M_c)
@@ -2575,7 +2708,8 @@ if rot_iso:
         axNB.plot(crit_nb, crit_M, "o-", ms=4, lw=LW_THIN, zorder=6,
                   color=STANDARD_COLORS["Red"],
                   label=r"$M_{\max}$ at each $f$")
-    set_nb_axis(axNB)
+    # No set_nb_axis here: this axis is CENTRAL density, whose useful range is
+    # set by ROT_NB_C, not by the range the equation of state is tabulated over.
     axNB.set_xlabel(LABELS["nB_n0"] + "  (central)")
     axNB.set_ylabel(r"$M$  [$M_\odot$]")
     axNB.set_title("maximum mass against spin")
@@ -2595,15 +2729,14 @@ if rot_iso:
         ax.plot(nb_c, kep[:, KCOL["M"]], color=STANDARD_COLORS["Gray"],
                 lw=LW_MAIN, ls="--", zorder=5, label="Kepler limit")
         for k, value in enumerate(targets):
-            M = grid[:, k, ICOL["M"]]
-            keep, x_c, M_c = stable_part(M, rising=rising)
-            if keep.any():
-                ax.plot(nb_c[keep], M[keep], "-o", ms=3, lw=LW_THIN,
-                        color=shades[k], zorder=4, label=fmt(value))
+            x, y, x_c, M_c = stable_part(grid[:, k, ICOL["M"]], rising=rising)
+            if x.size:
+                ax.plot(x, y, "-o", ms=3, lw=LW_THIN, color=shades[k],
+                        zorder=4, label=fmt(value))
             if np.isfinite(x_c):
                 ax.plot(x_c / N_SAT, M_c, "*", ms=9, color=shades[k],
                         mec="k", mew=0.7, zorder=7)
-        set_nb_axis(ax)
+        # Central density again: its range comes from ROT_NB_C (see panel b).
         ax.set_xlabel(LABELS["nB_n0"] + "  (central)")
         ax.set_ylabel(r"$M$  [$M_\odot$]")
         ax.set_title(title + rf",  $\eta = {ROT_ETA_SHOW:g}$")
