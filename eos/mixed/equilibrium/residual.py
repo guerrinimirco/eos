@@ -14,7 +14,7 @@ needs no new code.
 Because the phase adapters already absorb each phase's internal
 self-consistency (fields and densities at given potentials), the unknowns here
 are only conserved-charge potentials, chi, and the eta-split lepton potentials
-— four to eight numbers, rather than the full per-species (mu_i, n_i) vector a
+— four to nine numbers, rather than the full per-species (mu_i, n_i) vector a
 direct formulation would carry.
 
 The eta parameter
@@ -58,7 +58,7 @@ from eos.general.thermodynamics_leptons import (
     electron_thermo, muon_thermo, neutrino_thermo,
 )
 from eos.mixed.equilibrium.charges import ChargeSpec, Regime
-from eos.mixed.solvers.phases import hadronic_phase, hadronic_seed, quark_phase
+from eos.mixed.adapters import hadronic_phase, hadronic_seed, quark_phase
 
 
 def _quark_mus_from_charges(mu_B, mu_C, mu_S):

@@ -144,9 +144,10 @@ eos/
 │   │
 │   ├── vmit/               # Vector-MIT bag model
 │   │   ├── parameters.py           # Bag constant, vector coupling
-│   │   ├── thermodynamics_quarks.py   # Quark thermodynamics
+│   │   ├── thermodynamics.py       # Quark thermodynamics
 │   │   ├── eos.py                  # EOS solvers
-│   │   └── compute_tables.py       # Table generation script
+│   │   ├── table.py                # Grid driver
+│   │   └── api.py                  # eos_point / eos_table / eos_response
 │   │
 │   ├── abpr/               # ABPR analytical CFL model (T=0)
 │   │   └── eos.py                  # Analytical P(μ), ε(μ), n_B(μ)

@@ -29,16 +29,23 @@ the mixed system is solved only inside the located window — outside it the far
 cheaper pure-phase solvers answer the same question.
 """
 from dataclasses import dataclass, field
-from itertools import product
 
 import numpy as np
 
+from eos.general.tabulate import (
+    TEMPERATURE_AXES, lines_from_axes, print_progress, split_conditions,
+)
 from eos.mixed.equilibrium.charges import (
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
 )
 from eos.mixed.equilibrium.residual import mixed_slots
 from eos.mixed.solvers.point import solve_mixed
 from eos.mixed.solvers.sweep import locate_window, sweep_mixed
+
+#: The fraction axes a table may sweep, in the canonical order they are keyed
+#: in. Fixing the order here rather than reading it off the caller's dict is
+#: what makes the window keys of two tables of the same physics identical.
+FRACTION_AXES = ("Y_C", "Y_S", "Y_L")
 
 #: mode name -> the fixed fractions it consumes (as an axis or in `fixed`).
 MODE_FRACTIONS = {
@@ -240,7 +247,7 @@ def _locate_chained(spec, nB, cs, vp, T, hint):
     return locate_window(spec.par, spec.flags, nB, spec.eta, cs, **kw)
 
 
-def build_mixed_table(spec, progress=None):
+def build_mixed_table(spec, progress=None, verbose=False):
     """Solve a `MixedTableSpec` over the product of its temperature and
     fraction axes, warm-started along n_B within each combination.
 
@@ -248,21 +255,38 @@ def build_mixed_table(spec, progress=None):
     (temperature value, fraction values) key to the `MixedWindow` found there —
     which is what the phase-boundary curves T(n_B) are made of.
 
-    `progress` is an optional callable invoked once per axis combination with a
-    dict describing what was just solved, so a notebook can print without this
-    module importing anything to print with.
+    `progress` is an optional callable invoked once per line — one temperature
+    and one combination of the fixed fractions — with the dictionary every
+    table builder in this repository reports, so one printer serves them all:
+
+        {mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,
+         elapsed_s}
+
+    plus the two a mixed table has and a single-phase one does not: `eta`, and
+    the `window` located on that line (None when the line was not searched for
+    one). `fracs` carries every fraction the line was solved at, swept or
+    `fixed`, since both are equally part of what identifies it. `n_requested`
+    counts the densities the mixed system was actually asked at, which with
+    `window_only` is the part of the grid inside the window rather than the
+    whole of it. `verbose=True` installs the built-in printer as the callback.
 
     Non-convergent points are skipped rather than filled: this is a raw table,
     not the smoothed core EoS that `build_mixed_eos_table` produces.
     """
     import time
 
+    if verbose and progress is None:
+        progress = print_progress
+
     nB = np.asarray(spec.axes["nB"], dtype=float)
-    temp_key = "SnB" if "SnB" in spec.axes else "T"
-    temp_vals = np.atleast_1d(np.asarray(spec.axes[temp_key], dtype=float))
-    frac_keys = [k for k in ("Y_C", "Y_S", "Y_L") if k in spec.axes]
-    frac_grids = [np.atleast_1d(np.asarray(spec.axes[k], float))
-                  for k in frac_keys]
+    # The fraction axes are taken in the canonical order, not in the order the
+    # caller happened to write the dict: the (temperature, fractions) tuple is
+    # the KEY the windows are stored and saved under, so two tables of the same
+    # physics have to key alike whichever way their axes were spelled.
+    frac_keys = [k for k in FRACTION_AXES if k in spec.axes]
+    axes = {k: v for k, v in spec.axes.items() if k in TEMPERATURE_AXES}
+    axes.update((k, spec.axes[k]) for k in frac_keys)
+    lines = lines_from_axes(axes, fixed=spec.fixed)
     vp = spec.vmit_params
     if vp is None:
         from eos.vmit.parameters import get_vmit_default
@@ -270,52 +294,54 @@ def build_mixed_table(spec, progress=None):
 
     rows, windows = [], {}
     hint_of = {}                  # last located window, per fraction combo
-    for tv in temp_vals:
-        for combo in product(*frac_grids) if frac_grids else [()]:
-            t0 = time.time()
-            fracs = dict(spec.fixed)
-            fracs.update(zip(frac_keys, (float(c) for c in combo)))
-            for need in MODE_FRACTIONS[spec.mode]:
-                if need not in fracs:
-                    raise ValueError(f"mode {spec.mode!r} needs {need!r} "
-                                     f"as an axis or in `fixed`")
-            cs = make_charge_spec(spec.mode, fracs, leptons=spec.leptons)
-            key = (float(tv),) + tuple(round(float(c), 6) for c in combo)
+    for i_line, conditions in enumerate(lines, start=1):
+        t0 = time.time()
+        temp_key, tv, fracs = split_conditions(conditions)
+        combo = tuple(fracs[k] for k in frac_keys)
+        for need in MODE_FRACTIONS[spec.mode]:
+            if need not in fracs:
+                raise ValueError(f"mode {spec.mode!r} needs {need!r} "
+                                 f"as an axis or in `fixed`")
+        cs = make_charge_spec(spec.mode, fracs, leptons=spec.leptons)
+        key = (float(tv),) + tuple(round(float(c), 6) for c in combo)
 
-            if temp_key == "SnB":
-                results = _sweep_at_entropy(spec.par, spec.flags, nB,
-                                            float(tv), spec.eta, cs, vp)
-                window = None
-            elif spec.window_only:
-                window = _locate_chained(spec, nB, cs, vp, float(tv),
-                                         hint_of.get(combo))
-                if window.exists:
-                    hint_of[combo] = (window.n_onset, window.n_offset)
-                    inside = nB[(nB >= window.n_onset) & (nB <= window.n_offset)]
-                    results = sweep_mixed(spec.par, spec.flags, inside,
-                                          spec.eta, cs, vmit_params=vp,
-                                          T=float(tv),
-                                          analytic_jac=spec.analytic_jac)
-                else:
-                    results = []
-                windows[key] = window
-            else:
-                results = sweep_mixed(spec.par, spec.flags, nB, spec.eta, cs,
-                                      vmit_params=vp, T=float(tv),
+        if temp_key == "SnB":
+            results = _sweep_at_entropy(spec.par, spec.flags, nB,
+                                        float(tv), spec.eta, cs, vp)
+            window, n_requested = None, len(nB)
+        elif spec.window_only:
+            window = _locate_chained(spec, nB, cs, vp, float(tv),
+                                     hint_of.get(combo))
+            if window.exists:
+                hint_of[combo] = (window.n_onset, window.n_offset)
+                inside = nB[(nB >= window.n_onset) & (nB <= window.n_offset)]
+                results = sweep_mixed(spec.par, spec.flags, inside,
+                                      spec.eta, cs, vmit_params=vp,
+                                      T=float(tv),
                                       analytic_jac=spec.analytic_jac)
-                window = None
+                n_requested = len(inside)
+            else:
+                results, n_requested = [], 0
+            windows[key] = window
+        else:
+            results = sweep_mixed(spec.par, spec.flags, nB, spec.eta, cs,
+                                  vmit_params=vp, T=float(tv),
+                                  analytic_jac=spec.analytic_jac)
+            window, n_requested = None, len(nB)
 
-            for r in results:
-                row = composition_row(r)
-                for k in MODE_FRACTIONS[spec.mode]:
-                    row[k] = fracs[k]
-                if temp_key == "SnB":
-                    row["SnB"] = float(tv)
-                rows.append(row)
+        for r in results:
+            row = composition_row(r)
+            for k in MODE_FRACTIONS[spec.mode]:
+                row[k] = fracs[k]
+            if temp_key == "SnB":
+                row["SnB"] = float(tv)
+            rows.append(row)
 
-            if progress is not None:
-                progress(dict(temp_key=temp_key, temp=float(tv),
-                              fractions=dict(zip(frac_keys, combo)),
-                              eta=spec.eta, n_points=len(results),
-                              window=window, seconds=time.time() - t0))
+        if progress is not None:
+            progress(dict(mode=spec.mode, line=i_line, n_lines=len(lines),
+                          temp_key=temp_key, temp=float(tv),
+                          fracs=dict(fracs),
+                          n_solved=len(results), n_requested=n_requested,
+                          elapsed_s=time.time() - t0,
+                          eta=spec.eta, window=window))
     return rows, windows

@@ -71,7 +71,7 @@ from eos.dd2.solver import solve_octet, octet_warm_start
 from eos.dd2.physics.octet import _yc_neutralizing_leptons
 from eos.vmit.thermodynamics import compute_quark_matter_thermo_from_n
 from eos.mixed.equilibrium.charges import quark_charges
-from eos.mixed.solvers.phases import hadronic_phase
+from eos.mixed.adapters import hadronic_phase
 
 
 def sound_speed_eq(P, eps):

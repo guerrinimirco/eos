@@ -40,14 +40,25 @@ CLAUDE.md §2 before assuming either sign.
 
 Typical use
 -----------
-    from eos.dd2 import Parametrization, SpeciesFlags
-    from eos.mixed import MixedTableSpec, build_mixed_table
+The three entry points every model in this repository exposes, with `eta` and
+the quark parameters added because a hybrid equation of state has a transition
+and two models in it:
 
-    par = Parametrization.from_dd2y_defaults()
+    from eos.dd2 import Parametrization, SpeciesFlags
+    from eos.mixed import eos_point, eos_table, eos_response
+
+    par = Parametrization.from_dd2_defaults()
     flags = SpeciesFlags(hyperons=True, deltas=True, muons=True)
-    rows, windows = build_mixed_table(MixedTableSpec(
-        par, flags, "beta_eq_neutrinoless",
-        axes={"nB": nB_grid, "T": [0.0, 10.0]}, eta=0.5))
+
+    state = eos_point(par, "beta_eq_neutrinoless", flags,
+                      n_B=0.6, T=0.0, eta=0.5)
+    rows, windows = eos_table(par, "beta_eq_neutrinoless", flags,
+                              axes={"nB": nB_grid, "T": [0.0, 10.0]}, eta=0.5)
+
+A mixed table is rows PLUS windows: the phase boundaries found on each line are
+part of the answer, not something to recover afterwards from the rows.
+`MixedTableSpec` / `build_mixed_table` remain available underneath for a table
+described as an object rather than as arguments.
 
 Units are fm-based on every public boundary: densities fm^-3, pressure and
 energy density MeV/fm^3, temperature and chemical potentials MeV.
@@ -59,8 +70,12 @@ from eos.mixed.equilibrium.charges import (
     QUARK_QN, quark_charges, hadronic_qn, hadronic_charges,
 )
 
+# --- the phase-adapter contract: the only surface onto a bulk engine --------
+from eos.mixed.adapters import (
+    PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
+)
+
 # --- solving one point, and sweeping density -------------------------------
-from eos.mixed.solvers.phases import PhaseThermo, hadronic_phase, quark_phase
 from eos.mixed.solvers.point import MixedResult, solve_mixed
 from eos.mixed.solvers.sweep import (
     MixedWindow, sweep_mixed, locate_window, find_mixed_window,
@@ -76,6 +91,11 @@ from eos.mixed.tables.core_eos import (
     MixedEoSTable, build_mixed_eos_table, mass_radius_mixed,
 )
 from eos.general.table_io import save_table, load_table, export_csv
+
+# --- the uniform model API, the same three entry points every model has -----
+from eos.mixed.api import (
+    PointResult, eos_point, eos_table, eos_response, RESPONSE_FREEZES,
+)
 
 # --- thermodynamic coefficients --------------------------------------------
 from eos.mixed.coefficients import (
@@ -98,9 +118,10 @@ __all__ = [
     "ChargeSpec", "Regime",
     # quantum numbers
     "QUARK_QN", "quark_charges", "hadronic_qn", "hadronic_charges",
+    # phase adapters
+    "PhaseThermo", "hadronic_phase", "hadronic_seed", "quark_phase",
     # solving
-    "solve_mixed", "MixedResult", "PhaseThermo",
-    "hadronic_phase", "quark_phase",
+    "solve_mixed", "MixedResult",
     "sweep_mixed", "locate_window", "find_mixed_window", "MixedWindow",
     "seed_across_eta",
     "solve_mixed_at_entropy",
@@ -108,6 +129,9 @@ __all__ = [
     "MixedTableSpec", "build_mixed_table", "composition_row",
     "MixedEoSTable", "build_mixed_eos_table", "mass_radius_mixed",
     "save_table", "load_table", "export_csv",
+    # the uniform model API
+    "eos_point", "eos_table", "eos_response", "PointResult",
+    "RESPONSE_FREEZES",
     # coefficients
     "sound_speed_eq", "sound_speed_frozen", "sound_speed_frozen_hadronic",
     "sound_speed_frozen_quark", "adiabatic_index", "frozen_along",

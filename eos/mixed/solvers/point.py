@@ -24,7 +24,7 @@ from eos.dd2.solver import solve_beta_eq_octet
 from eos.mixed.equilibrium.residual import (
     build_mixed_ctx, mixed_residual, evaluate_phases, has_leptons,
 )
-from eos.mixed.solvers.phases import PhaseThermo
+from eos.mixed.adapters import PhaseThermo
 
 #: Post-solve residual gate, matching the tolerance eos/dd2 accepts.
 RESIDUAL_TOL = 1.0e-10

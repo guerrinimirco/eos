@@ -1,0 +1,427 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nC}{n_C}
+\newcommand{\nS}{n_S}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\mutB}{\tilde\mu_B}
+\newcommand{\phH}{\mathrm{H}}
+\newcommand{\phQ}{\mathrm{Q}}
+
+\begin{document}
+
+\title{The hadron--quark mixed phase: a one-parameter family between the
+       Gibbs and Maxwell constructions \\
+       --- as implemented in \texttt{eos/mixed}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/mixed} subpackage builds the first-order deconfinement
+transition between a hadronic phase and a quark phase. It is a
+\emph{composite engine}, not a model: it supplies no matter of its own, and
+couples two validated bulk equations of state --- DD2~\cite{Typel2010,
+HempelSchaffnerBielich2010} for hadrons and vMIT~\cite{Chodos1974,Gomes2019}
+for quarks --- through a single narrow interface, the phase-adapter contract.
+A continuous parameter $\eta \in [0,1]$ selects how much of electric-charge
+neutrality is imposed phase by phase rather than on the mixture as a whole,
+so that $\eta = 0$ is the Gibbs construction~\cite{Glendenning1992},
+$\eta = 1$ is Maxwell, and intermediate values interpolate between them in
+the sense of Constantinou et al.~\cite{Constantinou2023}. This note states
+the contract, the equilibrium conditions, how the unknown vector and the
+residual are \emph{derived} from a per-charge regime declaration rather than
+enumerated per mode, and what a mixed table reports beyond a point equation
+of state. It is written from the code, as its specification: every equation
+here is asserted by the \texttt{verify/} suite or by \texttt{test/mixed/}.
+\end{abstract}
+
+\maketitle
+
+\section{What is being solved}
+
+At a given total baryon density $\nB$, temperature $T$ and construction
+parameter $\eta$, a hadronic phase H occupying volume fraction $1-\chi$
+coexists with a quark phase Q occupying $\chi$. The two phases are separate
+thermodynamic systems, each with its own composition and its own set of
+conserved-charge chemical potentials; coexistence is the statement that
+certain of those potentials are shared and that certain charges are conserved
+only in the volume average. Which ones is exactly the content of the
+construction, and it is the only thing that changes between $\eta = 0$ and
+$\eta = 1$.
+
+$\chi$ is an unknown of the solve, not an input, and it is deliberately
+\emph{not} clamped to $[0,1]$. Its value classifies the density: $\chi \le 0$
+means the point is still pure hadronic, $\chi \ge 1$ that it is already pure
+quark, and $0 < \chi < 1$ that it lies inside the coexistence window. The
+onset and offset densities are located by exactly that sign change, which is
+why the solver must be allowed to return the analytic continuation outside
+the window.
+
+\section{The phase-adapter contract}
+
+Everything this engine knows about DD2 and about vMIT passes through one
+interface. An adapter is a map
+%
+\begin{equation}
+\big( \text{the phase's conserved-charge potentials},\, T \big)
+\;\longmapsto\;
+\big\{ n_i \big\},\; \nB,\, \nC,\, \nS,\; P,\, \varepsilon,\, s;\;
+\muB,\, \muC,\, \muS ,
+\label{eq:adapter}
+\end{equation}
+%
+which solves that phase's own internal self-consistency --- the meson field
+equations for a density-dependent relativistic mean field, the vector-field
+fixed point for a bag model --- at the \emph{given} potentials, and reports
+the resulting block. There is no $\eta$ in Eq.~(\ref{eq:adapter}), no mixing
+and no neutrality: those are conditions on the \emph{pair} of phases. An
+adapter describes one phase in isolation, and pairing a different hadronic or
+quark model is writing an adapter, not editing the solver.
+
+Two properties of Eq.~(\ref{eq:adapter}) are load-bearing.
+
+\paragraph{One decomposition.} Both adapters report the same projection
+%
+\begin{equation}
+\mu_i = B_i \muB + C_i \muC + S_i \muS ,
+\label{eq:projection}
+\end{equation}
+%
+with $C$ the electric charge of strongly-interacting matter only (leptons
+excluded) and $S = +1$ per $s$ quark, the opposite of the PDG sign. Because
+both phases speak Eq.~(\ref{eq:projection}), the coexistence conditions can
+be written in terms of $(\muB, \muC, \muS)$ without either side knowing which
+engine produced the other.
+
+\paragraph{Determinism.} An adapter must be a function of its arguments
+alone: the same potentials must give the same block, to the last digit,
+however the point was reached. The mixed residual is differentiated
+numerically, so an adapter that remembered the previous trial point would
+make the Jacobian differentiate that memory along with the physics. This is
+why warm starts are passed in as explicit arguments and why the one thing
+that \emph{is} cached --- the hadronic phase's starting field configuration
+--- is a constant of the solve rather than a running state.
+
+\paragraph{The hadronic potential is the kinetic one.} The hadronic adapter
+takes $\mutB = \muB - \Sigma^R$, with $\Sigma^R$ the rearrangement
+self-energy of the density-dependent couplings. Since $\Sigma^R$ is itself a
+function of the phase density, which is an unknown of the phase-internal
+solve, carrying $\muB$ would put that circularity inside the outer iteration;
+carrying $\mutB$ leaves it inside the adapter, where it belongs. The physical
+$\muB$ is restored at assembly and is what the matching condition uses.
+
+\section{The $\eta$ family of constructions}
+
+Write the electron (and, when enabled, muon) gas as two populations. A
+\emph{local} population lives inside the structures and neutralises its own
+phase; a \emph{global} population is spread over the mixture and neutralises
+only the average. They carry weights $\eta$ and $1-\eta$:
+%
+\begin{equation}
+\text{local: } \mu_e^{\mathrm{L},\phH},\ \mu_e^{\mathrm{L},\phQ}
+\quad \text{(weight } \eta),
+\qquad
+\text{global: } \mu_e^{\mathrm{G}}
+\quad \text{(weight } 1-\eta).
+\label{eq:leptonsplit}
+\end{equation}
+%
+Neutrality is then imposed twice, each where its population lives:
+%
+\begin{align}
+\text{local } (\eta > 0): &\qquad
+   \nC^\phH = n_\ell^\phH , \qquad \nC^\phQ = n_\ell^\phQ ,
+\label{eq:neutral_local} \\
+\text{global } (\eta < 1): &\qquad
+   (1-\chi)\, \nC^\phH + \chi\, \nC^\phQ = n_\ell^{\mathrm{G}} ,
+\label{eq:neutral_global}
+\end{align}
+%
+where $n_\ell$ is the total negatively-charged lepton density of that domain.
+At $\eta = 1$ only Eq.~(\ref{eq:neutral_local}) survives: each phase is
+separately neutral, no charge is exchanged between them, and the two phases
+can only coexist at one pressure --- the Maxwell plateau, with a genuine
+density jump. At $\eta = 0$ only Eq.~(\ref{eq:neutral_global}) survives: each
+phase may be charged, charge is exchanged freely, and the pressure rises
+continuously through the window --- Gibbs. In between, both populations
+exist. Physically the intermediate case stands in for the finite surface
+tension and Coulomb energy of the mixed-phase structures, which suppress
+charge separation without forbidding it; here it is a controlled
+interpolation, not a derivation from a surface tension.
+
+Mechanical equilibrium carries the same weighting. Only the local leptons sit
+inside the structures whose pressures must balance, so
+%
+\begin{equation}
+P^\phH + \eta\, P_\ell^\phH \;=\; P^\phQ + \eta\, P_\ell^\phQ .
+\label{eq:mechanical}
+\end{equation}
+%
+The global leptons, the photons and any trapped neutrinos are common to both
+phases and cancel from Eq.~(\ref{eq:mechanical}) identically.
+
+\section{Conserved charges as a declaration}
+
+Each conserved quantity in $\{B, C, S, L_e\}$ is treated in one of three ways:
+
+\begin{description}
+\item[\textsc{global}] the potential is shared, $\mu_j^\phH = \mu_j^\phQ$,
+  and the charge is conserved in the volume average,
+  $(1-\chi) n_j^\phH + \chi\, n_j^\phQ = Y_j \nB$;
+\item[\textsc{local}] the potential is per-phase and the charge is conserved
+  inside each phase separately;
+\item[\textsc{not conserved}] the charge is not conserved at all: its
+  potential is eliminated from the unknown vector.
+\end{description}
+
+$B$ is \textsc{global} in every mode --- $\muB^\phH = \muB^\phQ$ is what makes
+the phases coexist at all. The four named equilibrium modes are four
+assignments of the remaining three charges:
+
+\begin{center}
+\begin{tabular}{lccccl}
+\toprule
+mode & $B$ & $C$ & $S$ & $L_e$ & independent variables \\
+\midrule
+\texttt{beta\_eq\_neutrinoless}     & global & --     & --     & --     & $(\nB, T)$ \\
+\texttt{beta\_eq\_neutrino\_trapped}& global & --     & --     & global & $(\nB, Y_{L_e}, T)$ \\
+\texttt{fixed\_YC}                  & global & global & --     & --     & $(\nB, Y_C, T)$ \\
+\texttt{fixed\_YC\_YS}              & global & global & global & --     & $(\nB, Y_C, Y_S, T)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+(``--'' is \textsc{not conserved}.) Nothing else in the engine enumerates
+modes. The unknown vector, the residual list and the analytic Jacobian are all
+\emph{assembled by reading the regimes}, so the four named modes are four
+configurations of one solver and an unnamed combination needs no new code.
+
+Two combinations are refused rather than mis-assembled: per-phase strangeness
+($S$ \textsc{local}) is not wired, and $L_e$ \textsc{local} is not a defined
+mode at all --- the neutrino mean free path is far larger than the
+mixed-phase structures, so neutrinos cannot be localised in one of them.
+
+\section{The equilibrium system}
+
+Because the adapters have already absorbed each phase's internal
+self-consistency, the unknowns here are only conserved-charge potentials,
+$\chi$, and the split lepton potentials:
+%
+\begin{equation}
+x = \Big(
+\underbrace{\mutB^\phH,\ \muB^\phQ,\ \chi}_{\text{always}} ,\;
+\underbrace{\muC^\phH, \muC^\phQ \ \text{or}\ \muC}_{C \text{ global}} ,\;
+\underbrace{\muS}_{S \text{ global}} ,\;
+\underbrace{\mu_{\nu_e}}_{L_e \text{ global}} ,\;
+\underbrace{\mu_e^{\mathrm{L},\phH}, \mu_e^{\mathrm{L},\phQ}}_{\eta > 0} ,\;
+\underbrace{\mu_e^{\mathrm{G}}}_{\eta < 1}
+\Big) ,
+\label{eq:unknowns}
+\end{equation}
+%
+four to nine numbers, rather than the full per-species $(\mu_i, n_i)$ vector
+a direct formulation would carry. The residual rows are, in order:
+%
+\begin{align}
+\muB^\phH - \muB^\phQ &= 0 ,
+&& \text{(baryon potentials match)}
+\label{eq:res_mub} \\
+(1-\chi)\, \nB^\phH + \chi\, \nB^\phQ - \nB &= 0 ,
+&& \text{(the average reproduces the target density)}
+\label{eq:res_nb} \\
+P^\phH + \eta P_\ell^\phH - P^\phQ - \eta P_\ell^\phQ &= 0 ,
+&& \text{(mechanical equilibrium, Eq.~\ref{eq:mechanical})}
+\label{eq:res_P}
+\end{align}
+%
+followed, by regime, by
+%
+\begin{align}
+(1-\chi)\, \nC^\phH + \chi\, \nC^\phQ - Y_C \nB &= 0 ,
+&& C\ \textsc{global}
+\label{eq:res_C} \\
+\muC^\phH + \eta\, \mu_e^{\mathrm{L},\phH}
+   - \muC^\phQ - \eta\, \mu_e^{\mathrm{L},\phQ} &= 0 ,
+&& C\ \textsc{global with leptons}
+\label{eq:res_Cmatch} \\
+(1-\chi)\, \nS^\phH + \chi\, \nS^\phQ - Y_S \nB &= 0 ,
+&& S\ \textsc{global}
+\label{eq:res_S} \\
+\eta \big[ (1-\chi) n_e^\phH + \chi n_e^\phQ \big]
+   + (1-\eta) n_e^{\mathrm{G}} + n_{\nu_e} - Y_{L_e} \nB &= 0 ,
+&& L_e\ \textsc{global}
+\label{eq:res_L}
+\end{align}
+%
+and closed by the neutrality rows Eqs.~(\ref{eq:neutral_local}) and
+(\ref{eq:neutral_global}), each present exactly when its lepton population is.
+
+The charge-matching row Eq.~(\ref{eq:res_Cmatch}) is where the construction
+enters the charge sector: at $\eta = 0$ it reduces to $\muC^\phH = \muC^\phQ$,
+the Gibbs statement that the two phases share a charge potential, and at
+$\eta = 1$ the local electron potentials shift it by exactly the amount that
+separate neutrality demands. The global electron potential does not appear in
+it, because it neutralises the average rather than either phase.
+
+In $\beta$ equilibrium ($C$ \textsc{not conserved}) the charge potential is
+not an unknown at all: it is eliminated by the weak condition applied with the
+$\eta$-weighted electron potential of that phase,
+%
+\begin{equation}
+\muC^{I} = \mu_{\nu_e}
+   - \big[ \eta\, \mu_e^{\mathrm{L},I} + (1-\eta)\, \mu_e^{\mathrm{G}} \big] ,
+\qquad I \in \{\phH, \phQ\} ,
+\label{eq:beta}
+\end{equation}
+%
+which for transparent matter ($\mu_{\nu_e} = 0$) is the repository's sign
+convention $\muC + \mu_e = 0$, i.e.\ $\muC = \mu_p - \mu_n$. Strangeness
+self-equilibrates in that case, $\muS = 0$.
+
+\section{Thermodynamics of the mixture}
+
+The matter phases are volume-averaged; the local leptons carry weight $\eta$
+and are themselves volume-averaged; the global leptons carry weight $1-\eta$;
+photons and trapped neutrinos are uniform across the whole mixture and are
+counted once:
+%
+\begin{align}
+P &= P^\phH + \eta P_\ell^\phH + (1-\eta) P^{\mathrm{G}}_\ell
+     + P_{\nu} + P_{\gamma} ,
+\label{eq:Ptot} \\
+\varepsilon &= (1-\chi)\, \varepsilon^\phH + \chi\, \varepsilon^\phQ
+     + \eta \big\langle \varepsilon_\ell \big\rangle
+     + (1-\eta)\, \varepsilon^{\mathrm{G}}_\ell
+     + \varepsilon_{\nu} + \varepsilon_{\gamma} ,
+\label{eq:epstot} \\
+s &= (1-\chi)\, s^\phH + \chi\, s^\phQ
+     + \eta \big\langle s_\ell \big\rangle + (1-\eta)\, s^{\mathrm{G}}_\ell
+     + s_{\nu} + s_{\gamma} ,
+\label{eq:stot}
+\end{align}
+%
+with $\langle X_\ell \rangle = (1-\chi) X_\ell^\phH + \chi X_\ell^\phQ$. The
+pressure is read off one phase rather than averaged because
+Eq.~(\ref{eq:res_P}) has made the two equal.
+
+\paragraph{Euler / Hugenholtz--Van Hove.} The identity
+%
+\begin{equation}
+\varepsilon + P = T s + \sum_i \mu_i n_i
+\label{eq:euler}
+\end{equation}
+%
+must hold for the mixture as a whole, with the sum weighted exactly as
+Eqs.~(\ref{eq:epstot})--(\ref{eq:stot}) weight $\varepsilon$ and $s$, and with
+$\mu_\gamma = 0$. Unlike the pure-phase case this is not an algebraic
+identity: it holds only if every thermal and lepton term has been weighted
+consistently, so it is the sharpest single check on the assembly and it is
+asserted at $10^{-8}$ relative on every solved point.
+
+\section{The two sound speeds}
+
+A first-order transition has two, and which is physical depends on how fast
+the matter is disturbed relative to the rate at which one phase converts into
+the other.
+
+The \emph{equilibrium} speed $c_{\mathrm{eq}}^2 = dP/d\varepsilon$ is taken
+along the solved sequence, with $\chi$ free to readjust: a compression is
+answered by converting hadrons into quarks rather than by raising the
+pressure. Through a Maxwell window it therefore vanishes identically, and
+through a Gibbs window it dips but stays finite. This is the speed that enters
+the TOV equations and whose causality bound $0 \le c^2 \le 1$ is checked
+before any table is integrated.
+
+The \emph{frozen} (adiabatic) speed $c_{\mathrm{ad}}^2$ holds $\chi$ fixed.
+The mixture is compressed faster than the phases can convert, the pressure has
+to rise, and $c_{\mathrm{ad}}$ does not collapse in the window. Freezing
+$\chi$ is the part that matters: freezing only the charge fractions would let
+the solve readjust $\chi$ and return to the plateau. In addition each phase is
+compressed by the same factor, each keeps its own $Y_C$ and $Y_S$, and the
+leptons are re-neutralised against the frozen total charge. That convention is
+stated in full in the module documentation, because a different one gives a
+different number; with $\chi = 0$ and the leptons switched off it reduces
+exactly to the pure-hadronic adiabatic sound speed of \texttt{eos/dd2}.
+
+The gap between the two is what drives a composition $g$-mode across the
+transition.
+
+\section{What a mixed table reports}
+
+A composite engine returns more than a point equation of state. Alongside the
+rows --- bulk thermodynamics, $\chi$, the phase label, and every conserved
+charge resolved by phase --- a table returns the \emph{windows}: the onset and
+offset densities located on each isotherm and each combination of the fixed
+fractions. Those are what the transition curves $\nB^{\mathrm{onset}}(T)$ and
+$\nB^{\mathrm{offset}}(T)$ are made of, and they are part of the result rather
+than something the caller recovers afterwards by scanning the rows for where
+$\chi$ crossed $0$ and $1$.
+
+The per-phase decomposition satisfies three cheap invariants at every solved
+point,
+%
+\begin{equation}
+Y_B^\phH + Y_B^\phQ = 1 , \qquad
+Y_C^\phH + Y_C^\phQ = Y_C , \qquad
+Y_S^\phH + Y_S^\phQ = Y_S ,
+\label{eq:partition}
+\end{equation}
+%
+on the volume-weighted convention $Y_j^I = w_I n_j^I / \nB$ with
+$w_\phH = 1-\chi$ and $w_\phQ = \chi$. The partition is what the global sums
+cannot show: at fixed total $Y_C$ the hadronic phase can be far more
+positively charged than the average while the quark phase carries the
+compensating negative charge, and how far that separation goes is exactly what
+$\eta$ controls.
+
+\section{Numerics}
+
+\paragraph{Scaling and the gate.} Every residual row is made dimensionless
+before it is judged: density rows are divided by $\nB$, potential equalities
+by a fixed potential scale, and the mechanical row by the larger of the two
+phase pressures. A state is accepted when the largest scaled residual is below
+$10^{-10}$. The rows carry mixed units --- densities of order
+$10^{-1}\,\mathrm{fm}^{-3}$ against potentials of order
+$10^{3}\,\mathrm{MeV}$ --- so a gate on the raw norm would be dominated by
+whichever row happens to be largest and would accept states satisfying the
+others only loosely.
+
+\paragraph{Warm starts.} These dominate the cost, because the adapters are
+called once per residual evaluation. Three levels are used, in order of what
+they buy: the hadronic phase's starting field configuration is a constant of
+the solve and is computed once; each density seeds the next along the stiff
+$\nB$ axis; and each isotherm seeds the next. On top of that the mixed system
+is solved only \emph{inside} the located window --- outside it the far cheaper
+pure-phase solvers answer the same question --- and the window search on one
+isotherm is told where the previous isotherm found its boundaries, since they
+move smoothly with $T$. A hint that produces a boundary on the edge of the
+hinted range is discarded and the full search repeated, so a window that
+genuinely disappears is still reported as gone.
+
+\paragraph{Jacobian.} The reference path uses the solver's own numeric
+Jacobian and is the correctness oracle. A hand-assembled analytic Jacobian is
+available as the fast path, validated against finite differences and required
+to reach the same root; where a trial point drives a phase solve out of its
+domain, both paths answer with a large penalty residual so the outer iteration
+backs off instead of aborting.
+
+\paragraph{Non-convergence.} Reported, never raised, at the public boundary:
+the engine is used inside parameter scans that walk into regions where no
+hybrid equation of state exists, and a scan must be able to score such a point
+and move on. A converged point outside $[0,1]$ in $\chi$ is not a failure ---
+it is how the engine says which side of the transition the density is on.
+
+\begin{acknowledgments}
+Written as the specification of \texttt{eos/mixed}.
+\end{acknowledgments}
+
+\bibliography{../../docs/eos}
+
+\end{document}

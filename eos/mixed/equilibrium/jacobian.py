@@ -49,7 +49,7 @@ from eos.mixed.equilibrium.charges import Regime
 from eos.mixed.equilibrium.residual import (
     charged_leptons, has_leptons, _quark_mus_from_charges,
 )
-from eos.mixed.solvers.phases import hadronic_phase, quark_phase, _hadronic_residual
+from eos.mixed.adapters import hadronic_phase, quark_phase, _hadronic_residual
 from eos.vmit.thermodynamics import compute_quark_density
 
 #: mu_flavor = _M @ mu_charge for mu_charge = (mu_B, mu_C, mu_S). Since

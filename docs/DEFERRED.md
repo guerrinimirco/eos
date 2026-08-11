@@ -135,6 +135,33 @@ the first-generation settings-object interface, kept because the ZLvMIT
 notebook drives vMIT through it, and it now sits beside `table.py` as a shim
 over the shared driver rather than being renamed to it.
 
+`eos/mixed` is a composite engine and takes the shorter list of CLAUDE.md §5 —
+`adapters.py`, `api.py`, `verify/`, `mixed.tex` — all of which it now has. The
+one name still out of step is internal: `ChargeSpec`, `MODE_FRACTIONS` and the
+table axes call the electron lepton fraction `Y_L` where the spec calls it
+`Y_Le`; the public boundary translates and refuses the internal spelling, but
+the rename itself is outstanding.
+
+---
+
+### `docs/STRUCTURE.md` does not exist yet
+
+CLAUDE.md §10 sends a new figure to the `figure_style` module docstring **and**
+to a worked figure example in `docs/STRUCTURE.md`, and §11 lists the file as
+part of the layout. Only the module docstring is written. The document belongs
+with the notebook rework in Phase 5, which is where the worked example comes
+from.
+
+---
+
+### The README's directory tree predates the refactor
+
+`README.md` still lists `sfhoalphabag/`, `general/plotting_info.py` and a
+one-file `tov/`, all of which are gone, and carries no `dd2/`, `mixed/` or
+`enjl/` at all. It is a rewrite rather than a patch, and Phase 5 does it
+alongside the notebook rework; individual lines are corrected only where a
+rename in this phase would otherwise leave them newly wrong.
+
 ---
 
 ## Per model
@@ -225,25 +252,35 @@ over the shared driver rather than being renamed to it.
   the engine has always agreed with dd2 and with CLAUDE.md §2. A comment in
   `phases.py` asserted the opposite and has been corrected; a test now pins
   the behaviour. Nothing moved.)
-- `build_mixed_table`'s progress callback does not use the shared key names.
-  It reports `fractions` / `n_points` / `seconds` where dd2 and vmit report
-  `fracs` / `n_solved` / `n_requested` / `elapsed_s`, and it omits `mode`,
-  `line` and `n_lines`. CLAUDE.md §5 asks for one shape across models, so the
-  keys should be renamed and the mixed-specific extras (`eta`, `window`) kept
-  alongside them. It is a public callback, so any notebook reading those keys
-  changes in the same commit.
-- The three spec entry points are not present under their spec names.
-  `solve_mixed`, `build_mixed_table` and the `coefficients` module already do
-  the work — and `build_mixed_table` already returns `(rows, windows)`, which
-  is the composite-engine requirement that the windows are part of the result
-  — but `eos_point` / `eos_table` / `eos_response` do not exist, so a caller
-  cannot drive mixed the way it drives dd2 and vmit. `eos_response` should
-  dispatch the freezes onto the existing `sound_speed_eq` /
-  `sound_speed_frozen` pair plus the `chi`-frozen variant.
-- The phase-adapter contract lives in `solvers/phases.py` and is documented
-  there, but the plan calls for it under `adapters.py` as its own named
-  surface, so a new hadron-quark pairing is visibly "write an adapter" rather
-  than "edit the solver's helpers".
+- `eos_response` implements two of the freezes CLAUDE.md §5 names:
+  `'equilibrium'` (nothing held) and `'chi'` (the quark volume fraction held,
+  and with it each phase's Y_C and Y_S). Two are not wired and raise:
+  frozen per-species composition (all Y_i held, which for a hadronic phase
+  with hyperons or Deltas is strictly stronger than holding Y_C and Y_S), and
+  frozen conserved fractions with chi left free — which in a Maxwell window
+  simply returns to the plateau, so it is only meaningful at eta < 1. The
+  susceptibility matrix chi_ab = dn_a/dmu_b is not computed for the mixture
+  either; the natural definition has to say whether it is taken at fixed chi.
+- `eos_response(frozen='equilibrium')` returns nan outside the coexistence
+  window. The mixed system still has a root there (chi runs negative or past
+  one) but it is an analytic continuation, not the state — at eta = 1 it sits
+  on the pressure plateau at every density. The physically continuous answer
+  is the pure phase's own `eos_response`, and stitching the three into one
+  curve is left to the caller; the engine does not dispatch across the
+  boundary because that would mean importing model internals past the
+  phase-adapter surface.
+- The public boundary takes `Y_Le` (the §5 condition name) while the engine's
+  own `ChargeSpec`, `MODE_FRACTIONS` and table axes call the same quantity
+  `Y_L`. `eos/mixed/api.py` translates in one place and refuses the internal
+  name, so the two never coexist at one boundary, but the internal rename is
+  still outstanding and belongs with the next change that touches
+  `equilibrium/charges.py`.
+- `mixed_slots` activates the local and global lepton populations at exactly
+  eta > 0 and eta < 1. Within about 1e-3 of an endpoint the just-activated
+  population carries almost no weight, its potential is a near spectator and
+  the Jacobian is near-singular, so a cold start can stall there. Interior eta
+  on practical grids is fine; a near-endpoint eta needs a warm start from the
+  eta = 0 or eta = 1 solution.
 
 ### astro/tov
 - Crust table paths are absolute and machine-specific. A missing crust file

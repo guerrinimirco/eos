@@ -1,11 +1,20 @@
 """
-mixed/solvers/phases.py
-=======================
-Uniform per-phase interface over the two validated bulk engines: given the
-phase's conserved-charge chemical potentials and (T, flags), return a
-`PhaseThermo` block.
+mixed/adapters.py
+=================
+The phase-adapter contract: the ONE surface through which this engine touches
+a bulk equation of state. Everything the mixed-phase solve knows about DD2 and
+about vMIT enters here and nowhere else, so pairing a different hadronic or
+quark model is writing an adapter, not editing the solver.
 
-*Internal module.* Called by the residual assembly and the Jacobian.
+An adapter is a function
+
+    adapter(<the phase's conserved-charge potentials>, T, ...) -> PhaseThermo
+
+that solves that phase's OWN internal self-consistency — meson fields for a
+relativistic mean field, flavor densities for a vector bag — at the given
+potentials, and reports the block in `PhaseThermo`: the species densities, the
+conserved-charge densities n_B, n_C, n_S, the bulk P, eps and s, and the
+conserved-charge potentials mu_B, mu_C, mu_S.
 
 Both adapters report the SAME conserved-charge decomposition,
 
@@ -14,8 +23,14 @@ Both adapters report the SAME conserved-charge decomposition,
 so the mixed-phase solver can match potentials across phases without knowing
 which engine produced them. There is deliberately NO eta, NO mixing and NO
 charge neutrality here: those are conditions on the *pair* of phases and belong
-to the mixed residual. Each adapter solves only one phase's own internal
-self-consistency at fixed potentials.
+to the mixed residual. An adapter is a description of one phase in isolation.
+
+An adapter must be a *deterministic function of its arguments*: the same
+potentials must give the same block, to the last digit, however the point was
+reached. The mixed residual is differentiated by finite differences, so an
+adapter that remembers the previous trial point would corrupt the Jacobian.
+This is why the optional warm start `x0` is an explicit argument rather than
+hidden state.
 
 Units on the boundary are fm-based (fm^-3, MeV/fm^3, MeV). The hadronic side
 converts DD2's internal natural units through hc3; the quark side is already
