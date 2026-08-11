@@ -6,7 +6,7 @@ General potential-driven mean-field residual for the full baryon octet
 Λ, Σ, Ξ with the φ field.
 
 Unknown vector (the unified charge/strangeness scheme):
-    x = [sigma, omega0, rho0, (phi0), mu_tilde_B, mu_Q, (mu_S)]
+    x = [sigma, omega0, rho0, (phi0), mu_tilde_B, mu_C, (mu_S)]
 
 phi0 is present iff phi_field is on AND hyperons are active. mu_S is present
 iff the strangeness sector is fixed (fixed-Y_S mode). All vector fields are
@@ -25,7 +25,7 @@ Y_L) are handled by the trapped lepton mode.
 
 mu_tilde_B = mu_B - Sigma^R absorbs the species-independent rearrangement term
 (and its density circularity) out of the iteration; the baryon effective
-potential is mu_eff_i = mu_tilde_B*B_i + mu_Q*Q_i - Gamma_omega_i omega0
+potential is mu_eff_i = mu_tilde_B*B_i + mu_C*Q_i - Gamma_omega_i omega0
 - Gamma_rho_i t3_i rho0 - Gamma_phi_i phi0. mu_B = mu_tilde_B + Sigma^R is
 restored at assembly.
 
@@ -39,8 +39,8 @@ from scipy.optimize import brentq
 
 from eos.general.particles import Electron, Muon
 from eos.general.physics_constants import hc3
-from eos.dd2.physics.thermo import kinetic_thermo
-from eos.dd2.physics.mesons import lambda_omega_ratio, thermal_meson_charges
+from eos.dd2.thermodynamics import kinetic_thermo
+from eos.dd2.thermodynamics import lambda_omega_ratio, thermal_meson_charges
 from eos.dd2.species import active_baryons
 
 # Each baryon spec: (mass, Q, t3, g, x_sigma, x_omega, x_rho, x_phi, S)
@@ -168,7 +168,7 @@ def build_octet_ctx(par, n_B, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
         raise ValueError("yc_leptons (flavor 2b) requires charge_mode='fixed'")
     Gs, Gw, Gr, dGs, dGw, dGr = par.couplings_at(n_B)
     has_phi = flags.phi_field and flags.hyperons
-    # sigma,omega,rho,(phi),muB~,muQ,(muS),(muL)
+    # sigma,omega,rho,(phi),muB~,muC,(muS),(muL)
     n_unknowns = (5 + int(has_phi) + int(strange_mode == "fixed")
                   + int(lepton_mode == "trapped"))
     return OctetCtx(
@@ -188,14 +188,14 @@ def build_octet_ctx(par, n_B, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
     )
 
 
-def meson_charges_nat(ctx, mu_Q, mu_S, omega0, rho0):
+def meson_charges_nat(ctx, mu_C, mu_S, omega0, rho0):
     """(n_C, n_S) of the thermal meson gas in NATURAL units [MeV^3].
 
     Zero unless a thermal-meson flag is on and T > 0, so every caller can
     add it unconditionally.
     """
     n_C, n_S = thermal_meson_charges(
-        ctx.Gw_N, ctx.Gr_N, ctx.x_omega_L, mu_Q, mu_S, omega0, rho0, ctx.T,
+        ctx.Gw_N, ctx.Gr_N, ctx.x_omega_L, mu_C, mu_S, omega0, rho0, ctx.T,
         include_pseudoscalars=ctx.include_pseudoscalars,
         include_thermal_vectors=ctx.include_thermal_vectors)
     return n_C * hc3, n_S * hc3
@@ -206,15 +206,15 @@ def _unpack(x, ctx):
     i = 3
     phi0 = x[i] if ctx.has_phi else 0.0
     i += int(ctx.has_phi)
-    mu_tilde_B, mu_Q = x[i], x[i + 1]
+    mu_tilde_B, mu_C = x[i], x[i + 1]
     i += 2
     mu_S = x[i] if ctx.has_muS else 0.0
     i += int(ctx.has_muS)
     mu_L = x[i] if ctx.has_muL else 0.0
-    return sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S, mu_L
+    return sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_L
 
 
-def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S):
+def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S):
     """
     Per-baryon (mu_eff, m*, n, ns, eps, P, s) at the current fields.
     Returns list of (spec, mu_eff, ms, n, ns, eps, P, s) in natural units, or
@@ -228,7 +228,7 @@ def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S):
         ms = mass - Gs * sigma
         if ms <= 0.0:
             return None
-        mu_eff = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
+        mu_eff = (mu_tilde_B + Q * mu_C + S * mu_S - Gw * omega0
                   - Gr * t3 * rho0 - Gphi * phi0)
         n, P, eps, s, ns = kinetic_thermo(mu_eff, ms, g, ctx.T)
         out.append((spec, mu_eff, ms, n, ns, eps, P, s))
@@ -237,9 +237,9 @@ def _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S):
 
 def octet_residual(x, ctx):
     """Dimensionless residual vector (the unified charge/strangeness scheme)."""
-    sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S, mu_L = _unpack(x, ctx)
+    sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_L = _unpack(x, ctx)
     kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
-                           mu_tilde_B, mu_Q, mu_S)
+                           mu_tilde_B, mu_C, mu_S)
     if kin is None:
         return [1.0e6] * ctx.n_unknowns
 
@@ -264,7 +264,7 @@ def octet_residual(x, ctx):
         res.append((phi0 - src_phi / ctx.m_phi2) / ctx.mbar)
     # Thermal mesons carry no baryon number, so n_B above is baryons only, but
     # they do carry charge and strangeness: both constraints below see the sum.
-    mC, mS = meson_charges_nat(ctx, mu_Q, mu_S, omega0, rho0)
+    mC, mS = meson_charges_nat(ctx, mu_C, mu_S, omega0, rho0)
     charge += mC
     strangeness += mS
     res.append(n_tot / ctx.nB_nat - 1.0)
@@ -272,9 +272,9 @@ def octet_residual(x, ctx):
     n_e = 0.0
     if ctx.charge_mode == "neutral":
         # electron carries +mu_L when leptons are trapped; the muon family
-        # stays transparent (mu_mu = -mu_Q, no mu-neutrino tracked).
-        mu_e = mu_L - mu_Q
-        mu_mu = -mu_Q
+        # stays transparent (mu_mu = -mu_C, no mu-neutrino tracked).
+        mu_e = mu_L - mu_C
+        mu_mu = -mu_C
         n_e = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)[0]
         n_mu = (kinetic_thermo(mu_mu, ctx.m_mu, 2.0, ctx.T)[0]
                 if ctx.include_muons else 0.0)
@@ -294,9 +294,9 @@ def assemble_octet(x, ctx):
     Full thermodynamic state from a converged unknown vector. Returns a dict
     in natural units plus per-species densities (fm^-3) for onset detection.
     """
-    sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S, mu_L = _unpack(x, ctx)
+    sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_L = _unpack(x, ctx)
     kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
-                           mu_tilde_B, mu_Q, mu_S)
+                           mu_tilde_B, mu_C, mu_S)
 
     eps_b = P_b = s_b = 0.0
     Sig_R = 0.0
@@ -336,15 +336,15 @@ def assemble_octet(x, ctx):
     # baryons-only because mu_dot_n below is the baryon mu_i n_i sum — the
     # meson sum_j mu*_j n_j is a separate term the callers add from
     # thermal_meson_thermo, and folding it in here would double count it.
-    mC, mS = meson_charges_nat(ctx, mu_Q, mu_S, omega0, rho0)
+    mC, mS = meson_charges_nat(ctx, mu_C, mu_S, omega0, rho0)
     charge_tot = charge_had + mC
     strangeness_tot = strangeness + mS
 
     nnue = Pnue = enue = snue = 0.0
     if ctx.charge_mode == "neutral":
         # beta / trapped: electron carries +mu_L, muon family transparent
-        mu_e = mu_L - mu_Q
-        mu_mu = -mu_Q
+        mu_e = mu_L - mu_C
+        mu_mu = -mu_C
         ne, Pe, ee, se, _ = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)
         if ctx.include_muons:
             nmu, Pmu, emu, smu, _ = kinetic_thermo(mu_mu, ctx.m_mu, 2.0, ctx.T)
@@ -362,7 +362,7 @@ def assemble_octet(x, ctx):
         lepton_dot_n = mu_e * (ne + nmu)
     else:
         # fixed-Y_C flavor 2a: leptonless (CompOSE Y_Q slicing)
-        mu_e = -mu_Q
+        mu_e = -mu_C
         ne = Pe = ee = se = nmu = Pmu = emu = smu = 0.0
         lepton_dot_n = 0.0
 
@@ -371,15 +371,15 @@ def assemble_octet(x, ctx):
     P = P_b + P_fields + ctx.nB_nat * Sig_R + Pe + Pmu + Pnue
     s = s_b + se + smu + snue
 
-    # baryon chemical-potential sum: mu_i = mu_B + Q_i mu_Q + S_i mu_S
-    mu_dot_n = mu_B * n_tot + mu_Q * charge_had + mu_S * strangeness
+    # baryon chemical-potential sum: mu_i = mu_B + Q_i mu_C + S_i mu_S
+    mu_dot_n = mu_B * n_tot + mu_C * charge_had + mu_S * strangeness
 
     return dict(
         sigma=sigma, omega0=omega0, rho0=rho0, phi0=phi0,
         m_eff_n=m_eff_n, mu_eff_n=mu_eff_n, mu_eff_p=mu_eff_p,
-        Sigma_R=Sig_R, mu_B=mu_B, mu_Q=mu_Q, mu_S=mu_S, mu_L=mu_L,
+        Sigma_R=Sig_R, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, mu_L=mu_L,
         mu_e=mu_e, mu_nue=mu_L,
-        mu_n=mu_B, mu_p=mu_B + mu_Q,
+        mu_n=mu_B, mu_p=mu_B + mu_C,
         eps=eps, P=P, s=s, n_tot=n_tot,
         n_e=ne, n_mu=nmu, n_nue=nnue,
         Y_C=charge_tot / ctx.nB_nat, Y_S=strangeness_tot / ctx.nB_nat,

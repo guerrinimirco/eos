@@ -113,7 +113,7 @@ def susceptibilities(par, n_B, flags, T=0.0):
 
     n_f = 3 + int(has_phi)
     field_cols = list(range(n_f))
-    mu_cols = [n_f, n_f + 1, n_f + 2]          # mutB, muQ, muS
+    mu_cols = [n_f, n_f + 1, n_f + 2]          # mutB, muC, muS
     rows = [n_f, n_f + 1, n_f + 2]             # baryon#, charge, strange
     JFF = J[np.ix_(field_cols, field_cols)]
     JFmu = J[np.ix_(field_cols, mu_cols)]

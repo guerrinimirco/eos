@@ -18,7 +18,7 @@ is analytic.
 """
 import numpy as np
 
-from eos.dd2.physics.thermo import kinetic_thermo
+from eos.dd2.thermodynamics import kinetic_thermo
 
 _PI2 = np.pi ** 2
 
@@ -57,7 +57,7 @@ def kinetic_derivs(mu_eff, m, g, T=0.0):
     return dn_dmu, dn_dm, dns_dmu, dns_dm
 
 
-def _dmeson(ctx, col, n, omega0, rho0, muQ, muS, which):
+def _dmeson(ctx, col, n, omega0, rho0, muC, muS, which):
     """
     Gradient (over the unknown columns) of the thermal meson gas's natural-unit
     n_C (which=0) or n_S (which=1).
@@ -71,8 +71,8 @@ def _dmeson(ctx, col, n, omega0, rho0, muQ, muS, which):
     if ctx.T <= 0.0 or not (ctx.include_pseudoscalars
                             or ctx.include_thermal_vectors):
         return d
-    args = dict(omega0=omega0, rho0=rho0, mu_Q=muQ, mu_S=muS)
-    knobs = [("mu_Q", "muQ"), ("omega0", "omega0"), ("rho0", "rho0")]
+    args = dict(omega0=omega0, rho0=rho0, mu_C=muC, mu_S=muS)
+    knobs = [("mu_C", "muC"), ("omega0", "omega0"), ("rho0", "rho0")]
     if ctx.has_muS:
         knobs.append(("mu_S", "muS"))
     for name, column in knobs:
@@ -92,7 +92,7 @@ def _columns(ctx):
     if ctx.has_phi:
         c["phi0"] = i
         i += 1
-    c["mutB"], c["muQ"] = i, i + 1
+    c["mutB"], c["muC"] = i, i + 1
     i += 2
     if ctx.has_muS:
         c["muS"] = i
@@ -113,8 +113,8 @@ def octet_jacobian(x, ctx):
     from eos.dd2.physics.octet import _unpack, _baryon_kinetics
 
     n = ctx.n_unknowns
-    sigma, omega0, rho0, phi0, mutB, muQ, muS, muL = _unpack(x, ctx)
-    kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mutB, muQ, muS)
+    sigma, omega0, rho0, phi0, mutB, muC, muS, muL = _unpack(x, ctx)
+    kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mutB, muC, muS)
     if kin is None:
         return np.eye(n)
 
@@ -140,7 +140,7 @@ def octet_jacobian(x, ctx):
         if ctx.has_phi:
             dmu_eff[col["phi0"]] = -xphi * ctx.Gw_N
         dmu_eff[col["mutB"]] = 1.0
-        dmu_eff[col["muQ"]] = Q
+        dmu_eff[col["muC"]] = Q
         if ctx.has_muS:
             dmu_eff[col["muS"]] = S
         dm = np.zeros(n)
@@ -161,9 +161,9 @@ def octet_jacobian(x, ctx):
     # so it enters the two constraint rows only. Differenced as one block, the
     # same tactic kinetic_derivs uses at T>0 — the JEL Bose routine exposes no
     # exact derivative, and the gas depends on the unknowns only through
-    # (mu_Q, mu_S, omega0, rho0).
-    dcharge += _dmeson(ctx, col, n, omega0, rho0, muQ, muS, 0)
-    dstrange += _dmeson(ctx, col, n, omega0, rho0, muQ, muS, 1)
+    # (mu_C, mu_S, omega0, rho0).
+    dcharge += _dmeson(ctx, col, n, omega0, rho0, muC, muS, 0)
+    dstrange += _dmeson(ctx, col, n, omega0, rho0, muC, muS, 1)
 
     # field-equation rows (scaled by mbar), R = (field - src/m^2)/mbar
     row = 0
@@ -182,16 +182,16 @@ def octet_jacobian(x, ctx):
 
     # charge row
     if ctx.charge_mode == "neutral":
-        mu_e = muL - muQ
+        mu_e = muL - muC
         Ae = kinetic_derivs(mu_e, ctx.m_e, 2.0, ctx.T)[0]
         dn_e = np.zeros(n)
-        dn_e[col["muQ"]] = -Ae
+        dn_e[col["muC"]] = -Ae
         if ctx.has_muL:
             dn_e[col["muL"]] = Ae
         dn_mu = np.zeros(n)
         if ctx.include_muons:
-            Amu = kinetic_derivs(-muQ, ctx.m_mu, 2.0, ctx.T)[0]
-            dn_mu[col["muQ"]] = -Amu
+            Amu = kinetic_derivs(-muC, ctx.m_mu, 2.0, ctx.T)[0]
+            dn_mu[col["muC"]] = -Amu
         J[row] = (dcharge - dn_e - dn_mu) / ctx.nB_nat
     else:
         J[row] = dcharge / ctx.nB_nat
@@ -204,10 +204,10 @@ def octet_jacobian(x, ctx):
 
     # lepton (Y_L) row
     if ctx.has_muL:
-        Ae = kinetic_derivs(muL - muQ, ctx.m_e, 2.0, ctx.T)[0]
+        Ae = kinetic_derivs(muL - muC, ctx.m_e, 2.0, ctx.T)[0]
         Anue = kinetic_derivs(muL, 0.0, 1.0, ctx.T)[0]
         dY = np.zeros(n)
-        dY[col["muQ"]] = -Ae
+        dY[col["muC"]] = -Ae
         dY[col["muL"]] = Ae + Anue
         J[row] = dY / ctx.nB_nat
 

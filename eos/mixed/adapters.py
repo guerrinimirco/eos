@@ -53,7 +53,7 @@ from eos.dd2.physics.octet import (
     build_octet_ctx, _baryon_kinetics, assemble_octet,
 )
 from eos.dd2.physics.kernel_numba import meson_sources_t0, _NUMBA_OK
-from eos.dd2.physics.mesons import thermal_meson_thermo
+from eos.dd2.thermodynamics import thermal_meson_thermo
 from eos.dd2.solver import solve_beta_eq_octet
 from eos.vmit.parameters import get_vmit_default
 from eos.vmit.thermodynamics import (
@@ -154,7 +154,7 @@ def hadronic_seed(par, flags, T, n_B_guess):
     return x
 
 
-def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S):
+def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_C, mu_S):
     """Meson field gaps plus baryon-density self-consistency at fixed charge
     potentials.
 
@@ -162,7 +162,7 @@ def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S):
     unknown here — unlike a normal DD2 solve, where it is given — because in a
     mixed phase only the *average* density is prescribed. DD2's couplings are
     density-dependent, so they are re-evaluated at the current nB_nat on every
-    iteration. There is no neutrality or Y_C row: mu_Q is an input.
+    iteration. There is no neutrality or Y_C row: mu_C is an input.
 
     At T=0 the per-species loop runs in the jitted `meson_sources_t0` kernel,
     which is the same closed form the NumPy path uses; T>0 keeps the NumPy path
@@ -191,13 +191,13 @@ def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S):
             spec_arr = np.asarray(ctx.specs, dtype=np.float64)
             ctx._spec_arr = spec_arr
         src_s, src_w, src_r, src_phi, n_tot = meson_sources_t0(
-            spec_arr, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S,
+            spec_arr, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S,
             Gs, Gw, Gr)
         if n_tot < 0.0:                              # m* <= 0: outside domain
             return [1.0e6] * len(x)
     else:
         kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
-                               mu_tilde_B, mu_Q, mu_S)
+                               mu_tilde_B, mu_C, mu_S)
         if kin is None:                              # m* <= 0: outside domain
             return [1.0e6] * len(x)
 
@@ -221,13 +221,13 @@ def _hadronic_residual(x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S):
     return res
 
 
-def hadronic_phase(par, flags, mu_tilde_B, mu_Q, mu_S=0.0, T=0.0,
+def hadronic_phase(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
                    n_B_guess=0.2, x0=None, return_state=False):
     """DD2 hadronic phase at fixed kinetic charge potentials.
 
     Inputs are the KINETIC baryon potential `mu_tilde_B = mu_B - Sigma^R` (which
     keeps the rearrangement self-energy and its density circularity out of the
-    iteration — see CLAUDE.md §2), the non-leptonic charge potential `mu_Q`
+    iteration — see CLAUDE.md §2), the non-leptonic charge potential `mu_C`
     (= mu_C) and the strangeness potential `mu_S`.
 
     Solves the DD-RMF meson fields and the phase's own baryon density
@@ -272,16 +272,16 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_Q, mu_S=0.0, T=0.0,
     sol = None
     for guess in guesses():
         sol = root(_hadronic_residual, guess,
-                   args=(ctx, par, flags, mu_tilde_B, mu_Q, mu_S),
+                   args=(ctx, par, flags, mu_tilde_B, mu_C, mu_S),
                    method="hybr", tol=1e-13)
         res_max = max(abs(r) for r in _hadronic_residual(
-            sol.x, ctx, par, flags, mu_tilde_B, mu_Q, mu_S))
+            sol.x, ctx, par, flags, mu_tilde_B, mu_C, mu_S))
         if res_max <= RESIDUAL_TOL:
             break
     else:
         raise RuntimeError(
             f"hadronic_phase solve failed at mu_tilde_B={mu_tilde_B}, "
-            f"mu_Q={mu_Q}, mu_S={mu_S}, T={T}: {sol.message} "
+            f"mu_C={mu_C}, mu_S={mu_S}, T={T}: {sol.message} "
             f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
 
     sigma, omega0, rho0 = sol.x[0], sol.x[1], sol.x[2]
@@ -296,13 +296,13 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_Q, mu_S=0.0, T=0.0,
     x_oct = [sigma, omega0, rho0]
     if ctx.has_phi:
         x_oct.append(phi0)
-    x_oct += [mu_tilde_B, mu_Q]
+    x_oct += [mu_tilde_B, mu_C]
     if ctx.has_muS:
         x_oct.append(mu_S)
     st = assemble_octet(x_oct, ctx)
 
     densities = st["densities"]
-    mu_B, mu_C = st["mu_B"], st["mu_Q"]
+    mu_B, mu_C = st["mu_B"], st["mu_C"]
     mu_i = {b.name: mu_B * b.baryon_no + mu_C * b.charge + mu_S * b.strangeness
             for b in ctx.baryons}
     P, eps, s = st["P"] / hc3, st["eps"] / hc3, st["s"] / hc3

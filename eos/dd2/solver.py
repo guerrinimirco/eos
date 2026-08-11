@@ -29,8 +29,8 @@ from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon, Neutron, Proton
 from eos.general.thermodynamics_leptons import photon_thermo
 import numpy as np
-from eos.dd2.physics.thermo import kF_from_n, kinetic_thermo
-from eos.dd2.physics.fields import vector_fields, rearrangement, field_eps_P
+from eos.dd2.thermodynamics import kF_from_n, kinetic_thermo
+from eos.dd2.thermodynamics import vector_fields, rearrangement, field_eps_P
 from eos.dd2.physics.residual import (
     beta_eq_nucleon_mu_eff, beta_eq_residual, make_beta_ctx,
 )
@@ -41,7 +41,7 @@ from eos.dd2.physics.jacobian import octet_jacobian
 from eos.dd2.physics.kernel_numba import (
     residual_t0_jit, jacobian_t0_jit, build_numba_arrays, _NUMBA_OK,
 )
-from eos.dd2.physics.mesons import thermal_meson_thermo
+from eos.dd2.thermodynamics import thermal_meson_thermo
 
 #: Hugenholtz–Van Hove residual gate, relative to eps.
 HVH_RTOL = 1.0e-8
@@ -216,13 +216,13 @@ def solve_snm_t0(par, n_B, check_consistency=True):
 
 
 def beta_warm_start(point):
-    """Warm-start vector [sigma, rho0, mu_eff_n, mu_Q] from a solved EoSPoint."""
+    """Warm-start vector [sigma, rho0, mu_eff_n, mu_C] from a solved EoSPoint."""
     return [point.sigma, point.rho0, point.mu_eff_n, -point.mu_e]
 
 
 def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
     """
-    Starting vector [sigma, rho0, mu_eff_n, mu_Q] from an exactly solved
+    Starting vector [sigma, rho0, mu_eff_n, mu_C] from an exactly solved
     fixed-composition point at Y_p: only the charge closure is off.
     """
     base = solve_composition(par, (1.0 - Y_p) * n_B, Y_p * n_B, T=T)
@@ -236,7 +236,7 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
     [fm^-3] and temperature T [MeV] ( mode 1: mu_S = mu_L = 0,
     charge neutrality). Photons contribute at T > 0 when include_photons.
 
-    x0: optional warm-start vector [sigma, rho0, mu_eff_n, mu_Q], e.g. from
+    x0: optional warm-start vector [sigma, rho0, mu_eff_n, mu_C], e.g. from
     beta_warm_start() of a neighbouring solution. Falls back to the default
     guess if the warm start stalls; raises RuntimeError on non-convergence
     — no silent failures.
@@ -316,12 +316,12 @@ def solve_beta_eq_t0(par, n_B, x0=None, include_muons=True,
 # OCTET: the general solve over all active baryons
 # =============================================================================
 def _octet_x0(fields, has_phi, has_muS, has_muL=False):
-    """Pack [sigma, omega0, rho0, (phi0), muB~, muQ, (muS), (muL)]."""
-    sigma, omega0, rho0, phi0, mutB, muQ, muS, muL = fields
+    """Pack [sigma, omega0, rho0, (phi0), muB~, muC, (muS), (muL)]."""
+    sigma, omega0, rho0, phi0, mutB, muC, muS, muL = fields
     x = [sigma, omega0, rho0]
     if has_phi:
         x.append(phi0)
-    x += [mutB, muQ]
+    x += [mutB, muC]
     if has_muS:
         x.append(muS)
     if has_muL:
@@ -332,8 +332,8 @@ def _octet_x0(fields, has_phi, has_muS, has_muL=False):
 def octet_warm_start(point, has_phi, has_muS=False, has_muL=False):
     """Unknown vector from a solved octet EoSPoint (for sweep continuation).
 
-    mu_Q is recovered as mu_p - mu_n (robust in trapped mode, where
-    mu_e = mu_L - mu_Q so -mu_e no longer equals mu_Q).
+    mu_C is recovered as mu_p - mu_n (robust in trapped mode, where
+    mu_e = mu_L - mu_C so -mu_e no longer equals mu_C).
     """
     return _octet_x0((point.sigma, point.omega0, point.rho0, point.phi0,
                       point.mu_n - point.Sigma_R, point.mu_p - point.mu_n,
@@ -427,7 +427,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     # fields. mu*_j n_j joins the HVH sum (the gas satisfies e+P = Ts+mu* n).
     if (flags.include_pseudoscalars or flags.include_thermal_vectors) and T > 0:
         mg = thermal_meson_thermo(
-            par, n_B, st["mu_Q"], st["mu_S"], st["omega0"], st["rho0"], T,
+            par, n_B, st["mu_C"], st["mu_S"], st["omega0"], st["rho0"], T,
             include_pseudoscalars=flags.include_pseudoscalars,
             include_thermal_vectors=flags.include_thermal_vectors)
         st["eps"] += mg["e"] * hc3
@@ -511,7 +511,7 @@ def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
     Fixed hadronic charge fraction Y_C. Two flavors:
 
     - leptons=False (2a, default): leptonless — the CompOSE general-purpose
-      (nB,T,Yq) slicing; mu_Q is the Lagrange multiplier for Y_C.
+      (nB,T,Yq) slicing; mu_C is the Lagrange multiplier for Y_C.
     - leptons=True (2b): populate electrons (+muons iff flags.muons) so the
       TOTAL is charge-neutral (n_e+n_mu = Y_C n_B, mu_e=mu_mu). The hadronic
       solve is identical to 2a; the leptons are a post-hoc neutraliser. Read
@@ -532,7 +532,7 @@ def solve_yl_octet(par, n_B, Y_L, flags, T=0.0, x0=None,
     """
     Neutrino-trapped matter at fixed electron lepton fraction
     Y_L = (n_e + n_nue)/n_B. Charge-neutral, mu_L unknown,
-    electron-neutrinos included (mu_nue = mu_L, mu_e = mu_L - mu_Q). The muon
+    electron-neutrinos included (mu_nue = mu_L, mu_e = mu_L - mu_C). The muon
     family stays transparent. Requires SpeciesFlags(neutrinos=True).
     """
     if not flags.neutrinos:

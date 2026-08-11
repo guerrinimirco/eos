@@ -65,7 +65,7 @@ def _derivs_t0(mu_eff, m, g):
 
 
 @njit(cache=True)
-def meson_sources_t0(spec, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S,
+def meson_sources_t0(spec, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S,
                      Gs_N, Gw_N, Gr_N):
     """Meson source terms and total baryon density at T=0, at fixed charge
     potentials — the inner loop of a mixed-phase hadronic solve, where the
@@ -95,7 +95,7 @@ def meson_sources_t0(spec, sigma, omega0, rho0, phi0, mu_tilde_B, mu_Q, mu_S,
         ms = mass - Gs * sigma
         if ms <= 0.0:
             return 0.0, 0.0, 0.0, 0.0, -1.0
-        mu_eff = (mu_tilde_B + Q * mu_Q + S * mu_S - Gw * omega0
+        mu_eff = (mu_tilde_B + Q * mu_C + S * mu_S - Gw * omega0
                   - Gr * t3 * rho0 - Gphi * phi0)
         n, ns = _n_ns_t0(mu_eff, ms, g)
         src_s += xs * Gs_N * ns
@@ -122,7 +122,7 @@ def residual_t0_jit(x, spec, params, flags):
     idx = 3
     phi0 = x[idx] if has_phi == 1 else 0.0
     idx += has_phi
-    mutB, muQ = x[idx], x[idx + 1]
+    mutB, muC = x[idx], x[idx + 1]
     idx += 2
     muS = x[idx] if has_muS == 1 else 0.0
     idx += has_muS
@@ -140,7 +140,7 @@ def residual_t0_jit(x, spec, params, flags):
             for k in range(n_unk):
                 res[k] = 1.0e6
             return res
-        mu_eff = (mutB + Q * muQ + S * muS - xw * Gw_N * omega0
+        mu_eff = (mutB + Q * muC + S * muS - xw * Gw_N * omega0
                   - xr * Gr_N * t3 * rho0 - xphi * Gw_N * phi0)
         n, ns = _n_ns_t0(mu_eff, ms, g)
         src_s += xs * Gs_N * ns
@@ -161,8 +161,8 @@ def residual_t0_jit(x, spec, params, flags):
     res[row] = n_tot / nB_nat - 1.0
     row += 1
     if neutral == 1:
-        n_e = _n_ns_t0(muL - muQ, m_e, 2.0)[0]
-        n_mu = _n_ns_t0(-muQ, m_mu, 2.0)[0] if inc_mu == 1 else 0.0
+        n_e = _n_ns_t0(muL - muC, m_e, 2.0)[0]
+        n_mu = _n_ns_t0(-muC, m_mu, 2.0)[0] if inc_mu == 1 else 0.0
         res[row] = (charge - n_e - n_mu) / nB_nat
     else:
         res[row] = charge / nB_nat - Y_C
@@ -171,7 +171,7 @@ def residual_t0_jit(x, spec, params, flags):
         res[row] = strange / nB_nat - Y_S
         row += 1
     if has_muL == 1:
-        n_e = _n_ns_t0(muL - muQ, m_e, 2.0)[0]
+        n_e = _n_ns_t0(muL - muC, m_e, 2.0)[0]
         n_nue = _n_ns_t0(muL, 0.0, 1.0)[0]
         res[row] = (n_e + n_nue) / nB_nat - Y_L
     return res
@@ -196,7 +196,7 @@ def jacobian_t0_jit(x, spec, params, flags):
 
     sigma, omega0, rho0 = x[0], x[1], x[2]
     phi0 = x[c_phi] if has_phi == 1 else 0.0
-    mutB, muQ = x[c_mutB], x[c_muQ]
+    mutB, muC = x[c_mutB], x[c_muQ]
     muS = x[c_muS] if has_muS == 1 else 0.0
     muL = x[c_muL] if has_muL == 1 else 0.0
 
@@ -219,7 +219,7 @@ def jacobian_t0_jit(x, spec, params, flags):
             for k in range(n_unk):
                 J2[k, k] = 1.0
             return J2
-        mu_eff = (mutB + Q * muQ + S * muS - xw * Gw_N * omega0
+        mu_eff = (mutB + Q * muC + S * muS - xw * Gw_N * omega0
                   - xr * Gr_N * t3 * rho0 - xphi * Gw_N * phi0)
         A, B, C, D = _derivs_t0(mu_eff, ms, g)
 
@@ -263,11 +263,11 @@ def jacobian_t0_jit(x, spec, params, flags):
         J[row, k] = dn_tot[k] / nB_nat
     row += 1
     if neutral == 1:
-        Ae = _derivs_t0(muL - muQ, m_e, 2.0)[0]
-        Amu = _derivs_t0(-muQ, m_mu, 2.0)[0] if inc_mu == 1 else 0.0
+        Ae = _derivs_t0(muL - muC, m_e, 2.0)[0]
+        Amu = _derivs_t0(-muC, m_mu, 2.0)[0] if inc_mu == 1 else 0.0
         for k in range(n_unk):
             J[row, k] = dcharge[k] / nB_nat
-        J[row, c_muQ] += (Ae + Amu) / nB_nat        # -(dn_e+dn_mu) at muQ
+        J[row, c_muQ] += (Ae + Amu) / nB_nat        # -(dn_e+dn_mu) at muC
         if has_muL == 1:
             J[row, c_muL] += (-Ae) / nB_nat
     else:
@@ -279,7 +279,7 @@ def jacobian_t0_jit(x, spec, params, flags):
             J[row, k] = dstrange[k] / nB_nat
         row += 1
     if has_muL == 1:
-        Ae = _derivs_t0(muL - muQ, m_e, 2.0)[0]
+        Ae = _derivs_t0(muL - muC, m_e, 2.0)[0]
         Anue = _derivs_t0(muL, 0.0, 1.0)[0]
         J[row, c_muQ] = -Ae / nB_nat
         J[row, c_muL] = (Ae + Anue) / nB_nat
