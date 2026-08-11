@@ -7,7 +7,10 @@ Routes implemented:
     from_dd2_defaults()   — published DD2 table (Typel et al. 2010, Tables II–III)
     from_microscopic(...) — user-supplied coefficients; dependent a_i, d_i derived
                             from the internal constraints when omitted
-    from_nmp(...)         — NMP inversion cascade (see nmp_inverter.py)
+
+The inverse maps that build a Parameters from physical observables live one
+layer up, where they can solve saturated matter: `nmp.from_nmp` for the
+nuclear-matter parameters.
 
 Every construction is validated in __post_init__ (the M0 ingest gate):
 positivity, f_i(1)=1 and d_i=1/sqrt(3 c_i) to INGEST_TOL.
@@ -274,27 +277,6 @@ class Parametrization:
             U_Delta, x_wD, Gs_sat, Gw_sat, sat.sigma, sat.omega0, sat.Sigma_R)
         return replace(base, x_Delta_sigma=x_Delta_sigma,
                        x_Delta_omega=x_wD, x_Delta_rho=x_rD)
-
-    @classmethod
-    def from_nmp(cls, nmp, m_sigma=546.212459, return_status=False):
-        """
-        Invert nuclear-matter parameters to DD2 nucleon couplings.
-        nmp: dict with {n_sat, E_sat, m_eff_ratio, K_sat, E_sym, L_sym}, and
-        optionally Q_sat. Without Q_sat the inversion uses the structural
-        closure (cross-constraint + pinned c_omega) and reports Q_sat and
-        K_sym as predictions in the status; with Q_sat present it is imposed
-        instead of the pin (see nmp_inverter.invert_nmp). Returns the
-        Parametrization, or (Parametrization, InversionStatus) if
-        return_status.
-
-        Hyperon/Δ sectors attach on top (same SU(6)+U_Y recipe as
-        from_dd2y_defaults / the x_Delta_* fields) once the nucleon sector is
-        set; not folded in here.
-        """
-        from eos.dd2.nmp_inverter import invert_nmp
-        par, status = invert_nmp(nmp, m_sigma=m_sigma)
-        return (par, status) if return_status else par
-
 
 def _check_dd2_defaults():
     """Standalone ingest check, mirrors the M0 gate."""

@@ -28,7 +28,7 @@ from scipy.optimize import brentq, root
 from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon, Neutron, Proton
 from eos.general.thermodynamics_leptons import photon_thermo
-from eos.dd2.xp import xp
+import numpy as np
 from eos.dd2.physics.thermo import kF_from_n, kinetic_thermo
 from eos.dd2.physics.fields import vector_fields, rearrangement, field_eps_P
 from eos.dd2.physics.residual import (
@@ -118,9 +118,9 @@ class EoSPoint:
 def _nucleon_mu_effs(n_n, n_p, ms_n, ms_p, T):
     """Effective potentials hitting the target densities [fm^-3]."""
     if T == 0.0:
-        mu_eff_n = float(xp.sqrt(kF_from_n(n_n * hc3, 2.0) ** 2 + ms_n ** 2)) \
+        mu_eff_n = float(np.sqrt(kF_from_n(n_n * hc3, 2.0) ** 2 + ms_n ** 2)) \
             if n_n > 0.0 else 0.0
-        mu_eff_p = float(xp.sqrt(kF_from_n(n_p * hc3, 2.0) ** 2 + ms_p ** 2)) \
+        mu_eff_p = float(np.sqrt(kF_from_n(n_p * hc3, 2.0) ** 2 + ms_p ** 2)) \
             if n_p > 0.0 else 0.0
         return mu_eff_n, mu_eff_p
     from eos.general.fermi_integrals import invert_fermi_density

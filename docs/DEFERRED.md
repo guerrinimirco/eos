@@ -142,11 +142,21 @@ carries the same name everywhere (`get_<model>_default` -> `Parameters.default()
 its own commit with every call site fixed alongside — no aliases, since two
 names for one thing is what the rule removes.
 
-`dd2/parameters.py` carries three function-level imports, two of them
-commented "local import breaks the cycle", because `Parametrization.from_nmp`
-and two saturation helpers reach up to `solver.py` from the bottom layer.
-Making `from_nmp` a free function in `nmp.py` removes all three; the deferred
-imports are the layering announcing itself and should not be left in place.
+`dd2/parameters.py` carried three function-level imports, two of them
+commented "local import breaks the cycle", because three constructors reach up
+to `solver.py` from the bottom layer. `from_nmp` is now a free function in
+`nmp.py` and its import is gone. Two remain: `from_hyperon_potentials` and
+`from_delta_potential`, which solve symmetric matter at saturation to invert a
+single-particle potential U_Y or U_Delta into a scalar coupling ratio.
+
+They are the same kind of object as `from_nmp` — an inverse map from a
+physical observable to a coupling, which is why they sit above `solver.py` —
+so the natural home is `nmp.py`, with that module documented as the maps
+between couplings and the quantities they are fitted to rather than as
+nuclear-matter parameters alone. What is not yet decided is whether the
+module keeps the name `nmp.py` once it holds potential inversions too. About
+ninety call sites use these as classmethods, so the move belongs with the
+`Parametrization` -> `Parameters` rename, which touches the same lines.
 
 `vmit/eos.py` is held back only because `notebooks/DD2vMIT_general1oPT`
 imports from it directly and that notebook has uncommitted work in it; the

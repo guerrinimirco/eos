@@ -11,10 +11,10 @@ T > 0: Johns-Ellis-Lattimer Fermi integrals from eos.general.fermi_integrals,
 converted from their fm-based units to natural units here so that no call site
 has to. Use this rather than calling the JEL routines directly.
 """
-from eos.dd2.xp import xp
+import numpy as np
 from eos.general.physics_constants import hc3
 
-_PI2 = xp.pi ** 2
+_PI2 = np.pi ** 2
 
 
 def kF_from_n(n, g):
@@ -31,26 +31,26 @@ def scalar_density_t0(kF, ms, g):
     """n_s [MeV^3]."""
     if kF <= 0.0:
         return 0.0
-    EF = xp.sqrt(kF ** 2 + ms ** 2)
-    return (g * ms / (4.0 * _PI2)) * (kF * EF - ms ** 2 * xp.log((kF + EF) / ms))
+    EF = np.sqrt(kF ** 2 + ms ** 2)
+    return (g * ms / (4.0 * _PI2)) * (kF * EF - ms ** 2 * np.log((kF + EF) / ms))
 
 
 def eps_kin_t0(kF, ms, g):
     """Kinetic energy density [MeV^4]."""
     if kF <= 0.0:
         return 0.0
-    EF = xp.sqrt(kF ** 2 + ms ** 2)
+    EF = np.sqrt(kF ** 2 + ms ** 2)
     return (g / (16.0 * _PI2)) * (kF * EF * (2.0 * kF ** 2 + ms ** 2)
-                                  - ms ** 4 * xp.log((kF + EF) / ms))
+                                  - ms ** 4 * np.log((kF + EF) / ms))
 
 
 def P_kin_t0(kF, ms, g):
     """Kinetic pressure [MeV^4]."""
     if kF <= 0.0:
         return 0.0
-    EF = xp.sqrt(kF ** 2 + ms ** 2)
+    EF = np.sqrt(kF ** 2 + ms ** 2)
     return (g / (48.0 * _PI2)) * (kF * EF * (2.0 * kF ** 2 - 3.0 * ms ** 2)
-                                  + 3.0 * ms ** 4 * xp.log((kF + EF) / ms))
+                                  + 3.0 * ms ** 4 * np.log((kF + EF) / ms))
 
 
 def kinetic_thermo(mu_eff, m, g, T=0.0):
@@ -70,7 +70,7 @@ def kinetic_thermo(mu_eff, m, g, T=0.0):
         kF2 = mu_eff * mu_eff - m * m
         if kF2 <= 0.0 or mu_eff <= 0.0:
             return 0.0, 0.0, 0.0, 0.0, 0.0
-        kF = xp.sqrt(kF2)
+        kF = np.sqrt(kF2)
         if m == 0.0:
             # massless (neutrinos): the ms^4 log terms are 0*inf; use the
             # ultra-relativistic closed forms (E=k, eps = g kF^4/8pi^2, P=eps/3).

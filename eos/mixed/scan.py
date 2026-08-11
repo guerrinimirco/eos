@@ -70,6 +70,7 @@ import time
 
 import numpy as np
 
+from eos.dd2.nmp import from_nmp
 from eos.dd2.parameters import Parametrization
 from eos.dd2.solver import sweep_beta_eq_octet
 from eos.vmit.parameters import get_vmit_custom
@@ -160,7 +161,7 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     reported separately. `par` is None unless `stage` is 'ok'.
     """
     nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta)
-    par, status = Parametrization.from_nmp(nmp, return_status=True)
+    par, status = from_nmp(nmp, return_status=True)
     if not status.ok:
         return None, "inversion_failed", status.message
     try:

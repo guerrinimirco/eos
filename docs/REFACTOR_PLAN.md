@@ -213,6 +213,56 @@ their tests in CLAUDE.md §5.
   static cross-check that validates RNS).
 - astro/gmode: unchanged.
 
+### 5a. Two structural decisions that the model re-cut depends on
+
+**The mode declaration is shared, in `general/`.** A mode is one binary choice
+per conserved charge: either its fraction is imposed and its potential is an
+unknown (FIXED), or its potential is set by an equilibrium relation and the
+fraction comes out (EQUILIBRATED). The field equations are never
+mode-dependent. So the three families a solver needs — field equations,
+conserved-charge relations, equilibrium relations — are each written ONCE, and
+the residual, the unknown vector and the analytic Jacobian are assembled by
+reading the declaration. No per-mode residual functions anywhere.
+
+`eos/mixed` already works this way and is the proof: its `ChargeSpec` /
+`Regime` drive `mixed_slots`, `mixed_residual` and `mixed_jacobian`, and its
+four named modes carry no per-mode code. dd2 does the same thing by branching
+inline on `ctx.charge_mode` / `has_muS` / `has_muL`, which is what welded the
+mode block onto `OctetCtx`.
+
+The declaration therefore moves to `general/`, where §7 already puts the
+conserved-charge machinery, and every model reads it. `eos/mixed` keeps its
+own on top: a two-phase system refines FIXED into GLOBAL (conserved on the
+volume average) and LOCAL (conserved inside each phase), and EQUILIBRATED is
+mixed's NOT_CONSERVED. Open when writing it: whether mixed's `ChargeSpec`
+contains the shared declaration or subclasses it, and whether the shared name
+is `ChargeSpec` (mixed's, already public) or something else.
+
+**A model's thermodynamics owns its own field solve.** Thermodynamics has two
+layers, and both belong to the model:
+
+    evaluation      at GIVEN fields and potentials -- no solve. What the
+                    residual calls on every iteration.
+    self-consistent at given CHARGE POTENTIALS, solving the model's own
+                    fields (and, for a phase of a mixture, its own density).
+                    A solve, but of nothing mode-dependent.
+
+`eos/mixed/adapters.py:hadronic_phase` is the second layer for DD2, written
+outside dd2 with its own residual, seed and gate -- a second implementation of
+DD2's field solve that can drift from the first. dd2/thermodynamics.py gains
+`thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S, T, x0)` and the
+hadronic adapter becomes a thin call that maps the result into `PhaseThermo`.
+The adapter contract then IS the thermodynamics/solver boundary rather than
+merely resembling it. The mixed hot path runs through here, so the warm start
+(`x0`, and the per-solve constant seed) has to survive the move intact.
+
+**State bases.** The per-species kernel is primitive; the conserved-charge
+entry is that composed with §2's basis map from `general/basis.py`. Both are
+public because they answer different physics: species potentials assume
+nothing and are what a frozen-composition response function needs, charge
+potentials assume strong equilibrium and are the normal case. `thermo_from_n`
+inverts per species and is thermodynamics too.
+
 Function names are the §13 vocabulary — `thermo_from_mu`, `thermo_from_n`,
 `kinetic_thermo`, `assemble`, `residual`, `default_guess`, `warm_start`,
 `solve_<mode>`, `build_table`, `Parameters.default()` — and no name repeats its

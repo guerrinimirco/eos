@@ -28,6 +28,7 @@ from eos.dd2 import (
     solve_octet_at_entropy, octet_warm_start,
     sound_speed_eq, sound_speed_adiabatic, heat_capacity_V,
 )
+from eos.dd2.nmp import from_nmp
 from eos.dd2.solver import sweep_octet
 from eos.dd2.verify.tov import build_core_table, N_TRANSITION
 from eos.tov.solver import (
@@ -457,11 +458,11 @@ def near_dd2_nmp():
 
 def build_nmp_par(nmp=None):
     """
-    ``Parametrization.from_nmp`` on the near-DD2 set. Returns (par, status);
+    ``eos.dd2.nmp.from_nmp`` on the near-DD2 set. Returns (par, status);
     the caller checks ``status.ok`` before plotting.
     """
     nmp = near_dd2_nmp() if nmp is None else nmp
-    return Parametrization.from_nmp(nmp, return_status=True)
+    return from_nmp(nmp, return_status=True)
 
 
 # =============================================================================

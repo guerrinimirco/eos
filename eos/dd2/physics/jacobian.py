@@ -3,12 +3,11 @@ physics/jacobian.py
 ====================
 Hand-coded analytic Jacobian of the octet residual.
 
-This is the "second backend" derivative engine: the report's JAX autodiff path
-is deferred (the JEL/Bose core and the T=0 threshold kink do not trace cleanly,
-report D3), so the exact solver Jacobian is supplied analytically instead. It
-makes the octet solve a true Newton step (dense J via MINPACK hybrj) and gives
-M10 the analytic thermodynamic derivatives (susceptibilities, exact c_s^2)
-without table finite-differencing.
+The exact solver Jacobian, supplied analytically because automatic
+differentiation does not survive this integrand: the JEL/Bose cores and the
+T = 0 threshold kink do not trace cleanly. It makes the octet solve a true
+Newton step (dense J via MINPACK hybrj) and gives the thermodynamic
+derivatives — susceptibilities, exact c_s^2 — without differencing a table.
 
 Kinetic derivatives d{n,ns}/d{mu_eff,m*} are closed-form at T=0 and a per-species
 finite difference of kinetic_thermo at T>0 (the JEL routine exposes no exact
@@ -16,13 +15,9 @@ derivative; differencing one species is far cleaner than differencing the whole
 residual). Everything else — the field-equation structure, the chain rule
 m*(sigma) / mu_eff(fields, potentials), and the algebraic lepton/constraint rows —
 is analytic.
-
-Kernel kept in the xp namespace so a Numba/JAX wrapper is a drop-in later
-(profiling-driven phase 2; eos_ref is sufficient now).
 """
 import numpy as np
 
-from eos.dd2.xp import xp
 from eos.dd2.physics.thermo import kinetic_thermo
 
 _PI2 = np.pi ** 2
@@ -40,12 +35,12 @@ def kinetic_derivs(mu_eff, m, g, T=0.0):
         kF2 = mu_eff * mu_eff - m * m
         if kF2 <= 0.0 or mu_eff <= 0.0:
             return 0.0, 0.0, 0.0, 0.0
-        kF = xp.sqrt(kF2)
+        kF = np.sqrt(kF2)
         if m == 0.0:
             return g * mu_eff * mu_eff / (2.0 * _PI2), 0.0, 0.0, 0.0
         dn_dmu = g * kF * mu_eff / (2.0 * _PI2)
         dn_dm = -g * kF * m / (2.0 * _PI2)
-        L = xp.log((kF + mu_eff) / m)      # EF = mu_eff at T=0
+        L = np.log((kF + mu_eff) / m)      # EF = mu_eff at T=0
         dns_dm = (g / (4.0 * _PI2)) * (kF * mu_eff - 3.0 * m * m * L)
         return dn_dmu, dn_dm, -dn_dm, dns_dm
     # T>0: central difference of the JEL kinetic thermo (per species).

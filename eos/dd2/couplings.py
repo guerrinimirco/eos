@@ -14,7 +14,7 @@ Internal constraints (used to derive dependent coefficients):
     f_i(1) = 1     =>  a_i = (1 + c_i (1+d_i)^2) / (1 + b_i (1+d_i)^2)
     f_i''(0) = 0   =>  d_i = 1 / sqrt(3 c_i)
 """
-from eos.dd2.xp import xp
+import numpy as np
 
 
 def rational_f(x, a, b, c, d):
@@ -36,7 +36,7 @@ def rational_d2f(x, a, b, c, d):
 
 def exponential_f(x, a_rho):
     """f_rho(x) for the isovector coupling."""
-    return xp.exp(-a_rho * (x - 1.0))
+    return np.exp(-a_rho * (x - 1.0))
 
 
 def exponential_df(x, a_rho):
@@ -46,7 +46,7 @@ def exponential_df(x, a_rho):
 
 def derived_d(c):
     """Dependent coefficient d_i from the f_i''(0)=0 constraint."""
-    return 1.0 / xp.sqrt(3.0 * c)
+    return 1.0 / np.sqrt(3.0 * c)
 
 
 def derived_a(b, c, d):

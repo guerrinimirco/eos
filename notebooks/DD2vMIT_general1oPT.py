@@ -112,7 +112,8 @@ from dataclasses import replace
 from collections import Counter, defaultdict
 from joblib import Parallel, delayed
 
-from eos.dd2 import Parametrization, SpeciesFlags, hadronic_row, compute_nmp
+from eos.dd2 import (Parametrization, SpeciesFlags, hadronic_row,
+                     compute_nmp, from_nmp)
 from eos.dd2.solver import sweep_beta_eq_octet, sweep_octet
 from eos.vmit.parameters import get_vmit_custom
 from eos.vmit.eos import solve_vmit_beta_eq, solve_vmit_fixed_yc
@@ -418,7 +419,7 @@ for _s in nmp_axes:
 
 # The feasible region as a picture, counting how many of the L_sym invert in
 # each (K_sat, Q_sat) cell. Read it as a map of what the SOLVER reached, not of
-# what exists: raise eos.dd2.nmp_inverter.N_RESTARTS and cells keep filling in.
+# what exists: raise eos.dd2.nmp.N_RESTARTS and cells keep filling in.
 _n_pass = Counter((r["K_sat"], r["Q_sat"])
                   for r in stage1_rows if r["inversion_ok"])
 print(f"\n  (K_sat, Q_sat) cells that invert — out of "
@@ -432,7 +433,7 @@ print(f"\n-> {len(nmp_ok)}/{len(nmp_axes)} NMP combinations invert "
       f"({time.time()-t0:.1f} s)")
 if not nmp_ok:
     raise RuntimeError("no NMP sample inverts — raise N_RESTARTS in "
-                       "eos.dd2.nmp_inverter before concluding anything about "
+                       "eos.dd2.nmp before concluding anything about "
                        "the physics, then widen SCAN_Q_SAT")
 
 # Thin evenly so the survivors still span the grid instead of clustering at
@@ -692,7 +693,7 @@ if _best["n_ok"]:
           f"m_eff_ratio={_b['m_eff_ratio']:.4f},\n"
           f"           K_sat={_b['K_sat']:.1f}, Q_sat={_b['Q_sat']:.2f}, "
           f"E_sym={_b['E_sym']:.2f}, L_sym={_b['L_sym']:.2f})")
-    print(f"PAR = Parametrization.from_nmp(NMP)")
+    print(f"PAR = from_nmp(NMP)")
     print(f"PAR = Parametrization.from_hyperon_potentials("
           f"U_Lambda={_b['U_Lambda']:.1f}, U_Sigma={_b['U_Sigma']:.1f}, "
           f"U_Xi={_b['U_Xi']:.1f}, base=PAR)")
@@ -789,7 +790,7 @@ print(f"({time.time()-t0:.1f} s)")
 #   # 1. nucleons: invert the nuclear-matter parameters at saturation
 #   NMP = dict(n_sat=0.149065, E_sat=-16.02, m_eff_ratio=0.5625,
 #              K_sat=242.7, Q_sat=169.15, E_sym=31.67, L_sym=55.03)
-#   PAR = Parametrization.from_nmp(NMP)          # add return_status=True to
+#   PAR = from_nmp(NMP)          # add return_status=True to
 #                                                # inspect the inversion residuals
 #
 #   # 2. hyperons: SU(6) vectors, scalars inverted from the potentials in SNM.
@@ -812,7 +813,7 @@ DELTA_U = dict(U_Delta=-50.0, x_wD=1.20, x_rD=1.00)
 # is a square system closed by f_sigma''(1) = f_omega''(1), which ties K_sat and
 # Q_sat together; a pair that is inconsistent with that constraint is silently
 # realised as the nearest pair that is. I.4 measures how much room there is.
-PAR, _status = Parametrization.from_nmp(NMP, return_status=True)
+PAR, _status = from_nmp(NMP, return_status=True)
 #PAR = Parametrization.from_hyperon_potentials(base=PAR, **HYPERON_U)
 #PAR = Parametrization.from_delta_potential(base=PAR, **DELTA_U)
 #VMIT = get_vmit_custom(B4=170.0, a=0.20, m_s=150.0)
@@ -1003,7 +1004,7 @@ print(f"liquid-gas spinodal and has no stable solution; those points are skipped
 # number in its ΔM_max column as "this does not matter".
 #
 # `m_sigma` is not a nuclear-matter parameter and cannot go through
-# `build_parametrization`, so it takes its own path via `Parametrization.from_nmp(nmp,
+# `build_parametrization`, so it takes its own path via `from_nmp(nmp,
 # m_sigma=...)`. Only the sigma mass is genuinely free — the omega and rho masses are
 # measured.
 
@@ -1044,7 +1045,7 @@ def _sens_par(sample, m_sigma=None):
         # has no slot for it. Go through from_nmp and add the two sectors by
         # hand, which is what build_parametrization does internally anyway.
         try:
-            par = Parametrization.from_nmp({k: s[k] for k in NMP_KEYS},
+            par = from_nmp({k: s[k] for k in NMP_KEYS},
                                            m_sigma=m_sigma)
             par = Parametrization.from_hyperon_potentials(
                 base=par, **{k: s[k] for k in HYPERON_U})

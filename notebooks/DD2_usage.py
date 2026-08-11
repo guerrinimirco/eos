@@ -96,7 +96,7 @@ PAR = Parametrization.from_dd2y_defaults()        #   DD2Y (enables hyperons bel
 # --- or an explicit NMP set (uncomment; inverts to DD2 nucleon couplings) -----
 # NMP = dict(n_sat=0.149065, E_sat=-16.02, K_sat=242.7, Q_sat=169.0,
 #            E_sym=31.67, L_sym=70.0, m_eff_ratio=0.5625)   # L_sym nudged 55→70 (stiffer sym energy)
-# PAR, _status = Parametrization.from_nmp(NMP, return_status=True)
+# PAR, _status = from_nmp(NMP, return_status=True)
 # assert _status.ok, f"NMP inversion did not converge: {_status.message}"
 
 # --- custom hyperon potentials U_YN + Δ coupling ratios (uncomment) ------------
