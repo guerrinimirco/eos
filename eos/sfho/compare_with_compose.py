@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple
 import os
 
 # My modules
-from eos.sfho.compute_tables import compute_table, TableSettings, results_to_arrays
+from eos.sfho.table import compute_table, TableSettings, results_to_arrays
 
 
 #==============================================================================

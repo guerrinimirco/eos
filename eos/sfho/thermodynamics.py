@@ -1,6 +1,6 @@
 """
-sfho_thermodynamics_hadrons.py
-================================
+thermodynamics.py
+==================
 Model-dependent hadron thermodynamics for SFHo-type RMF models.
 
 This module computes thermodynamic quantities for:
@@ -131,7 +131,7 @@ class SFHoThermo:
     particle densities (n_p, n_n or n_u, n_d, n_s) in ZL/vMIT.
     
     Includes source terms for field equations (src_sigma, src_omega, src_rho, src_phi)
-    to avoid redundant compute_hadron_thermo calls in solvers.
+    to avoid redundant baryon_thermo calls in solvers.
     """
     # Meson fields
     sigma: float = 0.0
@@ -170,7 +170,7 @@ class SFHoThermo:
 # =============================================================================
 
 
-def compute_hadron_thermo(
+def baryon_thermo(
     T: float,
     mu_B: float, mu_C: float, mu_S: float,
     sigma: float, omega: float, rho: float, phi: float,
@@ -291,7 +291,7 @@ def compute_hadron_thermo(
     )
 
 
-def compute_field_residuals(
+def field_residuals(
     sigma: float, omega: float, rho: float, phi: float,
     src_sigma: float, src_omega: float, src_rho: float, src_phi: float,
     params: SFHoParams
@@ -353,7 +353,7 @@ def compute_field_residuals(
     return res_sigma, res_omega, res_rho, res_phi
 
 
-def compute_meson_contribution(
+def meson_field_thermo(
     sigma: float, omega: float, rho: float, phi: float,
     params: SFHoParams
 ) -> Tuple[float, float]:
@@ -414,7 +414,7 @@ def compute_meson_contribution(
     return P_meson, e_meson
 
 
-def compute_pseudoscalar_meson_thermo(
+def thermal_meson_thermo(
     T: float,
     mu_C: float, mu_S: float,
     omega: float, rho: float,
@@ -602,7 +602,7 @@ def compute_pseudoscalar_meson_thermo(
     )
 
 
-def compute_sfho_thermo_from_mu_fields(
+def thermo_from_mu(
     mu_B: float, mu_C: float, mu_S: float,
     sigma: float, omega: float, rho: float, phi: float,
     T: float,
@@ -630,12 +630,12 @@ def compute_sfho_thermo_from_mu_fields(
         SFHoThermo with full thermodynamic state
     """
     # Compute baryon thermodynamics
-    hadron_result = compute_hadron_thermo(
+    hadron_result = baryon_thermo(
         T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, particles, params
     )
     
     # Mean-field meson contributions (σ, ω, ρ, φ)
-    P_mf, e_mf = compute_meson_contribution(sigma, omega, rho, phi, params)
+    P_mf, e_mf = meson_field_thermo(sigma, omega, rho, phi, params)
     
     # Total from baryons + mean-field mesons
     P_total = hadron_result.P_hadrons + P_mf
@@ -649,7 +649,7 @@ def compute_sfho_thermo_from_mu_fields(
     
     # Optional: pseudoscalar mesons (π, K, η)
     if include_pseudoscalar_mesons:
-        meson_result = compute_pseudoscalar_meson_thermo(T, mu_C, mu_S, omega, rho, params)
+        meson_result = thermal_meson_thermo(T, mu_C, mu_S, omega, rho, params)
         P_total += meson_result.P_mesons
         e_total += meson_result.e_mesons
         s_total += meson_result.s_mesons
@@ -707,12 +707,12 @@ def get_residual_vector(
     sigma, omega, rho, phi = fields
     
     # Compute hadron thermodynamics to get source terms
-    result = compute_hadron_thermo(
+    result = baryon_thermo(
         T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, particles, params
     )
     
     # Compute field equation residuals
-    res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+    res_sigma, res_omega, res_rho, res_phi = field_residuals(
         sigma, omega, rho, phi,
         result.src_sigma, result.src_omega, result.src_rho, result.src_phi,
         params
@@ -754,7 +754,7 @@ if __name__ == "__main__":
     print("-" * 50)
     nucleons = [Proton, Neutron]
     
-    result = compute_hadron_thermo(
+    result = baryon_thermo(
         T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, nucleons, params
     )
     
@@ -772,7 +772,7 @@ if __name__ == "__main__":
         print(f"  {name}: n={state.n:.4e}, m*={state.m_eff:.1f} MeV, μ*={state.mu_eff:.1f} MeV")
     
     # Field residuals
-    res = compute_field_residuals(
+    res = field_residuals(
         sigma, omega, rho, phi,
         result.src_sigma, result.src_omega, result.src_rho, result.src_phi,
         params
@@ -784,7 +784,7 @@ if __name__ == "__main__":
     print(f"  res_φ = {res[3]:.4e}")
     
     # Meson contribution
-    P_m, e_m = compute_meson_contribution(sigma, omega, rho, phi, params)
+    P_m, e_m = meson_field_thermo(sigma, omega, rho, phi, params)
     print(f"\nMeson contributions:")
     print(f"  P_meson = {P_m:.4e} MeV/fm³")
     print(f"  e_meson = {e_m:.4e} MeV/fm³")
@@ -799,7 +799,7 @@ if __name__ == "__main__":
     
     baryons = [Proton, Neutron, Lambda, SigmaP, Sigma0, SigmaM, Xi0, XiM]
     
-    result = compute_hadron_thermo(
+    result = baryon_thermo(
         T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, baryons, params
     )
     
@@ -821,7 +821,7 @@ if __name__ == "__main__":
     
     all_baryons = baryons + [DeltaPP, DeltaP, Delta0, DeltaM]
     
-    result = compute_hadron_thermo(
+    result = baryon_thermo(
         T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, all_baryons, params
     )
     
@@ -845,7 +845,7 @@ if __name__ == "__main__":
     print(f"T = {T_high} MeV, μ_C = {mu_C_test} MeV, μ_S = {mu_S_test} MeV")
     print()
     
-    meson_result = compute_pseudoscalar_meson_thermo(T_high, mu_C_test, mu_S_test, params)
+    meson_result = thermal_meson_thermo(T_high, mu_C_test, mu_S_test, params)
     
     print(f"n_C (mesons) = {meson_result.n_C_mesons:.4e} fm⁻³")
     print(f"n_S (mesons) = {meson_result.n_S_mesons:.4e} fm⁻³")
@@ -858,12 +858,12 @@ if __name__ == "__main__":
         if n > 1e-10:
             print(f"  {name:10s}: n = {n:.4e} fm⁻³")
     
-    # Test compute_sfho_thermo_from_mu_fields with mesons
+    # Test thermo_from_mu with mesons
     print("\n" + "=" * 70)
     print("TEST 5: Total EOS with baryons and mesons")
     print("-" * 50)
     
-    P_tot, e_tot, s_tot, hadron_res, meson_res = compute_sfho_thermo_from_mu_fields(
+    P_tot, e_tot, s_tot, hadron_res, meson_res = thermo_from_mu(
         T_high, mu_B, mu_C_test, mu_S_test, sigma, omega, rho, phi,
         all_baryons, params, include_pseudoscalar_mesons=True
     )

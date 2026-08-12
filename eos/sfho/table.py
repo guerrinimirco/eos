@@ -1,6 +1,6 @@
 """
-sfho_compute_tables.py
-=====================
+table.py
+========
 User-friendly script for generating SFHo EOS tables with OPTIMIZED initial guesses.
 
 Key speed optimization: Uses solutions from previous parameter values (T, Y_C)
@@ -8,11 +8,11 @@ as initial guesses for the next, dramatically reducing solver iterations.
 
 Usage:
     1. Edit the CONFIGURATION section below
-    2. Run: python sfho_compute_tables.py
+    2. Run: python -m eos.sfho.table
     
     OR import and use programmatically:
     
-    from eos.sfho.compute_tables import compute_table, TableSettings
+    from eos.sfho.table import compute_table, TableSettings
 """
 
 import numpy as np
@@ -22,14 +22,14 @@ from typing import List, Optional, Union, Dict, Any, Tuple
 from itertools import product
 
 # Import SFHo EOS modules
-from eos.sfho.eos import (
+from eos.sfho.solver import (
     SFHoEOSResult,
-    solve_sfho_beta_eq,
-    solve_sfho_fixed_yc,
-    solve_sfho_fixed_yc_ys,
-    solve_sfho_trapped_neutrinos,
-    solve_sfho_isentropic_beta_eq,
-    solve_sfho_isentropic_trapped,
+    solve_beta_eq_neutrinoless,
+    solve_fixed_yc,
+    solve_fixed_yc_ys,
+    solve_beta_eq_neutrino_trapped,
+    solve_isentropic_beta_eq,
+    solve_isentropic_trapped,
     result_to_guess,
     get_default_guess_beta_eq,
     get_default_guess_fixed_yc,
@@ -63,7 +63,7 @@ class TableSettings:
     - 'beta_eq': Beta equilibrium with charge neutrality
     - 'fixed_yc': Fixed charge fraction Y_C (hadrons only)
     - 'fixed_yc_ys': Fixed Y_C and Y_S (requires hyperons)
-    - 'trapped_neutrinos': Trapped neutrinos with fixed Y_L
+    - 'trapped_neutrinos': Trapped neutrinos with fixed Y_Le
     
     Custom parametrization:
         Use custom_params to pass a SFHoParams object directly. Example:
@@ -117,7 +117,7 @@ class TableSettings:
         'sigma', 'omega', 'rho', 'phi',
         'mu_B', 'mu_C', 'mu_S', 'mu_e', 'mu_nu',
         'P_total', 'e_total', 's_total',
-        'Y_C', 'Y_S', 'Y_L', 
+        'Y_C', 'Y_S', 'Y_Le', 
         'converged'
     ])
 
@@ -284,7 +284,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
     Y_L_list = _to_list(settings.Y_L_values)
     
     # Determine grid structure
-    # Order: composition constraints (Y_C, Y_S, Y_L) outer, T/S inner
+    # Order: composition constraints (Y_C, Y_S, Y_Le) outer, T/S inner
     # This way cross-parameter guesses come from previous T/S at same composition,
     # which is physically more sensible (T/S changes are more continuous)
     if eq_type_str == 'beta_eq':
@@ -298,13 +298,13 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
         param_names = ['Y_C', 'Y_S', 'T']
     elif eq_type_str == 'trapped_neutrinos':
         grid_params = list(product(Y_L_list, T_list))
-        param_names = ['Y_L', 'T']
+        param_names = ['Y_Le', 'T']
     elif eq_type_str == 'isentropic_beta_eq':
         grid_params = list(product(S_list))
         param_names = ['S']
     elif eq_type_str == 'isentropic_trapped':
         grid_params = list(product(Y_L_list, S_list))
-        param_names = ['Y_L', 'S']
+        param_names = ['Y_Le', 'S']
     else:
         raise ValueError(f"Unknown equilibrium type: {settings.equilibrium}")
     
@@ -337,7 +337,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
         S = param_dict.get('S')  # For isentropic modes
         Y_C = param_dict.get('Y_C')
         Y_S = param_dict.get('Y_S')
-        Y_L = param_dict.get('Y_L')
+        Y_Le = param_dict.get('Y_Le')
         
         if settings.print_results:
             param_str = ", ".join(f"{k}={v}" for k, v in param_dict.items() if v is not None)
@@ -376,7 +376,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 default_guess = get_default_guess_beta_eq(n_B, T, params)
                 if guess is None:
                     guess = default_guess
-                result = solve_sfho_beta_eq(
+                result = solve_beta_eq_neutrinoless(
                     n_B, T, params, particles,
                     include_photons=settings.include_photons,
                     include_muons=settings.include_muons,
@@ -386,7 +386,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 )
                 # Retry with default guess if first attempt failed
                 if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_sfho_beta_eq(
+                    result = solve_beta_eq_neutrinoless(
                         n_B, T, params, particles,
                         include_photons=settings.include_photons,
                         include_muons=settings.include_muons,
@@ -398,7 +398,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 default_guess = get_default_guess_fixed_yc(n_B, Y_C, T, params)
                 if guess is None:
                     guess = default_guess
-                result = solve_sfho_fixed_yc(
+                result = solve_fixed_yc(
                     n_B, Y_C, T, params, particles,
                     include_electrons=settings.include_electrons,
                     include_photons=settings.include_photons,
@@ -408,7 +408,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 )
                 # Retry with default guess if first attempt failed
                 if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_sfho_fixed_yc(
+                    result = solve_fixed_yc(
                         n_B, Y_C, T, params, particles,
                         include_electrons=settings.include_electrons,
                         include_photons=settings.include_photons,
@@ -420,7 +420,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 default_guess = get_default_guess_fixed_yc_ys(n_B, Y_C, Y_S, T, params)
                 if guess is None:
                     guess = default_guess
-                result = solve_sfho_fixed_yc_ys(
+                result = solve_fixed_yc_ys(
                     n_B, Y_C, Y_S, T, params, particles,
                     include_electrons=settings.include_electrons,
                     include_photons=settings.include_photons,
@@ -430,7 +430,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 )
                 # Retry with default guess if first attempt failed
                 if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_sfho_fixed_yc_ys(
+                    result = solve_fixed_yc_ys(
                         n_B, Y_C, Y_S, T, params, particles,
                         include_electrons=settings.include_electrons,
                         include_photons=settings.include_photons,
@@ -439,19 +439,19 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                         initial_guess=default_guess
                     )
             elif eq_type_str == 'trapped_neutrinos':
-                default_guess = get_default_guess_trapped(n_B, Y_L, T, params)
+                default_guess = get_default_guess_trapped(n_B, Y_Le, T, params)
                 if guess is None:
                     guess = default_guess
-                result = solve_sfho_trapped_neutrinos(
-                    n_B, Y_L, T, params, particles,
+                result = solve_beta_eq_neutrino_trapped(
+                    n_B, Y_Le, T, params, particles,
                     include_photons=settings.include_photons,
                     include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
                     initial_guess=guess
                 )
                 # Retry with default guess if first attempt failed
                 if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_sfho_trapped_neutrinos(
-                        n_B, Y_L, T, params, particles,
+                    result = solve_beta_eq_neutrino_trapped(
+                        n_B, Y_Le, T, params, particles,
                         include_photons=settings.include_photons,
                         include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
                         initial_guess=default_guess
@@ -461,7 +461,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 default_guess = np.append(get_default_guess_beta_eq(n_B, 10.0, params), 10.0)
                 if guess is None:
                     guess = default_guess
-                result = solve_sfho_isentropic_beta_eq(
+                result = solve_isentropic_beta_eq(
                     n_B, S, params, particles,
                     include_photons=settings.include_photons,
                     include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
@@ -469,26 +469,26 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 )
                 # Retry with default guess if first attempt failed
                 if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_sfho_isentropic_beta_eq(
+                    result = solve_isentropic_beta_eq(
                         n_B, S, params, particles,
                         include_photons=settings.include_photons,
                         include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
                         initial_guess=default_guess
                     )
             elif eq_type_str == 'isentropic_trapped':
-                # Isentropic trapped: T is unknown, S and Y_L are fixed
-                default_guess = np.append(get_default_guess_trapped(n_B, Y_L, 10.0, params), 10.0)
+                # Isentropic trapped: T is unknown, S and Y_Le are fixed
+                default_guess = np.append(get_default_guess_trapped(n_B, Y_Le, 10.0, params), 10.0)
                 if guess is None:
                     guess = default_guess
-                result = solve_sfho_isentropic_trapped(
-                    n_B, S, Y_L, params, particles,
+                result = solve_isentropic_trapped(
+                    n_B, S, Y_Le, params, particles,
                     include_photons=settings.include_photons,
                     initial_guess=guess
                 )
                 # Retry with default guess if first attempt failed
                 if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_sfho_isentropic_trapped(
-                        n_B, S, Y_L, params, particles,
+                    result = solve_isentropic_trapped(
+                        n_B, S, Y_Le, params, particles,
                         include_photons=settings.include_photons,
                         initial_guess=default_guess
                     )
@@ -528,8 +528,8 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 param_parts.append(f"Y_C={Y_C:.2f}")
             if Y_S is not None:
                 param_parts.append(f"Y_S={Y_S:.2f}")
-            if Y_L is not None:
-                param_parts.append(f"Y_L={Y_L:.2f}")
+            if Y_Le is not None:
+                param_parts.append(f"Y_Le={Y_Le:.2f}")
             if T is not None:
                 param_parts.append(f"T={T:.1f}")
             if S is not None:
@@ -617,8 +617,8 @@ def save_results(all_results: Dict[Tuple, List[SFHoEOSResult]],
                             val = r.Y_C
                         elif col == 'Y_S':
                             val = r.Y_S
-                        elif col == 'Y_L':
-                            val = getattr(r, 'Y_L', 0.0)
+                        elif col == 'Y_Le':
+                            val = getattr(r, 'Y_Le', 0.0)
                         elif col == 'mu_e':
                             val = getattr(r, 'mu_e', 0.0)
                         elif col == 'mu_C':
@@ -641,7 +641,7 @@ def results_to_arrays(results: List[SFHoEOSResult]) -> Dict[str, np.ndarray]:
     """Convert list of SFHoEOSResult to dictionary of numpy arrays."""
     attrs = [
         'n_B', 'T', 'P_total', 'e_total', 's_total', 'f_total',
-        'sigma', 'omega', 'rho', 'phi', 'mu_B', 'mu_C', 'mu_S', 'mu_L', 'mu_e', 'mu_nu',
+        'sigma', 'omega', 'rho', 'phi', 'mu_B', 'mu_C', 'mu_S', 'mu_nue', 'mu_e', 'mu_nu',
         'Y_C', 'Y_S', 'n_C', 'n_e', 'error'
     ]
     arrays = {}
@@ -709,10 +709,10 @@ COLUMN_MAPS = {
         'n_B': 0, 'T': 1, 'sigma': 2, 'omega': 3, 'rho': 4, 'phi': 5,
         'mu_B': 6, 'mu_C': 7, 'mu_S': 8, 'mu_e': 9, 'mu_nu': 10,
         'P_total': 11, 'e_total': 12, 's_total': 13,
-        'Y_C': 14, 'Y_S': 15, 'Y_L': 16, 'converged': 17
+        'Y_C': 14, 'Y_S': 15, 'Y_Le': 16, 'converged': 17
     },
     'trapped_neutrinos': {
-        'n_B': 0, 'Y_L': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
+        'n_B': 0, 'Y_Le': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
         'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
         'P_total': 12, 'e_total': 13, 's_total': 14,
         'Y_C': 15, 'Y_S': 16, 'converged': 17
@@ -721,16 +721,16 @@ COLUMN_MAPS = {
         'n_B': 0, 'Y_C': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
         'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
         'P_total': 12, 'e_total': 13, 's_total': 14,
-        'Y_S': 15, 'Y_L': 16, 'converged': 17
+        'Y_S': 15, 'Y_Le': 16, 'converged': 17
     },
     'isentropic_beta_eq': {
         'n_B': 0, 'S': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
         'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
         'P_total': 12, 'e_total': 13, 's_total': 14,
-        'Y_C': 15, 'Y_S': 16, 'Y_L': 17, 'converged': 18
+        'Y_C': 15, 'Y_S': 16, 'Y_Le': 17, 'converged': 18
     },
     'isentropic_trapped': {
-        'n_B': 0, 'Y_L': 1, 'S': 2, 'T': 3, 'sigma': 4, 'omega': 5, 'rho': 6, 'phi': 7,
+        'n_B': 0, 'Y_Le': 1, 'S': 2, 'T': 3, 'sigma': 4, 'omega': 5, 'rho': 6, 'phi': 7,
         'mu_B': 8, 'mu_C': 9, 'mu_S': 10, 'mu_e': 11, 'mu_nu': 12,
         'P_total': 13, 'e_total': 14, 's_total': 15,
         'Y_C': 16, 'Y_S': 17, 'converged': 18
@@ -740,10 +740,10 @@ COLUMN_MAPS = {
 # Grid axes for each equilibrium type (order matters for reshaping)
 GRID_AXES = {
     'beta_eq': ['n_B', 'T'],
-    'trapped_neutrinos': ['n_B', 'Y_L', 'T'],
+    'trapped_neutrinos': ['n_B', 'Y_Le', 'T'],
     'fixed_yc': ['n_B', 'Y_C', 'T'],
     'isentropic_beta_eq': ['n_B', 'S'],
-    'isentropic_trapped': ['n_B', 'Y_L', 'S'],
+    'isentropic_trapped': ['n_B', 'Y_Le', 'S'],
 }
 
 
@@ -772,7 +772,7 @@ def load_eos_table(filepath: str, eq_type: str) -> EOSTableData:
 
     Returns:
         EOSTableData with:
-        - grids: dict of 1D arrays for each axis (n_B, T, Y_L, etc.)
+        - grids: dict of 1D arrays for each axis (n_B, T, Y_Le, etc.)
         - data: dict of N-dimensional arrays for each quantity
                 e.g., data['P_total'][i, j] for beta_eq (2D)
                       data['P_total'][i, j, k] for trapped (3D)
@@ -844,10 +844,10 @@ def load_eos_table(filepath: str, eq_type: str) -> EOSTableData:
             # T is computed (isentropic cases)
             data['f_total'] = data['e_total'] - data['T'] * data['s_total']
 
-    # mu_L = mu_e + mu_nu for trapped cases (lepton chemical potential)
+    # mu_nue = mu_e + mu_nu for trapped cases (lepton chemical potential)
     if eq_type in ['trapped_neutrinos', 'isentropic_trapped']:
         if 'mu_e' in data and 'mu_nu' in data:
-            data['mu_L'] = data['mu_e'] + data['mu_nu']
+            data['mu_nue'] = data['mu_e'] + data['mu_nu']
 
     # Print summary
     print(f"  Equilibrium: {eq_type}")
@@ -871,7 +871,7 @@ class _EdgeSnapped:
 
         np.arange(0.10, 0.401, 0.05)[-1] == 0.40000000000000013
 
-    while the file reads back exactly 0.4. Asking for Y_L there is asking for a
+    while the file reads back exactly 0.4. Asking for Y_Le there is asking for a
     point *outside* the interpolation domain, and RegularGridInterpolator then
     fills the ENTIRE query with NaN -- one ULP silently blanks a whole EoS
     table, and the failure only surfaces much later (e.g. "EOS has 0 finite
@@ -942,7 +942,7 @@ def build_interpolators(table: EOSTableData,
         >>> eps = interp['eps'](0.16, 10.0)
         >>>
         >>> # For trapped neutrinos (3 arguments)
-        >>> P = interp['P'](0.16, 0.4, 50.0)  # n_B, Y_L, T
+        >>> P = interp['P'](0.16, 0.4, 50.0)  # n_B, Y_Le, T
     """
     from scipy.interpolate import RegularGridInterpolator
 
@@ -980,7 +980,7 @@ def build_interpolators(table: EOSTableData,
         result['Y_S'] = lambda nB, T: interpolators['Y_S']((nB, T))
 
     elif table.eq_type == 'trapped_neutrinos':
-        # 3D: f(n_B, Y_L, T)
+        # 3D: f(n_B, Y_Le, T)
         result['P'] = lambda nB, YL, T: interpolators['P_total']((nB, YL, T))
         result['eps'] = lambda nB, YL, T: interpolators['e_total']((nB, YL, T))
         result['s'] = lambda nB, YL, T: interpolators['s_total']((nB, YL, T))
@@ -988,7 +988,7 @@ def build_interpolators(table: EOSTableData,
         result['mu_B'] = lambda nB, YL, T: interpolators['mu_B']((nB, YL, T))
         result['mu_C'] = lambda nB, YL, T: interpolators['mu_C']((nB, YL, T))
         result['mu_S'] = lambda nB, YL, T: interpolators['mu_S']((nB, YL, T))
-        result['mu_L'] = lambda nB, YL, T: interpolators['mu_L']((nB, YL, T))
+        result['mu_nue'] = lambda nB, YL, T: interpolators['mu_nue']((nB, YL, T))
         result['mu_e'] = lambda nB, YL, T: interpolators['mu_e']((nB, YL, T))
         result['mu_nu'] = lambda nB, YL, T: interpolators['mu_nu']((nB, YL, T))
         result['Y_C'] = lambda nB, YL, T: interpolators['Y_C']((nB, YL, T))
@@ -1022,7 +1022,7 @@ def build_interpolators(table: EOSTableData,
         result['Y_S'] = lambda nB, S: interpolators['Y_S']((nB, S))
 
     elif table.eq_type == 'isentropic_trapped':
-        # 3D: f(n_B, Y_L, S)
+        # 3D: f(n_B, Y_Le, S)
         result['P'] = lambda nB, YL, S: interpolators['P_total']((nB, YL, S))
         result['eps'] = lambda nB, YL, S: interpolators['e_total']((nB, YL, S))
         result['s'] = lambda nB, YL, S: interpolators['s_total']((nB, YL, S))
@@ -1033,7 +1033,7 @@ def build_interpolators(table: EOSTableData,
         result['mu_S'] = lambda nB, YL, S: interpolators['mu_S']((nB, YL, S))
         result['mu_e'] = lambda nB, YL, S: interpolators['mu_e']((nB, YL, S))
         result['mu_nu'] = lambda nB, YL, S: interpolators['mu_nu']((nB, YL, S))
-        result['mu_L'] = lambda nB, YL, S: interpolators['mu_L']((nB, YL, S))
+        result['mu_nue'] = lambda nB, YL, S: interpolators['mu_nue']((nB, YL, S))
         result['Y_C'] = lambda nB, YL, S: interpolators['Y_C']((nB, YL, S))
         result['Y_S'] = lambda nB, YL, S: interpolators['Y_S']((nB, YL, S))
 

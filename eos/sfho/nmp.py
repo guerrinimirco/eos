@@ -1,6 +1,6 @@
 """
-sfho_nuclear_saturation_properties.py
-=====================================
+nmp.py
+======
 Compute nuclear saturation properties and hyperon potential depths
 following Typel 2022 definitions.
 
@@ -53,12 +53,12 @@ def compute_saturation_fields(params: Optional[SFHoParams] = None,
     Returns:
         (sigma, omega, rho, phi) fields in MeV
     """
-    from eos.sfho.eos import solve_sfho_fixed_yc, BARYONS_N
+    from eos.sfho.solver import solve_fixed_yc, BARYONS_N
     
     if params is None:
         params = get_sfho_nucleonic()
     
-    result = solve_sfho_fixed_yc(
+    result = solve_fixed_yc(
         n_B=n_B, Y_C=Y_C, T=T, params=params, particles=BARYONS_N,
         include_electrons=False, include_photons=False
     )
@@ -122,13 +122,13 @@ def find_saturation_density(params: Optional[SFHoParams] = None,
         n_sat in fm⁻³
     """
     from scipy.optimize import brentq
-    from eos.sfho.eos import solve_sfho_fixed_yc, BARYONS_N
+    from eos.sfho.solver import solve_fixed_yc, BARYONS_N
     
     if params is None:
         params = get_sfho_nucleonic()
     
     def pressure_at_density(n_B: float) -> float:
-        result = solve_sfho_fixed_yc(
+        result = solve_fixed_yc(
             n_B=n_B, Y_C=0.5, T=0.01, params=params, particles=BARYONS_N,
             include_electrons=False, include_photons=False
         )
@@ -141,14 +141,14 @@ def find_saturation_density(params: Optional[SFHoParams] = None,
 
 def compute_energy_per_baryon(params: Optional[SFHoParams], n_B: float, Y_C: float = 0.5) -> float:
     """Compute energy per baryon ε = e/n_B - M_N at given density and charge fraction."""
-    from eos.sfho.eos import solve_sfho_fixed_yc, BARYONS_N
+    from eos.sfho.solver import solve_fixed_yc, BARYONS_N
     
     if params is None:
         params = get_sfho_nucleonic()
     
     M_N = (params.m_n + params.m_p) / 2.0
     
-    result = solve_sfho_fixed_yc(
+    result = solve_fixed_yc(
         n_B=n_B, Y_C=Y_C, T=0.01, params=params, particles=BARYONS_N,
         include_electrons=False, include_photons=False
     )
@@ -163,12 +163,12 @@ def compute_energy_per_baryon(params: Optional[SFHoParams], n_B: float, Y_C: flo
 
 def compute_pressure(params: Optional[SFHoParams], n_B: float, Y_C: float = 0.5) -> float:
     """Compute pressure at given density and charge fraction."""
-    from eos.sfho.eos import solve_sfho_fixed_yc, BARYONS_N
+    from eos.sfho.solver import solve_fixed_yc, BARYONS_N
     
     if params is None:
         params = get_sfho_nucleonic()
     
-    result = solve_sfho_fixed_yc(
+    result = solve_fixed_yc(
         n_B=n_B, Y_C=Y_C, T=0.01, params=params, particles=BARYONS_N,
         include_electrons=False, include_photons=False
     )

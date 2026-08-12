@@ -85,11 +85,11 @@ from eos.sfho.parameters import (
     get_sfho_2fam_phi,
     get_sfho_2fam
 )
-from eos.sfho.eos import (
-    solve_sfho_beta_eq, solve_sfho_fixed_yc, SFHoEOSResult,
+from eos.sfho.solver import (
+    solve_beta_eq_neutrinoless, solve_fixed_yc, SFHoEOSResult,
     BARYONS_N, BARYONS_NY, BARYONS_NYD
 )
-from eos.sfho.compute_tables import TableSettings as SFHoTableSettings, compute_table as compute_sfho_table
+from eos.sfho.table import TableSettings as SFHoTableSettings, compute_table as compute_sfho_table
 from eos.alphabag.parameters import AlphaBagParams
 from eos.alphabag.eos import solve_alphabag_beta_eq, solve_alphabag_fixed_yc, AlphaBagEOSResult
 from eos.alphabag.compute_tables import AlphaBagTableSettings, compute_alphabag_table

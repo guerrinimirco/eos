@@ -1,25 +1,25 @@
 """
-sfho_eos.py
-===========
+solver.py
+=========
 Single-point solvers for SFHo relativistic mean-field EOS.
 
 This module provides solvers for different equilibrium conditions:
 - Beta equilibrium (charge neutrality with leptons, strangeness β-eq: μ_S = 0)
 - Fixed charge fraction Y_C (hadrons only, or with leptons for charge neutrality)
 - Fixed charge and strangeness fractions Y_C, Y_S
-- Trapped neutrinos (fixed Y_L = (n_e + n_ν)/n_B)
+- Trapped neutrinos (fixed Y_Le = (n_e + n_ν)/n_B)
 
-All thermodynamic functions are in sfho_thermodynamics_hadrons.py.
+All thermodynamic functions are in eos/sfho/thermodynamics.py.
 
 Usage:
-    from eos.sfho.eos import solve_sfho_beta_eq, solve_sfho_fixed_yc
+    from eos.sfho.solver import solve_beta_eq_neutrinoless, solve_fixed_yc
     from eos.sfho.parameters import get_sfho_2fam_phi
     from particles import Proton, Neutron, Lambda, ...
     
     params = get_sfho_2fam_phi()
     particles = [Proton, Neutron, Lambda, ...]
     
-    result = solve_sfho_beta_eq(n_B=0.16, T=10.0, params=params, particles=particles)
+    result = solve_beta_eq_neutrinoless(n_B=0.16, T=10.0, params=params, particles=particles)
     print(f"P = {result.P_total} MeV/fm³")
 
 References:
@@ -43,10 +43,10 @@ from eos.sfho.parameters import (
     SFHoParams, get_sfho_nucleonic, get_sfhoy_fortin,
     get_sfhoy_star_fortin, get_sfho_2fam_phi
 )
-from eos.sfho.thermodynamics_hadrons import (
-    compute_field_residuals,
-    compute_meson_contribution,
-    compute_sfho_thermo_from_mu_fields
+from eos.sfho.thermodynamics import (
+    field_residuals,
+    meson_field_thermo,
+    thermo_from_mu
 )
 from eos.general.thermodynamics_leptons import electron_thermo, photon_thermo, neutrino_thermo, electron_thermo_from_density
 from eos.general.physics_constants import hc, hc3, PI2
@@ -79,7 +79,7 @@ class SFHoEOSResult:
     T: float = 0.0         # Temperature (MeV)
     Y_C: float = 0.0       # Charge fraction n_C/n_B
     Y_S: float = 0.0       # Strangeness fraction n_S/n_B
-    Y_L: float = 0.0       # Lepton fraction (n_e + n_nu)/n_B
+    Y_Le: float = 0.0       # Lepton fraction (n_e + n_nu)/n_B
     
     # Meson fields (MeV)
     sigma: float = 0.0
@@ -92,8 +92,7 @@ class SFHoEOSResult:
     mu_C: float = 0.0
     mu_S: float = 0.0
     mu_e: float = 0.0      # Electron chemical potential
-    mu_L: float = 0.0      # Lepton chemical potential (for trapped neutrinos)
-    mu_nu: float = 0.0     # Neutrino chemical potential (0 for non-trapped modes)
+    mu_nue: float = 0.0    # Electron-neutrino potential (0 when they escape)
     
     # Densities (fm⁻³)
     n_C: float = 0.0       # Charge density
@@ -261,27 +260,27 @@ def get_default_guess_fixed_yc_ys(
 
 
 def get_default_guess_trapped(
-    n_B: float, Y_L: float, T: float, params: SFHoParams
+    n_B: float, Y_Le: float, T: float, params: SFHoParams
 ) -> np.ndarray:
     """
     Generate initial guess for trapped neutrinos: [σ, ω, ρ, φ, μ_B, μ_C, μ_L].
     
-    In trapped neutrino regime, Y_L = (n_e + n_ν)/n_B is fixed,
+    In trapped neutrino regime, Y_Le = (n_e + n_ν)/n_B is fixed,
     and μ_L is the lepton chemical potential (μ_e = μ_L - μ_C).
     """
     guess_beta = get_default_guess_beta_eq(n_B, T, params)
     
-    # Estimate μ_L from Y_L (higher Y_L needs higher μ_L)
-    mu_L_est = 10.0 + 50.0 * Y_L
+    # Estimate μ_L from Y_Le (higher Y_Le needs higher μ_L)
+    mu_nue_est = 10.0 + 50.0 * Y_Le
     
     return np.array([guess_beta[0], guess_beta[1], guess_beta[2], guess_beta[3],
-                     guess_beta[4], guess_beta[5], mu_L_est])
+                     guess_beta[4], guess_beta[5], mu_nue_est])
 
 
 # =============================================================================
 # SOLVER: BETA EQUILIBRIUM
 # =============================================================================
-def solve_sfho_beta_eq(
+def solve_beta_eq_neutrinoless(
     n_B: float, T: float,
     params: SFHoParams,
     particles: List[Particle],
@@ -327,13 +326,13 @@ def solve_sfho_beta_eq(
         mu_S = 0.0  # Strangeness β-equilibrium
         
         # Compute hadron thermodynamics (includes source terms and optional pseudoscalar mesons)
-        hadron = compute_sfho_thermo_from_mu_fields(
+        hadron = thermo_from_mu(
             mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Field equation residuals using source terms from hadron
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             hadron.src_sigma, hadron.src_omega, hadron.src_rho, hadron.src_phi,
             params
@@ -377,7 +376,7 @@ def solve_sfho_beta_eq(
     result.mu_e = -mu_C
     
     # Compute final thermodynamics using unified function
-    thermo = compute_sfho_thermo_from_mu_fields(
+    thermo = thermo_from_mu(
         mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
@@ -387,7 +386,7 @@ def solve_sfho_beta_eq(
     
     # Store densities (thermo.n_C already includes meson charge if enabled)
     result.n_C = thermo.n_C
-    result.n_S_val = thermo.n_S
+    result.n_S = thermo.n_S
     result.n_e = e_thermo.n
     result.Y_C = thermo.Y_C
     result.Y_S = thermo.Y_S
@@ -426,7 +425,7 @@ def solve_sfho_beta_eq(
 # =============================================================================
 # SOLVER: FIXED Y_C
 # =============================================================================
-def solve_sfho_fixed_yc(
+def solve_fixed_yc(
     n_B: float, Y_C: float, T: float,
     params: SFHoParams,
     particles: List[Particle],
@@ -475,13 +474,13 @@ def solve_sfho_fixed_yc(
         mu_S = 0.0
         
         # Compute hadron thermodynamics (includes source terms and optional pseudoscalar mesons)
-        hadron = compute_sfho_thermo_from_mu_fields(
+        hadron = thermo_from_mu(
             mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Field equation residuals using source terms from hadron
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             hadron.src_sigma, hadron.src_omega, hadron.src_rho, hadron.src_phi,
             params
@@ -516,13 +515,13 @@ def solve_sfho_fixed_yc(
     result.mu_B, result.mu_C, result.mu_S = mu_B, mu_C, mu_S
     
     # Compute final thermodynamics using unified function
-    thermo = compute_sfho_thermo_from_mu_fields(
+    thermo = thermo_from_mu(
         mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
     
     result.n_C = thermo.n_C
-    result.n_S_val = thermo.n_S
+    result.n_S = thermo.n_S
     result.Y_C = thermo.Y_C
     result.Y_S = thermo.Y_S
     
@@ -572,7 +571,7 @@ def solve_sfho_fixed_yc(
 # =============================================================================
 # SOLVER: FIXED Y_C AND Y_S
 # =============================================================================
-def solve_sfho_fixed_yc_ys(
+def solve_fixed_yc_ys(
     n_B: float, Y_C: float, Y_S: float, T: float,
     params: SFHoParams,
     particles: List[Particle],
@@ -622,13 +621,13 @@ def solve_sfho_fixed_yc_ys(
         sigma, omega, rho, phi, mu_B, mu_C, mu_S = x
         
         # Compute hadron thermodynamics (includes source terms and optional pseudoscalar mesons)
-        hadron = compute_sfho_thermo_from_mu_fields(
+        hadron = thermo_from_mu(
             mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Field equation residuals using source terms from hadron
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             hadron.src_sigma, hadron.src_omega, hadron.src_rho, hadron.src_phi,
             params
@@ -663,13 +662,13 @@ def solve_sfho_fixed_yc_ys(
     result.mu_B, result.mu_C, result.mu_S = mu_B, mu_C, mu_S
     
     # Compute final thermodynamics using unified function
-    thermo = compute_sfho_thermo_from_mu_fields(
+    thermo = thermo_from_mu(
         mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
     
     result.n_C = thermo.n_C
-    result.n_S_val = thermo.n_S
+    result.n_S = thermo.n_S
     result.Y_C = thermo.Y_C
     result.Y_S = thermo.Y_S
     
@@ -717,10 +716,10 @@ def solve_sfho_fixed_yc_ys(
 
 
 # =============================================================================
-# SOLVER: TRAPPED NEUTRINOS (FIXED Y_L)
+# SOLVER: TRAPPED NEUTRINOS (FIXED Y_Le)
 # =============================================================================
-def solve_sfho_trapped_neutrinos(
-    n_B: float, Y_L: float, T: float,
+def solve_beta_eq_neutrino_trapped(
+    n_B: float, Y_Le: float, T: float,
     params: SFHoParams,
     particles: List[Particle],
     include_photons: bool = True,
@@ -728,7 +727,7 @@ def solve_sfho_trapped_neutrinos(
     initial_guess: Optional[np.ndarray] = None
 ) -> SFHoEOSResult:
     """
-    Solve SFHo EOS with trapped neutrinos (fixed lepton fraction Y_L).
+    Solve SFHo EOS with trapped neutrinos (fixed lepton fraction Y_Le).
     
     Solves 7 equations for 7 unknowns: [σ, ω, ρ, φ, μ_B, μ_C, μ_L]
     (μ_S = 0 for strangeness β-equilibrium)
@@ -740,11 +739,11 @@ def solve_sfho_trapped_neutrinos(
         1-4. Field equations (σ, ω, ρ, φ self-consistency)
         5.   n_B = n_B_target
         6.   n_C - n_e = 0 (charge neutrality, includes meson charge if enabled)
-        7.   (n_e + n_ν)/n_B = Y_L (fixed lepton fraction)
+        7.   (n_e + n_ν)/n_B = Y_Le (fixed lepton fraction)
     
     Args:
         n_B: Baryon density (fm⁻³)
-        Y_L: Lepton fraction (n_e + n_ν)/n_B
+        Y_Le: Lepton fraction (n_e + n_ν)/n_B
         T: Temperature (MeV)
         params: SFHo parameters
         particles: List of baryon species
@@ -755,34 +754,34 @@ def solve_sfho_trapped_neutrinos(
     Returns:
         SFHoEOSResult with all thermodynamic quantities
     """
-    result = SFHoEOSResult(n_B=n_B, T=T, Y_L=Y_L)
+    result = SFHoEOSResult(n_B=n_B, T=T, Y_Le=Y_Le)
     
     if initial_guess is None:
-        x0 = get_default_guess_trapped(n_B, Y_L, T, params)
+        x0 = get_default_guess_trapped(n_B, Y_Le, T, params)
     else:
         x0 = initial_guess
     
     def equations(x):
-        sigma, omega, rho, phi, mu_B, mu_C, mu_L = x
+        sigma, omega, rho, phi, mu_B, mu_C, mu_nue = x
         mu_S = 0.0
         
         # Compute hadron thermodynamics (includes source terms and optional pseudoscalar mesons)
-        hadron = compute_sfho_thermo_from_mu_fields(
+        hadron = thermo_from_mu(
             mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Field equation residuals using source terms from hadron
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             hadron.src_sigma, hadron.src_omega, hadron.src_rho, hadron.src_phi,
             params
         )
         
         # Electron and neutrino: μ_e = μ_L - μ_C (trapped beta eq)
-        mu_e = mu_L - mu_C
+        mu_e = mu_nue - mu_C
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
-        nu_thermo = neutrino_thermo(mu_L, T, include_antiparticles=True)
+        nu_thermo = neutrino_thermo(mu_nue, T, include_antiparticles=True)
         
         # Normalize field residuals
         sigma_0 = 30.0
@@ -792,7 +791,7 @@ def solve_sfho_trapped_neutrinos(
         eq4 = res_phi / (params.m_phi**2 * sigma_0)
         eq5 = (hadron.n_B - n_B)
         eq6 = (hadron.n_C - e_thermo.n)  # charge neutrality (includes meson charge)
-        eq7 = ((e_thermo.n + nu_thermo.n) / n_B - Y_L)  # lepton fraction
+        eq7 = ((e_thermo.n + nu_thermo.n) / n_B - Y_Le)  # lepton fraction
         
         return [eq1, eq2, eq3, eq4, eq5, eq6, eq7]
     
@@ -800,7 +799,7 @@ def solve_sfho_trapped_neutrinos(
     if not sol.success:
         sol = root(equations, x0, method='lm', options={'maxiter': 2000})
     
-    sigma, omega, rho, phi, mu_B, mu_C, mu_L = sol.x
+    sigma, omega, rho, phi, mu_B, mu_C, mu_nue = sol.x
     mu_S = 0.0
     
     residuals = equations(sol.x)
@@ -810,21 +809,21 @@ def solve_sfho_trapped_neutrinos(
     
     result.sigma, result.omega, result.rho, result.phi = sigma, omega, rho, phi
     result.mu_B, result.mu_C, result.mu_S = mu_B, mu_C, mu_S
-    result.mu_L = mu_L
-    result.mu_e = mu_L - mu_C
+    result.mu_nue = mu_nue
+    result.mu_e = mu_nue - mu_C
     
     # Compute final thermodynamics using unified function
-    thermo = compute_sfho_thermo_from_mu_fields(
+    thermo = thermo_from_mu(
         mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
     
     # Lepton thermodynamics
     e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)
-    nu_thermo = neutrino_thermo(mu_L, T, include_antiparticles=True)
+    nu_thermo = neutrino_thermo(mu_nue, T, include_antiparticles=True)
     
     result.n_C = thermo.n_C
-    result.n_S_val = thermo.n_S
+    result.n_S = thermo.n_S
     result.n_e = e_thermo.n
     result.n_nu = nu_thermo.n
     result.Y_C = thermo.Y_C
@@ -880,7 +879,7 @@ def result_to_guess(
     elif eq_type in ['trapped', 'trapped_neutrinos']:
         return np.array([
             result.sigma, result.omega, result.rho, result.phi,
-            result.mu_B, result.mu_C, result.mu_L
+            result.mu_B, result.mu_C, result.mu_nue
         ])
     elif eq_type == 'isentropic_beta_eq':
         # For isentropic: include T in the guess
@@ -889,10 +888,10 @@ def result_to_guess(
             result.mu_B, result.mu_C, result.T
         ])
     elif eq_type == 'isentropic_trapped':
-        # For isentropic trapped: include mu_L and T
+        # For isentropic trapped: include mu_nue and T
         return np.array([
             result.sigma, result.omega, result.rho, result.phi,
-            result.mu_B, result.mu_C, result.mu_L, result.T
+            result.mu_B, result.mu_C, result.mu_nue, result.T
         ])
     else:
         # Default fallback
@@ -905,7 +904,7 @@ def result_to_guess(
 # =============================================================================
 # SOLVER: ISENTROPIC BETA EQUILIBRIUM
 # =============================================================================
-def solve_sfho_isentropic_beta_eq(
+def solve_isentropic_beta_eq(
     n_B: float, S_target: float,
     params: SFHoParams,
     particles: List[Particle],
@@ -943,13 +942,13 @@ def solve_sfho_isentropic_beta_eq(
         mu_S = 0.0
         
         # Compute hadron thermodynamics (includes source terms and optional pseudoscalar mesons)
-        hadron = compute_sfho_thermo_from_mu_fields(
+        hadron = thermo_from_mu(
             mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Field equation residuals using source terms from hadron
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             hadron.src_sigma, hadron.src_omega, hadron.src_rho, hadron.src_phi,
             params
@@ -991,7 +990,7 @@ def solve_sfho_isentropic_beta_eq(
     result.mu_e = -mu_C
     result.T = T
     
-    thermo = compute_sfho_thermo_from_mu_fields(
+    thermo = thermo_from_mu(
         mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params
     )
     e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)
@@ -1024,8 +1023,8 @@ def solve_sfho_isentropic_beta_eq(
 # =============================================================================
 # SOLVER: ISENTROPIC TRAPPED NEUTRINOS
 # =============================================================================
-def solve_sfho_isentropic_trapped(
-    n_B: float, S_target: float, Y_L_target: float,
+def solve_isentropic_trapped(
+    n_B: float, S_target: float, Y_Le_target: float,
     params: SFHoParams,
     particles: List[Particle],
     include_photons: bool = True,
@@ -1039,7 +1038,7 @@ def solve_sfho_isentropic_trapped(
     Args:
         n_B: Baryon density (fm⁻³)
         S_target: Entropy per baryon
-        Y_L_target: Lepton fraction (n_e + n_nu)/n_B
+        Y_Le_target: Lepton fraction (n_e + n_nu)/n_B
         params: SFHo parameters
         particles: List of baryon species
         include_photons: Include photon contributions
@@ -1049,36 +1048,35 @@ def solve_sfho_isentropic_trapped(
         SFHoEOSResult with T as output
     """
     if initial_guess is None:
-        guess_trapped = get_default_guess_trapped(n_B, Y_L_target, 10.0, params)
+        guess_trapped = get_default_guess_trapped(n_B, Y_Le_target, 10.0, params)
         x0 = np.append(guess_trapped, 10.0)
     else:
         x0 = initial_guess
         
-    result = SFHoEOSResult(n_B=n_B, Y_L=Y_L_target)
+    result = SFHoEOSResult(n_B=n_B, Y_Le=Y_Le_target)
     
     def equations(x):
-        sigma, omega, rho, phi, mu_B, mu_C, mu_L, T = x
+        sigma, omega, rho, phi, mu_B, mu_C, mu_nue, T = x
         mu_S = 0.0
         
         if T < 0.1: T = 0.1
         
-        mu_e = mu_L - mu_C
-        mu_nu = mu_L
-        
+        mu_e = mu_nue - mu_C
+
         # Compute hadron thermodynamics (includes source terms)
-        hadron = compute_sfho_thermo_from_mu_fields(
+        hadron = thermo_from_mu(
             mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params
         )
         
         # Field equation residuals using source terms from hadron
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             hadron.src_sigma, hadron.src_omega, hadron.src_rho, hadron.src_phi,
             params
         )
         
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
-        nu_thermo = neutrino_thermo(mu_nu, T, include_antiparticles=True)
+        nu_thermo = neutrino_thermo(mu_nue, T, include_antiparticles=True)
         
         # Total entropy (hadron.s is from unified function)
         s_total = hadron.s + e_thermo.s + nu_thermo.s
@@ -1093,7 +1091,7 @@ def solve_sfho_isentropic_trapped(
         eq4 = res_phi / (params.m_phi**2 * sigma_0)
         eq5 = (hadron.n_B - n_B)
         eq6 = (hadron.n_C - e_thermo.n)  # Charge neutrality
-        eq7 = (e_thermo.n + nu_thermo.n)/n_B - Y_L_target  # Lepton fraction
+        eq7 = (e_thermo.n + nu_thermo.n)/n_B - Y_Le_target  # Lepton fraction
         eq8 = (s_total / n_B - S_target)  # Entropy constraint
         
         return [eq1, eq2, eq3, eq4, eq5, eq6, eq7, eq8]
@@ -1102,7 +1100,7 @@ def solve_sfho_isentropic_trapped(
     if not sol.success:
         sol = root(equations, x0, method='lm', options={'maxiter': 3000})
 
-    sigma, omega, rho, phi, mu_B, mu_C, mu_L, T = sol.x
+    sigma, omega, rho, phi, mu_B, mu_C, mu_nue, T = sol.x
     mu_S = 0.0
     
     residuals = equations(sol.x)
@@ -1111,17 +1109,16 @@ def solve_sfho_isentropic_trapped(
     
     result.sigma, result.omega, result.rho, result.phi = sigma, omega, rho, phi
     result.mu_B, result.mu_C, result.mu_S = mu_B, mu_C, mu_S
-    result.mu_e = mu_L - mu_C
-    result.mu_nu = mu_L
-    result.mu_L = mu_L
+    result.mu_e = mu_nue - mu_C
+    result.mu_nue = mu_nue
     result.T = T
     
-    thermo = compute_sfho_thermo_from_mu_fields(
+    thermo = thermo_from_mu(
         mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, particles, params
     )
     
     e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)
-    nu_thermo = neutrino_thermo(result.mu_nu, T, include_antiparticles=True)
+    nu_thermo = neutrino_thermo(result.mu_nue, T, include_antiparticles=True)
     
     result.n_C = thermo.n_C
     result.n_e = e_thermo.n
@@ -1166,7 +1163,7 @@ if __name__ == "__main__":
     # Test 1: Beta equilibrium with nucleons only
     print("\n" + "-" * 50)
     print("TEST 1: Beta equilibrium (nucleons only)")
-    r = solve_sfho_beta_eq(n_B, T, params, BARYONS_N)
+    r = solve_beta_eq_neutrinoless(n_B, T, params, BARYONS_N)
     print(f"  converged = {r.converged}, error = {r.error:.2e}")
     print(f"  σ = {r.sigma:.2f} MeV, ω = {r.omega:.2f} MeV")
     print(f"  Y_C = {r.Y_C:.4f}, P = {r.P_total:.2f} MeV/fm³")
@@ -1176,7 +1173,7 @@ if __name__ == "__main__":
     # Test 2: Beta equilibrium with hyperons
     print("\n" + "-" * 50)
     print("TEST 2: Beta equilibrium (nucleons + hyperons)")
-    r = solve_sfho_beta_eq(0.32, T, params, BARYONS_NY)
+    r = solve_beta_eq_neutrinoless(0.32, T, params, BARYONS_NY)
     print(f"  converged = {r.converged}, error = {r.error:.2e}")
     print(f"  Y_C = {r.Y_C:.4f}, Y_S = {r.Y_S:.4f}")
     print(f"  P = {r.P_total:.2f} MeV/fm³")
@@ -1184,14 +1181,14 @@ if __name__ == "__main__":
     # Test 3: Fixed Y_C (hadrons only)
     print("\n" + "-" * 50)
     print("TEST 3: Fixed Y_C = 0.3 (hadrons only)")
-    r = solve_sfho_fixed_yc(n_B, Y_C=0.3, T=T, params=params, particles=BARYONS_N)
+    r = solve_fixed_yc(n_B, Y_C=0.3, T=T, params=params, particles=BARYONS_N)
     print(f"  converged = {r.converged}, error = {r.error:.2e}")
     print(f"  Y_C = {r.Y_C:.4f}, P = {r.P_total:.2f} MeV/fm³")
     
     # Test 4: Fixed Y_C = 0.5 (symmetric)
     print("\n" + "-" * 50)
     print("TEST 4: Fixed Y_C = 0.5 (symmetric matter)")
-    r = solve_sfho_fixed_yc(n_B, Y_C=0.5, T=T, params=params, particles=BARYONS_N)
+    r = solve_fixed_yc(n_B, Y_C=0.5, T=T, params=params, particles=BARYONS_N)
     print(f"  converged = {r.converged}, error = {r.error:.2e}")
     print(f"  P = {r.P_total:.2f} MeV/fm³")
     print(f"  n_p = {r.baryon_densities.get('p', 0):.4e} fm⁻³")
@@ -1200,7 +1197,7 @@ if __name__ == "__main__":
     # Test 5: Fixed Y_C and Y_S
     print("\n" + "-" * 50)
     print("TEST 5: Fixed Y_C = 0.4, Y_S = 0.1 (with hyperons)")
-    r = solve_sfho_fixed_yc_ys(0.32, Y_C=0.4, Y_S=0.1, T=T,
+    r = solve_fixed_yc_ys(0.32, Y_C=0.4, Y_S=0.1, T=T,
                                params=params, particles=BARYONS_NY)
     print(f"  converged = {r.converged}, error = {r.error:.2e}")
     print(f"  Y_C = {r.Y_C:.4f}, Y_S = {r.Y_S:.4f}")
@@ -1209,13 +1206,13 @@ if __name__ == "__main__":
     
     # Test 6: Trapped neutrinos
     print("\n" + "-" * 50)
-    print("TEST 6: Trapped neutrinos Y_L = 0.4")
-    r = solve_sfho_trapped_neutrinos(n_B, Y_L=0.4, T=50.0, params=params, 
+    print("TEST 6: Trapped neutrinos Y_Le = 0.4")
+    r = solve_beta_eq_neutrino_trapped(n_B, Y_Le=0.4, T=50.0, params=params, 
                                       particles=BARYONS_N)
     print(f"  converged = {r.converged}, error = {r.error:.2e}")
-    print(f"  Y_C = {r.Y_C:.4f}, Y_L = {r.Y_L:.4f}")
+    print(f"  Y_C = {r.Y_C:.4f}, Y_Le = {r.Y_Le:.4f}")
     print(f"  n_e = {r.n_e:.4e}, n_ν = {r.n_nu:.4e}")
-    print(f"  μ_L = {r.mu_L:.2f} MeV")
+    print(f"  μ_L = {r.mu_nue:.2f} MeV")
     print(f"  P = {r.P_total:.2f} MeV/fm³")
     
     print("\n" + "=" * 60)

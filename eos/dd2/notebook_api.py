@@ -482,7 +482,7 @@ def benchmark_dd2_vs_sfho(par, grid=None, T=0.0, Y_C=0.3):
     NumPy (the JEL integrals don't jit), so the ms/pt is naturally larger.
     """
     from eos.dd2.solver import sweep_octet
-    from eos.sfho.compute_tables import compute_table, TableSettings
+    from eos.sfho.table import compute_table, TableSettings
     grid = default_grid(n=100) if grid is None else np.asarray(grid, float)
     n = len(grid)
     photons = T > 0.0

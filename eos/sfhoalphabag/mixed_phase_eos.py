@@ -26,14 +26,14 @@ from enum import Enum
 
 # SFHo (hadronic) modules
 from eos.sfho.parameters import SFHoParams, get_sfho_nucleonic
-from eos.sfho.thermodynamics_hadrons import (
-    compute_sfho_thermo_from_mu_fields,
-    compute_field_residuals,
-    compute_meson_contribution
+from eos.sfho.thermodynamics import (
+    thermo_from_mu,
+    field_residuals,
+    meson_field_thermo
 )
-from eos.sfho.eos import (
-    solve_sfho_beta_eq as solve_pure_H_beta,
-    solve_sfho_fixed_yc as solve_pure_H_fixed_yc,
+from eos.sfho.solver import (
+    solve_beta_eq_neutrinoless as solve_pure_H_beta,
+    solve_fixed_yc as solve_pure_H_fixed_yc,
     SFHoEOSResult
 )
 
@@ -375,12 +375,12 @@ def solve_eta0_beta(n_B: float, T: float,
         mu_S_H = 0.0  # Strangeness weak eq. in hadronic phase
         
         # Hadronic thermodynamics
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params, include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Get field residuals using source terms from had
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -424,7 +424,7 @@ def solve_eta0_beta(n_B: float, T: float,
     mu_S_H = 0.0
     
     # Final thermodynamics
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params, include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
     qua = compute_alphabag_thermo_from_mu(mu_u, mu_d, mu_s, T, alphabag_params)
@@ -504,10 +504,10 @@ def solve_eta1_beta(n_B: float, T: float,
         sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, chi = x
         mu_S_H = 0.0
         
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params, include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -542,7 +542,7 @@ def solve_eta1_beta(n_B: float, T: float,
     sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, chi = sol.x
     mu_S_H = 0.0
     
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
@@ -621,10 +621,10 @@ def solve_eta0_fixed_yc(n_B: float, Y_C: float, T: float,
         sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eG, chi = x
         mu_S_H = 0.0
         
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params, include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -661,7 +661,7 @@ def solve_eta0_fixed_yc(n_B: float, Y_C: float, T: float,
     sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eG, chi = sol.x
     mu_S_H = 0.0
     
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
@@ -743,11 +743,11 @@ def solve_eta1_fixed_yc(n_B: float, Y_C: float, T: float,
         sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, chi = x
         mu_S_H = 0.0
         
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -782,7 +782,7 @@ def solve_eta1_fixed_yc(n_B: float, Y_C: float, T: float,
     sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, chi = sol.x
     mu_S_H = 0.0
     
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
@@ -925,13 +925,13 @@ def solve_eta0_fixed_chi_beta(T: float, chi: float,
         mu_S_H = 0.0  # Strangeness β-eq in hadronic phase
         
         # Hadronic thermodynamics (includes source terms)
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Get field residuals using source terms from had
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -975,7 +975,7 @@ def solve_eta0_fixed_chi_beta(T: float, chi: float,
     mu_S_H = 0.0
     
     # Final thermodynamics
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
@@ -1043,11 +1043,11 @@ def solve_eta0_fixed_chi_yc(T: float, chi: float, Y_C: float,
         sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eG, n_B = x
         mu_S_H = 0.0
         
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -1088,7 +1088,7 @@ def solve_eta0_fixed_chi_yc(T: float, chi: float, Y_C: float,
     sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eG, n_B = sol.x
     mu_S_H = 0.0
     
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
@@ -1171,13 +1171,13 @@ def solve_eta1_fixed_chi_beta(T: float, chi: float,
         mu_S_H = 0.0
         
         # Hadronic thermodynamics (includes source terms)
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
         
         # Get field residuals using source terms from had
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -1223,7 +1223,7 @@ def solve_eta1_fixed_chi_beta(T: float, chi: float,
     mu_S_H = 0.0
     
     # Final thermodynamics
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )
@@ -1285,7 +1285,7 @@ def solve_eta1_fixed_chi_yc(T: float, chi: float, Y_C: float,
     if alphabag_params is None:
         alphabag_params = AlphaBagParams("default", 180.0, 0.1 * np.pi / 2)
     if particles is None:
-        from eos.sfho.eos import BARYONS_NYD
+        from eos.sfho.solver import BARYONS_NYD
         particles = BARYONS_NYD
     
     n_B_est = chi * 0.6 + (1 - chi) * 0.4
@@ -1303,11 +1303,11 @@ def solve_eta1_fixed_chi_yc(T: float, chi: float, Y_C: float,
         sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_B = x
         mu_S_H = 0.0
         
-        had = compute_sfho_thermo_from_mu_fields(
+        had = thermo_from_mu(
             mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
             include_pseudoscalar_mesons=include_pseudoscalar_mesons
         )
-        res_sigma, res_omega, res_rho, res_phi = compute_field_residuals(
+        res_sigma, res_omega, res_rho, res_phi = field_residuals(
             sigma, omega, rho, phi,
             had.src_sigma, had.src_omega, had.src_rho, had.src_phi, sfho_params
         )
@@ -1343,7 +1343,7 @@ def solve_eta1_fixed_chi_yc(T: float, chi: float, Y_C: float,
     sigma, omega, rho, phi, mu_B_H, mu_C_H, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_B = sol.x
     mu_S_H = 0.0
     
-    had = compute_sfho_thermo_from_mu_fields(
+    had = thermo_from_mu(
         mu_B_H, mu_C_H, mu_S_H, sigma, omega, rho, phi, T, particles, sfho_params,
         include_pseudoscalar_mesons=include_pseudoscalar_mesons
     )

@@ -72,7 +72,7 @@ All dependencies are automatically installed via pip.
 
 ```python
 import numpy as np
-from eos.sfho.compute_tables import TableSettings, compute_table
+from eos.sfho.table import TableSettings, compute_table
 
 # Generate a simple beta-equilibrium EOS table
 settings = TableSettings(
@@ -182,7 +182,7 @@ eos/
 The SFHo model is a Relativistic Mean Field (RMF) model with σ-ω-ρ-φ meson exchange.
 
 ```python
-from eos.sfho.compute_tables import TableSettings, compute_table
+from eos.sfho.table import TableSettings, compute_table
 import numpy as np
 
 settings = TableSettings(
