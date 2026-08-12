@@ -80,12 +80,12 @@ def default_guess(ctx):
     from eos.vmit.eos import solve_vmit_beta_eq
     base = solve_beta_eq_octet(ctx.par, ctx.n_B, ctx.flags, T=ctx.T,
                                include_photons=False, check_consistency=False)
-    mu_tilde_B = base.mu_n - base.Sigma_R
+    mu_tilde_B = base.mu_B - base.Sigma_R
     try:
         q = solve_vmit_beta_eq(ctx.n_B, ctx.T, params=ctx.vmit_params)
         mu_B_Q, mu_eL_Q = q.mu_B, q.mu_e
     except Exception:
-        mu_B_Q, mu_eL_Q = base.mu_n, base.mu_e
+        mu_B_Q, mu_eL_Q = base.mu_B, base.mu_e
     seed = {
         "mu_tilde_B_H": mu_tilde_B,
         "mu_B_Q": mu_B_Q,

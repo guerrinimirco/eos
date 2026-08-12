@@ -57,10 +57,11 @@ _GOLDEN_SNM_016 = dict(mstar_m=0.54247, eps=147.6750, P=0.34289, mu_B=925.112)
 def _check_golden(par):
     p = solve_snm(par, 0.16)
     errs = {
-        "m*/m": abs(p.m_eff / par.m_nucleon / _GOLDEN_SNM_016["mstar_m"] - 1),
+        "m*/m": abs(p.m_eff("n") / par.m_nucleon
+                    / _GOLDEN_SNM_016["mstar_m"] - 1),
         "eps": abs(p.eps / _GOLDEN_SNM_016["eps"] - 1),
         "P": abs(p.P / _GOLDEN_SNM_016["P"] - 1),
-        "mu_B": abs(p.mu_n / _GOLDEN_SNM_016["mu_B"] - 1),
+        "mu_B": abs(p.mu_B / _GOLDEN_SNM_016["mu_B"] - 1),
     }
     m = max(errs.values())
     return CheckResult("golden points", m < 1e-4, m,
@@ -71,7 +72,8 @@ def _check_identities(par, flags, grid):
     worst = 0.0
     for n_B in grid:
         p = solve_beta_eq_octet(par, n_B, flags)
-        worst = max(worst, abs(p.hvh_rel), abs(p.mu_n - p.mu_p - p.mu_e) / p.mu_n)
+        worst = max(worst, abs(p.hvh_rel),
+                     abs(-p.mu_C - p.mu_e) / p.mu_B)
     return CheckResult("thermo identities", worst < 1e-8, worst,
                        "HVH + beta residual over grid")
 
@@ -118,7 +120,7 @@ def _check_backend_parity(par, flags, grid):
     for n_B in grid:
         a = solve_octet(par, n_B, flags, include_photons=False, analytic_jac=True)
         r = solve_octet(par, n_B, flags, include_photons=False, analytic_jac=False)
-        for f in ("eps", "P", "mu_n", "sigma", "omega0"):
+        for f in ("eps", "P", "mu_B", "sigma", "omega0"):
             va, vr = getattr(a, f), getattr(r, f)
             if abs(vr) > 1e-9:
                 worst = max(worst, abs(va / vr - 1.0))

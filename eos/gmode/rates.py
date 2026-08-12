@@ -177,7 +177,7 @@ def susceptibility_A(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3):
         pt = solve_composition(par, n_n, n_p, T=T, check_consistency=False)
         mu_e, _e, _m = neutralizing_leptons(
             n_p * hc3, Electron.mass, Muon.mass, muons, T)
-        return pt.mu_n - pt.mu_p - mu_e
+        return -pt.mu_C - mu_e
 
     n_n0 = (1.0 - Y_p) * n_B
     A_fm = (mu_delta(n_n0 + dn) - mu_delta(n_n0 - dn)) / (2.0 * dn)
@@ -211,14 +211,14 @@ def equilibration_rate(par, n_B, Y_p, T, muons=True, processes="both",
     p_Fn, p_Fp = _fermi_momentum(n_n), _fermi_momentum(n_p)
     p_Fe = np.sqrt(max(mu_e**2 - Electron.mass**2, 0.0))
     # Each rate gets the mass its own source prescribes: the Dirac effective
-    # mass for direct Urca, the vacuum masses for modified Urca. DD2 carries a
-    # single isospin-averaged effective mass, which is well inside the accuracy
-    # of the Fermi-surface approximation.
-    m_eff = pt.m_eff
+    # masses for direct Urca, the vacuum masses for modified Urca. The two
+    # nucleons carry their own m*_i; they coincide under DD2's default
+    # averaged kernel mass and differ when nucleon_mass_mode splits them.
+    m_eff_n, m_eff_p = pt.m_eff("n"), pt.m_eff("p")
 
     lam = 0.0
     if processes in ("both", "direct"):
-        lam += lambda_direct_urca(p_Fn, p_Fp, p_Fe, m_eff, m_eff, T)
+        lam += lambda_direct_urca(p_Fn, p_Fp, p_Fe, m_eff_n, m_eff_p, T)
     if processes in ("both", "modified"):
         lam += lambda_modified_urca(p_Fn, p_Fp, p_Fe, par.m_n, par.m_p, T)
     if processes not in ("both", "direct", "modified"):

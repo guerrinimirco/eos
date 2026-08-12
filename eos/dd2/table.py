@@ -80,9 +80,9 @@ def hadronic_row(p, flags):
     n_B = p.n_B
     _, n_C, n_S = hadronic_charges(flags, p.composition_map)
     row = dict(n_B=n_B, T=p.T, chi=0.0, phase="H", P=p.P, eps=p.eps, s=p.s,
-               S_per_B=(p.s / n_B if n_B else 0.0), mu_B=p.mu_n,
+               S_per_B=(p.s / n_B if n_B else 0.0), mu_B=p.mu_B,
                Y_C=n_C / n_B, Y_S=n_S / n_B,
-               mu_e=p.mu_e, mu_S=p.mu_S, mu_L=p.mu_L,
+               mu_e=p.mu_e, mu_S=p.mu_S, mu_L=p.mu_nue,
                Y_e=p.n_e / n_B, **{"Y_mu-": p.n_mu / n_B})
     for name, n in p.composition_map.items():
         row[f"Y_{name}"] = n / n_B

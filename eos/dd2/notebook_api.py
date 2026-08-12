@@ -173,7 +173,7 @@ def plot_sound_speed(par, flags=NUCLEONIC, grid=None, T=0.0):
         # truncate the curve there instead of raising.
         try:
             Y_p = solve_beta_eq_octet(par, float(n), flags, T=T,
-                                      include_photons=False).Y_p
+                                      include_photons=False).Y("p")
             c_ad = sound_speed_adiabatic(par, float(n), Y_p, T=T)
             c_eq = sound_speed_eq(par, float(n), flags, T=T)
         except RuntimeError:
@@ -205,7 +205,8 @@ def _heat_capacity_P(par, n_B, flags, T, cv_vol, rel_dn=1e-3, dT=1e-2):
     # ponytail: frozen-composition Mayer relation; swap for an analytic C_P if
     # responses_jac ever grows one.
     """
-    Y_p = solve_beta_eq_octet(par, n_B, flags, T=T, include_photons=False).Y_p
+    Y_p = solve_beta_eq_octet(par, n_B, flags, T=T,
+                              include_photons=False).Y("p")
     P = lambda n, t: solve_composition(par, (1 - Y_p) * n, Y_p * n, T=t).P
     dP_dT = (P(n_B, T + dT) - P(n_B, T - dT)) / (2 * dT)
     dP_dn = (P(n_B * (1 + rel_dn), T) - P(n_B * (1 - rel_dn), T)) \

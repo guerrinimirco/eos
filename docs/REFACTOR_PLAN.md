@@ -190,6 +190,15 @@ their tests in CLAUDE.md §5.
   public vocabulary and appear in notebooks — and turns them into a spec in
   one place, `solver.mode_spec`.
 
+  `EoSPoint` took the hard break the records were built for: the nucleon
+  fields `n_n, n_p, m_eff, mu_eff_n, mu_eff_p, mu_n, mu_p, mu_L` are gone, and
+  every active baryon is carried the same way through `composition`,
+  `mu_eff_i` and `m_eff_i`, read by `.n(name)`, `.mu_eff(name)`,
+  `.m_eff(name)`. `.mu(name)` derives mu_i = B_i mu_B + C_i mu_C + S_i mu_S
+  from section 2's basis rather than storing it. No aliases were left behind,
+  so a missed call site raises AttributeError instead of reading a stale
+  scalar.
+
   `backends/` being deletable is now a measured fact rather than a claim:
   nothing in it is re-exported from `eos/dd2/__init__.py`, and both
   `solver.py` and `thermodynamics.py` import it under `try/except ImportError`

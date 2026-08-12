@@ -115,7 +115,7 @@ def susceptibilities(par, n_B, flags, T=0.0):
     x = [p.sigma, p.omega0, p.rho0]
     if has_phi:
         x.append(p.phi0)
-    x += [p.mu_n - p.Sigma_R, p.mu_p - p.mu_n, 0.0]
+    x += [p.mu_B - p.Sigma_R, p.mu_C, 0.0]
     J = np.array(octet_jacobian(np.array(x), ctx, held))
 
     n_f = 3 + int(has_phi)

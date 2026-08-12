@@ -50,6 +50,7 @@ from scipy.optimize import brentq, root
 from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon, Neutron, Proton
 from eos.general.thermodynamics_leptons import photon_thermo
+from eos.general.basis import species_potential
 from eos.general.modes import (
     Conservation, ModeSpec, electron_potential, muon_potential,
     strangeness_potential,
@@ -83,20 +84,29 @@ RESIDUAL_TOL = 1.0e-10
 
 @dataclass(frozen=True)
 class EoSPoint:
-    """One solved thermodynamic state (lite version of)."""
+    """One solved thermodynamic state.
+
+    Every baryon is carried the same way. The three per-species tuples --
+    `composition`, `mu_eff_i`, `m_eff_i` -- run over EVERY active baryon, so a
+    Lambda is read exactly as a neutron is, through `.n("Lambda")`,
+    `.mu_eff("Lambda")`, `.m_eff("Lambda")`. Neither mu_eff_i nor m_eff_i is
+    recoverable from the rest of the record -- they need the mean fields and
+    the per-species coupling ratios -- which is why they are carried rather
+    than recomputed by every consumer.
+
+    The potentials are CLAUDE.md section 2's conserved-charge basis. Species
+    potentials are derived from it, mu_i = B_i mu_B + C_i mu_C + S_i mu_S, so
+    the neutron potential is `mu_B` and mu_p - mu_n is `mu_C`; both are
+    available per species through `.mu("n")`.
+    """
     n_B: float          # fm^-3
     T: float            # MeV
-    n_n: float          # fm^-3
-    n_p: float          # fm^-3
     sigma: float        # MeV
     omega0: float       # MeV
     rho0: float         # MeV
-    m_eff: float        # MeV (Dirac effective nucleon mass)
     Sigma_R: float      # MeV (rearrangement self-energy)
-    mu_eff_n: float     # MeV (effective potential mu_n - Sigma0_n)
-    mu_eff_p: float     # MeV
-    mu_n: float         # MeV
-    mu_p: float         # MeV
+    mu_B: float         # MeV
+    mu_C: float         # MeV (mu_p - mu_n; beta equilibrium is mu_C + mu_e = 0)
     eps: float          # MeV/fm^3 (total, incl. leptons/photons when present)
     P: float            # MeV/fm^3 (total, incl. leptons/photons when present)
     s: float            # fm^-3 (total entropy density)
@@ -105,10 +115,13 @@ class EoSPoint:
     n_mu: float = 0.0   # fm^-3 (net)
     mu_e: float = 0.0   # MeV
     mu_S: float = 0.0   # MeV (strangeness potential; 0 unless strangeness fixed)
-    mu_L: float = 0.0   # MeV (lepton potential; 0 unless neutrino-trapped)
+    mu_nue: float = 0.0  # MeV (electron-neutrino potential; 0 unless trapped)
     n_nu: float = 0.0   # fm^-3 (net electron-neutrino density; trapped only)
     phi0: float = 0.0   # MeV (hidden-strange vector; 0 without hyperons)
-    composition: tuple = ()  # ((name, n_i [fm^-3]), ...) all active baryons
+    #: Per active baryon, as ((name, value), ...) so the record stays frozen.
+    composition: tuple = ()   # n_i [fm^-3]
+    mu_eff_i: tuple = ()      # mu_i - Sigma0_i [MeV]
+    m_eff_i: tuple = ()       # Dirac effective mass m*_i [MeV]
     #: The TOTAL non-leptonic charge and strangeness fractions of the state --
     #: baryons PLUS any thermal meson gas, which carries both. They are what
     #: the fixed-Y_C / fixed-Y_S conditions are stated in terms of, so a state
@@ -119,8 +132,32 @@ class EoSPoint:
     Y_S: float = 0.0
 
     @property
-    def Y_p(self):
-        return self.n_p / self.n_B
+    def composition_map(self):
+        return dict(self.composition)
+
+    def n(self, name):
+        """Density n_i [fm^-3] of baryon `name` (0 if not active)."""
+        return self.composition_map.get(name, 0.0)
+
+    def Y(self, name):
+        """Population fraction n_i / n_B of baryon `name` (0 if absent)."""
+        return self.n(name) / self.n_B
+
+    def mu_eff(self, name):
+        """Effective (kinetic) potential mu_eff_i [MeV] of baryon `name`."""
+        return dict(self.mu_eff_i)[name]
+
+    def m_eff(self, name):
+        """Effective (Dirac) mass m*_i [MeV] of baryon `name`."""
+        return dict(self.m_eff_i)[name]
+
+    def mu(self, name):
+        """Full chemical potential mu_i [MeV] of baryon `name`.
+
+        Derived from the conserved-charge basis, never stored: section 2's
+        mu_i = B_i mu_B + C_i mu_C + S_i mu_S.
+        """
+        return species_potential(name, self.mu_B, self.mu_C, self.mu_S)
 
     @property
     def Y_e(self):
@@ -131,14 +168,6 @@ class EoSPoint:
     def Y_mu(self):
         """Muon fraction n_mu / n_B."""
         return self.n_mu / self.n_B
-
-    @property
-    def composition_map(self):
-        return dict(self.composition)
-
-    def Y(self, name):
-        """Population fraction n_i / n_B of baryon `name` (0 if absent)."""
-        return self.composition_map.get(name, 0.0) / self.n_B
 
     @property
     def free_energy_density(self):
@@ -218,13 +247,14 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
 
     return EoSPoint(
         n_B=float(nB_nat / hc3), T=T,
-        n_n=float(nn_nat / hc3), n_p=float(np_nat / hc3),
         sigma=float(sigma), omega0=float(omega0), rho0=float(rho0),
-        m_eff=float(0.5 * (ms_n + ms_p)), Sigma_R=float(Sig_R),
-        mu_eff_n=float(mu_eff_n), mu_eff_p=float(mu_eff_p),
-        mu_n=float(mu_n), mu_p=float(mu_p),
+        Sigma_R=float(Sig_R),
+        mu_B=float(mu_n), mu_C=float(mu_p - mu_n),
         eps=float(eps_nat / hc3), P=float(P_nat / hc3),
         s=float(s_nat / hc3), hvh_rel=float(hvh_rel),
+        composition=(("n", float(nn_nat / hc3)), ("p", float(np_nat / hc3))),
+        mu_eff_i=(("n", float(mu_eff_n)), ("p", float(mu_eff_p))),
+        m_eff_i=(("n", float(ms_n)), ("p", float(ms_p))),
         Y_C=float(np_nat / nB_nat), Y_S=0.0,
     )
 
@@ -248,7 +278,7 @@ def solve_snm_t0(par, n_B, check_consistency=True):
 
 def beta_warm_start(point):
     """Warm-start vector [sigma, rho0, mu_eff_n, mu_C] from a solved EoSPoint."""
-    return [point.sigma, point.rho0, point.mu_eff_n, -point.mu_e]
+    return [point.sigma, point.rho0, point.mu_eff("n"), -point.mu_e]
 
 
 def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
@@ -257,7 +287,7 @@ def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
     fixed-composition point at Y_p: only the charge closure is off.
     """
     base = solve_composition(par, (1.0 - Y_p) * n_B, Y_p * n_B, T=T)
-    return [base.sigma, base.rho0, base.mu_eff_n, -(base.mu_n - base.mu_p)]
+    return [base.sigma, base.rho0, base.mu_eff("n"), -base.mu_C]
 
 
 class BetaCtx(NamedTuple):
@@ -381,10 +411,10 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
     eps_nat = base.eps * hc3 + ee + emu + eph
     P_nat = base.P * hc3 + Pe + Pmu + Pph
     s_nat = base.s * hc3 + se + smu + sph
-    rhs = (base.mu_n * base.n_n + base.mu_p * base.n_p) * hc3 \
+    rhs = (base.mu("n") * base.n("n") + base.mu("p") * base.n("p")) * hc3 \
         + mu_e * (ne_nat + nmu_nat)
     hvh_rel = (eps_nat + P_nat - T * s_nat - rhs) / eps_nat
-    beta_res = base.mu_n - base.mu_p - mu_e
+    beta_res = -base.mu_C - mu_e
     if check_consistency:
         if abs(hvh_rel) > HVH_RTOL:
             raise ValueError(
@@ -434,8 +464,8 @@ def octet_warm_start(point, has_phi, has_muS=False, has_muL=False):
     mu_e = mu_L - mu_C so -mu_e no longer equals mu_C).
     """
     return _octet_x0((point.sigma, point.omega0, point.rho0, point.phi0,
-                      point.mu_n - point.Sigma_R, point.mu_p - point.mu_n,
-                      point.mu_S, point.mu_L),
+                      point.mu_B - point.Sigma_R, point.mu_C,
+                      point.mu_S, point.mu_nue),
                      has_phi, has_muS, has_muL)
 
 
@@ -449,7 +479,7 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
                          include_photons=False, check_consistency=False)
     has_phi = flags.phi_field and flags.hyperons
     return _octet_x0((base.sigma, base.omega0, base.rho0, -1e-3,
-                      base.mu_n - base.Sigma_R, base.mu_p - base.mu_n, 0.0, 0.0),
+                      base.mu_B - base.Sigma_R, base.mu_C, 0.0, 0.0),
                      has_phi, has_muS, has_muL)
 
 
@@ -602,8 +632,9 @@ def assemble_octet(x, ctx, spec):
     eps_b = P_b = s_b = 0.0
     Sig_R = 0.0
     n_tot = charge_had = strangeness = 0.0
-    m_eff_n = mu_eff_n = mu_eff_p = None
     densities = {}
+    mu_eff_i = {}
+    m_eff_i = {}
     for (_name, bspec, mu_eff, ms, n, ns, eps, P, s), b in zip(kin, ctx.baryons):
         mass, Q, t3, g, xs, xw, xr, xphi, S = bspec
         eps_b += eps
@@ -612,16 +643,17 @@ def assemble_octet(x, ctx, spec):
         n_tot += n
         charge_had += Q * n
         strangeness += S * n
+        # Every active baryon, kept the same way: neither mu_eff_i nor m*_i is
+        # recoverable from the densities afterwards, so a Lambda that is
+        # dropped here is a Lambda every consumer has to re-solve for.
         densities[b.name] = n / hc3
+        mu_eff_i[b.name] = mu_eff
+        m_eff_i[b.name] = ms
         # rearrangement; phi inherits f_omega so dGamma_phiY/dn = x_phi*dGw_N
         Sig_R += (xw * ctx.dGw_N * omega0 * n
                   + xr * ctx.dGr_N * rho0 * t3 * n
                   + xphi * ctx.dGw_N * phi0 * n
                   - xs * ctx.dGs_N * sigma * ns)
-        if b.name == "n":
-            m_eff_n, mu_eff_n = ms, mu_eff
-        elif b.name == "p":
-            mu_eff_p = mu_eff
 
     # meson field energies: scalars minus in P, vectors plus. Written from the
     # ctx's squared masses rather than through `field_eps_P`, which takes the
@@ -680,10 +712,9 @@ def assemble_octet(x, ctx, spec):
 
     return dict(
         sigma=sigma, omega0=omega0, rho0=rho0, phi0=phi0,
-        m_eff_n=m_eff_n, mu_eff_n=mu_eff_n, mu_eff_p=mu_eff_p,
-        Sigma_R=Sig_R, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, mu_L=mu_nue,
+        mu_eff_i=mu_eff_i, m_eff_i=m_eff_i,
+        Sigma_R=Sig_R, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
         mu_e=mu_e, mu_nue=mu_nue,
-        mu_n=mu_B, mu_p=mu_B + mu_C,
         eps=eps, P=P, s=s, n_tot=n_tot,
         n_e=ne, n_mu=nmu, n_nue=nnue,
         Y_C=charge_tot / ctx.nB_nat, Y_S=strangeness_tot / ctx.nB_nat,
@@ -795,23 +826,23 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 f"|{hvh_rel:.2e}| > {HVH_RTOL:.0e}")
         if not spec.is_fixed("C"):
             # transparent: mu_n - mu_p = mu_e; trapped: = mu_e - mu_nue.
-            beta_res = st["mu_n"] - st["mu_p"] - (st["mu_e"] - st["mu_nue"])
+            beta_res = -st["mu_C"] - (st["mu_e"] - st["mu_nue"])
             if abs(beta_res) > 1e-6:
                 raise ValueError(
                     f"beta-equilibrium condition violated at n_B={n_B}, "
                     f"T={T}: mu_n - mu_p - (mu_e - mu_nue) = {beta_res:.2e} MeV")
 
-    dmap = st["densities"]
     return EoSPoint(
-        n_B=n_B, T=T, n_n=dmap.get("n", 0.0), n_p=dmap.get("p", 0.0),
+        n_B=n_B, T=T,
         sigma=st["sigma"], omega0=st["omega0"], rho0=st["rho0"],
-        phi0=st["phi0"], m_eff=st["m_eff_n"], Sigma_R=st["Sigma_R"],
-        mu_eff_n=st["mu_eff_n"], mu_eff_p=st["mu_eff_p"],
-        mu_n=st["mu_n"], mu_p=st["mu_p"],
+        phi0=st["phi0"], Sigma_R=st["Sigma_R"],
+        mu_B=st["mu_B"], mu_C=st["mu_C"], mu_S=st["mu_S"],
         eps=st["eps"] / hc3, P=st["P"] / hc3, s=st["s"] / hc3,
         hvh_rel=float(hvh_rel), n_e=st["n_e"] / hc3, n_mu=st["n_mu"] / hc3,
-        mu_e=st["mu_e"], mu_S=st["mu_S"], mu_L=st["mu_L"],
-        n_nu=st["n_nue"] / hc3, composition=tuple(sorted(dmap.items())),
+        mu_e=st["mu_e"], mu_nue=st["mu_nue"], n_nu=st["n_nue"] / hc3,
+        composition=tuple(sorted(st["densities"].items())),
+        mu_eff_i=tuple(sorted(st["mu_eff_i"].items())),
+        m_eff_i=tuple(sorted(st["m_eff_i"].items())),
         Y_C=st["Y_C"], Y_S=st["Y_S"],
     )
 

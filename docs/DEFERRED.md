@@ -137,20 +137,27 @@ solver, not a statement about the state — physically vmit's state is still
 (mu_q, V, T). So `fields` holds whatever the model solves for, under the
 model's own names, and is empty where there is nothing to solve.
 
-Three things the records fix that every model currently gets wrong in the same
-way, so they are worth doing together rather than one model at a time:
+Three things the records fix that the remaining models get wrong in the same
+way, so they are worth doing together rather than one model at a time. dd2 is
+converted on all three and is the worked example:
 
 - **nucleons are privileged over hyperons.** Every model's kinetics computes
   mu_eff and m* for each active species and then keeps only n and p. Neither
   is recoverable from the record afterwards (they need the fields and the
   per-species coupling ratios), so g-modes and the response functions recompute
-  them. `m_eff` is even singular although m*_i differs per species.
+  them. `m_eff` is even singular although m*_i differs per species — in DD2Y
+  at n_B = 0.6 the neutron sits at 192 MeV while Lambda is at 652 and Xi- at
+  1083, so the single number was the neutron's and the rest were discarded.
 - **the mode is welded into the state.** dd2 carried eight mode fields on its
   context and branched on strings inside the residual; the other models do the
   same with their own vocabularies, which is why no two of them accept a mode
   the same way.
 - **the non-leptonic charge is called `mu_Q` in some models and `mu_C` in
-  others.** §2 says C. dd2 is converted; the rest are not.
+  others.** §2 says C. dd2 is converted; the rest are not. Storing mu_C rather
+  than recovering it as mu_p - mu_n is also the numerically better choice, and
+  measurably so: those are two ~1300 MeV numbers differing by ~100 MeV, so the
+  subtraction costs about two digits, and removing it from dd2's warm start
+  took its backend parity from 3.0e-14 to 8.9e-16.
 
 Each model's conversion lands in its own commit with its baseline re-run,
 since the records change what `eos_point` returns.

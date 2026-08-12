@@ -107,6 +107,17 @@ def energy_per_baryon(par, n_B):
     return p.eps / n_B - par.m_nucleon
 
 
+def _dirac_mass(point):
+    """Nucleon Dirac mass m* [MeV] of a symmetric-matter point.
+
+    The two nucleons share a kernel mass under the default
+    `nucleon_mass_mode="average"`, so m*_n = m*_p and this is either of
+    them; where the mode splits them, the isospin average is what the
+    nuclear-matter parameters mean by m*.
+    """
+    return 0.5 * (point.m_eff("n") + point.m_eff("p"))
+
+
 def esym(par, n_B):
     """
     Symmetry energy E_sym(n_B) [MeV], mean-field closed form:
@@ -114,7 +125,7 @@ def esym(par, n_B):
     """
     p = solve_snm_t0(par, n_B)
     kF = kF_from_n(n_B * hc3, 4.0)
-    EFs = np.sqrt(kF ** 2 + p.m_eff ** 2)
+    EFs = np.sqrt(kF ** 2 + _dirac_mass(p) ** 2)
     _, _, Gr, _, _, _ = par.couplings_at(n_B)
     return kF ** 2 / (6.0 * EFs) + Gr ** 2 * (n_B * hc3) / (2.0 * par.m_rho ** 2)
 
@@ -143,7 +154,7 @@ def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
     return {
         "n_sat": n_sat,
         "E_sat": EA(n_sat),
-        "m_eff_ratio": at_sat.m_eff / par.m_nucleon,
+        "m_eff_ratio": _dirac_mass(at_sat) / par.m_nucleon,
         "K_sat": 9.0 * n_sat ** 2 * d2,
         "Q_sat": 27.0 * n_sat ** 3 * d3,
         "E_sym": esym(par, n_sat),
@@ -215,7 +226,7 @@ def _isoscalar_quantities(par, n_sat, h=1e-4, want_Q=True):
     EA = lambda n: solve_snm(par, n).eps / n - par.m_nucleon
     at = solve_snm(par, n_sat)
     d2 = (EA(n_sat + h) - 2 * EA(n_sat) + EA(n_sat - h)) / h ** 2
-    out = dict(P=at.P, E_sat=EA(n_sat), m_ratio=at.m_eff / par.m_nucleon,
+    out = dict(P=at.P, E_sat=EA(n_sat), m_ratio=_dirac_mass(at) / par.m_nucleon,
                K_sat=9 * n_sat ** 2 * d2)
     if want_Q:
         d3 = (EA(n_sat + 2 * h) - 2 * EA(n_sat + h)
@@ -375,7 +386,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
     par_iso = _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma)
     at = solve_snm(par_iso, n_sat)
     kF = kF_from_n(n_sat * hc3, 4.0)
-    EFs = float(np.sqrt(kF ** 2 + at.m_eff ** 2))
+    EFs = float(np.sqrt(kF ** 2 + _dirac_mass(at) ** 2))
     kin = kF ** 2 / (6.0 * EFs)
     n_nat = n_sat * hc3
     rho_term = nmp["E_sym"] - kin
