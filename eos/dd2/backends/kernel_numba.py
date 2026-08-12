@@ -13,7 +13,7 @@ guarded by backend parity (kernel_numba vs octet.py) in the M9 gate.
 Array layout (built once per solve by build_numba_arrays):
     spec   : (N, 9) [mass, Q, t3, g, x_sigma, x_omega, x_rho, x_phi, S]
     params : [Gs_N, Gw_N, Gr_N, m_s2, m_w2, m_r2, m_p2, nB_nat, mbar,
-              m_e, m_mu, Y_C, Y_S, Y_L]
+              m_e, m_mu, Y_C, Y_S, Y_Le]
     flags  : [has_phi, has_muS, has_muL, charge_neutral, include_muons]  (int)
 """
 import numpy as np
@@ -112,7 +112,7 @@ def residual_t0_jit(x, spec, params, flags):
     Gs_N, Gw_N, Gr_N = params[0], params[1], params[2]
     m_s2, m_w2, m_r2, m_p2 = params[3], params[4], params[5], params[6]
     nB_nat, mbar, m_e, m_mu = params[7], params[8], params[9], params[10]
-    Y_C, Y_S, Y_L = params[11], params[12], params[13]
+    Y_C, Y_S, Y_Le = params[11], params[12], params[13]
     has_phi, has_muS, has_muL = flags[0], flags[1], flags[2]
     neutral, inc_mu = flags[3], flags[4]
     N = spec.shape[0]
@@ -173,7 +173,7 @@ def residual_t0_jit(x, spec, params, flags):
     if has_muL == 1:
         n_e = _n_ns_t0(muL - muC, m_e, 2.0)[0]
         n_nue = _n_ns_t0(muL, 0.0, 1.0)[0]
-        res[row] = (n_e + n_nue) / nB_nat - Y_L
+        res[row] = (n_e + n_nue) / nB_nat - Y_Le
     return res
 
 

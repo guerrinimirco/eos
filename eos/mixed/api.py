@@ -53,14 +53,6 @@ from eos.mixed.tables.generate import (
     MODE_FRACTIONS, MixedTableSpec, build_mixed_table, make_charge_spec,
 )
 
-#: The electron lepton fraction has two names. CLAUDE.md section 5 calls it
-#: Y_Le; `eos.mixed` predates that rule and calls it Y_L throughout its
-#: `ChargeSpec`, its `MODE_FRACTIONS` and its table axes. The public boundary
-#: takes the spec name and translates here, in the one place that has to know.
-_YLE_SPEC = "Y_Le"
-_YLE_ENGINE = "Y_L"
-
-
 @dataclass(frozen=True)
 class PointResult:
     """One eos_point outcome: a convergence status the caller can test.
@@ -75,25 +67,8 @@ class PointResult:
     point: MixedResult = None
 
 
-def _to_engine_names(named):
-    """Spec condition names translated to the engine's own, or raise.
-
-    The internal name is REJECTED here rather than quietly accepted as a
-    second spelling: one quantity with two accepted names at one boundary is
-    exactly the drift the uniform API exists to stop.
-    """
-    if _YLE_ENGINE in named:
-        raise ValueError(f"{_YLE_ENGINE!r} is the engine's internal name for "
-                         f"the electron lepton fraction; this boundary takes "
-                         f"{_YLE_SPEC!r}")
-    out = {}
-    for key, value in named.items():
-        out[_YLE_ENGINE if key == _YLE_SPEC else key] = value
-    return out
-
-
 def _engine_fractions(mode, conditions):
-    """The mode's fractions in the engine's own names, or raise.
+    """The mode's fractions, checked against what it takes, or raise.
 
     Raises unless exactly the fractions this mode takes were supplied, so a
     misspelled or surplus condition is a loud error at the call rather than a
@@ -106,21 +81,15 @@ def _engine_fractions(mode, conditions):
         raise NotImplementedError(
             "the mixed engine tracks one trapped lepton family; "
             "beta_eq_neutrino_trapped takes (n_B, Y_Le, T) only")
-    fracs = _to_engine_names(conditions)
-
-    def spec_name(key):
-        return _YLE_SPEC if key == _YLE_ENGINE else key
-
+    fracs = dict(conditions)
     wanted = set(MODE_FRACTIONS[mode])
     given = set(fracs)
     missing = wanted - given
     if missing:
-        raise ValueError(f"mode {mode!r} needs "
-                         f"{sorted(spec_name(m) for m in missing)}")
+        raise ValueError(f"mode {mode!r} needs {sorted(missing)}")
     extra = given - wanted
     if extra:
-        raise ValueError(f"mode {mode!r} does not take "
-                         f"{sorted(spec_name(e) for e in extra)}")
+        raise ValueError(f"mode {mode!r} does not take {sorted(extra)}")
     return fracs
 
 
@@ -218,8 +187,8 @@ def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
         species = SpeciesFlags()
     if not 0.0 <= eta <= 1.0:
         raise ValueError(f"eta must lie in [0, 1], got {eta}")
-    axes = _to_engine_names(axes or {})
-    fixed = _to_engine_names(fixed or {})
+    axes = dict(axes or {})
+    fixed = dict(fixed or {})
     spec = MixedTableSpec(par=par, flags=species, mode=mode, axes=axes,
                           eta=float(eta), vmit_params=vmit_params, fixed=fixed,
                           leptons=leptons, window_only=window_only,

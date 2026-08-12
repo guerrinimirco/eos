@@ -56,7 +56,7 @@ class Regime(Enum):
 
 
 #: charge name -> the `targets` key carrying its fixed fraction (GLOBAL/LOCAL).
-_TARGET_KEY = {"C": "Y_C", "S": "Y_S", "L_e": "Y_L"}
+_TARGET_KEY = {"C": "Y_C", "S": "Y_S", "L_e": "Y_Le"}
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class ChargeSpec:
 
     `B` is always GLOBAL. `C`, `S`, `L_e` default to NOT_CONSERVED, which is
     plain beta equilibrium. `targets` carries the fixed fractions (`Y_C`,
-    `Y_S`, `Y_L`) that the GLOBAL/LOCAL charges need. `yc_leptons` picks
+    `Y_S`, `Y_Le`) that the GLOBAL/LOCAL charges need. `yc_leptons` picks
     between the two fixed-Y_C flavors: leptonless (False, the CompOSE
     (n_B, T, Y_q) convention) or with neutralizing leptons present (True).
 
@@ -159,7 +159,7 @@ def quark_charges(n_u, n_d, n_s):
 #   mode                       | B      | C      | S      | L_e    | table axes
 #   ---------------------------|--------|--------|--------|--------|-----------
 #   beta_eq_neutrinoless       | global | -      | -      | -      | nB, T
-#   beta_eq_neutrino_trapped   | global | -      | -      | global | nB, Y_L, T
+#   beta_eq_neutrino_trapped   | global | -      | -      | global | nB, Y_Le, T
 #   fixed_YC                   | global | global | -      | -      | nB, Y_C, T
 #   fixed_YC_YS                | global | global | global | -      | nB,Y_C,Y_S,T
 #
@@ -176,9 +176,9 @@ def beta_eq_neutrinoless():
     return ChargeSpec()
 
 
-def beta_eq_neutrino_trapped(Y_L):
+def beta_eq_neutrino_trapped(Y_Le):
     """Beta equilibrium with trapped neutrinos at fixed total electron lepton
-    fraction Y_L = (n_e + n_nue)/n_B. Independent variables (n_B, Y_L, T).
+    fraction Y_Le = (n_e + n_nue)/n_B. Independent variables (n_B, Y_Le, T).
 
     L_e is GLOBAL: the trapped neutrinos are treated as one uniform gas shared
     by both phases (mu_nu^H = mu_nu^Q) with no local component and no eta
@@ -186,7 +186,7 @@ def beta_eq_neutrino_trapped(Y_L):
     far larger than the mixed-phase structures, so they cannot be localized in
     a droplet — and it is worth surfacing in output metadata.
     """
-    return ChargeSpec(L_e=Regime.GLOBAL, targets={"Y_L": Y_L})
+    return ChargeSpec(L_e=Regime.GLOBAL, targets={"Y_Le": Y_Le})
 
 
 def fixed_YC(Y_C, *, leptons=False):

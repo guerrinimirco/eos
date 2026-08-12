@@ -129,7 +129,7 @@ TABLE_NB    = np.linspace(0.06, 1.2, 300)*n_sat            # density grid for th
 Y_C_VALUES   = (0.1, 0.3, 0.5)                     # fixed charge fractions (one fixed-Y_C file each)
 YC_ELECTRONS = True                                # neutralise with electrons? (False = leptonless, 2a)
 YC_MUONS     = False                               # also add muons? (only when YC_ELECTRONS; 2b)
-Y_L_VALUES  = (0.3,)                               # trapped-ν lepton fractions (one file each)
+Y_LE_VALUES  = (0.3,)                               # trapped-ν lepton fractions (one file each)
 OUT_DIR     = "../output/tables_DD2/"              # written next to the SFHo convention
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -169,7 +169,7 @@ print("NB_GRID:", round(NB_GRID[0], 3), "→", round(NB_GRID[-1], 3),
 # selected by the `YC_ELECTRONS` / `YC_MUONS` knobs; `YL` (fixed lepton fraction, trapped ν).
 # Temperature axis is `T=[…]` **or** `SnB=[…]` (entropy per baryon, adds the isentropic
 # outer T-solve). The `fixed` dict is scalar, so the fixed-Y_C and trapped tables loop over
-# `Y_C_VALUES` / `Y_L_VALUES` writing one file per value.
+# `Y_C_VALUES` / `Y_LE_VALUES` writing one file per value.
 
 # %%
 # fixed-Y_C lepton content: electrons on/off (mode YC_e vs YC), muons via flags.
@@ -187,15 +187,15 @@ for yc in Y_C_VALUES:                              # fixed-Y_C tables, one per Y
     tag = f"YC{int(round(yc * 100))}_{_lep}"
     jobs.append((f"fixed_{tag}", YC_MODE, FLAGS_YC, dict(T=T_VALUES),
                  {"Y_C": yc}, f"eos_dd2_fixed{tag}.dat"))
-for yl in Y_L_VALUES:                              # trapped-ν tables, one per Y_L
+for yl in Y_LE_VALUES:                              # trapped-ν tables, one per Y_Le
     tag = f"YL{int(round(yl * 100))}"
     jobs.append((f"trapped_{tag}", "beta_eq_neutrino_trapped", FLAGS_TRAP, dict(T=T_VALUES),
-                 {"Y_L": yl}, f"eos_dd2_trapped_{tag}.dat"))
+                 {"Y_Le": yl}, f"eos_dd2_trapped_{tag}.dat"))
     jobs.append((f"iso_trapped_{tag}", "beta_eq_neutrino_trapped", FLAGS_TRAP, dict(SnB=S_VALUES),
-                 {"Y_L": yl}, f"eos_dd2_trapped_{tag}_isentropic.dat"))
+                 {"Y_Le": yl}, f"eos_dd2_trapped_{tag}_isentropic.dat"))
 
 # skip_errors: drop points where the uniform solve doesn't converge (the low-T /
-# low-density liquid-gas spinodal for constrained Y_C/Y_L modes) instead of aborting.
+# low-density liquid-gas spinodal for constrained Y_C/Y_Le modes) instead of aborting.
 results_H = {}
 for label, mode, flags, temp_kw, fixed, fname in jobs:
     print(f"\n── computing DD2 table: {label}  (mode={mode}) ──")

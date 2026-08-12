@@ -91,7 +91,7 @@ lepton potentials — four to nine numbers:
     always            mu_tilde_B_H, mu_B_Q, chi
     C global          mu_C_H, mu_C_Q  (with leptons)  or  mu_C  (leptonless)
     S global          mu_S
-    L_e global        mu_L
+    L_e global        mu_nue
     eta > 0           mu_eL_H, mu_eL_Q
     eta < 1           mu_eG
 
@@ -102,7 +102,7 @@ lepton-number conditions, the eta-shifted charge matching
 statement `mu_C^H = mu_C^Q`), and the neutrality rows above.
 
 In beta equilibrium `mu_C` is not an unknown: it is eliminated by
-`mu_C^I = mu_L - [eta mu_eL^I + (1-eta) mu_eG]`, which for transparent matter
+`mu_C^I = mu_nue - [eta mu_eL^I + (1-eta) mu_eG]`, which for transparent matter
 is the repository's `mu_C + mu_e = 0`. Strangeness self-equilibrates,
 `mu_S = 0`.
 

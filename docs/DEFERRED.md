@@ -229,11 +229,8 @@ notebook drives vMIT through it, and it now sits beside `table.py` as a shim
 over the shared driver rather than being renamed to it.
 
 `eos/mixed` is a composite engine and takes the shorter list of CLAUDE.md §5 —
-`adapters.py`, `api.py`, `verify/`, `mixed.tex` — all of which it now has. The
-one name still out of step is internal: `ChargeSpec`, `MODE_FRACTIONS` and the
-table axes call the electron lepton fraction `Y_L` where the spec calls it
-`Y_Le`; the public boundary translates and refuses the internal spelling, but
-the rename itself is outstanding.
+`adapters.py`, `api.py`, `responses.py`, `verify/`, `mixed.tex` — all of which
+it now has.
 
 ---
 
@@ -467,12 +464,6 @@ both touch the same code.
   curve is left to the caller; the engine does not dispatch across the
   boundary because that would mean importing model internals past the
   phase-adapter surface.
-- The public boundary takes `Y_Le` (the §5 condition name) while the engine's
-  own `ChargeSpec`, `MODE_FRACTIONS` and table axes call the same quantity
-  `Y_L`. `eos/mixed/api.py` translates in one place and refuses the internal
-  name, so the two never coexist at one boundary, but the internal rename is
-  still outstanding and belongs with the next change that touches
-  `equilibrium/charges.py`.
 - `mixed_slots` activates the local and global lepton populations at exactly
   eta > 0 and eta < 1. Within about 1e-3 of an endpoint the just-activated
   population carries almost no weight, its potential is a near spectator and

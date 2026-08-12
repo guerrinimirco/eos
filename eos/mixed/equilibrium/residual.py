@@ -44,7 +44,7 @@ whose pressures must balance.
 Charged leptons
 ---------------
 Electrons and, when enabled, muons share each neutrality domain. They are in
-weak equilibrium with each other, mu_mu = mu_e - mu_L (with mu_L the trapped
+weak equilibrium with each other, mu_mu = mu_e - mu_nue (with mu_nue the trapped
 neutrino potential, zero for transparent matter), which is the same relation
 eos/dd2 uses. Muons therefore add no unknowns: they add their density to each
 neutrality condition and their pressure to mechanical equilibrium.
@@ -88,10 +88,10 @@ class LeptonDomain:
     n_mu: float = 0.0
 
 
-def charged_leptons(mu_e, T, muons, mu_L=0.0):
+def charged_leptons(mu_e, T, muons, mu_nue=0.0):
     """Electron (+muon) thermodynamics in one neutrality domain.
 
-    Muons are in equilibrium with electrons at mu_mu = mu_e - mu_L: for
+    Muons are in equilibrium with electrons at mu_mu = mu_e - mu_nue: for
     neutrino-transparent matter that is mu_mu = mu_e, and with trapped
     electron-neutrinos the muon family stays transparent, matching
     eos/dd2/solver.py.
@@ -100,7 +100,7 @@ def charged_leptons(mu_e, T, muons, mu_L=0.0):
     if not muons:
         return LeptonDomain(n=e.n, P=e.P, e=e.e, s=e.s,
                             mu_dot_n=mu_e * e.n, n_e=e.n)
-    mu_mu = mu_e - mu_L
+    mu_mu = mu_e - mu_nue
     m = muon_thermo(mu_mu, T)
     return LeptonDomain(
         n=e.n + m.n, P=e.P + m.P, e=e.e + m.e, s=e.s + m.s,
@@ -127,7 +127,7 @@ def mixed_slots(spec: ChargeSpec, eta: float, flags=None):
     Then, by regime: a GLOBAL C contributes the charge potential(s) — per-phase
     (mu_C_H, mu_C_Q, tied by the eta-shifted matching condition) when
     neutralizing leptons are present, or a single shared mu_C when leptonless.
-    A GLOBAL S contributes mu_S; a GLOBAL L_e contributes mu_L.
+    A GLOBAL S contributes mu_S; a GLOBAL L_e contributes mu_nue.
 
     Finally the lepton populations activate by eta: the local potentials
     (mu_eL_H, mu_eL_Q) exist iff eta > 0, the global one (mu_eG) iff eta < 1.
@@ -145,7 +145,7 @@ def mixed_slots(spec: ChargeSpec, eta: float, flags=None):
     if spec.L_e is Regime.GLOBAL and spec.C is not Regime.NOT_CONSERVED:
         raise NotImplementedError(
             "trapped neutrinos are defined on top of beta-equilibrium charge; "
-            "combining fixed Y_C with a fixed Y_L is not a defined mode")
+            "combining fixed Y_C with a fixed Y_Le is not a defined mode")
     if flags is not None and flags.sigma_star:
         raise NotImplementedError(
             "SpeciesFlags.sigma_star (hidden-strange scalar) is not wired in "
@@ -163,7 +163,7 @@ def mixed_slots(spec: ChargeSpec, eta: float, flags=None):
     if spec.S is Regime.GLOBAL:
         slots += ["mu_S"]                  # shared, matched across phases
     if spec.L_e is Regime.GLOBAL:
-        slots += ["mu_L"]                  # trapped-neutrino potential
+        slots += ["mu_nue"]                  # trapped-neutrino potential
     if has_leptons(spec) and eta > 0.0:
         slots += ["mu_eL_H", "mu_eL_Q"]
     if has_leptons(spec) and eta < 1.0:
@@ -232,7 +232,7 @@ def evaluate_phases(x, ctx):
 
     The non-leptonic charge potential of each phase is set by the C regime.
     In beta equilibrium it is not an unknown at all: it is eliminated by the
-    beta condition mu_C + mu_e = mu_L, applied with the eta-weighted electron
+    beta condition mu_C + mu_e = mu_nue, applied with the eta-weighted electron
     potential of that phase.
     """
     d = dict(zip(ctx.slots, x))
@@ -242,11 +242,11 @@ def evaluate_phases(x, ctx):
     mu_eL_H = d.get("mu_eL_H", 0.0)
     mu_eL_Q = d.get("mu_eL_Q", 0.0)
     mu_eG = d.get("mu_eG", 0.0)
-    mu_L = d.get("mu_L", 0.0)          # trapped-neutrino potential; 0 if none
+    mu_nue = d.get("mu_nue", 0.0)          # trapped-neutrino potential; 0 if none
 
     if spec.C is Regime.NOT_CONSERVED:                  # beta-equilibrium
-        mu_C_H = mu_L - (eta * mu_eL_H + (1.0 - eta) * mu_eG)
-        mu_C_Q = mu_L - (eta * mu_eL_Q + (1.0 - eta) * mu_eG)
+        mu_C_H = mu_nue - (eta * mu_eL_H + (1.0 - eta) * mu_eG)
+        mu_C_Q = mu_nue - (eta * mu_eL_Q + (1.0 - eta) * mu_eG)
     elif spec.yc_leptons:                               # fixed Y_C, per-phase
         mu_C_H, mu_C_Q = d["mu_C_H"], d["mu_C_Q"]
     else:                                               # fixed Y_C, leptonless
@@ -266,10 +266,10 @@ def evaluate_phases(x, ctx):
 
     zero = LeptonDomain()
     extras = dict(
-        L_H=charged_leptons(mu_eL_H, ctx.T, muons, mu_L) if (lep and eta > 0) else zero,
-        L_Q=charged_leptons(mu_eL_Q, ctx.T, muons, mu_L) if (lep and eta > 0) else zero,
-        G=charged_leptons(mu_eG, ctx.T, muons, mu_L) if (lep and eta < 1) else zero,
-        nu=neutrino_thermo(mu_L, ctx.T) if spec.L_e is Regime.GLOBAL else None,
+        L_H=charged_leptons(mu_eL_H, ctx.T, muons, mu_nue) if (lep and eta > 0) else zero,
+        L_Q=charged_leptons(mu_eL_Q, ctx.T, muons, mu_nue) if (lep and eta > 0) else zero,
+        G=charged_leptons(mu_eG, ctx.T, muons, mu_nue) if (lep and eta < 1) else zero,
+        nu=neutrino_thermo(mu_nue, ctx.T) if spec.L_e is Regime.GLOBAL else None,
 )
     return th_H, th_Q, d, extras
 
@@ -329,10 +329,10 @@ def mixed_residual(x, ctx):
         res.append(((1.0 - chi) * th_H.n_S + chi * th_Q.n_S
                     - Y_S * ctx.n_B) / ns)
     if spec.L_e is Regime.GLOBAL:                                     # (6)
-        Y_L = spec.targets["Y_L"]
+        Y_Le = spec.targets["Y_Le"]
         n_e_avg = (eta * ((1.0 - chi) * L_H.n_e + chi * L_Q.n_e)
                    + (1.0 - eta) * G.n_e)
-        res.append((n_e_avg + extras["nu"].n - Y_L * ctx.n_B) / ns)
+        res.append((n_e_avg + extras["nu"].n - Y_Le * ctx.n_B) / ns)
     if lep and eta > 0.0:                                             # (7) local
         res.append((th_H.n_C - L_H.n) / ns)
         res.append((th_Q.n_C - L_Q.n) / ns)

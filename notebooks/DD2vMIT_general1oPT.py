@@ -851,7 +851,7 @@ FLAGS = SpeciesFlags(
 
 # ---- equilibrium modes ----------------------------------------------------
 # 'beta_eq_neutrinoless'      independent variables (nB, T)
-# 'beta_eq_neutrino_trapped'  independent variables (nB, Y_L, T)
+# 'beta_eq_neutrino_trapped'  independent variables (nB, Y_Le, T)
 # 'fixed_YC'                  independent variables (nB, Y_C, T)
 # 'fixed_YC_YS'               independent variables (nB, Y_C, Y_S, T)
 #
@@ -1306,7 +1306,7 @@ print("inside the liquid-gas spinodal has no stable solution and is skipped.")
 # | mode | globally conserved | independent variables | where it applies |
 # |---|---|---|---|
 # | `beta_eq_neutrinoless` | B | (n_B, T, η) | cold compact stars |
-# | `beta_eq_neutrino_trapped` | B, L | (n_B, Y_L, T, η) | early neutrino-trapped stages of protoneutron stars |
+# | `beta_eq_neutrino_trapped` | B, L | (n_B, Y_Le, T, η) | early neutrino-trapped stages of protoneutron stars |
 # | `fixed_YC` | B, C | (n_B, Y_C, T, η) | EOS tables for CCSN and BNSM simulations, where β reactions are not always equilibrated |
 # | `fixed_YC_YS` | B, C, S | (n_B, Y_C, Y_S, T, η) | timescales short compared with the weak strangeness-changing one — heavy-ion collisions, or the first critical droplet in nucleation |
 #
@@ -1434,7 +1434,7 @@ print(f"  status breakdown: "
 
 if bad:
     _fkeys = sorted({k for r in bad for k in r
-                     if k in ("Y_C", "Y_S", "Y_L")})
+                     if k in ("Y_C", "Y_S", "Y_Le")})
     print(f"  {'mode':<22} {'eta':>5} " + "".join(f"{k:>7}" for k in _fkeys)
           + f" {'T':>7} | {'onset':>7} {'offset':>7} | status")
     for r in sorted(bad, key=lambda r: (r["mode"], r["eta"],
@@ -1451,7 +1451,7 @@ if bad:
 print(f"\n  complete temperature range per (mode, fractions, eta):")
 _by = defaultdict(list)
 for r in report_rows:
-    _fk = tuple(sorted((k, r[k]) for k in r if k in ("Y_C", "Y_S", "Y_L")))
+    _fk = tuple(sorted((k, r[k]) for k in r if k in ("Y_C", "Y_S", "Y_Le")))
     _by[(r["mode"], _fk, r["eta"])].append(r)
 for (_m, _fk, _e), _rs in sorted(_by.items(), key=lambda kv: str(kv[0])):
     _okT = sorted(r["T"] for r in _rs if r["status"] == "ok")
@@ -1690,7 +1690,7 @@ def window_of(mode, fracs, T, eta):
     MODE_FRACTIONS declares.
     """
     wins = windows_by_run.get(mode, {}).get(eta, {}) or {}
-    order = {"beta_eq_neutrinoless": (), "beta_eq_neutrino_trapped": ("Y_L",),
+    order = {"beta_eq_neutrinoless": (), "beta_eq_neutrino_trapped": ("Y_Le",),
              "fixed_YC": ("Y_C",), "fixed_YC_YS": ("Y_C", "Y_S")}[mode]
     key = (round(float(T), 6),) + tuple(round(float(fracs[k]), 6)
                                         for k in order)
@@ -1752,7 +1752,7 @@ except NameError:                            # or read what it wrote
         print("no completeness.csv and II.2 has not run — figures cannot check "
               "which slices are complete and will draw everything")
 
-COMPLETE = {(r["mode"], frac_key({k: r[k] for k in ("Y_C", "Y_S", "Y_L")
+COMPLETE = {(r["mode"], frac_key({k: r[k] for k in ("Y_C", "Y_S", "Y_Le")
                                   if k in r and np.isfinite(r[k])}),
              round(float(r["T"]), 6), round(float(r["eta"]), 6)): r
             for r in _rep}

@@ -22,7 +22,7 @@ class SpeciesFlags:
     hyperons: bool = False              # Λ, Σ, Ξ octet
     deltas: bool = False                # Δ quartet
     muons: bool = True                  # e always on; μ optional
-    neutrinos: bool = False             # only trapped / fixed-Y_L modes
+    neutrinos: bool = False             # only trapped / fixed-Y_Le modes
     photons: bool = True                # radiation (matters only at T>0)
     phi_field: bool = True              # hidden-strange VECTOR φ (DD2Y default)
     sigma_star: bool = False            # hidden-strange SCALAR σ* (later)
@@ -30,7 +30,7 @@ class SpeciesFlags:
     include_thermal_vectors: bool = False  # thermal ρ,ω,K*,φ Bose gas (M7)
 
     def __post_init__(self):
-        # neutrinos are wired (M6 trapped Y_L mode; use solve_yl_octet).
+        # neutrinos are wired (M6 trapped Y_Le mode; use solve_yl_octet).
         if self.sigma_star:
             raise NotImplementedError(
                 "SpeciesFlags: sigma_star (hidden-strange scalar) is not wired")

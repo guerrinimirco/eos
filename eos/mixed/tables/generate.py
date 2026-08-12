@@ -11,7 +11,7 @@ the equilibrium mode, and the axes to sweep. The mode decides which fractions
 are meaningful axes, so all four modes generate tables through this one path:
 
     beta_eq_neutrinoless        axes  nB, and T or SnB
-    beta_eq_neutrino_trapped    axes  nB, Y_L, and T or SnB
+    beta_eq_neutrino_trapped    axes  nB, Y_Le, and T or SnB
     fixed_YC                    axes  nB, Y_C, and T or SnB
     fixed_YC_YS                 axes  nB, Y_C, Y_S, and T or SnB
 
@@ -45,12 +45,12 @@ from eos.mixed.solvers.sweep import locate_window, sweep_mixed
 #: The fraction axes a table may sweep, in the canonical order they are keyed
 #: in. Fixing the order here rather than reading it off the caller's dict is
 #: what makes the window keys of two tables of the same physics identical.
-FRACTION_AXES = ("Y_C", "Y_S", "Y_L")
+FRACTION_AXES = ("Y_C", "Y_S", "Y_Le")
 
 #: mode name -> the fixed fractions it consumes (as an axis or in `fixed`).
 MODE_FRACTIONS = {
     "beta_eq_neutrinoless": (),
-    "beta_eq_neutrino_trapped": ("Y_L",),
+    "beta_eq_neutrino_trapped": ("Y_Le",),
     "fixed_YC": ("Y_C",),
     "fixed_YC_YS": ("Y_C", "Y_S"),
 }
@@ -61,7 +61,7 @@ def make_charge_spec(mode, fracs, leptons=True):
     if mode == "beta_eq_neutrinoless":
         return beta_eq_neutrinoless()
     if mode == "beta_eq_neutrino_trapped":
-        return beta_eq_neutrino_trapped(fracs["Y_L"])
+        return beta_eq_neutrino_trapped(fracs["Y_Le"])
     if mode == "fixed_YC":
         return fixed_YC(fracs["Y_C"], leptons=leptons)
     if mode == "fixed_YC_YS":
@@ -104,7 +104,7 @@ def composition_row(r):
         row[f"Y_B_{tag}"] = w * th.n_B / r.n_B
         row[f"Y_C_{tag}"] = w * th.n_C / r.n_B
         row[f"Y_S_{tag}"] = w * th.n_S / r.n_B
-    for key in ("mu_C", "mu_S", "mu_L", "mu_eL_H", "mu_eL_Q", "mu_eG"):
+    for key in ("mu_C", "mu_S", "mu_nue", "mu_eL_H", "mu_eL_Q", "mu_eG"):
         if key in r.potentials:
             row[key] = r.potentials[key]
     for name, n in r.th_H.densities.items():
@@ -181,7 +181,7 @@ class MixedTableSpec:
     par, flags : DD2 `Parametrization` and `SpeciesFlags`
     mode       : one of `MODE_FRACTIONS`
     axes       : {'nB': grid, exactly one of 'T'/'SnB': grid, and optionally
-                 any of 'Y_C'/'Y_S'/'Y_L': grid to sweep that fraction}
+                 any of 'Y_C'/'Y_S'/'Y_Le': grid to sweep that fraction}
     eta        : local-neutrality fraction (a scalar; loop outside for an
                  eta axis, since eta changes the unknown vector's shape)
     fixed      : scalar values for fractions the mode needs but that are not

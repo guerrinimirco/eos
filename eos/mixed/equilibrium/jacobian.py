@@ -68,36 +68,36 @@ def _fd_quark_kappa(mu_eff, T, m, h_min=1e-2, rel=1e-4):
             - compute_quark_density(mu_eff - h, T, m)) / (2.0 * h)
 
 
-def _lepton_kappa(mu_e, T, muons, mu_L=0.0, h_min=1e-2, rel=1e-4):
+def _lepton_kappa(mu_e, T, muons, mu_nue=0.0, h_min=1e-2, rel=1e-4):
     """d(n_e + n_mu)/dmu_e for one neutrality domain."""
     if mu_e == 0.0:
         return 0.0
     h = max(h_min, rel * abs(mu_e))
-    return (charged_leptons(mu_e + h, T, muons, mu_L).n
-            - charged_leptons(mu_e - h, T, muons, mu_L).n) / (2.0 * h)
+    return (charged_leptons(mu_e + h, T, muons, mu_nue).n
+            - charged_leptons(mu_e - h, T, muons, mu_nue).n) / (2.0 * h)
 
 
-def _muon_kappa(mu_e, T, muons, mu_L=0.0, h_min=1e-2, rel=1e-4):
+def _muon_kappa(mu_e, T, muons, mu_nue=0.0, h_min=1e-2, rel=1e-4):
     """dn_mu/dmu_mu for one neutrality domain (0 when muons are off).
 
-    Needed on its own because mu_mu = mu_e - mu_L: with trapped neutrinos the
-    muon density responds to mu_L as well as to mu_e, with the opposite sign.
+    Needed on its own because mu_mu = mu_e - mu_nue: with trapped neutrinos the
+    muon density responds to mu_nue as well as to mu_e, with the opposite sign.
     """
     if not muons:
         return 0.0
-    mu_mu = mu_e - mu_L
+    mu_mu = mu_e - mu_nue
     if mu_mu == 0.0:
         return 0.0
     h = max(h_min, rel * abs(mu_mu))
     return (muon_thermo(mu_mu + h, T).n - muon_thermo(mu_mu - h, T).n) / (2.0 * h)
 
 
-def _neutrino_kappa(mu_L, T, h_min=1e-2, rel=1e-4):
-    if mu_L == 0.0:
+def _neutrino_kappa(mu_nue, T, h_min=1e-2, rel=1e-4):
+    if mu_nue == 0.0:
         return 0.0
-    h = max(h_min, rel * abs(mu_L))
-    return (neutrino_thermo(mu_L + h, T).n
-            - neutrino_thermo(mu_L - h, T).n) / (2.0 * h)
+    h = max(h_min, rel * abs(mu_nue))
+    return (neutrino_thermo(mu_nue + h, T).n
+            - neutrino_thermo(mu_nue - h, T).n) / (2.0 * h)
 
 
 def _quark_block(mu_B_Q, mu_C_Q, mu_S, T, params, th_Q):
@@ -174,12 +174,12 @@ def _phase_potentials(x, ctx):
     """The per-phase charge potentials the residual would derive from `x`."""
     spec, eta, slots = ctx.spec, ctx.eta, ctx.slots
     d = dict(zip(slots, x))
-    mu_L = d.get("mu_L", 0.0)
+    mu_nue = d.get("mu_nue", 0.0)
     mu_S = d.get("mu_S", 0.0)
     if spec.C is Regime.NOT_CONSERVED:
-        mu_C_H = mu_L - (eta * d.get("mu_eL_H", 0.0)
+        mu_C_H = mu_nue - (eta * d.get("mu_eL_H", 0.0)
                          + (1.0 - eta) * d.get("mu_eG", 0.0))
-        mu_C_Q = mu_L - (eta * d.get("mu_eL_Q", 0.0)
+        mu_C_Q = mu_nue - (eta * d.get("mu_eL_Q", 0.0)
                          + (1.0 - eta) * d.get("mu_eG", 0.0))
     elif spec.yc_leptons:
         mu_C_H, mu_C_Q = d["mu_C_H"], d["mu_C_Q"]
@@ -215,29 +215,29 @@ def mixed_jacobian(x, ctx):
                          ctx.T, state_H)                 # 5x3
     bQ = _quark_block(d["mu_B_Q"], mu_C_Q, mu_S, ctx.T, ctx.vmit_params, th_Q)
 
-    mu_L = d.get("mu_L", 0.0)
+    mu_nue = d.get("mu_nue", 0.0)
     mu_eL_H, mu_eL_Q = d.get("mu_eL_H", 0.0), d.get("mu_eL_Q", 0.0)
     mu_eG = d.get("mu_eG", 0.0)
     on_L = lep and eta > 0.0
     on_G = lep and eta < 1.0
-    L_H = charged_leptons(mu_eL_H, ctx.T, muons, mu_L) if on_L else None
-    L_Q = charged_leptons(mu_eL_Q, ctx.T, muons, mu_L) if on_L else None
-    G = charged_leptons(mu_eG, ctx.T, muons, mu_L) if on_G else None
-    k_L_H = _lepton_kappa(mu_eL_H, ctx.T, muons, mu_L) if on_L else 0.0
-    k_L_Q = _lepton_kappa(mu_eL_Q, ctx.T, muons, mu_L) if on_L else 0.0
-    k_G = _lepton_kappa(mu_eG, ctx.T, muons, mu_L) if on_G else 0.0
-    k_nue = (_neutrino_kappa(mu_L, ctx.T)
+    L_H = charged_leptons(mu_eL_H, ctx.T, muons, mu_nue) if on_L else None
+    L_Q = charged_leptons(mu_eL_Q, ctx.T, muons, mu_nue) if on_L else None
+    G = charged_leptons(mu_eG, ctx.T, muons, mu_nue) if on_G else None
+    k_L_H = _lepton_kappa(mu_eL_H, ctx.T, muons, mu_nue) if on_L else 0.0
+    k_L_Q = _lepton_kappa(mu_eL_Q, ctx.T, muons, mu_nue) if on_L else 0.0
+    k_G = _lepton_kappa(mu_eG, ctx.T, muons, mu_nue) if on_G else 0.0
+    k_nue = (_neutrino_kappa(mu_nue, ctx.T)
              if spec.L_e is Regime.GLOBAL else 0.0)
-    # The Y_L row counts ELECTRONS only (muons carry no electron lepton
+    # The Y_Le row counts ELECTRONS only (muons carry no electron lepton
     # number), so it needs the electron-only susceptibility.
     ke_L_H = _lepton_kappa(mu_eL_H, ctx.T, False) if on_L else 0.0
     ke_L_Q = _lepton_kappa(mu_eL_Q, ctx.T, False) if on_L else 0.0
     ke_G = _lepton_kappa(mu_eG, ctx.T, False) if on_G else 0.0
-    # mu_mu = mu_e - mu_L, so with trapped neutrinos every muon quantity also
-    # responds to mu_L, with the opposite sign.
-    km_L_H = _muon_kappa(mu_eL_H, ctx.T, muons, mu_L) if on_L else 0.0
-    km_L_Q = _muon_kappa(mu_eL_Q, ctx.T, muons, mu_L) if on_L else 0.0
-    km_G = _muon_kappa(mu_eG, ctx.T, muons, mu_L) if on_G else 0.0
+    # mu_mu = mu_e - mu_nue, so with trapped neutrinos every muon quantity also
+    # responds to mu_nue, with the opposite sign.
+    km_L_H = _muon_kappa(mu_eL_H, ctx.T, muons, mu_nue) if on_L else 0.0
+    km_L_Q = _muon_kappa(mu_eL_Q, ctx.T, muons, mu_nue) if on_L else 0.0
+    km_G = _muon_kappa(mu_eG, ctx.T, muons, mu_nue) if on_G else 0.0
 
     chi = d["chi"]
     n_L_H, P_L_H = (L_H.n, L_H.P) if on_L else (0.0, 0.0)
@@ -258,9 +258,9 @@ def mixed_jacobian(x, ctx):
         d_chi = _sens(sj, "chi")
         d_muS = _sens(sj, "mu_S")
         if spec.C is Regime.NOT_CONSERVED:
-            d_muCH = (_sens(sj, "mu_L") - eta * _sens(sj, "mu_eL_H")
+            d_muCH = (_sens(sj, "mu_nue") - eta * _sens(sj, "mu_eL_H")
                       - (1.0 - eta) * _sens(sj, "mu_eG"))
-            d_muCQ = (_sens(sj, "mu_L") - eta * _sens(sj, "mu_eL_Q")
+            d_muCQ = (_sens(sj, "mu_nue") - eta * _sens(sj, "mu_eL_Q")
                       - (1.0 - eta) * _sens(sj, "mu_eG"))
         elif spec.yc_leptons:
             d_muCH, d_muCQ = _sens(sj, "mu_C_H"), _sens(sj, "mu_C_Q")
@@ -278,8 +278,8 @@ def mixed_jacobian(x, ctx):
         dnB_Q, dnC_Q, dnS_Q, dP_Q = qOut(0), qOut(1), qOut(2), qOut(3)
 
         # Lepton responses: dP = sum n dmu (Gibbs-Duhem), dn = sum kappa dmu.
-        # The muon terms pick up -dmu_L because mu_mu = mu_e - mu_L.
-        d_muL = _sens(sj, "mu_L")
+        # The muon terms pick up -dmu_L because mu_mu = mu_e - mu_nue.
+        d_muL = _sens(sj, "mu_nue")
         dP_L_H = n_L_H * _sens(sj, "mu_eL_H") - nm_L_H * d_muL
         dP_L_Q = n_L_Q * _sens(sj, "mu_eL_Q") - nm_L_Q * d_muL
         dn_L_H = k_L_H * _sens(sj, "mu_eL_H") - km_L_H * d_muL
@@ -307,7 +307,7 @@ def mixed_jacobian(x, ctx):
                               + chi * ke_L_Q * _sens(sj, "mu_eL_Q")
                               + (ne_L_Q - ne_L_H) * d_chi)
                        + (1.0 - eta) * ke_G * _sens(sj, "mu_eG"))
-            rows.append((dne_avg + k_nue * _sens(sj, "mu_L")) / ns)
+            rows.append((dne_avg + k_nue * _sens(sj, "mu_nue")) / ns)
         if on_L:
             rows.append((dnC_H - dn_L_H) / ns)
             rows.append((dnC_Q - dn_L_Q) / ns)

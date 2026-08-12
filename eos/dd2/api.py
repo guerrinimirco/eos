@@ -26,12 +26,6 @@ from eos.dd2.table import (
     TableSpec, build_table, _mode_kwargs, solve_octet_at_entropy,
 )
 
-#: Spec condition name -> the keyword the solver layer uses. Y_Le is the
-#: electron-family lepton fraction of the trapped mode; DD2 does not track the
-#: muon family (Y_Lmu raises below).
-_CONDITION_ALIASES = {"Y_Le": "Y_L"}
-
-
 @dataclass(frozen=True)
 class PointResult:
     """One eos_point outcome: a convergence status the caller can test.
@@ -62,10 +56,7 @@ def _normalize(mode, conditions):
             raise ValueError("leptons= applies to fixed_YC (fixed_YC_YS with "
                              "leptons is not wired; see docs/DEFERRED.md)")
         mode = "fixed_YC_neutral" if leptons else "fixed_YC"
-    out = {}
-    for key, value in conditions.items():
-        out[_CONDITION_ALIASES.get(key, key)] = value
-    return mode, out
+    return mode, dict(conditions)
 
 
 def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
@@ -124,7 +115,7 @@ def eos_table(par, mode, species, axes, fixed=None, skip_errors=True,
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
     A thin wrapper over eos.dd2.build_table: axes and fixed follow TableSpec
-    (axes={'nB': grid, 'T' or 'SnB': grid, optionally 'Y_C'/'Y_S'/'Y_L'}),
+    (axes={'nB': grid, 'T' or 'SnB': grid, optionally 'Y_C'/'Y_S'/'Y_Le'}),
     the density axis is warm-started with bisected continuation through
     onsets, and the result's points/rows feed eos.tov and the plotting code
     directly. skip_errors=True drops non-converged points from their line

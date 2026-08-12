@@ -99,7 +99,7 @@ def default_guess(ctx):
         "mu_C": -base.mu_e,
         # Strangeness self-equilibrating, neutrinos transparent.
         "mu_S": 0.0,
-        "mu_L": 0.0,
+        "mu_nue": 0.0,
     }
     return [seed[name] for name in ctx.slots]
 
@@ -209,7 +209,7 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
     if lep:
         mu_dot_n += eta * avg_local("mu_dot_n") + (1.0 - eta) * G.mu_dot_n
     if nu is not None:
-        mu_dot_n += d["mu_L"] * nu.n                      # mu_nue = mu_L
+        mu_dot_n += d["mu_nue"] * nu.n                      # mu_nue = mu_nue
 
     result = MixedResult(
         converged=True, error=res_max, n_B=n_B, T=T, eta=eta, chi=chi,

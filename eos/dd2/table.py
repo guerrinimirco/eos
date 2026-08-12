@@ -28,7 +28,7 @@ from eos.dd2.solver import solve_octet, sweep_octet
 #: same way:
 #:
 #:   beta_eq_neutrinoless      charge-neutral beta equilibrium, neutrinos escape
-#:   beta_eq_neutrino_trapped  ... with neutrinos trapped at fixed Y_L
+#:   beta_eq_neutrino_trapped  ... with neutrinos trapped at fixed Y_Le
 #:   fixed_YC                  fixed non-leptonic charge fraction, no leptons
 #:                             (the CompOSE general-purpose (nB, T, Y_q) slice)
 #:   fixed_YC_neutral          ... plus neutralizing leptons, so the total
@@ -51,7 +51,7 @@ MODES = {
 MODE_FRACTIONS = {
     "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",),
     "fixed_YC_neutral": ("Y_C",), "fixed_YS": ("Y_S",),
-    "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_L",),
+    "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_Le",),
 }
 
 
@@ -82,7 +82,7 @@ def hadronic_row(p, flags):
     row = dict(n_B=n_B, T=p.T, chi=0.0, phase="H", P=p.P, eps=p.eps, s=p.s,
                S_per_B=(p.s / n_B if n_B else 0.0), mu_B=p.mu_B,
                Y_C=n_C / n_B, Y_S=n_S / n_B,
-               mu_e=p.mu_e, mu_S=p.mu_S, mu_L=p.mu_nue,
+               mu_e=p.mu_e, mu_S=p.mu_S, mu_nue=p.mu_nue,
                Y_e=p.n_e / n_B, **{"Y_mu-": p.n_mu / n_B})
     for name, n in p.composition_map.items():
         row[f"Y_{name}"] = n / n_B
@@ -123,7 +123,7 @@ class TableSpec:
     """One table request.
 
     axes : {'nB': grid, exactly one of 'T'/'SnB': grid, and optionally any of
-           'Y_C'/'Y_S'/'Y_L': grid to sweep that fraction as a further axis}
+           'Y_C'/'Y_S'/'Y_Le': grid to sweep that fraction as a further axis}
     fixed: scalar values for the fractions the mode needs that are not swept
            as axes
     """
@@ -131,7 +131,7 @@ class TableSpec:
     mode: str                             # a key of MODES, above
     axes: dict
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
-    fixed: dict = field(default_factory=dict)   # Y_C / Y_S / Y_L targets
+    fixed: dict = field(default_factory=dict)   # Y_C / Y_S / Y_Le targets
     want_coeffs: bool = False             # attach equilibrium c_s^2 per T-line
 
     def __post_init__(self):
@@ -144,7 +144,7 @@ class TableSpec:
         if self.mode not in MODES:
             raise ValueError(f"unknown mode {self.mode!r}; expected one of "
                              f"{list(MODES)}")
-        self._frac_keys = [k for k in ("Y_C", "Y_S", "Y_L") if k in self.axes]
+        self._frac_keys = [k for k in ("Y_C", "Y_S", "Y_Le") if k in self.axes]
         # Validate early that every fraction the mode needs is supplied, by an
         # axis or a scalar; an axis value stands in here only for the check.
         probe = dict(self.fixed)

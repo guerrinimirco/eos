@@ -8,7 +8,7 @@
 \newcommand{\muB}{\mu_B}
 \newcommand{\muC}{\mu_C}
 \newcommand{\muS}{\mu_S}
-\newcommand{\muL}{\mu_L}
+\newcommand{\munue}{\mu_{\nu_e}}
 \newcommand{\SigR}{\Sigma^{R}}
 \newcommand{\mueff}[1]{\mu^{\mathrm{eff}}_{#1}}
 \newcommand{\meff}[1]{m^{*}_{#1}}
@@ -232,7 +232,7 @@ Species potentials are derived, never independent unknowns:
 \end{equation}
 %
 In trapped-neutrino matter the electron family adds $\mu_{L}$:
-$\mu_e = \muL - \muC$, $\mu_{\nu_e} = \muL$; the muon family remains
+$\mu_e = \munue - \muC$, $\mu_{\nu_e} = \munue$; the muon family remains
 transparent ($\mu_\mu = -\muC$, no $\nu_\mu$ tracked).
 
 \section{The thermal meson gas}
@@ -273,13 +273,13 @@ All modes are solved by one residual system over the unknown vector
 %
 \begin{equation}
 x = \big[ \sigma,\ \omega_0,\ \rho_0,\ (\phi_0),\ \tilde\mu_B,\ \muC,\
-          (\muS),\ (\muL) \big],
+          (\muS),\ (\munue) \big],
 \qquad \tilde\mu_B \equiv \muB - \SigR ,
 \label{eq:unknowns}
 \end{equation}
 %
 where $\phi_0$ is present iff hyperons and the $\phi$ field are active,
-$\muS$ iff strangeness is fixed, and $\muL$ iff neutrinos are trapped.
+$\muS$ iff strangeness is fixed, and $\munue$ iff neutrinos are trapped.
 Working with $\tilde\mu_B$ (and species $\mueff{i}$) instead of $\muB$
 removes the rearrangement circularity and the large vector shift from the
 iteration --- $\muB = \tilde\mu_B + \SigR$ is restored at assembly --- and
@@ -297,16 +297,16 @@ mode & independent variables & closing constraints & potentials \\
 \midrule
 \texttt{beta\_eq\_neutrinoless} & $(\nB, T)$ &
   $\sum_i Q_i n_i + n_C^{\mathrm{mes}} - n_e - n_\mu = 0$ &
-  $\muS = \muL = 0$ \\
+  $\muS = \munue = 0$ \\
 \texttt{beta\_eq\_neutrino\_trapped} & $(\nB, Y_{L_e}, T)$ &
   neutrality; $(n_e + n_{\nu_e})/\nB = Y_{L_e}$ &
-  $\muS = 0$; $\muL$ unknown \\
+  $\muS = 0$; $\munue$ unknown \\
 \texttt{fixed\_YC} & $(\nB, Y_C, T)$ &
   $\big(\textstyle\sum_i Q_i n_i + n_C^{\mathrm{mes}}\big)/\nB = Y_C$ &
-  $\muS = \muL = 0$ \\
+  $\muS = \munue = 0$ \\
 \texttt{fixed\_YC\_YS} & $(\nB, Y_C, Y_S, T)$ &
   the $Y_C$ row; $\big(\textstyle\sum_i S_i n_i + n_S^{\mathrm{mes}}\big)/\nB = Y_S$ &
-  $\muS$ unknown; $\muL = 0$ \\
+  $\muS$ unknown; $\munue = 0$ \\
 \bottomrule
 \end{tabular}
 \end{center}

@@ -30,7 +30,7 @@ Each is a choice of how {B, C, S, L_e} are conserved, and all four run through
 one solver rather than four:
 
     beta_eq_neutrinoless()              (n_B, T)
-    beta_eq_neutrino_trapped(Y_L)       (n_B, Y_L, T)
+    beta_eq_neutrino_trapped(Y_Le)       (n_B, Y_Le, T)
     fixed_YC(Y_C, leptons=...)          (n_B, Y_C, T)
     fixed_YC_YS(Y_C, Y_S, leptons=...)  (n_B, Y_C, Y_S, T)
 

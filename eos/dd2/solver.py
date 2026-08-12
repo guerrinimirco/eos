@@ -361,7 +361,7 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
                   include_photons=True, check_consistency=True):
     """
     Neutrino-transparent beta-equilibrium npemu matter at density n_B
-    [fm^-3] and temperature T [MeV] ( mode 1: mu_S = mu_L = 0,
+    [fm^-3] and temperature T [MeV] ( mode 1: mu_S = mu_nue = 0,
     charge neutrality). Photons contribute at T > 0 when include_photons.
 
     x0: optional warm-start vector [sigma, rho0, mu_eff_n, mu_C], e.g. from
@@ -461,7 +461,7 @@ def octet_warm_start(point, has_phi, has_muS=False, has_muL=False):
     """Unknown vector from a solved octet EoSPoint (for sweep continuation).
 
     mu_C is recovered as mu_p - mu_n (robust in trapped mode, where
-    mu_e = mu_L - mu_C so -mu_e no longer equals mu_C).
+    mu_e = mu_nue - mu_C so -mu_e no longer equals mu_C).
     """
     return _octet_x0((point.sigma, point.omega0, point.rho0, point.phi0,
                       point.mu_B - point.Sigma_R, point.mu_C,
@@ -484,7 +484,7 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
 
 
 def mode_spec(charge_mode="neutral", Y_C=0.0, strange_mode="eq", Y_S=0.0,
-              lepton_mode="transparent", Y_L=0.0, yc_leptons=False):
+              lepton_mode="transparent", Y_Le=0.0, yc_leptons=False):
     """dd2's keyword vocabulary as the shared mode declaration.
 
     The keywords predate `eos.general.modes` and are what every caller of
@@ -495,11 +495,11 @@ def mode_spec(charge_mode="neutral", Y_C=0.0, strange_mode="eq", Y_S=0.0,
         charge_mode='neutral'  ->  C equilibrated (beta equilibrium)
         charge_mode='fixed'    ->  C fixed at Y_C, leptons per yc_leptons
         strange_mode='fixed'   ->  S fixed at Y_S; 'eq' leaves mu_S = 0
-        lepton_mode='trapped'  ->  L_e fixed at Y_L, i.e. the spec's Y_Le
+        lepton_mode='trapped'  ->  L_e fixed at Y_Le, i.e. the spec's Y_Le
     """
     if lepton_mode == "trapped" and charge_mode != "neutral":
         raise ValueError("trapped lepton_mode requires charge_mode='neutral' "
-                         "(Y_L trapping implies leptons present, charge-neutral)")
+                         "(Y_Le trapping implies leptons present, charge-neutral)")
     if yc_leptons and charge_mode != "fixed":
         raise ValueError("yc_leptons (flavor 2b) requires charge_mode='fixed'")
     fixed = Conservation.FIXED
@@ -510,7 +510,7 @@ def mode_spec(charge_mode="neutral", Y_C=0.0, strange_mode="eq", Y_S=0.0,
     if strange_mode == "fixed":
         targets["Y_S"] = Y_S
     if lepton_mode == "trapped":
-        targets["Y_Le"] = Y_L
+        targets["Y_Le"] = Y_Le
     return ModeSpec(
         C=fixed if charge_mode == "fixed" else eq,
         S=fixed if strange_mode == "fixed" else eq,
@@ -720,7 +720,7 @@ def assemble_octet(x, ctx, spec):
         Y_C=charge_tot / ctx.nB_nat, Y_S=strangeness_tot / ctx.nB_nat,
         Y_C_baryons=charge_had / ctx.nB_nat,
         Y_S_baryons=strangeness / ctx.nB_nat,
-        Y_L=(ne + nnue) / ctx.nB_nat,
+        Y_Le=(ne + nnue) / ctx.nB_nat,
         densities=densities,
         mu_dot_n=mu_dot_n + lepton_dot_n,
     )
@@ -751,7 +751,7 @@ def _residual_and_jacobian(ctx, spec, T, analytic_jac):
 
 def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
-                Y_L=0.0, yc_leptons=False, include_photons=True,
+                Y_Le=0.0, yc_leptons=False, include_photons=True,
                 check_consistency=True, analytic_jac=True):
     """
     General octet solve (the unified charge/strangeness scheme) at (n_B [fm^-3], T [MeV]).
@@ -770,7 +770,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     slower than finite differences; it is left on there for one default rather
     than a speed heuristic.
     """
-    spec = mode_spec(charge_mode, Y_C, strange_mode, Y_S, lepton_mode, Y_L,
+    spec = mode_spec(charge_mode, Y_C, strange_mode, Y_S, lepton_mode, Y_Le,
                      yc_leptons)
     ctx = build_matter_ctx(par, n_B, flags, T=T)
     has_muS, has_muL = spec.is_fixed("S"), spec.is_fixed("L_e")
@@ -852,7 +852,7 @@ def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
                         analytic_jac=True):
     """
     Beta-equilibrium matter with the full active baryon set (
-    mode 1; mu_S = mu_L = 0, charge neutrality). Thin wrapper over solve_octet.
+    mode 1; mu_S = mu_nue = 0, charge neutrality). Thin wrapper over solve_octet.
     Reduces to the nucleon problem when flags.hyperons is False.
     """
     return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
@@ -872,7 +872,7 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
             'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_neutral',
             'fixed_YS', 'fixed_YC_YS'.
     fracs : the fixed fractions the mode consumes, as keywords, e.g.
-            Y_C=0.3 for 'fixed_YC' or Y_L=0.4 for the trapped mode. Which
+            Y_C=0.3 for 'fixed_YC' or Y_Le=0.4 for the trapped mode. Which
             keys each mode needs is `eos.dd2.MODE_FRACTIONS`.
 
     A thin dispatcher over `solve_octet`, which implements every mode; this
@@ -909,18 +909,18 @@ def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
                        check_consistency=check_consistency)
 
 
-def solve_yl_octet(par, n_B, Y_L, flags, T=0.0, x0=None,
+def solve_yl_octet(par, n_B, Y_Le, flags, T=0.0, x0=None,
                    include_photons=True, check_consistency=True):
     """
     Neutrino-trapped matter at fixed electron lepton fraction
-    Y_L = (n_e + n_nue)/n_B. Charge-neutral, mu_L unknown,
-    electron-neutrinos included (mu_nue = mu_L, mu_e = mu_L - mu_C). The muon
+    Y_Le = (n_e + n_nue)/n_B. Charge-neutral, mu_nue unknown,
+    electron-neutrinos included (mu_nue = mu_nue, mu_e = mu_nue - mu_C). The muon
     family stays transparent. Requires SpeciesFlags(neutrinos=True).
     """
     if not flags.neutrinos:
         raise ValueError("solve_yl_octet requires SpeciesFlags(neutrinos=True)")
     return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
-                       lepton_mode="trapped", Y_L=Y_L,
+                       lepton_mode="trapped", Y_Le=Y_Le,
                        include_photons=include_photons,
                        check_consistency=check_consistency)
 
@@ -951,7 +951,7 @@ def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
 
 
 def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
-                strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_L=0.0,
+                strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_Le=0.0,
                 yc_leptons=False, include_photons=True, max_bisect=6,
                 stop_at_boundary=False, analytic_jac=True, max_skip=3):
     """
@@ -982,7 +982,7 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
     def solve_from(n_B, x0):
         return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
                            Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
-                           lepton_mode=lepton_mode, Y_L=Y_L, yc_leptons=yc_leptons,
+                           lepton_mode=lepton_mode, Y_Le=Y_Le, yc_leptons=yc_leptons,
                            include_photons=include_photons,
                            analytic_jac=analytic_jac)
 

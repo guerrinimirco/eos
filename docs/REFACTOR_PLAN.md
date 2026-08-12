@@ -220,9 +220,11 @@ their tests in CLAUDE.md §5.
 - abpr: solver.py + api.py.
 - enjl: eos_beta.py + uniform.py merge into solver.py; thermodynamics.py grows
   finite-T; gains verify/.
-- mixed: has adapters.py and api.py; coefficients.py becomes responses.py
-  (same role, same name as dd2's); the internal `Y_L` is renamed to the spec's
-  `Y_Le`.
+- mixed: has adapters.py, api.py and responses.py (same role, same name as
+  dd2's). DONE: the electron lepton fraction is `Y_Le` and its potential
+  `mu_nue` everywhere in dd2 and mixed — CLAUDE.md §2's names — and both
+  `api.py` translation layers are deleted. `Y_L` was only unambiguous while
+  the muon family was untrackable, and §3 already allows `Y_Lmu`.
 - astro/tov: crust handling split out of solver.py into crust.py — not
   because solver.py is long (§13 forbids that reason) but because stitching a
   crust EoS onto a core table is separable physics from integrating the TOV

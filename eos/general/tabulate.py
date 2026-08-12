@@ -37,7 +37,7 @@ def lines_from_axes(axes, fixed=None):
     """The list of line conditions from a table's axes.
 
     `axes` maps axis name to grid: exactly one temperature axis (`T` or
-    `SnB`) plus any fraction axes (`Y_C`, `Y_S`, `Y_L`, ...). `fixed` supplies
+    `SnB`) plus any fraction axes (`Y_C`, `Y_S`, `Y_Le`, ...). `fixed` supplies
     fractions the mode needs that are not swept. Returns one dict per line,
     temperature outermost, in the order the fraction axes were given -- so
     adding a fraction axis extends the table without reordering what was

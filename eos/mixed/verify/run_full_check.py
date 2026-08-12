@@ -75,17 +75,17 @@ def _euler_resid(r):
     and species densities rather than reading the solver's own bookkeeping, so
     this is an independent oracle and not the same code path twice. Each
     charged-lepton species is counted at its own potential: mu_e for electrons,
-    mu_mu = mu_e - mu_L for muons.
+    mu_mu = mu_e - mu_nue for muons.
     """
     chi, eta, T = r.chi, r.eta, r.T
     p, e = r.potentials, r.extras
-    mu_L = p.get("mu_L", 0.0)
+    mu_nue = p.get("mu_nue", 0.0)
     munH = sum(r.th_H.mu_i[n] * dn for n, dn in r.th_H.densities.items())
     munQ = sum(r.th_Q.mu_i[n] * dn for n, dn in r.th_Q.densities.items())
     mdn = (1.0 - chi) * munH + chi * munQ
 
     def lepton_sum(domain, mu_e):
-        return mu_e * domain.n_e + (mu_e - mu_L) * domain.n_mu
+        return mu_e * domain.n_e + (mu_e - mu_nue) * domain.n_mu
 
     if "mu_eL_H" in p:
         mdn += eta * ((1.0 - chi) * lepton_sum(e["L_H"], p["mu_eL_H"])
@@ -93,7 +93,7 @@ def _euler_resid(r):
     if "mu_eG" in p:
         mdn += (1.0 - eta) * lepton_sum(e["G"], p["mu_eG"])
     if e["nu"] is not None:
-        mdn += mu_L * e["nu"].n
+        mdn += mu_nue * e["nu"].n
     return abs(r.eps + r.P - T * r.s - mdn) / abs(r.eps)
 
 

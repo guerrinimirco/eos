@@ -59,7 +59,7 @@ def _columns(rows):
     """Long-format rows -> {name: array}, union of all keys, nan where absent.
 
     Different modes and different eta values populate different columns (a
-    trapped-neutrino run has mu_L, a Maxwell run has no mu_eG), so the union is
+    trapped-neutrino run has mu_nue, a Maxwell run has no mu_eG), so the union is
     taken rather than assuming every row has the same keys.
     """
     names = []

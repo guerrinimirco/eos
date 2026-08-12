@@ -29,7 +29,7 @@ gas contributes charge and strangeness to the equilibrium constraints, no
 baryon number, and no field sources.
 
 **Solving.** One residual system for all modes over
-`x = [sigma, omega0, rho0, (phi0), mu_B - Sigma^R, mu_C, (mu_S), (mu_L)]`;
+`x = [sigma, omega0, rho0, (phi0), mu_B - Sigma^R, mu_C, (mu_S), (mu_nue)]`;
 species potentials follow `mu_i = B_i mu_B + Q_i mu_C + S_i mu_S`, and the
 solver works in the effective potentials `mu_eff_i = mu_i - Sigma0_i`, which
 vary smoothly along density sweeps (that is what makes warm starts work).

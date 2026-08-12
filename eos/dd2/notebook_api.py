@@ -530,7 +530,7 @@ def export_eos_table(par, flags, mode="beta_eq_neutrinoless", nB=None, T=None, S
     T / SnB : the temperature axis — pass ONE. ``T`` is temperature [MeV]
               (scalar or list); ``SnB`` is entropy per baryon (adds the outer
               T-solve). Defaults to T=0.
-    fixed   : {'Y_C':..,'Y_S':..,'Y_L':..} for the constrained modes. Any of
+    fixed   : {'Y_C':..,'Y_S':..,'Y_Le':..} for the constrained modes. Any of
               those keys may instead be a grid, which makes it a further table
               axis.
 
@@ -547,7 +547,7 @@ def export_eos_table(par, flags, mode="beta_eq_neutrinoless", nB=None, T=None, S
         axes = {"nB": nB, "T": np.atleast_1d(0.0 if T is None else T)}
     fixed = dict(fixed or {})
     # A fraction given as a grid becomes an axis; a scalar stays in `fixed`.
-    for key in ("Y_C", "Y_S", "Y_L"):
+    for key in ("Y_C", "Y_S", "Y_Le"):
         if key in fixed and np.ndim(fixed[key]) > 0:
             axes[key] = np.asarray(fixed.pop(key), float)
     spec = TableSpec(parametrization=par, mode=mode, axes=axes, include=flags,
