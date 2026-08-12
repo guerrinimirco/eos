@@ -68,7 +68,7 @@ import numpy as np
 from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon
 from eos.dd2.solver import solve_octet, octet_warm_start
-from eos.dd2.physics.octet import _yc_neutralizing_leptons
+from eos.dd2.thermodynamics import neutralizing_leptons
 from eos.vmit.thermodynamics import compute_quark_matter_thermo_from_n
 from eos.mixed.equilibrium.charges import quark_charges
 from eos.mixed.adapters import hadronic_phase
@@ -131,10 +131,10 @@ def _quark_block(n_u, n_d, n_s, T, vmit_params):
 def _lepton_block(n_C, flags, T):
     """(P, eps) of the leptons neutralising a charge density `n_C` [fm^-3].
 
-    `_yc_neutralizing_leptons` works in natural units and returns
+    `neutralizing_leptons` works in natural units and returns
     (mu_e, (n,P,eps,s)_e, (n,P,eps,s)_mu) there.
     """
-    _mu_e, e_blk, mu_blk = _yc_neutralizing_leptons(
+    _mu_e, e_blk, mu_blk = neutralizing_leptons(
         n_C * hc3, Electron.mass, Muon.mass, flags.muons, T)
     return (e_blk[1] + mu_blk[1]) / hc3, (e_blk[2] + mu_blk[2]) / hc3
 

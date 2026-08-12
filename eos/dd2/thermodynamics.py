@@ -36,7 +36,13 @@ from eos.general.particles import Electron, Muon
 from eos.general.physics_constants import hc3
 from eos.general.state import PhaseThermo
 from eos.general import thermal_mesons as _gas
-from eos.dd2.physics.kernel_numba import meson_sources_t0, _NUMBA_OK
+try:
+    from eos.dd2.backends.kernel_numba import meson_sources_t0, _NUMBA_OK
+except ImportError:
+    # `backends/` is optional: CLAUDE.md section 5 defines it by the property
+    # that deleting it changes no number, only the speed. Without it the plain
+    # NumPy path below is the whole implementation.
+    meson_sources_t0, _NUMBA_OK = None, False
 from eos.dd2.species import active_baryons
 
 _PI2 = np.pi ** 2

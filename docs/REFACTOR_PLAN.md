@@ -174,24 +174,33 @@ The two rules that decide what goes where — *thermodynamics computes from the
 state, solver finds the state*, and *backends/ is deletable* — are stated with
 their tests in CLAUDE.md §5.
 
-- dd2 is the template and is retrofitted FIRST, because sfho is reshaped to
-  it. `physics/` becomes `backends/{jacobian, kernel_numba}`; `physics/thermo`
-  + `fields` + the non-residual half of `octet` become `thermodynamics.py`;
-  `octet_residual` and `beta_eq_residual` join `solver.py`. The mode block
-  (`charge_mode`, `Y_C`, `strange_mode`, `Y_S`, `lepton_mode`, `Y_L`,
-  `yc_leptons`) comes off `OctetCtx` and becomes an explicit argument to the
-  residual — this is the one part that is surgery rather than a move, and it
-  pays for itself at `mixed/adapters.py`, which currently passes a
-  `charge_mode="fixed", Y_C=0.0, Y_S=0.0` it never uses. Also:
-  coefficients.py becomes responses.py and coefficients_jac.py becomes
-  backends/responses_jac.py — two files, not one, because §9 makes them the
-  reference and fast flavors of one set of quantities and `backends/` is
-  defined by being deletable; nmp.py + nmp_inverter.py merge into
-  nmp.py with `from_nmp` a free function there rather than a classmethod on
-  Parametrization (which today needs three deferred imports to break the
-  cycle); `xp.py` (the dead JAX namespace shim) and `notebook_api.py` go;
-  `_yc_neutralizing_leptons` is model-independent and moves to
-  `general/thermodynamics_leptons.py`.
+- dd2 is the template and was retrofitted FIRST, because sfho is reshaped to
+  it. DONE: `physics/` is `backends/{jacobian, kernel_numba, responses_jac}`;
+  `physics/{thermo, fields, mesons}` and the non-residual half of `octet` are
+  `thermodynamics.py`; `octet_residual`, `assemble_octet` and
+  `beta_eq_residual` are in `solver.py`; `coefficients.py` is `responses.py`;
+  `nmp.py` + `nmp_inverter.py` are merged with `from_nmp` a free function
+  there rather than a classmethod on Parametrization (which needed a deferred
+  import to break the cycle); `xp.py` is gone.
+
+  The mode block (`charge_mode`, `Y_C`, `strange_mode`, `Y_S`, `lepton_mode`,
+  `Y_L`, `yc_leptons`) came off `OctetCtx`, which dissolved into
+  `thermodynamics.MatterCtx`; `octet_residual(x, ctx, spec)` now takes the
+  `ModeSpec` as an argument. `solve_octet` keeps its keywords — they are the
+  public vocabulary and appear in notebooks — and turns them into a spec in
+  one place, `solver.mode_spec`.
+
+  `backends/` being deletable is now a measured fact rather than a claim:
+  nothing in it is re-exported from `eos/dd2/__init__.py`, and both
+  `solver.py` and `thermodynamics.py` import it under `try/except ImportError`
+  so a missing directory lands on the NumPy reference path. Removing it leaves
+  every EoS baseline bit-identical at rtol = 1e-10; see DEFERRED for the one
+  quantity that does move (the TOV sequence, by 5e-07) and why.
+
+  STILL OUTSTANDING: `notebook_api.py` goes, and
+  `_yc_neutralizing_leptons` — model-independent, now
+  `thermodynamics.neutralizing_leptons` with its alias dropped at all three
+  consumers — moves to `general/thermodynamics_leptons.py`.
 - sfho: reshaped to the dd2 pattern — nuclear_saturation_properties.py
   becomes nmp.py; comparison logic becomes verify/compose.py; meson gas
   through general/thermal_mesons.py. No couplings.py: SFHo's g_i are

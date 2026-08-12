@@ -106,6 +106,57 @@ in `eos/` and in `nucleation/` now goes through
 
 ---
 
+### Only dd2 returns the shared state records; six models still return their own
+
+`eos/general/state.py` holds the records every model is meant to hand back —
+`PhaseThermo` (matter only: the model's own fields under its own names, EVERY
+active species' density, mu_i, mu_eff_i and m_eff_i per species, the conserved
+charges, P, eps, s), `LeptonThermo` (all four potentials explicit, so a
+transparent muon family is a visible assumption rather than a hidden
+`mu_mu = -mu_C`), and `EoSPoint` (what a mode returns). `eos/general/modes.py`
+holds `ModeSpec`, the mode as one choice per conserved charge. dd2's
+thermodynamics returns `PhaseThermo` and its solver takes a `ModeSpec`. The
+others do not, and `eos/mixed` still carries a second `PhaseThermo` of its own.
+
+What each model has to supply is decided by ONE question — what its internal
+self-consistent solution is — because the rest of the state is (chemical
+potentials, T) in every model:
+
+    dd2, sfho          meson mean fields sigma, omega0, rho0, (phi0);
+                       n_i derived
+    enjl               constituent masses M_u, M_d, M_s from the gap
+                       equation; n_i derived
+    vmit               the vector field V = a hbar c sum_q n_q
+    zl                 the interaction potentials mu_Hv(n_p, n_n)
+    alphabag, abpr     none -- everything is explicit in mu
+
+vmit and zl are the two that look different and are not: both carry densities
+in the *unknown vector* because that keeps the residual polynomial rather than
+nesting Fermi integrals inside it. That is a conditioning choice of the
+solver, not a statement about the state — physically vmit's state is still
+(mu_q, V, T). So `fields` holds whatever the model solves for, under the
+model's own names, and is empty where there is nothing to solve.
+
+Three things the records fix that every model currently gets wrong in the same
+way, so they are worth doing together rather than one model at a time:
+
+- **nucleons are privileged over hyperons.** Every model's kinetics computes
+  mu_eff and m* for each active species and then keeps only n and p. Neither
+  is recoverable from the record afterwards (they need the fields and the
+  per-species coupling ratios), so g-modes and the response functions recompute
+  them. `m_eff` is even singular although m*_i differs per species.
+- **the mode is welded into the state.** dd2 carried eight mode fields on its
+  context and branched on strings inside the residual; the other models do the
+  same with their own vocabularies, which is why no two of them accept a mode
+  the same way.
+- **the non-leptonic charge is called `mu_Q` in some models and `mu_C` in
+  others.** §2 says C. dd2 is converted; the rest are not.
+
+Each model's conversion lands in its own commit with its baseline re-run,
+since the records change what `eos_point` returns.
+
+---
+
 ### The module names are standardised, and most models have not been renamed
 
 CLAUDE.md §5 fixes one name per role — `parameters.py`, `species.py`,
@@ -115,15 +166,16 @@ names mandatory and their existence conditional. Two renames are done
 `thermodynamics.py`). The rest are outstanding, each belonging in its model's
 own session where the baseline and `test_imports.py` are already being run:
 
-    dd2       physics/ -> backends/{jacobian, kernel_numba, responses_jac};
-              the non-residual half of physics/octet -> thermodynamics.py;
-              octet_residual and physics/residual.py -> solver.py;
-              delete notebook_api.py
-              (done: physics/{thermo, fields, mesons} -> thermodynamics.py;
-               coefficients.py -> responses.py and coefficients_jac.py ->
-               responses_jac.py, kept as two files because §9 makes them the
-               reference and fast flavors of one thing, not one module;
-               nmp.py + nmp_inverter.py -> nmp.py; xp.py deleted)
+    dd2       delete notebook_api.py -- the last one outstanding. The rest of
+              dd2's layout is now CLAUDE.md §5: physics/{thermo, fields,
+              mesons} and the non-residual half of physics/octet became
+              thermodynamics.py; octet_residual, assemble_octet and
+              physics/residual.py became solver.py; physics/ became backends/
+              {jacobian, kernel_numba, responses_jac}; coefficients.py became
+              responses.py (kept apart from responses_jac.py because §9 makes
+              them the reference and fast flavors of one thing, and backends/
+              has to stay deletable); nmp.py + nmp_inverter.py merged; xp.py
+              deleted.
     sfho      eos.py -> solver.py, compute_tables.py -> table.py,
               nuclear_saturation_properties.py -> nmp.py,
               thermodynamics_hadrons.py -> thermodynamics.py
@@ -262,24 +314,27 @@ both touch the same code.
   at T > 0, so it is a deliberate physics-changing fix: its own commit, the
   before/after quoted, and the affected baseline entries regenerated. It must
   not be folded into a refactor, which is why it is still here.
-- `eos/dd2/__init__.py` re-exports four names that live in the accelerated
-  half of the model — `octet_jacobian` and `kinetic_derivs` from
-  `physics/jacobian.py`, `susceptibilities` and `SUSCEPT_LABELS` from
-  `responses_jac.py`. CLAUDE.md §5 defines `backends/` by the property that
-  deleting it changes no number, so once those files move there `import
-  eos.dd2` would fail on a deleted `backends/` and the property would be a
-  claim rather than a fact. Either the exports come off the package surface
-  (callers reach them at `eos.dd2.backends.jacobian`, which is where a reader
-  looking for the analytic Jacobian would go anyway) or the import is guarded.
-  It belongs in the commit that creates `backends/`, alongside a check that
-  actually deletes the directory and re-runs `test/dd2`.
+- Deleting `backends/` leaves every equation-of-state baseline BIT-IDENTICAL
+  at rtol = 1e-10 — that is CLAUDE.md §5's property, measured — but moves the
+  TOV sequences by 4.8e-07 relative and M_max by 2.5e-08 (6e-08 Msun on a
+  2.4 Msun star). The jitted T = 0 kernel and the NumPy one evaluate the same
+  closed form to machine precision, yet the two paths converge to roots
+  differing in the last bits, and the adaptive integrator amplifies that by
+  ~1e7 — the same amplification measured in the backend-parity entry under
+  astro/tov. Nothing to fix in `backends/`; recorded so the next person to run
+  the deletion check knows the tov baseline is expected to move and by how
+  much.
 - `susceptibilities` exists only in the analytic-Jacobian flavor. §9 says the
   fast flavor is validated against a reference, and for chi_ab there is none:
   the sound speeds and heat capacities have their finite-difference twins in
-  `responses.py`, chi_ab does not. `thermo_at_potentials` now makes the
-  reference cheap to write — perturb mu_B, mu_C, mu_S, re-solve, read
-  (n_B, n_C, n_S) — but writing it is new physics, not a rename, so it waits
-  for the response-function session.
+  `responses.py`, chi_ab does not. Two consequences. It is unvalidated except
+  against its own symmetry and a hand-rolled grand-canonical difference in
+  `test/dd2/test_dd2_m10_jac.py`; and `eos_response(frozen='equilibrium')`
+  raises without `backends/` rather than degrading to a slower path, which is
+  the one place §5's deletability is a feature gap rather than a speed cost.
+  `thermo_at_potentials` now makes the reference cheap to write — perturb
+  mu_B, mu_C, mu_S, re-solve, read (n_B, n_C, n_S) — but writing it is new
+  physics, so it waits for the response-function session.
 - `eos_response` implements the freezes `equilibrium` (beta_eq_neutrinoless
   only: c_s^2, C_V, C_P, chi_ab) and `composition` (nucleonic Y_p: adiabatic
   c_s^2 and Gamma). Not yet wired: frozen conserved fractions (Y_C, Y_S fixed

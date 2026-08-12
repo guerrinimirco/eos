@@ -149,7 +149,7 @@ def cs2_frozen_nucleonic(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3,
     compressed faster than the Urca processes can convert neutrons to protons.
     """
     from eos.dd2.solver import solve_composition
-    from eos.dd2.physics.octet import _yc_neutralizing_leptons
+    from eos.dd2.thermodynamics import neutralizing_leptons
 
     def state(scale):
         n = n_B * scale
@@ -157,7 +157,7 @@ def cs2_frozen_nucleonic(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3,
         pt = solve_composition(par, n - n_p, n_p, T=T, check_consistency=False)
         P, eps = pt.P, pt.eps
         if leptons:
-            _mu_e, e_blk, mu_blk = _yc_neutralizing_leptons(
+            _mu_e, e_blk, mu_blk = neutralizing_leptons(
                 n_p * hc3, Electron.mass, Muon.mass, muons, T)
             P += (e_blk[1] + mu_blk[1]) / hc3
             eps += (e_blk[2] + mu_blk[2]) / hc3

@@ -1,14 +1,35 @@
 """
 solver.py
-====================
-DD2 nucleonic solves: fixed-composition and beta-equilibrium matter at
-T = 0 and T > 0, plus the general octet solve that all equilibrium modes go
-through.
+=========
+DD2's equilibrium conditions and the solves that close them: fixed-composition
+and beta-equilibrium nucleonic matter at T = 0 and T > 0, and the general octet
+system every mode of CLAUDE.md section 3 goes through.
 
-Fixed composition (n_n, n_p): one scalar sigma gap solve; at T > 0 the
-kinetic potentials are recovered per species by inverting the JEL density
-(eos.general.fermi_integrals.invert_fermi_density). Beta equilibrium: the
-potential-driven charge-vector system of physics/residual.py.
+`thermodynamics.py` computes quantities FROM the state; this module FINDS the
+state. What separates them is the mode: the residual here knows which
+conserved charges are held and which equilibrate, and it reads that from a
+`ModeSpec` rather than branching on strings, so the equations are written once
+and the mode selects among them.
+
+Two systems, because they have different unknown vectors:
+
+  nucleons     x = [sigma, rho0, mu_eff_n, mu_C]. omega0 is eliminated at the
+               target density, which only works while every species shares the
+               nucleon couplings.
+  octet        x = [sigma, omega0, rho0, (phi0), mu_tilde_B, mu_C, (mu_S),
+               (mu_nue)]. Once the couplings differ per species the vector
+               sources are composition-dependent and all the fields become
+               unknowns. Reduces to the nucleon problem when hyperons are off,
+               and is the path every public mode takes.
+
+Fixed composition (n_n, n_p) is neither: one scalar sigma gap solve, with the
+kinetic potentials recovered per species at T > 0 by inverting the JEL density
+(eos.general.fermi_integrals.invert_fermi_density).
+
+The unknowns are the EFFECTIVE potentials rather than mu_B (CLAUDE.md section
+2): the rearrangement term and the large vector shift cancel out of the
+iteration, and mu_eff varies smoothly along a density sweep, which is what
+makes the warm starts work.
 
 Nucleon-mass convention: by default the uniform-matter kernel uses the
 AVERAGE nucleon mass (m_n + m_p)/2 for both species, so m_n and m_p enter only
@@ -22,26 +43,36 @@ consistent set of densities, so the Hugenholtz–Van Hove identity
 eps + P - T s = sum_i mu_i n_i holds to round-off and is asserted.
 """
 from dataclasses import dataclass, replace
+from typing import NamedTuple
 
 from scipy.optimize import brentq, root
 
 from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon, Neutron, Proton
 from eos.general.thermodynamics_leptons import photon_thermo
+from eos.general.modes import (
+    Conservation, ModeSpec, electron_potential, muon_potential,
+    strangeness_potential,
+)
 import numpy as np
 from eos.dd2.thermodynamics import kF_from_n, kinetic_thermo
 from eos.dd2.thermodynamics import vector_fields, rearrangement, field_eps_P
-from eos.dd2.physics.residual import (
-    beta_eq_nucleon_mu_eff, beta_eq_residual, make_beta_ctx,
+from eos.dd2.thermodynamics import (
+    G_NU, baryon_kinetics, build_matter_ctx, meson_charges_nat,
+    neutralizing_leptons, thermal_meson_thermo,
 )
-from eos.dd2.physics.octet import (
-    assemble_octet, build_octet_ctx, octet_residual,
-)
-from eos.dd2.physics.jacobian import octet_jacobian
-from eos.dd2.physics.kernel_numba import (
-    residual_t0_jit, jacobian_t0_jit, build_numba_arrays, _NUMBA_OK,
-)
-from eos.dd2.thermodynamics import thermal_meson_thermo
+try:
+    from eos.dd2.backends.jacobian import octet_jacobian
+    from eos.dd2.backends.kernel_numba import (
+        residual_t0_jit, jacobian_t0_jit, build_numba_arrays, _NUMBA_OK,
+    )
+except ImportError:
+    # `backends/` is optional: CLAUDE.md section 5 defines it by the property
+    # that deleting it changes no number, only the speed. Without it every
+    # solve takes the finite-difference reference path below.
+    octet_jacobian = build_numba_arrays = None
+    residual_t0_jit = jacobian_t0_jit = None
+    _NUMBA_OK = False
 
 #: Hugenholtz–Van Hove residual gate, relative to eps.
 HVH_RTOL = 1.0e-8
@@ -229,6 +260,73 @@ def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
     return [base.sigma, base.rho0, base.mu_eff_n, -(base.mu_n - base.mu_p)]
 
 
+class BetaCtx(NamedTuple):
+    """The nucleon beta-equilibrium system at one density and temperature.
+
+    Smaller than `MatterCtx` on purpose: this system carries only n and p, so
+    omega0 is eliminated at the target density and phi never enters.
+    """
+    nB_nat: float        # target baryon density [MeV^3]
+    mbar: float          # average nucleon mass [MeV] (residual scaling)
+    m_kn: float          # kernel neutron mass [MeV] (par.kernel_masses)
+    m_kp: float          # kernel proton mass [MeV]
+    m_sigma2: float      # [MeV^2]
+    m_rho2: float        # [MeV^2]
+    Gs: float            # Gamma_sigma(n_B target)
+    Gw: float
+    Gr: float
+    m_e: float
+    m_mu: float
+    T: float             # [MeV]
+    include_muons: bool
+
+
+def make_beta_ctx(par, n_B, T=0.0, include_muons=True):
+    Gs, Gw, Gr, _, _, _ = par.couplings_at(n_B)
+    m_kn, m_kp = par.kernel_masses()
+    return BetaCtx(
+        nB_nat=n_B * hc3, mbar=par.m_nucleon, m_kn=m_kn, m_kp=m_kp,
+        m_sigma2=par.m_sigma ** 2, m_rho2=par.m_rho ** 2,
+        Gs=Gs, Gw=Gw, Gr=Gr,
+        m_e=Electron.mass, m_mu=Muon.mass, T=T, include_muons=include_muons,
+    )
+
+
+def beta_eq_nucleon_mu_eff(x, ctx):
+    """Effective potentials and effective masses from the unknown vector."""
+    sigma, rho0, mu_eff_n, mu_C = x
+    ms_n = ctx.m_kn - ctx.Gs * sigma
+    ms_p = ctx.m_kp - ctx.Gs * sigma
+    mu_eff_p = mu_eff_n + mu_C - (Proton.t3 - Neutron.t3) * ctx.Gr * rho0
+    return mu_eff_n, mu_eff_p, ms_n, ms_p
+
+
+def beta_eq_residual(x, ctx):
+    """
+    Dimensionless residuals: [sigma gap, rho0 field eq, baryon number,
+    charge neutrality]. Zero exactly at the solved state.
+    """
+    sigma, rho0, _, mu_C = x
+    mu_eff_n, mu_eff_p, ms_n, ms_p = beta_eq_nucleon_mu_eff(x, ctx)
+    if min(ms_n, ms_p) <= 0.0:
+        return [1.0e6, 0.0, 0.0, 0.0]   # outside physical domain
+
+    n_n, _, _, _, ns_n = kinetic_thermo(mu_eff_n, ms_n, 2.0, ctx.T)
+    n_p, _, _, _, ns_p = kinetic_thermo(mu_eff_p, ms_p, 2.0, ctx.T)
+    mu_e = electron_potential(mu_C)
+    n_e = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)[0]
+    n_mu = (kinetic_thermo(muon_potential(mu_e), ctx.m_mu, 2.0, ctx.T)[0]
+            if ctx.include_muons else 0.0)
+
+    n3 = Neutron.t3 * n_n + Proton.t3 * n_p
+    return [
+        (sigma - ctx.Gs * (ns_n + ns_p) / ctx.m_sigma2) / ctx.mbar,
+        (rho0 - ctx.Gr * n3 / ctx.m_rho2) / ctx.mbar,
+        (n_n + n_p) / ctx.nB_nat - 1.0,
+        (n_p - n_e - n_mu) / ctx.nB_nat,
+    ]
+
+
 def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
                   include_photons=True, check_consistency=True):
     """
@@ -355,6 +453,271 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
                      has_phi, has_muS, has_muL)
 
 
+def mode_spec(charge_mode="neutral", Y_C=0.0, strange_mode="eq", Y_S=0.0,
+              lepton_mode="transparent", Y_L=0.0, yc_leptons=False):
+    """dd2's keyword vocabulary as the shared mode declaration.
+
+    The keywords predate `eos.general.modes` and are what every caller of
+    `solve_octet` still writes; this is the one place they turn into a
+    `ModeSpec`, so the residual and the assembly branch on the declaration
+    rather than on strings.
+
+        charge_mode='neutral'  ->  C equilibrated (beta equilibrium)
+        charge_mode='fixed'    ->  C fixed at Y_C, leptons per yc_leptons
+        strange_mode='fixed'   ->  S fixed at Y_S; 'eq' leaves mu_S = 0
+        lepton_mode='trapped'  ->  L_e fixed at Y_L, i.e. the spec's Y_Le
+    """
+    if lepton_mode == "trapped" and charge_mode != "neutral":
+        raise ValueError("trapped lepton_mode requires charge_mode='neutral' "
+                         "(Y_L trapping implies leptons present, charge-neutral)")
+    if yc_leptons and charge_mode != "fixed":
+        raise ValueError("yc_leptons (flavor 2b) requires charge_mode='fixed'")
+    fixed = Conservation.FIXED
+    eq = Conservation.EQUILIBRATED
+    targets = {}
+    if charge_mode == "fixed":
+        targets["Y_C"] = Y_C
+    if strange_mode == "fixed":
+        targets["Y_S"] = Y_S
+    if lepton_mode == "trapped":
+        targets["Y_Le"] = Y_L
+    return ModeSpec(
+        C=fixed if charge_mode == "fixed" else eq,
+        S=fixed if strange_mode == "fixed" else eq,
+        L_e=fixed if lepton_mode == "trapped" else eq,
+        targets=targets,
+        # `leptons` is only read where C is FIXED; beta equilibrium always has
+        # them, and ModeSpec refuses leptons=False there.
+        leptons=(yc_leptons or charge_mode != "fixed"),
+    )
+
+
+def octet_unknowns(ctx, spec):
+    """How many unknowns the octet vector carries in this mode.
+
+        x = [sigma, omega0, rho0, (phi0), mu_tilde_B, mu_C, (mu_S), (mu_nue)]
+
+    Five are always there: the three meson mean fields, the baryon potential
+    and mu_C. phi0 joins iff the hidden-strange vector is active, mu_S iff the
+    mode holds strangeness, mu_nue iff it traps the electron family. mu_C is an
+    unknown in EVERY mode -- what the mode changes is the row that closes it,
+    electric neutrality or the held Y_C.
+
+    All the vector fields are unknowns with their field equations as residuals:
+    once the couplings differ per species their sources are composition
+    dependent, so they can no longer be eliminated at the target density as in
+    the nucleon-only system above.
+    """
+    return (5 + int(ctx.has_phi) + int(spec.is_fixed("S"))
+            + int(spec.is_fixed("L_e")))
+
+
+def _unpack(x, ctx, spec):
+    """Read the unknown vector in the order `octet_unknowns` documents."""
+    sigma, omega0, rho0 = x[0], x[1], x[2]
+    i = 3
+    phi0 = x[i] if ctx.has_phi else 0.0
+    i += int(ctx.has_phi)
+    mu_tilde_B, mu_C = x[i], x[i + 1]
+    i += 2
+    mu_S = x[i] if spec.is_fixed("S") else strangeness_potential(spec)
+    i += int(spec.is_fixed("S"))
+    mu_nue = x[i] if spec.is_fixed("L_e") else 0.0
+    return sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_nue
+
+
+def octet_residual(x, ctx, spec):
+    """Dimensionless residual of the octet system in the mode `spec` declares.
+
+    Three families of row, in this order: the meson field equations, always all
+    of them because a mean field does not know what is being held fixed; the
+    baryon-number row; and one row per conserved charge the mode constrains.
+    Field equations are scaled by the nucleon mass and density rows by n_B, so
+    every entry is dimensionless.
+    """
+    sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_nue = _unpack(
+        x, ctx, spec)
+    kin = baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
+                          mu_tilde_B, mu_C, mu_S)
+    if kin is None:
+        return [1.0e6] * octet_unknowns(ctx, spec)
+
+    src_s = src_w = src_r = src_phi = 0.0
+    n_tot = charge = strangeness = 0.0
+    for (_name, bspec, mu_eff, ms, n, ns, eps, P, s) in kin:
+        mass, Q, t3, g, xs, xw, xr, xphi, S = bspec
+        src_s += xs * ctx.Gs_N * ns
+        src_w += xw * ctx.Gw_N * n
+        src_r += xr * ctx.Gr_N * t3 * n
+        src_phi += xphi * ctx.Gw_N * n          # Gamma_phiY = x_phi*Gamma_omegaN
+        n_tot += n
+        charge += Q * n
+        strangeness += S * n
+
+    res = [
+        (sigma - src_s / ctx.m_sigma2) / ctx.mbar,
+        (omega0 - src_w / ctx.m_omega2) / ctx.mbar,
+        (rho0 - src_r / ctx.m_rho2) / ctx.mbar,
+    ]
+    if ctx.has_phi:
+        res.append((phi0 - src_phi / ctx.m_phi2) / ctx.mbar)
+    # Thermal mesons carry no baryon number, so n_tot above is baryons only,
+    # but they do carry charge and strangeness: both constraints below see the
+    # sum (CLAUDE.md section 2).
+    mC, mS = meson_charges_nat(ctx, mu_C, mu_S, omega0, rho0)
+    charge += mC
+    strangeness += mS
+    res.append(n_tot / ctx.nB_nat - 1.0)
+
+    n_e = 0.0
+    if not spec.is_fixed("C"):
+        # Beta equilibrium closes the charge sector: mu_e follows from mu_C and
+        # the electron-neutrino potential, and electric neutrality is the row.
+        mu_e = electron_potential(mu_C, mu_nue)
+        n_e = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)[0]
+        n_mu = (kinetic_thermo(muon_potential(mu_e, mu_nue), ctx.m_mu, 2.0,
+                               ctx.T)[0]
+                if ctx.include_muons else 0.0)
+        res.append((charge - n_e - n_mu) / ctx.nB_nat)
+    else:
+        res.append((charge / ctx.nB_nat) - spec.targets["Y_C"])
+    if spec.is_fixed("S"):
+        res.append((strangeness / ctx.nB_nat) - spec.targets["Y_S"])
+    if spec.is_fixed("L_e"):
+        n_nue = kinetic_thermo(mu_nue, 0.0, G_NU, ctx.T)[0]
+        res.append((n_e + n_nue) / ctx.nB_nat - spec.targets["Y_Le"])
+    return res
+
+
+def assemble_octet(x, ctx, spec):
+    """
+    Full thermodynamic state from a converged unknown vector. Returns a dict
+    in natural units plus per-species densities (fm^-3) for onset detection.
+    """
+    sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_nue = _unpack(
+        x, ctx, spec)
+    kin = baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
+                          mu_tilde_B, mu_C, mu_S)
+
+    eps_b = P_b = s_b = 0.0
+    Sig_R = 0.0
+    n_tot = charge_had = strangeness = 0.0
+    m_eff_n = mu_eff_n = mu_eff_p = None
+    densities = {}
+    for (_name, bspec, mu_eff, ms, n, ns, eps, P, s), b in zip(kin, ctx.baryons):
+        mass, Q, t3, g, xs, xw, xr, xphi, S = bspec
+        eps_b += eps
+        P_b += P
+        s_b += s
+        n_tot += n
+        charge_had += Q * n
+        strangeness += S * n
+        densities[b.name] = n / hc3
+        # rearrangement; phi inherits f_omega so dGamma_phiY/dn = x_phi*dGw_N
+        Sig_R += (xw * ctx.dGw_N * omega0 * n
+                  + xr * ctx.dGr_N * rho0 * t3 * n
+                  + xphi * ctx.dGw_N * phi0 * n
+                  - xs * ctx.dGs_N * sigma * ns)
+        if b.name == "n":
+            m_eff_n, mu_eff_n = ms, mu_eff
+        elif b.name == "p":
+            mu_eff_p = mu_eff
+
+    # meson field energies: scalars minus in P, vectors plus. Written from the
+    # ctx's squared masses rather than through `field_eps_P`, which takes the
+    # parameter object this function does not carry.
+    s2 = ctx.m_sigma2 * sigma ** 2
+    w2 = ctx.m_omega2 * omega0 ** 2
+    r2 = ctx.m_rho2 * rho0 ** 2
+    p2 = ctx.m_phi2 * phi0 ** 2
+    eps_fields = 0.5 * (s2 + w2 + r2 + p2)
+    P_fields = 0.5 * (-s2 + w2 + r2 + p2)
+
+    # Thermal meson charge/strangeness, matching octet_residual. `charge_tot`
+    # is the total NON-leptonic charge (baryons + mesons) and is what
+    # neutrality, Y_C and Y_S are stated in terms of; `charge_had` stays
+    # baryons-only because mu_dot_n below is the baryon mu_i n_i sum -- the
+    # meson sum_j mu*_j n_j is a separate term the callers add from
+    # thermal_meson_thermo, and folding it in here would double count it.
+    mC, mS = meson_charges_nat(ctx, mu_C, mu_S, omega0, rho0)
+    charge_tot = charge_had + mC
+    strangeness_tot = strangeness + mS
+
+    nnue = Pnue = enue = snue = 0.0
+    if not spec.is_fixed("C"):
+        # beta / trapped: mu_e from beta equilibrium, muon family transparent.
+        mu_e = electron_potential(mu_C, mu_nue)
+        mu_mu = muon_potential(mu_e, mu_nue)
+        ne, Pe, ee, se, _ = kinetic_thermo(mu_e, ctx.m_e, 2.0, ctx.T)
+        if ctx.include_muons:
+            nmu, Pmu, emu, smu, _ = kinetic_thermo(mu_mu, ctx.m_mu, 2.0, ctx.T)
+        else:
+            nmu = Pmu = emu = smu = 0.0
+        if spec.is_fixed("L_e"):      # trapped electron-neutrinos
+            nnue, Pnue, enue, snue, _ = kinetic_thermo(mu_nue, 0.0, G_NU, ctx.T)
+        lepton_dot_n = mu_e * ne + mu_mu * nmu + mu_nue * nnue
+    elif spec.leptons:
+        # fixed-Y_C with neutralizing leptons: mu_mu = mu_e and n_e + n_mu is
+        # the non-leptonic charge, so the total is electrically neutral.
+        mu_e, (ne, Pe, ee, se), (nmu, Pmu, emu, smu) = neutralizing_leptons(
+            charge_tot, ctx.m_e, ctx.m_mu, ctx.include_muons, ctx.T)
+        mu_mu = mu_e
+        lepton_dot_n = mu_e * (ne + nmu)
+    else:
+        # fixed-Y_C leptonless: charged matter (the CompOSE Y_q slicing, and
+        # what a mixed-phase construction needs per pure phase).
+        mu_e = electron_potential(mu_C)
+        ne = Pe = ee = se = nmu = Pmu = emu = smu = 0.0
+        lepton_dot_n = 0.0
+
+    mu_B = mu_tilde_B + Sig_R
+    eps = eps_b + eps_fields + ee + emu + enue
+    P = P_b + P_fields + ctx.nB_nat * Sig_R + Pe + Pmu + Pnue
+    s = s_b + se + smu + snue
+
+    # baryon chemical-potential sum: mu_i = mu_B + Q_i mu_C + S_i mu_S
+    mu_dot_n = mu_B * n_tot + mu_C * charge_had + mu_S * strangeness
+
+    return dict(
+        sigma=sigma, omega0=omega0, rho0=rho0, phi0=phi0,
+        m_eff_n=m_eff_n, mu_eff_n=mu_eff_n, mu_eff_p=mu_eff_p,
+        Sigma_R=Sig_R, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, mu_L=mu_nue,
+        mu_e=mu_e, mu_nue=mu_nue,
+        mu_n=mu_B, mu_p=mu_B + mu_C,
+        eps=eps, P=P, s=s, n_tot=n_tot,
+        n_e=ne, n_mu=nmu, n_nue=nnue,
+        Y_C=charge_tot / ctx.nB_nat, Y_S=strangeness_tot / ctx.nB_nat,
+        Y_C_baryons=charge_had / ctx.nB_nat,
+        Y_S_baryons=strangeness / ctx.nB_nat,
+        Y_L=(ne + nnue) / ctx.nB_nat,
+        densities=densities,
+        mu_dot_n=mu_dot_n + lepton_dot_n,
+    )
+
+
+def _residual_and_jacobian(ctx, spec, T, analytic_jac):
+    """The (residual, Jacobian) pair the octet solve should use.
+
+    The reference pair is `octet_residual` with no Jacobian, so MINPACK builds
+    a forward difference: plain NumPy/SciPy, and the oracle the accelerated
+    pair is judged against (CLAUDE.md section 9).
+
+    With `analytic_jac` the exact Jacobian goes to MINPACK's hybrj, which is
+    3-11x faster on a warm-started sweep; at T = 0 the residual AND the
+    Jacobian come from the jitted kernel instead, machine-identical to the
+    NumPy one. Both live in `backends/`, which section 5 makes optional, so a
+    missing directory lands on the reference pair rather than raising.
+    """
+    if not analytic_jac or octet_jacobian is None:
+        return octet_residual, None
+    if T == 0.0 and _NUMBA_OK:
+        arrays = build_numba_arrays(ctx, spec)
+        return (lambda xx, *_a: residual_t0_jit(xx, *arrays),
+                lambda xx, *_a: jacobian_t0_jit(xx, *arrays))
+    # T > 0: the JEL integrals do not jit, so the residual stays NumPy.
+    return octet_residual, octet_jacobian
+
+
 def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
                 Y_L=0.0, yc_leptons=False, include_photons=True,
@@ -376,10 +739,10 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     slower than finite differences; it is left on there for one default rather
     than a speed heuristic.
     """
-    ctx = build_octet_ctx(par, n_B, flags, T=T, charge_mode=charge_mode,
-                          Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
-                          lepton_mode=lepton_mode, Y_L=Y_L, yc_leptons=yc_leptons)
-    has_muS, has_muL = ctx.has_muS, ctx.has_muL
+    spec = mode_spec(charge_mode, Y_C, strange_mode, Y_S, lepton_mode, Y_L,
+                     yc_leptons)
+    ctx = build_matter_ctx(par, n_B, flags, T=T)
+    has_muS, has_muL = spec.is_fixed("S"), spec.is_fixed("L_e")
     # Lazy guess sequence: try the warm start x0 first and only build the
     # (expensive, un-jitted beta-eq) default guess if x0 is missing or its solve
     # doesn't converge. In a warm-started sweep the fallback is never evaluated,
@@ -390,24 +753,12 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
             yield x0
         yield default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
                                   has_muL=has_muL)
-    # eos_fast backend (analytic_jac): exact analytic Jacobian via MINPACK
-    # hybrj. At T=0 the residual AND Jacobian are Numba-jitted (kernel_numba,
-    # machine-identical to the NumPy kernel); T>0 uses the NumPy analytic path
-    # (the JEL integrals don't jit). eos_ref (analytic_jac=False) uses the
-    # forward-difference Jacobian and remains the correctness oracle.
-    if analytic_jac and T == 0.0 and _NUMBA_OK:
-        _spec, _prm, _flg = build_numba_arrays(ctx)
-        res_fn = lambda xx, _c: residual_t0_jit(xx, _spec, _prm, _flg)
-        jac_fn = lambda xx, _c: jacobian_t0_jit(xx, _spec, _prm, _flg)
-    elif analytic_jac:
-        res_fn, jac_fn = octet_residual, octet_jacobian
-    else:
-        res_fn, jac_fn = octet_residual, None
+    res_fn, jac_fn = _residual_and_jacobian(ctx, spec, T, analytic_jac)
     sol = None
     for guess in _guesses():
-        sol = root(res_fn, guess, args=(ctx,), jac=jac_fn,
+        sol = root(res_fn, guess, args=(ctx, spec), jac=jac_fn,
                    method="hybr", tol=1e-13)
-        res_max = max(abs(r) for r in res_fn(sol.x, ctx))
+        res_max = max(abs(r) for r in res_fn(sol.x, ctx, spec))
         if res_max <= RESIDUAL_TOL:
             break
     else:
@@ -416,7 +767,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
             f"(charge={charge_mode}, strange={strange_mode}): {sol.message} "
             f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
 
-    st = assemble_octet(sol.x, ctx)
+    st = assemble_octet(sol.x, ctx, spec)
     if include_photons and T > 0.0:
         ph = photon_thermo(T)
         st["eps"] += ph.e * hc3
@@ -442,7 +793,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 f"Hugenholtz–Van Hove violated at n_B={n_B}, T={T} "
                 f"(octet {charge_mode}/{strange_mode}): "
                 f"|{hvh_rel:.2e}| > {HVH_RTOL:.0e}")
-        if charge_mode == "neutral":
+        if not spec.is_fixed("C"):
             # transparent: mu_n - mu_p = mu_e; trapped: = mu_e - mu_nue.
             beta_res = st["mu_n"] - st["mu_p"] - (st["mu_e"] - st["mu_nue"])
             if abs(beta_res) > 1e-6:

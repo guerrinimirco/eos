@@ -1,5 +1,5 @@
 """
-physics/jacobian.py
+backends/jacobian.py
 ====================
 Hand-coded analytic Jacobian of the octet residual.
 
@@ -57,7 +57,7 @@ def kinetic_derivs(mu_eff, m, g, T=0.0):
     return dn_dmu, dn_dm, dns_dmu, dns_dm
 
 
-def _dmeson(ctx, col, n, omega0, rho0, muC, muS, which):
+def _dmeson(ctx, spec, col, n, omega0, rho0, muC, muS, which):
     """
     Gradient (over the unknown columns) of the thermal meson gas's natural-unit
     n_C (which=0) or n_S (which=1).
@@ -73,7 +73,7 @@ def _dmeson(ctx, col, n, omega0, rho0, muC, muS, which):
         return d
     args = dict(omega0=omega0, rho0=rho0, mu_C=muC, mu_S=muS)
     knobs = [("mu_C", "muC"), ("omega0", "omega0"), ("rho0", "rho0")]
-    if ctx.has_muS:
+    if spec.is_fixed("S"):
         knobs.append(("mu_S", "muS"))
     for name, column in knobs:
         h = max(1e-3, 1e-4 * abs(args[name]))
@@ -85,8 +85,8 @@ def _dmeson(ctx, col, n, omega0, rho0, muC, muS, which):
     return d
 
 
-def _columns(ctx):
-    """Column index of each unknown (matches octet._unpack ordering)."""
+def _columns(ctx, spec):
+    """Column index of each unknown (matches solver._unpack ordering)."""
     c = dict(sigma=0, omega0=1, rho0=2)
     i = 3
     if ctx.has_phi:
@@ -94,15 +94,15 @@ def _columns(ctx):
         i += 1
     c["mutB"], c["muC"] = i, i + 1
     i += 2
-    if ctx.has_muS:
+    if spec.is_fixed("S"):
         c["muS"] = i
         i += 1
-    if ctx.has_muL:
+    if spec.is_fixed("L_e"):
         c["muL"] = i
     return c
 
 
-def octet_jacobian(x, ctx):
+def octet_jacobian(x, ctx, spec):
     """
     Analytic dR/dx of octet_residual (dense, n_unknowns x n_unknowns).
 
@@ -110,16 +110,16 @@ def octet_jacobian(x, ctx):
     benign fallback when x is outside the physical domain (m*<=0), where the
     residual itself returns its 1e6 sentinel and MINPACK damps the step.
     """
-    from eos.dd2.physics.octet import _unpack
+    from eos.dd2.solver import _unpack, octet_unknowns
     from eos.dd2.thermodynamics import baryon_kinetics as _baryon_kinetics
 
-    n = ctx.n_unknowns
-    sigma, omega0, rho0, phi0, mutB, muC, muS, muL = _unpack(x, ctx)
+    n = octet_unknowns(ctx, spec)
+    sigma, omega0, rho0, phi0, mutB, muC, muS, muL = _unpack(x, ctx, spec)
     kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mutB, muC, muS)
     if kin is None:
         return np.eye(n)
 
-    col = _columns(ctx)
+    col = _columns(ctx, spec)
     J = np.zeros((n, n))
 
     # accumulators: gradients (over columns) of the residual source sums
@@ -131,8 +131,8 @@ def octet_jacobian(x, ctx):
     dcharge = np.zeros(n)
     dstrange = np.zeros(n)
 
-    for (_name, spec, mu_eff, ms, n_i, ns_i, eps_i, P_i, s_i) in kin:
-        mass, Q, t3, g, xs, xw, xr, xphi, S = spec
+    for (_name, bspec, mu_eff, ms, n_i, ns_i, eps_i, P_i, s_i) in kin:
+        mass, Q, t3, g, xs, xw, xr, xphi, S = bspec
         A, B, C, D = kinetic_derivs(mu_eff, ms, g, ctx.T)   # dn/dmu,dn/dm,dns/dmu,dns/dm
 
         dmu_eff = np.zeros(n)
@@ -142,7 +142,7 @@ def octet_jacobian(x, ctx):
             dmu_eff[col["phi0"]] = -xphi * ctx.Gw_N
         dmu_eff[col["mutB"]] = 1.0
         dmu_eff[col["muC"]] = Q
-        if ctx.has_muS:
+        if spec.is_fixed("S"):
             dmu_eff[col["muS"]] = S
         dm = np.zeros(n)
         dm[col["sigma"]] = -xs * ctx.Gs_N
@@ -163,8 +163,8 @@ def octet_jacobian(x, ctx):
     # same tactic kinetic_derivs uses at T>0 — the JEL Bose routine exposes no
     # exact derivative, and the gas depends on the unknowns only through
     # (mu_C, mu_S, omega0, rho0).
-    dcharge += _dmeson(ctx, col, n, omega0, rho0, muC, muS, 0)
-    dstrange += _dmeson(ctx, col, n, omega0, rho0, muC, muS, 1)
+    dcharge += _dmeson(ctx, spec, col, n, omega0, rho0, muC, muS, 0)
+    dstrange += _dmeson(ctx, spec, col, n, omega0, rho0, muC, muS, 1)
 
     # field-equation rows (scaled by mbar), R = (field - src/m^2)/mbar
     row = 0
@@ -182,12 +182,12 @@ def octet_jacobian(x, ctx):
     row += 1
 
     # charge row
-    if ctx.charge_mode == "neutral":
+    if not spec.is_fixed("C"):
         mu_e = muL - muC
         Ae = kinetic_derivs(mu_e, ctx.m_e, 2.0, ctx.T)[0]
         dn_e = np.zeros(n)
         dn_e[col["muC"]] = -Ae
-        if ctx.has_muL:
+        if spec.is_fixed("L_e"):
             dn_e[col["muL"]] = Ae
         dn_mu = np.zeros(n)
         if ctx.include_muons:
@@ -199,12 +199,12 @@ def octet_jacobian(x, ctx):
     row += 1
 
     # strangeness row
-    if ctx.has_muS:
+    if spec.is_fixed("S"):
         J[row] = dstrange / ctx.nB_nat
         row += 1
 
-    # lepton (Y_L) row
-    if ctx.has_muL:
+    # lepton (Y_Le) row
+    if spec.is_fixed("L_e"):
         Ae = kinetic_derivs(muL - muC, ctx.m_e, 2.0, ctx.T)[0]
         Anue = kinetic_derivs(muL, 0.0, 1.0, ctx.T)[0]
         dY = np.zeros(n)

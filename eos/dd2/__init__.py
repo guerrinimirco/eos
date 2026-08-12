@@ -25,14 +25,18 @@ from eos.dd2.table import (
     MODES, MODE_FRACTIONS, hadronic_row, rows_from_result,
 )
 from eos.general.table_io import save_table, load_table, export_csv
-from eos.dd2.physics.jacobian import octet_jacobian, kinetic_derivs
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
 from eos.dd2.responses import (
     sound_speed_eq, sound_speed_adiabatic, adiabatic_index, thermal_index,
     heat_capacity_V, snm_sound_speed,
 )
-from eos.dd2.responses_jac import susceptibilities, SUSCEPT_LABELS
+# Nothing from `backends/` is re-exported here. CLAUDE.md section 5 defines
+# that package by the property that deleting it changes no number, and a name
+# on the package surface would make `import eos.dd2` fail instead. Reach the
+# analytic Jacobian and its susceptibilities at eos.dd2.backends.jacobian and
+# eos.dd2.backends.responses_jac, which is where a reader looking for them
+# would go.
 from eos.dd2.api import (
     eos_point, eos_table, eos_response, PointResult,
     RESPONSE_FREEZES,
@@ -51,9 +55,7 @@ __all__ = [
     "TableSpec", "TableResult", "build_table", "solve_octet_at_entropy",
     "MODES", "MODE_FRACTIONS", "hadronic_row", "rows_from_result",
     "save_table", "load_table", "export_csv",
-    "octet_jacobian", "kinetic_derivs",
     "compute_nmp", "energy_per_baryon", "esym",
     "sound_speed_eq", "sound_speed_adiabatic", "adiabatic_index",
     "thermal_index", "heat_capacity_V", "snm_sound_speed",
-    "susceptibilities", "SUSCEPT_LABELS",
 ]

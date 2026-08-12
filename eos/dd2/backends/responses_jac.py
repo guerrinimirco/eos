@@ -21,9 +21,16 @@ Two Jacobian products:
 import numpy as np
 
 from eos.general.physics_constants import hc3
-from eos.dd2.solver import solve_beta_eq_octet, octet_warm_start
-from eos.dd2.physics.octet import build_octet_ctx, octet_residual, assemble_octet
-from eos.dd2.physics.jacobian import octet_jacobian
+from eos.general.modes import beta_eq_neutrinoless
+from eos.dd2.thermodynamics import build_matter_ctx
+from eos.dd2.solver import (
+    assemble_octet, mode_spec, octet_residual, octet_warm_start,
+    solve_beta_eq_octet,
+)
+from eos.dd2.backends.jacobian import octet_jacobian
+
+#: Every quantity here is taken along the beta-equilibrium sequence.
+_BETA = beta_eq_neutrinoless()
 
 
 def _state(par, n_B, flags, T):
@@ -31,17 +38,17 @@ def _state(par, n_B, flags, T):
     p = solve_beta_eq_octet(par, n_B, flags, T=T, include_photons=False)
     has_phi = flags.phi_field and flags.hyperons
     x0 = np.array(octet_warm_start(p, has_phi, False, False))
-    ctx0 = build_octet_ctx(par, n_B, flags, T=T)
-    J = np.array(octet_jacobian(x0, ctx0))
+    ctx0 = build_matter_ctx(par, n_B, flags, T=T)
+    J = np.array(octet_jacobian(x0, ctx0, _BETA))
     return p, x0, ctx0, J, has_phi
 
 
 def _tangent(x0, J, ctx_pert):
     """One Newton step from x0 toward the perturbed-ctx root, then assemble.
     Returns (P, eps, s) in fm-based units (MeV/fm^3, MeV/fm^3, fm^-3)."""
-    R = np.array(octet_residual(x0, ctx_pert))
+    R = np.array(octet_residual(x0, ctx_pert, _BETA))
     dx = np.linalg.solve(J, -R)
-    st = assemble_octet(x0 + dx, ctx_pert)
+    st = assemble_octet(x0 + dx, ctx_pert, _BETA)
     return st["P"] / hc3, st["eps"] / hc3, st["s"] / hc3
 
 
@@ -52,14 +59,14 @@ def _sequence_derivs(par, n_B, flags, T, rel_dn=1e-3, dT=0.05):
     C_P, where the volume changes at fixed P)."""
     _, x0, ctx0, J, _ = _state(par, n_B, flags, T)
     dn = rel_dn * n_B
-    Pp, ep, sp = _tangent(x0, J, build_octet_ctx(par, n_B + dn, flags, T=T))
-    Pm, em, sm = _tangent(x0, J, build_octet_ctx(par, n_B - dn, flags, T=T))
+    Pp, ep, sp = _tangent(x0, J, build_matter_ctx(par, n_B + dn, flags, T=T))
+    Pm, em, sm = _tangent(x0, J, build_matter_ctx(par, n_B - dn, flags, T=T))
     d = dict(dP_dn=(Pp - Pm) / (2 * dn), de_dn=(ep - em) / (2 * dn),
              dsig_dn=(sp / (n_B + dn) - sm / (n_B - dn)) / (2 * dn),
              dP_dT=0.0, dsig_dT=0.0)
     if T > 0.0:
-        Pp, ep, sp = _tangent(x0, J, build_octet_ctx(par, n_B, flags, T=T + dT))
-        Pm, em, sm = _tangent(x0, J, build_octet_ctx(par, n_B, flags, T=T - dT))
+        Pp, ep, sp = _tangent(x0, J, build_matter_ctx(par, n_B, flags, T=T + dT))
+        Pm, em, sm = _tangent(x0, J, build_matter_ctx(par, n_B, flags, T=T - dT))
         d["dP_dT"] = (Pp - Pm) / (2 * dT)
         d["dsig_dT"] = (sp - sm) / (n_B * 2 * dT)
     return d
@@ -103,13 +110,13 @@ def susceptibilities(par, n_B, flags, T=0.0):
     has_phi = flags.phi_field and flags.hyperons
     # fixed+fixed ctx exposes the mu_S column and the hadronic charge/strange
     # rows; the Y_C/Y_S targets don't enter the (pointwise) Jacobian.
-    ctx = build_octet_ctx(par, n_B, flags, T=T, charge_mode="fixed",
-                          strange_mode="fixed")
+    held = mode_spec(charge_mode="fixed", strange_mode="fixed")
+    ctx = build_matter_ctx(par, n_B, flags, T=T)
     x = [p.sigma, p.omega0, p.rho0]
     if has_phi:
         x.append(p.phi0)
     x += [p.mu_n - p.Sigma_R, p.mu_p - p.mu_n, 0.0]
-    J = np.array(octet_jacobian(np.array(x), ctx))
+    J = np.array(octet_jacobian(np.array(x), ctx, held))
 
     n_f = 3 + int(has_phi)
     field_cols = list(range(n_f))

@@ -171,7 +171,7 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
                 f"eos_response(frozen='equilibrium') is wired for "
                 f"beta_eq_neutrinoless only, not {mode!r} "
                 f"(see docs/DEFERRED.md)")
-        from eos.dd2.responses_jac import (
+        from eos.dd2.backends.responses_jac import (
             sound_speed_eq, heat_capacity_V, heat_capacity_P, susceptibilities,
         )
         out = {"cs2_eq": sound_speed_eq(par, n_B, species, T=T),

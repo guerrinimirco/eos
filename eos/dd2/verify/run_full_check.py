@@ -100,7 +100,7 @@ def _check_responses(par, flags, grid):
 def _check_coeff_cross(par, flags, grid):
     """Analytic-from-Jacobian c_s^2 vs finite-difference:
     independent-method agreement on the equilibrium sound speed."""
-    from eos.dd2 import responses_jac as _jc
+    from eos.dd2.backends import responses_jac as _jc
     from eos.dd2.responses import sound_speed_eq as _cs_fd
     worst = 0.0
     for n_B in grid:

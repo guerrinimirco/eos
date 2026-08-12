@@ -1,5 +1,5 @@
 """
-physics/kernel_numba.py
+backends/kernel_numba.py
 ====================
 Numba-jitted T=0 octet residual and analytic Jacobian — the eos_fast hot path
 . Mirrors octet_residual / octet_jacobian
@@ -286,13 +286,21 @@ def jacobian_t0_jit(x, spec, params, flags):
     return J
 
 
-def build_numba_arrays(ctx):
-    """Flat (spec, params, flags) arrays from an OctetCtx (built once/solve)."""
+def build_numba_arrays(ctx, mode):
+    """Flat (spec, params, flags) arrays from a MatterCtx and a ModeSpec.
+
+    Built once per solve. Numba cannot see a dataclass or an Enum, so the mode
+    reaches the kernel as three target numbers and three integer flags; an
+    unheld target is passed as zero and its row never reads it.
+    """
     spec = np.array(ctx.specs, dtype=np.float64)
+    targets = mode.targets
     params = np.array([ctx.Gs_N, ctx.Gw_N, ctx.Gr_N, ctx.m_sigma2, ctx.m_omega2,
                        ctx.m_rho2, ctx.m_phi2, ctx.nB_nat, ctx.mbar, ctx.m_e,
-                       ctx.m_mu, ctx.Y_C, ctx.Y_S, ctx.Y_L], dtype=np.float64)
-    flags = np.array([int(ctx.has_phi), int(ctx.has_muS), int(ctx.has_muL),
-                      int(ctx.charge_mode == "neutral"), int(ctx.include_muons)],
-                     dtype=np.int64)
+                       ctx.m_mu, targets.get("Y_C", 0.0),
+                       targets.get("Y_S", 0.0), targets.get("Y_Le", 0.0)],
+                      dtype=np.float64)
+    flags = np.array([int(ctx.has_phi), int(mode.is_fixed("S")),
+                      int(mode.is_fixed("L_e")), int(not mode.is_fixed("C")),
+                      int(ctx.include_muons)], dtype=np.int64)
     return spec, params, flags

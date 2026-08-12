@@ -94,7 +94,7 @@ def charged_leptons(mu_e, T, muons, mu_L=0.0):
     Muons are in equilibrium with electrons at mu_mu = mu_e - mu_L: for
     neutrino-transparent matter that is mu_mu = mu_e, and with trapped
     electron-neutrinos the muon family stays transparent, matching
-    eos/dd2/physics/octet.py.
+    eos/dd2/solver.py.
     """
     e = electron_thermo(mu_e, T)
     if not muons:
