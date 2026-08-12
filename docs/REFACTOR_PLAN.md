@@ -225,6 +225,16 @@ their tests in CLAUDE.md §5.
   `mu_nue` everywhere in dd2 and mixed — CLAUDE.md §2's names — and both
   `api.py` translation layers are deleted. `Y_L` was only unambiguous while
   the muon family was untrackable, and §3 already allows `Y_Lmu`.
+
+  ALSO DONE: `ChargeSpec` is a `ModeSpec` plus a `Locality` per charge, so §3's
+  four modes are declared once, in `general/`. `Regime` survives as the
+  composition of the two — not held is NOT_CONSERVED, held is GLOBAL or LOCAL —
+  and is a property, so the ~25 sites that read `spec.C is Regime.GLOBAL` did
+  not move. What went with the mode are the `targets` field, its validation,
+  the `yc_leptons` flag and the pickling dance: all four now live once, on
+  `ModeSpec`. `B` GLOBAL stopped being a checked invariant and became a
+  structural one — it is a property with no field behind it, so there is
+  nothing to set wrongly.
 - astro/tov: crust handling split out of solver.py into crust.py — not
   because solver.py is long (§13 forbids that reason) but because stitching a
   crust EoS onto a core table is separable physics from integrating the TOV

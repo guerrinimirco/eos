@@ -36,6 +36,7 @@ import numpy as np
 from eos.dd2 import Parametrization, SpeciesFlags
 from eos.vmit.parameters import get_vmit_default
 from eos.mixed import beta_eq_neutrinoless, fixed_YC, fixed_YC_YS
+from eos.general.modes import Conservation, ModeSpec
 from eos.mixed.equilibrium.charges import ChargeSpec, Regime
 from eos.mixed.solvers.point import solve_mixed
 from eos.mixed.solvers.sweep import sweep_mixed
@@ -139,7 +140,9 @@ def _check_cross_mode(par, flags, vp, n_B=0.65):
     Y_S = ((1 - rA.chi) * rA.th_H.n_S + rA.chi * rA.th_Q.n_S) / rA.n_B
     rC = solve_mixed(par, flags, n_B, 0.0, fixed_YC(Y_C, leptons=True), vmit_params=vp)
     rD = solve_mixed(par, flags, n_B, 0.0,
-                     ChargeSpec(S=Regime.GLOBAL, targets={"Y_S": Y_S}), vmit_params=vp)
+                     ChargeSpec(ModeSpec(S=Conservation.FIXED,
+                                         targets={"Y_S": Y_S})),
+                     vmit_params=vp)
     worst = max(abs(rC.chi - rA.chi), abs(rD.chi - rA.chi),
                 abs(rD.potentials.get("mu_S", 0.0)))
     return CheckResult("cross-mode repro", worst < 1e-6, worst,

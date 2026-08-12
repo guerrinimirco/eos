@@ -84,6 +84,14 @@ configurations of one solver and an unnamed combination needs no new code.
 `S` LOCAL is not wired and raises; `L_e` LOCAL is not a defined mode at all —
 the neutrino mean free path is far larger than the mixed-phase structures.
 
+A regime is not a third kind of declaration. A `ChargeSpec` is a `ModeSpec`
+— the same object every single-phase model takes, saying which charges are
+held and at what fractions — plus one `Locality` per charge, which is the only
+axis a second phase adds. The regime is the two composed: a charge the mode
+does not hold is NOT_CONSERVED; one it holds is GLOBAL or LOCAL according to
+its locality. So the four modes are declared once, in `eos/general/modes.py`,
+and this engine says only *where* each conserved charge is conserved.
+
 **The system.** Because the adapters absorb each phase's internal
 self-consistency, the unknowns are only potentials, `chi`, and the split
 lepton potentials — four to nine numbers:

@@ -25,6 +25,13 @@ regimes off a ChargeSpec. The four named modes are therefore four
 configurations of one solver, and an unnamed combination is constructible by
 instantiating `ChargeSpec` directly.
 
+The three regimes are not a third thing beside `eos.general.modes`: they are
+that module's two-valued Conservation refined by ONE extra axis, which is all
+a second phase adds. A ChargeSpec is a `ModeSpec` plus a locality per charge,
+so the four modes of CLAUDE.md section 3 are declared once, in `general/`, and
+this module says only where each conserved charge is conserved. NOT_CONSERVED
+is `general`'s EQUILIBRATED seen from here.
+
 Baryon number is GLOBAL in every mode: mu_B^H = mu_B^Q is what makes the two
 phases coexist at all.
 
@@ -41,10 +48,10 @@ no solving.
 """
 from dataclasses import dataclass, field
 from enum import Enum
-from types import MappingProxyType
-from typing import Mapping
 
 from eos.general.particles import Up, Down, Strange
+from eos.general import modes
+from eos.general.modes import ModeSpec
 from eos.dd2.species import hadronic_qn, hadronic_charges
 
 
@@ -55,72 +62,87 @@ class Regime(Enum):
     NOT_CONSERVED = "not_conserved"
 
 
-#: charge name -> the `targets` key carrying its fixed fraction (GLOBAL/LOCAL).
-_TARGET_KEY = {"C": "Y_C", "S": "Y_S", "L_e": "Y_Le"}
+class Locality(Enum):
+    """On which volume a CONSERVED charge is conserved.
+
+    The second axis a two-phase system needs, and the only one `eos.general`
+    does not carry: on the volume average (GLOBAL, one shared potential) or
+    inside each phase separately (LOCAL, a potential per phase). It says
+    nothing about whether the charge is held at all -- that is the mode's job.
+    """
+    GLOBAL = "global"
+    LOCAL = "local"
 
 
 @dataclass(frozen=True)
 class ChargeSpec:
     """
-    Per-charge regime assignment for one mixed-phase configuration.
+    One mixed-phase configuration: a mode, plus where each charge is conserved.
 
-    `B` is always GLOBAL. `C`, `S`, `L_e` default to NOT_CONSERVED, which is
-    plain beta equilibrium. `targets` carries the fixed fractions (`Y_C`,
-    `Y_S`, `Y_Le`) that the GLOBAL/LOCAL charges need. `yc_leptons` picks
-    between the two fixed-Y_C flavors: leptonless (False, the CompOSE
-    (n_B, T, Y_q) convention) or with neutralizing leptons present (True).
+    A two-phase equilibrium needs exactly one axis more than a single phase, so
+    that is exactly what this adds. `mode` is the shared declaration from
+    `eos.general.modes` -- WHICH charges are held, at what fractions, and
+    whether neutralizing leptons are present -- and the three locality fields
+    say, for each held charge, on which volume. `Regime` is the two composed,
+    and is what the rest of the engine reads:
 
-    Prefer the named factories at the bottom of this module; build a ChargeSpec
-    directly only for a combination they do not cover.
+        the mode does not hold it      ->  NOT_CONSERVED
+        held, Locality.GLOBAL          ->  GLOBAL
+        held, Locality.LOCAL           ->  LOCAL
+
+    B is GLOBAL in every mode and is not stored: the two phases coexist only if
+    the baryon potential matches, mu_B^H = mu_B^Q.
+
+    Nothing else in the engine enumerates equilibrium modes -- the unknown
+    vector (`mixed_slots`), the residual list (`mixed_residual`) and the
+    Jacobian are all assembled by reading the regimes off a ChargeSpec -- so
+    the four named modes below are four configurations of one solver, and an
+    unnamed combination is constructible by passing a `ModeSpec` directly.
     """
-    B: Regime = Regime.GLOBAL
-    C: Regime = Regime.NOT_CONSERVED
-    S: Regime = Regime.NOT_CONSERVED
-    L_e: Regime = Regime.NOT_CONSERVED
-    targets: Mapping[str, float] = field(default_factory=dict)
-    yc_leptons: bool = False
+    mode: ModeSpec = field(default_factory=ModeSpec)
+    C_locality: Locality = Locality.GLOBAL
+    S_locality: Locality = Locality.GLOBAL
+    L_e_locality: Locality = Locality.GLOBAL
 
-    def __post_init__(self):
-        if self.B is not Regime.GLOBAL:
-            raise ValueError(
-                "B must be GLOBAL in every mode: the two phases coexist only "
-                "if the baryon potential matches, mu_B^H = mu_B^Q")
-        # A charge that fixes a fraction (GLOBAL/LOCAL) needs its target, and
-        # only then; a NOT_CONSERVED charge must not carry one.
-        for charge, key in _TARGET_KEY.items():
-            fixes = getattr(self, charge) in (Regime.GLOBAL, Regime.LOCAL)
-            given = key in self.targets
-            if fixes and not given:
-                raise ValueError(
-                    f"{charge} is {getattr(self, charge).name} but no {key} "
-                    f"target was provided in `targets`")
-            if not fixes and given:
-                raise ValueError(
-                    f"{charge} is NOT_CONSERVED; a {key} target is meaningless")
-        if self.yc_leptons and self.C is not Regime.GLOBAL:
-            raise ValueError(
-                "yc_leptons only applies when C is GLOBAL (fixed Y_C)")
-        # Normalize to an immutable mapping so a frozen ChargeSpec really is
-        # frozen (dataclass freezes the field binding, not the dict contents).
-        object.__setattr__(self, "targets",
-                           MappingProxyType(dict(self.targets)))
+    # The mode validates its own targets and survives pickling on its own
+    # (`eos.mixed.scan` runs a parameter scan across processes, and CLAUDE.md
+    # section 6 requires that), so neither is restated here. Three enums beside
+    # it are picklable as they stand.
 
-    # A mappingproxy cannot be pickled, and a ChargeSpec has to survive being
-    # sent to a worker process: `eos.mixed.scan` runs a parameter scan across
-    # processes, and CLAUDE.md section 6 requires model objects to be
-    # picklable so multiprocessing and MPI work. Unwrap for the wire and
-    # re-wrap on arrival, so the immutability holds in every process without
-    # costing the portability.
-    def __getstate__(self):
-        state = dict(self.__dict__)
-        state["targets"] = dict(state["targets"])
-        return state
+    def _regime(self, charge, locality):
+        if not self.mode.is_fixed(charge):
+            return Regime.NOT_CONSERVED
+        return Regime.GLOBAL if locality is Locality.GLOBAL else Regime.LOCAL
 
-    def __setstate__(self, state):
-        for name, value in state.items():
-            object.__setattr__(self, name, value)
-        object.__setattr__(self, "targets",
-                           MappingProxyType(dict(state["targets"])))
+    @property
+    def B(self):
+        return Regime.GLOBAL
+
+    @property
+    def C(self):
+        return self._regime("C", self.C_locality)
+
+    @property
+    def S(self):
+        return self._regime("S", self.S_locality)
+
+    @property
+    def L_e(self):
+        return self._regime("L_e", self.L_e_locality)
+
+    @property
+    def targets(self):
+        """The fixed fractions, in CLAUDE.md section 5's condition names."""
+        return self.mode.targets
+
+    @property
+    def yc_leptons(self):
+        """Are neutralizing leptons present in the fixed-Y_C mode?
+
+        False wherever C is not held: with the charge potential fixed by beta
+        equilibrium instead, there is no leptonless flavour to choose between.
+        """
+        return self.mode.is_fixed("C") and self.mode.leptons
 
 
 # =============================================================================
@@ -173,7 +195,7 @@ def beta_eq_neutrinoless():
     mu_C = -mu_e, so no charge fraction is imposed. This is the cold /
     neutrino-transparent neutron-star condition.
     """
-    return ChargeSpec()
+    return ChargeSpec(modes.beta_eq_neutrinoless())
 
 
 def beta_eq_neutrino_trapped(Y_Le):
@@ -186,7 +208,7 @@ def beta_eq_neutrino_trapped(Y_Le):
     far larger than the mixed-phase structures, so they cannot be localized in
     a droplet — and it is worth surfacing in output metadata.
     """
-    return ChargeSpec(L_e=Regime.GLOBAL, targets={"Y_Le": Y_Le})
+    return ChargeSpec(modes.beta_eq_neutrino_trapped(Y_Le))
 
 
 def fixed_YC(Y_C, *, leptons=False):
@@ -200,8 +222,7 @@ def fixed_YC(Y_C, *, leptons=False):
                      so the total system is electrically neutral while the
                      hadron+quark charge fraction is held at Y_C.
     """
-    return ChargeSpec(C=Regime.GLOBAL, targets={"Y_C": Y_C},
-                      yc_leptons=leptons)
+    return ChargeSpec(modes.fixed_YC(Y_C, leptons=leptons))
 
 
 def fixed_YC_YS(Y_C, Y_S, *, leptons=False):
@@ -216,5 +237,4 @@ def fixed_YC_YS(Y_C, Y_S, *, leptons=False):
 
     `leptons` selects the charge flavor exactly as `fixed_YC`.
     """
-    return ChargeSpec(C=Regime.GLOBAL, S=Regime.GLOBAL,
-                      targets={"Y_C": Y_C, "Y_S": Y_S}, yc_leptons=leptons)
+    return ChargeSpec(modes.fixed_YC_YS(Y_C, Y_S, leptons=leptons))

@@ -65,7 +65,7 @@ energy density MeV/fm^3, temperature and chemical potentials MeV.
 """
 # --- equilibrium modes and the regime declaration behind them ---------------
 from eos.mixed.equilibrium.charges import (
-    ChargeSpec, Regime,
+    ChargeSpec, Regime, Locality,
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
     QUARK_QN, quark_charges, hadronic_qn, hadronic_charges,
 )
@@ -115,7 +115,7 @@ __all__ = [
     "beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
     "fixed_YC", "fixed_YC_YS", "MODE_FRACTIONS", "make_charge_spec",
     # regime machinery, for combinations the named modes do not cover
-    "ChargeSpec", "Regime",
+    "ChargeSpec", "Regime", "Locality",
     # quantum numbers
     "QUARK_QN", "quark_charges", "hadronic_qn", "hadronic_charges",
     # phase adapters
