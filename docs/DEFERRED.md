@@ -318,6 +318,59 @@ algebraically from the isothermal one and the heat-capacity ratio — one
 stencil instead of two. Worth doing when the freeze selector is built, since
 both touch the same code.
 
+### The two thermal meson gases are not duplicates, and cannot be merged blind
+
+`eos/general/thermal_mesons.py` and the gas inside `eos/sfho/thermodynamics.py`
+implement the same physics — the pseudoscalar nonet as ideal Bose gases riding
+on the mean field, Lavagno PRC 81 044909 (2010) / arXiv:1210.0400 — and the
+plan lists collapsing them into one. They agree exactly on the structure: three
+independent effective potentials (mu*_pi+, mu*_K+, mu*_K0), the conjugation
+rule mu*_{j-} = -mu*_{j+}, neutral strangeless mesons at mu* = 0, and S = +1
+per s quark. What they do NOT agree on is three inputs, and each disagreement
+moves numbers in one model or the other:
+
+**1. Every mass differs.** `general/` carries rounded PDG constants, sfho reads
+its parameter object:
+
+                sfho      general
+      pi+-    139.570      140.0
+      pi0     134.977      140.0
+      K+-     493.677      494.0
+      K0      497.611      494.0
+      eta     547.862      547.0
+      eta'    957.780      958.0
+
+**2. `general/` does not split the isospin partners.** It has one pion mass and
+one kaon mass, so pi0 is given the pi+- mass and K0 the K+- mass. sfho carries
+both. The split is the more correct treatment and costs two constants.
+
+**3. They treat Bose condensation oppositely.** `solve_bose_jel` caps mu at m
+internally, so `general/` keeps a saturated contribution past threshold. sfho
+guards with `if abs(mu_eff) < m` and otherwise sets that species' density,
+pressure, energy and entropy to ZERO. Neither describes a condensate;
+`general/` is continuous and understates one, sfho's is discontinuous and drops
+a fully populated species at the threshold.
+
+That third one is not a corner case. Measured over beta equilibrium and fixed
+Y_C = 0.05 / 0.5, nucleons and hyperons, T up to 100 MeV and n_B up to
+1.2 fm^-3, the largest |mu*| / m reached is
+
+      pi+   3.11   (T = 100 MeV, n_B = 1.2)
+      K+    3.52   (T = 100 MeV, n_B = 1.2)
+      K0    2.62   (T = 10 MeV,  n_B = 1.2)
+
+so the guard fires across a large part of any table built with
+`thermal_mesons=True`, and it fires for K0 at temperatures as low as 10 MeV.
+
+What the merge needs, in order: decide the masses (a model input per section 7,
+so the shared module should TAKE them and default to the PDG values, which
+leaves dd2 untouched by construction); decide whether the isospin partners
+split (they should, and dd2 then moves); and decide what happens at
+mu* = m, which is the real physics question — a proper condensate, a documented
+cap, or a raised status. Only the first is a refactor. Until they are settled
+the shared machinery cannot be the single home section 7 wants, and merging on
+the current defaults would silently change both models.
+
 ## Per model
 
 ### dd2
