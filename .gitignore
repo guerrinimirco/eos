@@ -76,3 +76,6 @@ plot/data/samples/*.mismatch
 
 # Notebook scratch
 notebooks/zlvmit_test.ipynb
+
+# Generated knowledge graph (graphify)
+graphify-out/
