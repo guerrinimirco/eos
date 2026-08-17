@@ -15,7 +15,11 @@ Checks:
      analytic formula of the model's source paper;
   4. causality and monotonicity — 0 <= c_s^2 <= 1 and P non-decreasing along
      a cold beta-equilibrium sweep;
-  5. CompOSE HS(SFHo) comparison, when the table is present.
+  5. CompOSE HS(SFHo) comparison, when the table is present;
+  6. backend parity — the analytic Jacobian of `backends/` against a central
+     difference of the residual, CLAUDE.md §9's gate on the fast flavour;
+  7. the susceptibility matrix against the inverse map dmu_a/dn_b, which the
+     fixed-Y_C-Y_S mode supplies without touching the Jacobian.
 
 Why check 1 earns its place: SFHo shipped for a long time with an energy
 density missing the omega(dA/domega) rho^2 partner of the omega field
@@ -32,11 +36,9 @@ before there is an eta to miss. Both are covered now — the gas enters at its
 effective potentials, and the meson cases sit at T = 50.
 """
 from dataclasses import dataclass, field
-import os
 
 import numpy as np
 
-from eos.general.physics_constants import hc, hc3
 from eos.sfho.parameters import get_sfho_nucleonic, get_sfhoy_fortin
 from eos.sfho.species import SpeciesFlags, active_baryons
 from eos.sfho.solver import (
@@ -54,8 +56,6 @@ WITH_MESONS = SpeciesFlags(thermal_mesons=True)
 #: Steiner, Hempel & Fischer, ApJ 774 (2013) 17, as tabulated by Fortin,
 #: Oertel & Providencia, PASA 35 (2018) e044, Table 2.
 PUBLISHED = dict(n_sat=0.158, E_sat=-16.2, E_sym=31.6, L=47.1)
-
-SFHO_COMPOSE = "/Users/mircoguerrini/Desktop/Research/Compose/SFHO_Compose"
 
 
 @dataclass
@@ -236,39 +236,144 @@ def _check_causality(par, grid):
 # =============================================================================
 # 5. COMPOSE
 # =============================================================================
-def _check_compose(par, compose_dir=SFHO_COMPOSE):
-    """Compare P and eps with the published HS(SFHo) table.
+def _check_compose(par, compose_dir=None):
+    """Compare P, eps, s and mu_B with the published HS(SFHo) table.
 
-    At T = 10 MeV and n_B above about 0.2 fm^-3 the statistical model is
-    uniform matter, so the table is this model's fixed_YC mode with electrons
-    and photons. Neutron-rich slices are the point: the isovector sector is
-    where an energy-density error hides, since it vanishes at Y_q = 0.5.
+    Three charge fractions at T = 10 MeV, over the uniform-matter density
+    range. The conditions and why they are those conditions are in
+    `verify/compose.py`; here it is only the pass/fail. Skipped where the
+    table is not on this machine, since it is a download rather than repository
+    data.
     """
-    if not os.path.isfile(os.path.join(compose_dir, "eos.thermo.ns")):
-        return CheckResult("CompOSE HS(SFHo)", True, 0.0, "skipped (no table)")
-    from eos.sfho.compose_loader import read_compose_data
+    from eos.sfho.verify import compose as _compose
 
-    data = read_compose_data(compose_dir, name="SFHO")
-    iT = int(np.argmin(abs(data.T_values - 10.0)))
-    T = float(data.T_values[iT])
+    compose_dir = compose_dir or _compose.SFHO_COMPOSE
+    if not _compose.available(compose_dir):
+        return CheckResult("CompOSE HS(SFHo)", True, 0.0, "skipped (no table)")
     worst, where = 0.0, ""
     for Y_C in (0.5, 0.3, 0.1):
-        iY = int(np.argmin(abs(data.Y_C_values - Y_C)))
-        for n_B in (0.2, 0.3, 0.4, 0.6):
-            iN = int(np.argmin(abs(data.n_B_values - n_B)))
-            nb = float(data.n_B_values[iN])
-            P_ref = float(data.P[iT, iN, iY])
-            eps_ref = float(data.e[iT, iN, iY])
-            if not (np.isfinite(P_ref) and np.isfinite(eps_ref)):
-                continue
-            r = solve_fixed_yc(par, nb, float(data.Y_C_values[iY]),
-                               NUCLEONS, T=T, leptons=True)
-            err = max(abs(r.P - P_ref) / abs(P_ref),
-                      abs(r.eps - eps_ref) / abs(eps_ref))
-            if err > worst:
-                worst, where = err, f"Y_q={data.Y_C_values[iY]:.2f} n_B={nb:.3f}"
+        out = _compose.compare_slice(par, NUCLEONS, compose_dir=compose_dir,
+                                     T=10.0, Y_C=Y_C,
+                                     nB_min=0.2, nB_max=0.6)
+        err = max(out["max_err_P"], out["max_err_eps"])
+        if err > worst:
+            worst, where = err, f"Y_q={out['Y_C']:.2f}"
     return CheckResult("CompOSE HS(SFHo)", worst < 2e-3, worst,
-                       f"T={T:.1f} MeV, worst at {where}")
+                       f"T=10.0 MeV, worst at {where}")
+
+
+# =============================================================================
+# 6. BACKEND PARITY
+# =============================================================================
+def _fd_jacobian(x, sys):
+    """dR/dx by central differences of `solver.residual` -- the reference."""
+    from eos.sfho.solver import residual
+    x = np.asarray(x, dtype=float)
+    rows = len(residual(x, sys))
+    J = np.zeros((rows, len(x)))
+    for k in range(len(x)):
+        h = max(1e-5, 1e-6 * abs(x[k]))
+        up, lo = x.copy(), x.copy()
+        up[k] += h
+        lo[k] -= h
+        J[:, k] = (np.asarray(residual(up, sys))
+                   - np.asarray(residual(lo, sys))) / (2.0 * h)
+    return J
+
+
+def _check_jacobian(nuc, hyp):
+    """The analytic Jacobian against a central difference of the residual.
+
+    CLAUDE.md §9's gate on the accelerated flavour: `backends/jacobian` writes
+    out the same derivative the reference path builds numerically, so the two
+    must agree. Each entry is compared against the largest entry of its own
+    row, because a Jacobian row spans many orders of magnitude -- a field
+    equation's diagonal is m^2 and its coupling to a distant potential is not.
+
+    The kinetic derivatives are closed forms at T = 0 and central differences
+    at T > 0, so the T = 0 cases agree ~1e-9 and the T > 0 ones ~1e-8; both are
+    far inside the residual gate the solve is judged on.
+    """
+    from eos.general import modes
+    from eos.sfho.solver import _system, solve, warm_start
+    from eos.sfho.backends.jacobian import residual_jacobian
+
+    cases = [
+        ("beta T=0", nuc, NUCLEONS, modes.beta_eq_neutrinoless(), 0.16, 0.0),
+        ("beta T=10", nuc, NUCLEONS, modes.beta_eq_neutrinoless(), 0.16, 10.0),
+        ("beta hyperons", hyp, WITH_HYPERONS,
+         modes.beta_eq_neutrinoless(), 0.5, 10.0),
+        ("fixed Y_C", nuc, NUCLEONS, modes.fixed_YC(0.3), 0.16, 10.0),
+        ("fixed Y_C Y_S", hyp, WITH_HYPERONS,
+         modes.fixed_YC_YS(0.3, 0.1), 0.5, 10.0),
+        ("trapped", nuc, NUCLEONS,
+         modes.beta_eq_neutrino_trapped(0.4), 0.16, 30.0),
+        ("mesons T=50", nuc, WITH_MESONS, modes.fixed_YC(0.3), 0.3, 50.0),
+    ]
+    worst, where = 0.0, ""
+    for tag, par, flags, spec, n_B, T in cases:
+        sys = _system(par, flags, spec, n_B, T=T)
+        point = solve(sys)
+        if not point.converged:
+            return CheckResult("Jacobian vs finite difference", False, 1.0,
+                               f"{tag}: no converged state to check at")
+        x = warm_start(point, spec)
+        J_a = residual_jacobian(x, sys)
+        J_f = _fd_jacobian(x, sys)
+        scale = np.maximum(np.abs(J_f).max(axis=1, keepdims=True), 1e-300)
+        err = float(np.max(np.abs(J_a - J_f) / scale))
+        if err > worst:
+            worst, where = err, tag
+    return CheckResult("Jacobian vs finite difference", worst < 1e-6, worst,
+                       f"worst at {where}")
+
+
+def _check_susceptibilities(hyp, n_B=0.8, T=10.0, rel=1e-4):
+    """chi_ab = dn_a/dmu_b against the inverse map, dmu_a/dn_b.
+
+    The susceptibility matrix is the one response with no finite-difference
+    twin inside the model -- the solver never varies mu_B, mu_C and mu_S
+    independently, so there is no sequence to walk along. The independent route
+    is the OTHER direction: the fixed-Y_C-Y_S mode imposes (n_B, n_C, n_S) and
+    reports (mu_B, mu_C, mu_S), so re-solving it at perturbed charges gives
+    dmu_a/dn_b without touching the Jacobian, and the two matrices must
+    multiply to the identity.
+
+    Hyperons at n_B = 0.8 fm^-3 deliberately. Lower down the strangeness
+    density is essentially zero -- 2.5e-07 fm^-3 at n_B = 0.16, T = 10 MeV --
+    and where a conserved charge is carried by no populated species the
+    residual is flat in its potential, so the numerical dmu_S/dn_S is
+    meaningless there. That is a property of the model rather than of chi.
+    """
+    from eos.sfho.solver import _system, solve
+    from eos.general import modes
+    from eos.sfho.backends.responses_jac import susceptibilities
+
+    flags = WITH_HYPERONS
+    base = solve(_system(hyp, flags, modes.beta_eq_neutrinoless(), n_B, T=T))
+    if not base.converged:
+        return CheckResult("chi_ab vs dmu/dn", False, 1.0,
+                           f"no beta-eq state at n_B={n_B:g}")
+    charges = [n_B, base.n_C, base.n_S]
+    dmu_dn = np.zeros((3, 3))
+    for b in range(3):
+        step = rel * max(abs(charges[b]), 1e-3)
+        ends = []
+        for sign in (+1.0, -1.0):
+            perturbed = list(charges)
+            perturbed[b] += sign * step
+            nB_, nC_, nS_ = perturbed
+            spec = modes.fixed_YC_YS(nC_ / nB_, nS_ / nB_)
+            point = solve(_system(hyp, flags, spec, nB_, T=T))
+            if not point.converged:
+                return CheckResult("chi_ab vs dmu/dn", False, 1.0,
+                                   "perturbed fixed-Y_C-Y_S solve failed")
+            ends.append(np.array([point.mu_B, point.mu_C, point.mu_S]))
+        dmu_dn[:, b] = (ends[0] - ends[1]) / (2.0 * step)
+    chi = susceptibilities(hyp, n_B, flags, T=T)
+    err = float(np.max(np.abs(chi @ dmu_dn - np.eye(3))))
+    return CheckResult("chi_ab vs dmu/dn", err < 1e-4, err,
+                       f"n_B={n_B:g} fm^-3, T={T:g} MeV, hyperons")
 
 
 # =============================================================================
@@ -284,6 +389,8 @@ def run_full_check(par=None, hyp=None, grid=None):
     report.results.append(_check_esym_two_ways(par))
     report.results.append(_check_causality(par, np.linspace(0.1, 1.0, 25)))
     report.results.append(_check_compose(par))
+    report.results.append(_check_jacobian(par, hyp))
+    report.results.append(_check_susceptibilities(hyp))
     return report
 
 

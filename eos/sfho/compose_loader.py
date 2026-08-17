@@ -3,9 +3,9 @@ compose_loader.py
 =================
 In-memory lookup for the SFHO CompOSE EOS as a 3-axis (n_B, Y_C, T) table.
 
-Wraps :func:`eos.sfho.compare_with_compose.read_compose_data` so the full 3-D
-CompOSE grid is loaded once and cached, then exposes bilinear interpolation in
-(T, Y_C) along the native n_B grid. Designed for crust attachment in
+Reads the full 3-D CompOSE grid once through :func:`read_compose_data` below,
+caches it, and exposes bilinear interpolation in (T, Y_C) along the native n_B
+grid. Designed for crust attachment in
 :mod:`eos.tov.solver` (the ``compose_sfho_nYCT`` crust option), but useful
 anywhere a (T, Y_C) slice of SFHO is needed.
 

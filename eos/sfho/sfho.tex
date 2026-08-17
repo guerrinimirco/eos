@@ -1,0 +1,446 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nsat}{n_{\mathrm{sat}}}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\munue}{\mu_{\nu_e}}
+\newcommand{\mueff}[1]{\mu^{\mathrm{eff}}_{#1}}
+\newcommand{\meff}[1]{m^{*}_{#1}}
+
+\begin{document}
+
+\title{SFHo: a nonlinear relativistic mean-field model \\
+       for hadronic matter --- as implemented in \texttt{eos/sfho}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/sfho} subpackage implements the SFHo parametrization of
+Steiner, Hempel \& Fischer~\cite{Steiner2013}, a nonlinear relativistic
+mean-field model in the Boguta--Bodmer family~\cite{BogutaBodmer1977} with the
+isoscalar--isovector cross coupling of Steiner, Prakash, Lattimer \&
+Ellis~\cite{Steiner2005}, extended to the hyperon octet with the SFHoY and
+SFHoY$^{*}$ couplings of Fortin, Oertel \& Provid\^encia~\cite{Fortin2017}, to
+the $\Delta(1232)$ quartet, and to a thermal pseudoscalar meson gas following
+Lavagno~\cite{Lavagno2010}. This note states the Lagrangian, the parameter
+set, the field equations, the thermodynamics, and the closure of each
+equilibrium mode the code supports. It is written from the code, as its
+specification: every equation here is asserted by the \texttt{verify/} suite
+or the test gates.
+
+SFHo and DD2 are the two hadronic models of this repository and are
+deliberately built the same way --- same module layout, same names, same
+modes. The physics difference is one thing: DD2 puts the density dependence in
+the \emph{couplings}, SFHo puts it in nonlinear \emph{self-interactions} of
+the meson fields. SFHo therefore has constant $g_i$, no rearrangement
+self-energy, and no \texttt{couplings.py}.
+\end{abstract}
+
+\maketitle
+
+\section{Lagrangian and couplings}
+
+Baryons $i$ (nucleons; optionally the hyperon octet and the $\Delta$ quartet)
+couple to the isoscalar--scalar $\sigma$, isoscalar--vector $\omega$,
+isovector--vector $\rho$, and (for strange baryons) the hidden-strange vector
+$\phi$, with \emph{constant} couplings $g_{Mi}$:
+%
+\begin{align}
+\mathcal{L} ={}& \sum_i \bar\psi_i \Big[ \gamma_\mu \big( i\partial^\mu
+      - g_{\omega i}\,\omega^\mu
+      - g_{\rho i}\, I_{3i}\, \rho^\mu
+      - g_{\phi i}\, \phi^\mu \big)
+      - \big( m_i - g_{\sigma i}\,\sigma \big) \Big] \psi_i
+      \nonumber\\
+ &+ \tfrac12 \big( \partial_\mu \sigma\, \partial^\mu \sigma
+      - m_\sigma^2 \sigma^2 \big) - U(\sigma)
+   - \tfrac14 W_{\mu\nu} W^{\mu\nu} + \tfrac12 m_\omega^2\, \omega_\mu \omega^\mu
+   + \tfrac{c_3}{4} (\omega_\mu \omega^\mu)^2
+      \nonumber\\
+ &- \tfrac14 R_{\mu\nu} R^{\mu\nu} + \tfrac12 m_\rho^2\, \rho_\mu \rho^\mu
+   + \tfrac{c_4}{4} (\rho_\mu \rho^\mu)^2
+   + A(\sigma, \omega)\, \rho_\mu \rho^\mu
+   - \tfrac14 \Phi_{\mu\nu} \Phi^{\mu\nu} + \tfrac12 m_\phi^2\, \phi_\mu \phi^\mu ,
+\label{eq:lagrangian}
+\end{align}
+%
+where $I_{3i}$ is the third isospin component in the $\tau_3/2$ convention
+($I_{3p} = +\tfrac12$, $I_{3n} = -\tfrac12$, $I_{3\Sigma^+} = +1$,
+$I_{3\Delta^{++}} = +\tfrac32$), which is the convention the published SFHo
+$\rho$ coupling is tabulated in. (DD2 uses $\tau_3 = \pm 1$ instead; the two
+conventions absorb a factor of two into $g_\rho$, and neither model may be
+read with the other's table.) Leptons ($e$) and, in trapped modes, electron
+neutrinos enter as free Dirac gases; photons as a free Bose gas.
+
+Three nonlinear terms carry what DD2 carries in $\Gamma_i(\nB)$. The scalar
+self-interaction is Boguta--Bodmer~\cite{BogutaBodmer1977},
+%
+\begin{equation}
+U(\sigma) = \frac{g_2}{3}\, \sigma^3 + \frac{g_3}{4}\, \sigma^4 ,
+\qquad
+\frac{\partial U}{\partial \sigma} = g_2 \sigma^2 + g_3 \sigma^3 ,
+\label{eq:Usigma}
+\end{equation}
+%
+and controls $K_{\mathrm{sat}}$ and $m^*/m$. The quartic vector terms $c_3,
+c_4$ stiffen (or soften) the high-density vector sector. The third is the
+isoscalar--isovector cross coupling of Steiner et al.~\cite{Steiner2005},
+%
+\begin{equation}
+A(\sigma, \omega) = g_{\rho N}^2\, f(\sigma, \omega),
+\qquad
+f(\sigma, \omega) = \sum_{i=1}^{6} a_i\, \sigma^i
+                  + \sum_{j=1}^{3} b_j\, \omega^{2j} ,
+\label{eq:Afunction}
+\end{equation}
+%
+which is what makes $L_{\mathrm{sym}}$ adjustable at fixed $E_{\mathrm{sym}}$
+in this family. It generalises the $\Lambda_v \omega^2 \rho^2$ coupling of
+Horowitz \& Piekarewicz~\cite{HorowitzPiekarewicz2001}, which is the single
+term $b_1$: $A$ is a polynomial in $\sigma$ and in $\omega^2$ separately, so
+$\partial^2 A/\partial\sigma\,\partial\omega \equiv 0$ --- a fact the analytic
+Jacobian uses. The published values~\cite{Steiner2013}, as transcribed from
+the CompOSE table, are in Table~\ref{tab:params}.
+
+\begin{table}[b]
+\caption{The SFHo parameter set~\cite{Steiner2013}, as carried by
+\texttt{get\_sfho\_nucleonic()}. The CompOSE table states the couplings as
+$c_M = g_M/m_M$ in fm and the self-interactions in the dimensionless
+$(b, c, \zeta, \xi)$ of Steiner et al.; the values below are those converted
+to the $(g, g_2, g_3, c_3, c_4)$ of Eqs.~\eqref{eq:lagrangian}
+and~\eqref{eq:Usigma}, with $\sigma$ and $\omega$ measured in MeV. The $\phi$
+mass ($1020$~MeV) enters only with hyperons.}
+\label{tab:params}
+\begin{ruledtabular}
+\begin{tabular}{lcc|lcc}
+$m_n$ & $939.565346$ & MeV & $g_{\sigma N}$ & $7.53128$ & \\
+$m_p$ & $938.272013$ & MeV & $g_{\omega N}$ & $9.02239$ & \\
+$m_\sigma$ & $467.4583$ & MeV & $g_{\rho N}$ & $9.30415$ & \\
+$m_\omega$ & $782.5011$ & MeV & $g_2$ & $2.95146 \times 10^{3}$ & MeV \\
+$m_\rho$ & $763.0001$ & MeV & $g_3$ & $-1.22905 \times 10^{1}$ & \\
+ & & & $c_3$ & $-1.78429$ & \\
+ & & & $c_4$ & $5.15657$ & \\
+\hline
+$a_1$ & $-3.81010\times 10^{1}$ & MeV & $b_1$ & $5.51185$ & \\
+$a_2$ & $\phantom{-}5.61503\times 10^{-1}$ & & $b_2$ & $-4.62463\times 10^{-5}$ & MeV$^{-2}$ \\
+$a_3$ & $\phantom{-}1.45031\times 10^{-3}$ & MeV$^{-1}$ & $b_3$ & $2.81043\times 10^{-7}$ & MeV$^{-4}$ \\
+$a_4$ & $\phantom{-}7.11844\times 10^{-5}$ & MeV$^{-2}$ & & & \\
+$a_5$ & $\phantom{-}1.60179\times 10^{-7}$ & MeV$^{-3}$ & & & \\
+$a_6$ & $\phantom{-}4.05497\times 10^{-10}$ & MeV$^{-4}$ & & & \\
+\end{tabular}
+\end{ruledtabular}
+\end{table}
+
+Non-nucleonic baryons carry their own constant couplings, stored as ratios of
+the nucleon ones. The vector sector is SU(6) with an optional overall
+enhancement $y$ (the SFHoY choice of Ref.~\cite{Fortin2017}, $y = 1.5$ for
+$\Lambda, \Sigma$ and $1.875$ for $\Xi$):
+$g_{\omega Y}/g_{\omega N} = y \times \{2/3,\, 2/3,\, 1/3\}$ and
+$g_{\phi Y}/g_{\omega N} = y \times \{-\sqrt2/3,\, -\sqrt2/3,\, -2\sqrt2/3\}$
+for $\{\Lambda, \Sigma, \Xi\}$, with
+$g_{\rho Y}/g_{\rho N} = \{0,\, 2,\, 1\}$. The scalar ratios are either the
+published SFHoY values or inverted from the hyperon single-particle potentials
+in symmetric matter at saturation,
+%
+\begin{equation}
+U_Y(\nsat) = -g_{\sigma Y}\, \bar\sigma + g_{\omega Y}\, \bar\omega
+\qquad (\text{defaults } U_\Lambda = -30,\; U_\Sigma = +30,\;
+        U_\Xi = -14 \text{ MeV}),
+\label{eq:UY}
+\end{equation}
+%
+one linear equation per hyperon --- and, unlike DD2, with no $\Sigma^R$ in it.
+The $\Delta$ quartet has no canonical SFHo coupling table: the default is
+universal vector coupling ($g_{\Delta i} = g_{Ni}$), or $g_{\sigma\Delta}$ is
+fixed by the same inversion from a chosen $U_\Delta$.
+
+\section{Mean fields and thermodynamics}
+
+In static uniform matter the meson field equations follow from
+Eq.~\eqref{eq:lagrangian}. They are no longer algebraic in the sources, as
+they are in DD2: three of the four carry nonlinear terms in the fields
+themselves, so the four fields are solved for together with the potentials
+rather than being eliminated,
+%
+\begin{align}
+m_\sigma^2 \sigma + g_2 \sigma^2 + g_3 \sigma^3
+   - \frac{\partial A}{\partial \sigma}\, \rho^2
+   &= \sum_i g_{\sigma i}\, n^s_i ,
+\label{eq:fieldeqs}\\
+m_\omega^2 \omega + c_3 \omega^3
+   + \frac{\partial A}{\partial \omega}\, \rho^2
+   &= \sum_i g_{\omega i}\, n_i ,
+\nonumber\\
+m_\rho^2 \rho + c_4 \rho^3 + 2 A\, \rho
+   &= \sum_i g_{\rho i}\, I_{3i}\, n_i ,
+\nonumber\\
+m_\phi^2 \phi &= \sum_i g_{\phi i}\, n_i ,
+\nonumber
+\end{align}
+%
+with $n_i$ and $n^s_i$ the number and scalar densities of an ideal Fermi gas
+of effective mass and effective chemical potential
+%
+\begin{equation}
+\meff{i} = m_i - g_{\sigma i}\, \sigma, \qquad
+\mueff{i} = \mu_i - g_{\omega i}\, \omega
+          - g_{\rho i}\, I_{3i}\, \rho
+          - g_{\phi i}\, \phi .
+\label{eq:mueff}
+\end{equation}
+%
+There is no rearrangement term: the couplings do not depend on the state, so
+$\Sigma^R = 0$ identically. That is the single structural simplification
+relative to DD2, and it is stated in the code rather than omitted. At $T=0$
+the gas integrals are closed forms; at $T>0$ they are evaluated with the
+Johns--Ellis--Lattimer approximants~\cite{JohnsEllisLattimer1996} from
+\texttt{eos/general/fermi\_integrals} (the single home of all Fermi and Bose
+integrals in this repository). In code, $\mueff{i}$ and $\meff{i}$ are named
+\texttt{mu\_eff\_i} and \texttt{m\_eff\_i}.
+
+The meson fields contribute to the pressure and the energy density
+%
+\begin{align}
+P_{\mathrm{mf}} &= -V(\sigma)
+   + \tfrac12 m_\omega^2 \omega^2 + \tfrac{c_3}{4}\, \omega^4
+   + \tfrac12 m_\rho^2 \rho^2 + \tfrac{c_4}{4}\, \rho^4 + A\, \rho^2
+   + \tfrac12 m_\phi^2 \phi^2 ,
+\label{eq:Pmf}\\
+\varepsilon_{\mathrm{mf}} &= +V(\sigma)
+   + \tfrac12 m_\omega^2 \omega^2 + \tfrac{3 c_3}{4}\, \omega^4
+   + \omega \frac{\partial A}{\partial \omega} \rho^2
+   + \tfrac12 m_\rho^2 \rho^2 + \tfrac{3 c_4}{4}\, \rho^4 + A\, \rho^2
+   + \tfrac12 m_\phi^2 \phi^2 ,
+\label{eq:epsmf}
+\end{align}
+%
+with $V(\sigma) = \tfrac12 m_\sigma^2 \sigma^2 + U(\sigma)$. The asymmetric
+terms deserve a word, because two of them were wrong in this code once and
+nothing but the Euler identity found it. Eliminating the $\omega$ source
+through its own field equation is what turns $\tfrac12 m_\omega^2 \omega^2$
+into $\tfrac12 m_\omega^2 \omega^2 + \tfrac{3c_3}{4}\omega^4$; the same
+elimination leaves behind $\omega\,(\partial A/\partial\omega)\,\rho^2$,
+because $A$ depends on $\omega$ as well as on $\sigma$. Keeping only $b_1$
+gives $A = g_\rho^2 b_1 \omega^2$, so that term is $2A\rho^2$ and the cross
+coupling enters $\varepsilon$ as $3A\rho^2$ against $A\rho^2$ in $P$ --- the
+familiar factor of three of the Horowitz--Piekarewicz
+coupling~\cite{HorowitzPiekarewicz2001} this generalises. The $\sigma$
+dependence of $A$ has no such partner: $\sigma$ reaches the baryons through
+$\meff{}$ and the scalar density rather than through $\mu$, so $V(\sigma)$
+simply changes sign between $P$ and $\varepsilon$ and the $a_i$ keep
+coefficient one.
+
+Every assembled state is checked against the Hugenholtz--Van Hove
+identity~\cite{HugenholtzVanHove1958}
+$\varepsilon + P - T s = \sum_i \mu_i n_i$ (sum over every species present,
+including leptons and thermal mesons) to a relative $10^{-8}$. That check is
+what caught the missing $\omega(\partial A/\partial\omega)\rho^2$ term: it
+enters no residual, so the solver converged perfectly on an energy density
+wrong by up to $1.8\%$ in asymmetric matter, which put $E_{\mathrm{sym}}$ at
+$18.7$~MeV instead of $31.6$ and made $L_{\mathrm{sym}}$ negative.
+
+\section{Conserved charges and species potentials}
+
+The conserved-charge basis is $(B, C, S)$ with $C$ the electric charge of
+strongly interacting matter only and $S = +1$ per strange quark ($\Lambda$:
+$S=+1$, $\Xi$: $S=+2$; the opposite of the PDG sign, used consistently).
+Species potentials are derived, never independent unknowns:
+%
+\begin{equation}
+\mu_i = B_i\, \muB + C_i\, \muC + S_i\, \muS ,
+\qquad\text{so}\qquad
+\muC = \mu_p - \mu_n,
+\quad \text{and beta equilibrium reads } \muC + \mu_e = \munue .
+\label{eq:basis}
+\end{equation}
+%
+The muon family is not tracked by this model: $\mu$ appears in no residual and
+in no total, and requesting it raises rather than being silently ignored.
+
+\section{The thermal meson gas}
+
+At $T>0$ the pseudoscalar mesons ($\pi$, $K$, $\eta$) ride on the mean field
+as one-body Bose gases~\cite{Lavagno2010}, with effective potentials tied to
+the same vector fields that generate the baryon interactions:
+%
+\begin{align}
+\mu^{*}_{\pi^+} &= \muC - g_{\rho N}\, \rho ,
+\nonumber\\
+\mu^{*}_{K^+} &= \muC - \muS
+   - \big( g_{\omega N} - g_{\omega \Lambda} \big)\, \omega
+   - \tfrac12\, g_{\rho N}\, \rho ,
+\label{eq:mesonshifts}\\
+\mu^{*}_{K^0} &= - \muS
+   - \big( g_{\omega N} - g_{\omega \Lambda} \big)\, \omega
+   + \tfrac12\, g_{\rho N}\, \rho ,
+\nonumber
+\end{align}
+%
+with $\mu^{*}_{j^-} = -\mu^{*}_{j^+}$ and $\mu^{*}_j = 0$ for strangeless
+neutral mesons. The $\omega$ shift on the kaons is the light/strange asymmetry
+of the vector coupling --- a kaon carries one light quark and one strange
+antiquark --- and the $\rho$ shifts follow isospin. The gas carries electric
+charge and strangeness --- under this sign convention $K^-$ and $\bar K^0$
+carry $S=+1$ --- and those densities \emph{enter the equilibrium
+constraints}: charge neutrality and the fixed-$Y_C$/$Y_S$ conditions are
+imposed on baryons and mesons together. The gas carries no baryon number and
+does not source the field equations. Its $P$, $\varepsilon$, $s$ and
+$\sum_j \mu^{*}_j n_j$ join the totals and the Hugenholtz--Van Hove sum, the
+gas entering at its \emph{effective} potentials because the vector shifts it
+carries are sourced by the baryons alone and so have no partner in the field
+energy to cancel against.
+
+Bose--Einstein condensation is not implemented, and a state that reaches it is
+refused rather than approximated. Every entry point reports
+$\max_j |\mu^{*}_j| / m_j$; at $1$ the ideal-gas expressions stop describing
+the species, and the solve returns \texttt{converged = False}. In cold
+beta-equilibrium nucleonic matter that boundary is crossed just above
+saturation, because $\mu^{*}_{\pi^-} \simeq \mu_e$ and $\mu_e$ passes
+$m_\pi$ near $\nB \approx 0.27$~fm$^{-3}$: the ideal gas has no repulsive
+s-wave $\pi N$ term, which is exactly what suppresses s-wave pion condensation
+in real matter. The domain the gas is valid in is the one it was written for,
+high $T$ and low $\muB$; negatively charged baryons ($\Sigma^-$, $\Delta^-$)
+take over the neutralisation, collapse $\mu_e$, and push the boundary away.
+
+\section{Equilibrium modes and their closures}
+
+All modes are solved by one residual system over the unknown vector
+%
+\begin{equation}
+x = \big[ \sigma,\ \omega,\ \rho,\ \phi,\ \muB,\ \muC,\
+          (\muS),\ (\munue),\ (T) \big] ,
+\label{eq:unknowns}
+\end{equation}
+%
+where $\muS$ is present iff strangeness is fixed, $\munue$ iff neutrinos are
+trapped, and $T$ iff an entropy per baryon is imposed in its place. All four
+fields are always unknowns --- a mean field does not know what is being held
+fixed --- and $\muC$ is an unknown in every mode; what the mode changes is the
+row that closes it.
+
+The first four residuals are the field equations~\eqref{eq:fieldeqs}, each
+divided by $m_M^2$ times a typical field scale so that every row is
+dimensionless and of order unity; then $\sum_i n_i - \nB$ (baryon number;
+thermal mesons carry none); then per mode:
+%
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+mode & independent variables & closing constraints & potentials \\
+\midrule
+\texttt{beta\_eq\_neutrinoless} & $(\nB, T)$ &
+  $\sum_i C_i n_i + n_C^{\mathrm{mes}} - n_e = 0$ &
+  $\muS = \munue = 0$ \\
+\texttt{beta\_eq\_neutrino\_trapped} & $(\nB, Y_{L_e}, T)$ &
+  neutrality; $(n_e + n_{\nu_e})/\nB = Y_{L_e}$ &
+  $\muS = 0$; $\munue$ unknown \\
+\texttt{fixed\_YC} & $(\nB, Y_C, T)$ &
+  $\big(\textstyle\sum_i C_i n_i + n_C^{\mathrm{mes}}\big)/\nB = Y_C$ &
+  $\muS = \munue = 0$ \\
+\texttt{fixed\_YC\_YS} & $(\nB, Y_C, Y_S, T)$ &
+  the $Y_C$ row; $\big(\textstyle\sum_i S_i n_i + n_S^{\mathrm{mes}}\big)/\nB = Y_S$ &
+  $\muS$ unknown; $\munue = 0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+In the fixed-fraction modes the flag \texttt{leptons} selects between the
+strongly-interacting slice alone (electrically charged; what a mixed-phase
+construction consumes) and the same slice plus neutralizing electrons
+($n_e = Y_C \nB$) --- the leptons do not source the fields and enter no
+residual row, so they close post hoc through a single 1-D root. Wherever a
+temperature is accepted, entropy per baryon $s/\nB$ is accepted in its place;
+here $T$ joins the unknown vector and $s/\nB - (S/A) = 0$ joins the rows,
+rather than being an outer 1-D solve.
+
+Non-convergence is a return value at every layer, judged on the largest
+residual and reported on the solved record, never an exception --- a sampler
+must be able to score a bad point and move on.
+
+\section{Nuclear-matter parameters}
+
+The forward map evaluates, at the parametrization's own saturation density
+(the $P=0$ root of symmetric matter): $E_{\mathrm{sat}} = E/A$, $m^*/m$,
+$K_{\mathrm{sat}} = 9 \nsat^2\, \partial^2_n (E/A)$,
+$Q_{\mathrm{sat}} = 27 \nsat^3\, \partial^3_n (E/A)$, and in the isovector
+sector the mean-field closed form of Steiner et al.~\cite{Steiner2005}
+Eq.~(20),
+%
+\begin{equation}
+E_{\mathrm{sym}}(\nB) = \frac{k_F^2}{6 E^*_F}
+  + \frac{\nB\, g_{\rho N}^2}{8 \big( m_\rho^2 + 2 A \big)} ,
+\qquad L_{\mathrm{sym}} = 3 \nsat\, E_{\mathrm{sym}}'(\nsat),
+\qquad K_{\mathrm{sym}} = 9 \nsat^2\, E_{\mathrm{sym}}''(\nsat) ,
+\label{eq:esym}
+\end{equation}
+%
+where the $2A$ in the denominator is the whole point of the cross coupling: it
+is a function of the isoscalar fields and therefore of density, so it bends
+$E_{\mathrm{sym}}(\nB)$ without moving its value at saturation. The map
+returns the same key set as \texttt{eos.dd2.compute\_nmp}, so one caller reads
+either model, and it reproduces the published SFHo values --- $\nsat = 0.158$,
+$E_{\mathrm{sat}} = -16.2$, $E_{\mathrm{sym}} = 31.6$, $L_{\mathrm{sym}} =
+47.1$~MeV --- to better than $0.3\%$. The verification suite computes
+$E_{\mathrm{sym}}$ a second, independent way, as the $\delta^2$ curvature of
+$E/A$ in the isospin asymmetry, and requires the two to agree: the closed form
+is a $\rho$-field response and the curvature is a property of $\varepsilon$,
+so an error in the energy density moves one and not the other.
+
+The inverse map is not yet written. Its isoscalar half is the classical
+Boguta--Bodmer inversion, $\{\nsat, E_{\mathrm{sat}}, K_{\mathrm{sat}},
+m^*/m\}$ against $\{g_{\sigma N}, g_{\omega N}, g_2, g_3\}$ at fixed
+$m_\sigma$, $m_\omega$, $c_3$. Its isovector half is not well posed as stated:
+two conditions $\{E_{\mathrm{sym}}, L_{\mathrm{sym}}\}$ face $g_{\rho N}$ plus
+the nine shape coefficients of Eq.~\eqref{eq:Afunction}, so a closure --- which
+two of the ten are freed --- has to be chosen, and that choice is physics
+rather than bookkeeping, because it decides how $E_{\mathrm{sym}}$ behaves
+above saturation where no nuclear-matter parameter constrains it.
+
+\section{Numerical implementation}
+
+The reference path is plain NumPy/SciPy: the residual above, with MINPACK
+building its own forward-difference Jacobian. It is the correctness oracle and
+is never bypassed. Alongside it, \texttt{backends/} carries a hand-derived
+analytic Jacobian of the same residual, agreeing with a central difference of
+it to better than $10^{-7}$ across every mode; its kinetic derivatives
+are closed forms at $T=0$ and per-species central differences of the JEL
+integrals at $T>0$, since those expose no exact derivative. It is not selected
+by default, because it is not faster here --- it cuts the residual evaluations
+of a warm-started sweep by about a third but costs more per evaluation than it
+saves. What it is for is the susceptibility matrix
+$\chi_{ab} = \partial n_a / \partial \mu_b$ for $a,b \in (B, C, S)$, which is
+not a finite-difference quantity at all: the solver never varies the three
+potentials independently, so there is no sequence to difference along. It is
+read off the Jacobian through the field-response identity
+%
+\begin{equation}
+\frac{\partial n_a}{\partial \mu_b}
+  = \left.\frac{\partial n_a}{\partial \mu_b}\right|_{F}
+  + \frac{\partial n_a}{\partial F}\,
+    \left( -\Big(\frac{\partial G}{\partial F}\Big)^{-1}
+             \frac{\partial G}{\partial \mu_b} \right),
+\label{eq:chi}
+\end{equation}
+%
+with $F$ the four mean fields and $G$ their field equations, and it is checked
+against the inverse map $\partial\mu_a/\partial n_b$, which the
+\texttt{fixed\_YC\_YS} mode supplies without touching the Jacobian at all.
+
+Density sweeps are warm-started: each solved point seeds the next. Two
+degeneracies are known and are properties of the model rather than of the
+solver. Where a conserved charge is carried by no populated species its
+potential is unpinned --- the strangeness row is flat in $\muS$ when
+$n_S \to 0$, and $\mu_e$ is only weakly determined at $Y_C = 0$ --- so
+neither quantity is frozen in the regression baseline where its conjugate
+density vanishes, and the susceptibility check is placed where strangeness is
+populated.
+
+\bibliography{../../docs/eos}
+
+\end{document}

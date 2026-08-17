@@ -459,6 +459,21 @@ belongs in the mixed session.
   `thermo_at_potentials` now makes the reference cheap to write — perturb
   mu_B, mu_C, mu_S, re-solve, read (n_B, n_C, n_S) — but writing it is new
   physics, so it waits for the response-function session.
+
+  sfho has since found a cheaper reference that needs no new physics at all,
+  and dd2 should adopt it: chi_ab is the INVERSE of dmu_a/dn_b, and
+  `fixed_YC_YS` already computes that direction — impose (n_B, n_C, n_S),
+  read back (mu_B, mu_C, mu_S), and require chi (dmu/dn) = I. It agrees to
+  1.6e-05 at n_B = 0.8 fm^-3 with hyperons, and is pinned in sfho's
+  `verify/run_full_check.py`. It has to be taken where the conjugate density
+  is populated: at n_B = 0.16 with hyperons at T = 10 MeV, n_S is 2.5e-07
+  fm^-3 and the numerical dmu_S/dn_S is meaningless (the flat-mu_S entry at
+  the top of this file).
+- The two models return chi_ab in DIFFERENT UNITS. dd2's is natural
+  (MeV^2), sfho's is fm-based (fm^-3 MeV^-1). §5 makes fm-based the rule at
+  every public boundary, so dd2's is the one to change; it is left alone here
+  because it is dd2's number and this was an sfho session. Same quantity, same
+  physics — a units convention, not a discrepancy.
 - `eos_response` implements the freezes `equilibrium` (beta_eq_neutrinoless
   only: c_s^2, C_V, C_P, chi_ab) and `composition` (nucleonic Y_p: adiabatic
   c_s^2 and Gamma). Not yet wired: frozen conserved fractions (Y_C, Y_S fixed
@@ -517,11 +532,23 @@ belongs in the mixed session.
   `.dat` column header the published 2fam PNS tables carry, so the rename is a
   file-format change and belongs with the table-I/O unification rather than
   with a record swap.
-- `eos_response` is not implemented at all: no sound speed, heat capacity,
-  adiabatic index or susceptibility matrix. It raises naming this file.
-  SFHo has no analytic Jacobian either, so both the reference
-  finite-difference flavour and the fast one are missing; `eos.dd2.responses`
-  and `eos.dd2.backends.responses_jac` are the worked examples.
+- `eos_response` implements the `equilibrium` freeze only — `cs2_isothermal`,
+  and at T > 0 also `cs2_adiabatic`, `C_V`, `C_P`, `Gamma_th` and the
+  susceptibility matrix `chi`. Everything but chi is a finite difference along
+  re-solved sequences in `sfho/responses.py`; chi comes off the analytic
+  Jacobian. Not wired, and raising: every freeze that holds a composition. A
+  per-species freeze needs the Y_i in the residual, which SFHo does not carry
+  (dd2 reaches its `composition` freeze through `solve_composition(n_n, n_p)`,
+  which has no SFHo counterpart), and holding the conserved fractions with the
+  species free is the fixed_YC / fixed_YC_YS modes differentiated at fixed
+  fraction — cheap to add, not yet asked for.
+
+  The three-stencil objection in the cross-cutting section applies to this
+  implementation as written: C_V, C_P and the two sound speeds are separate
+  central differences rather than one derivation of F(T, n_B, Y_C). What it
+  does NOT repeat is the naming defect — the returned sound speeds say which
+  thermal condition they were taken at, and `cs2_adiabatic` is derived from
+  `cs2_isothermal` through C_P/C_V rather than by a second stencil.
 - An isentropic fixed-Y_C solve with neutralizing leptons raises: the
   electrons follow from n_C only after the solve, so they are missing from
   the entropy row that fixes T. Wiring it means putting mu_e in the unknown
