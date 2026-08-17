@@ -1,26 +1,34 @@
 """
 nmp.py
 ======
-Compute nuclear saturation properties and hyperon potential depths
-following Typel 2022 definitions.
+The maps between SFHo's couplings and the physical quantities they are
+fitted to, in both directions.
 
-Available functions:
-- compute_saturation_fields(): Get σ, ω fields at given density
-- compute_hyperon_potentials(): Compute U_Λ, U_Σ, U_Ξ from parametrization
-- find_saturation_density(): Find n_sat where P = 0
-- compute_all_nuclear_properties(): Compute n_sat, B_sat, K, Q, J, L, K_sym
-- compute_symmetry_energy(): Compute E_sym(n_B) via Typel eq 6.5
-- print_parametrization_summary(): Print summary table
+    compute_nmp(par)                couplings -> nuclear-matter parameters
+    compute_hyperon_potentials(par)  couplings -> U_Lambda, U_Sigma, U_Xi
+    create_custom_parametrization(U_Lambda_N, ...)   the inverse of that
 
-Note: For creating custom parametrizations, use create_custom_parametrization()
-from sfho_parameters.py instead.
+This module sits ABOVE `solver.py` in the import order (CLAUDE.md section
+5), and it has to: every quantity here is defined by a property of the
+SOLVED state -- the saturation density is where the pressure vanishes, the
+effective mass is read off the converged fields -- so computing any of them
+means solving symmetric matter. That is also why a constructor that inverts
+one of these maps is a free function here rather than a classmethod on the
+parameter dataclass, which is at the bottom of the same order.
+
+Definitions follow the CompOSE manual (Typel et al., arXiv:2203.03209 sec.
+6) and Steiner, Prakash, Lattimer & Ellis, Phys. Rept. 411 (2005).
 
 Units:
 - Energies/masses/potentials: MeV
-- Densities: fm⁻³
+- Densities: fm^-3
 """
 import numpy as np
 from typing import Optional, Tuple, Dict
+from scipy.optimize import brentq
+
+from eos.general.physics_constants import hc, hc3
+from eos.sfho.species import SpeciesFlags
 from eos.sfho.parameters import (
     SFHoParams, get_sfho_nucleonic, get_sfhoy_fortin, 
     get_sfhoy_star_fortin, get_sfho_2fam_phi, get_sfho_2fam,
@@ -107,220 +115,115 @@ def compute_hyperon_potentials(params: SFHoParams,
 
 
 # =============================================================================
-# COMPUTE NUCLEAR MATTER PROPERTIES (TYPEL 2022 DEFINITIONS)
+# FORWARD:  couplings -> nuclear-matter parameters
 # =============================================================================
-def find_saturation_density(params: Optional[SFHoParams] = None,
-                             n_min: float = 0.14, 
-                             n_max: float = 0.18) -> float:
-    """
-    Find saturation density n_sat where P = 0 in symmetric nuclear matter.
-    
-    Uses bisection to find where pressure vanishes (Typel 2022, eq 6.6).
-    
-    Returns:
-        n_sat in fm⁻³
-    """
-    from scipy.optimize import brentq
+#: Symmetric nuclear matter, hadrons only: no electrons, no photons. The
+#: nuclear-matter parameters are properties of the strongly-interacting
+#: sector, so a lepton or radiation term in eps would corrupt every one of
+#: them.
+SNM_FLAGS = SpeciesFlags(photons=False)
+
+#: The temperature the T -> 0 limit is taken at. SFHo's Fermi integrals accept
+#: T = 0, but the whole NMP path is finite differences of eps, and a strictly
+#: cold solve puts a threshold kink exactly where the differences straddle.
+#: 0.01 MeV is far below any nuclear scale and keeps the sweep smooth.
+T_COLD = 0.01
+
+
+def _snm(par, n_B, Y_C=0.5):
+    """The solved symmetric-matter point at n_B, or a raised error."""
     from eos.sfho.solver import solve_fixed_yc
-    from eos.sfho.species import SpeciesFlags
-    
-    if params is None:
-        params = get_sfho_nucleonic()
-    
-    def pressure_at_density(n_B: float) -> float:
-        result = solve_fixed_yc(params, n_B, 0.5, SpeciesFlags(photons=False),
-                           T=0.01)
-        return result.P  # hadrons only, so the total IS P_hadrons
-    
-    # Find where P = 0
-    n_sat = brentq(pressure_at_density, n_min, n_max)
-    return n_sat
+
+    point = solve_fixed_yc(par, n_B, Y_C, SNM_FLAGS, T=T_COLD)
+    if not point.converged:
+        raise RuntimeError(
+            f"symmetric matter did not converge at n_B={n_B:g}, Y_C={Y_C:g} "
+            f"(residual {point.error:.3e})")
+    return point
 
 
-def compute_energy_per_baryon(params: Optional[SFHoParams], n_B: float, Y_C: float = 0.5) -> float:
-    """Compute energy per baryon ε = e/n_B - M_N at given density and charge fraction."""
-    from eos.sfho.solver import solve_fixed_yc
-    from eos.sfho.species import SpeciesFlags
-    
-    if params is None:
-        params = get_sfho_nucleonic()
-    
-    M_N = (params.m_n + params.m_p) / 2.0
-    
-    result = solve_fixed_yc(params, n_B, Y_C, SpeciesFlags(photons=False),
-                           T=0.01)
-    
-    if not result.converged:
-        raise RuntimeError(f"Failed to converge at n_B={n_B}, Y_C={Y_C}")
-    
-    # Hadrons only (no electrons, no photons), so the total IS eps_hadrons
-    epsilon = result.eps / result.n_B - M_N
-    return epsilon
+def energy_per_baryon(par, n_B, Y_C=0.5):
+    """E/A [MeV] of nuclear matter at n_B [fm^-3], rest mass subtracted."""
+    return _snm(par, n_B, Y_C).eps / n_B - 0.5 * (par.m_n + par.m_p)
 
 
-def compute_pressure(params: Optional[SFHoParams], n_B: float, Y_C: float = 0.5) -> float:
-    """Compute pressure at given density and charge fraction."""
-    from eos.sfho.solver import solve_fixed_yc
-    from eos.sfho.species import SpeciesFlags
-    
-    if params is None:
-        params = get_sfho_nucleonic()
-    
-    result = solve_fixed_yc(params, n_B, Y_C, SpeciesFlags(photons=False),
-                           T=0.01)
-    
-    return result.P  # hadrons only, so the total IS P_hadrons
+def pressure(par, n_B, Y_C=0.5):
+    """P [MeV/fm^3] of nuclear matter at n_B [fm^-3]. Vanishes at n_sat."""
+    return _snm(par, n_B, Y_C).P
 
 
-def compute_symmetry_energy(params: Optional[SFHoParams], n_B: float) -> float:
+def esym(par, n_B):
     """
-    Compute symmetry energy E_sym(n_B) following CompOSE/Typel 2022 eq 6.4.
-    
-    E_sym(n_B) = (1/2) × (∂²ε/∂α²)|_{α=0}
-    
-    Where α = 1 - 2Y_q (isospin asymmetry):
-    - α = 0  → Y_C = 0.5 (symmetric nuclear matter, SNM)
-    - α = 1  → Y_C = 0 (pure neutron matter, PNM)
-    - α = -1 → Y_C = 1 (pure proton matter, PPM)
-    
-    Uses cubic spline interpolation over multiple α values for robust second derivative.
+    Symmetry energy E_sym(n_B) [MeV], mean-field closed form.
+
+    Steiner, Prakash, Lattimer & Ellis, Phys. Rept. 411 (2005), Eq. (20):
+
+        E_sym = k_F^2 / (6 E_F*) + n_B / [ 8 ( m_rho^2/g_rho^2 + 2 f ) ]
+
+    with A = g_rho^2 f, so the second term is n_B g_rho^2 / [8 (m_rho^2 + 2A)].
+    A = A(sigma, omega) is SFHo's isoscalar-isovector cross coupling, which is
+    what makes L_sym adjustable at fixed E_sym in this family of models.
+
+    This is the rho-field response, not a rearrangement of eps, so comparing
+    it with the delta^2 curvature of E/A is a genuine second opinion on the
+    isovector sector rather than the same computation written twice --
+    `verify/run_full_check.py` runs exactly that comparison.
     """
-    from scipy.interpolate import CubicSpline
-    
-    # Sample ε(n_B, α) at multiple α values for spline interpolation
-    # Range: α from -0.8 to 0.8 (avoid extremes where numerics may be less stable)
-    alpha_values = np.array([-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6])
-    
-    eps_values = []
-    for alpha in alpha_values:
-        Y_C = (1 - alpha) / 2.0  # α = 1 - 2Y_C → Y_C = (1-α)/2
-        eps = compute_energy_per_baryon(params, n_B, Y_C=Y_C)
-        eps_values.append(eps)
-    
-    eps_values = np.array(eps_values)
-    
-    # Create cubic spline for ε(α)
-    spline = CubicSpline(alpha_values, eps_values, bc_type='natural')
-    
-    # Second derivative at α = 0
-    d2eps_dalpha2 = spline.derivative(nu=2)
-    
-    # E_sym = (1/2) × (∂²ε/∂α²)|_{α=0}
-    E_sym = 0.5 * float(d2eps_dalpha2(0.0))
-    
-    return E_sym
+    point = _snm(par, n_B)
+    k_F = hc * (3.0 * np.pi**2 * n_B / 2.0) ** (1.0 / 3.0)
+    E_F = np.sqrt(k_F**2 + point.m_eff("n")**2)
+    A = par.compute_A(point.sigma, point.omega)
+    kinetic = k_F**2 / (6.0 * E_F)
+    potential = n_B * hc3 * par.g_rho_N**2 / (8.0 * (par.m_rho**2 + 2.0 * A))
+    return kinetic + potential
 
 
-def compute_all_nuclear_properties(params: Optional[SFHoParams] = None) -> Dict[str, float]:
+def compute_nmp(par, h=1e-3, n_lo=0.12, n_hi=0.20):
     """
-    Compute all nuclear saturation properties following standard definitions.
-    
-    Properties computed:
-        - n_sat: Saturation density where P = 0 (eq 6.6)
-        - B_sat: Binding energy per nucleon at saturation, -ε(n_sat, 0) 
-        - m_eff_ratio: Effective mass m*/M at saturation
-        - K: Incompressibility K = 9n² (∂²ε/∂n²)|n_sat (eq 6.7)
-        - Q: Skewness Q = 27n³ (∂³ε/∂n³)|n_sat (eq 6.9)
-        - J: Symmetry energy at saturation J = E_PNM(n_sat) - E_SNM(n_sat)
-        - L: Slope parameter L = 3n (dE_sym/dn)|n_sat (eq 6.11)
-        - K_sym: Symmetry incompressibility K_sym = 9n² (d²E_sym/dn²)|n_sat
-    
-    Uses cubic spline interpolation for robust derivative calculation.
-    
-    Returns:
-        Dictionary with all properties
+    Nuclear-matter parameters at saturation.
+
+    Returns dict with n_sat [fm^-3], E_sat, K_sat, Q_sat, E_sym, L_sym,
+    K_sym [MeV], m_eff_ratio, and P_sat [MeV/fm^3] (diagnostic, ~0 by
+    construction). The same keys `eos.dd2.compute_nmp` returns, so one caller
+    reads either model.
+
+    The derivatives are central differences AT saturation, not derivatives of
+    a spline fitted over a density range: a fit spreads the third derivative
+    over the whole range it was fitted on, and `bc_type='natural'` additionally
+    pins the curvature to zero at the endpoints.
+
+    On `h`. The step has to sit above the solver's own noise and below where
+    truncation bites. Measured for SFHo_Nucleonic, K_sat and Q_sat are flat
+    from h = 1e-4 to 2e-3 (245.221 +- 0.001 and -467.4 +- 0.1) and start
+    drifting at 4e-3, reaching 245.43 / -470.4 by 1.6e-2. The default sits in
+    the middle of that plateau.
+
+    Q_sat and K_sym are PREDICTIONS of the parametrization, not quantities any
+    fit imposes; they are reported for exactly that reason.
     """
-    from scipy.interpolate import CubicSpline
-    from scipy.optimize import brentq
-    
-    if params is None:
-        params = get_sfho_nucleonic()
-    
-    M_N = (params.m_n + params.m_p) / 2.0
-    
-    # Create density grid for spline interpolation
-    rho_arr = np.linspace(0.02, 0.30, 50)  # fm^-3
-    
-    print("  Computing E(n) for SNM and PNM...")
-    E_snm_arr = np.array([compute_energy_per_baryon(params, n, Y_C=0.5) for n in rho_arr])
-    E_pnm_arr = np.array([compute_energy_per_baryon(params, n, Y_C=0.0) for n in rho_arr])
-    
-    # Create cubic splines
-    spline_snm = CubicSpline(rho_arr, E_snm_arr, bc_type='natural')
-    spline_pnm = CubicSpline(rho_arr, E_pnm_arr, bc_type='natural')
-    
-    # Derivative of SNM energy
-    dE_snm_dn = spline_snm.derivative(nu=1)
-    d2E_snm_dn2 = spline_snm.derivative(nu=2)
-    d3E_snm_dn3 = spline_snm.derivative(nu=3)
-    
-    # Find saturation density where dE/dn = 0 (equivalent to P = 0)
-    a, b = 0.10, 0.25
-    if dE_snm_dn(a) * dE_snm_dn(b) > 0:
-        # Fall back to pressure-based method
-        n_sat = find_saturation_density(params)
-    else:
-        n_sat = brentq(dE_snm_dn, a, b)
-    
-    # Energy and binding at saturation
-    eps_sat = float(spline_snm(n_sat))
-    B_sat = -eps_sat
-    
-    # Incompressibility K = 9n² (∂²ε/∂n²)
-    K = 9.0 * n_sat**2 * float(d2E_snm_dn2(n_sat))
-    
-    # Skewness Q = 27n³ (∂³ε/∂n³)
-    Q = 27.0 * n_sat**3 * float(d3E_snm_dn3(n_sat))
-    
-    # Meson fields at saturation
-    sigma, omega, _, _ = compute_saturation_fields(params, n_B=n_sat, Y_C=0.5)
-    m_eff = M_N - params.g_sigma_N * sigma
-    m_eff_ratio = m_eff / M_N
-    
-    # =========================================================================
-    # SYMMETRY ENERGY (standard definition: E_sym = E_PNM - E_SNM)
-    # =========================================================================
-    # This is the commonly used definition that matches CompOSE
-    E_sym_arr = E_pnm_arr - E_snm_arr
-    spline_sym = CubicSpline(rho_arr, E_sym_arr, bc_type='natural')
-    
-    dE_sym_dn = spline_sym.derivative(nu=1)
-    d2E_sym_dn2 = spline_sym.derivative(nu=2)
-    
-    # J = E_sym(n_sat)
-    J = float(spline_sym(n_sat))
-    
-    # L = 3n (dE_sym/dn)|n_sat
-    L = 3.0 * n_sat * float(dE_sym_dn(n_sat))
-    
-    # K_sym = 9n² (d²E_sym/dn²)|n_sat
-    K_sym = 9.0 * n_sat**2 * float(d2E_sym_dn2(n_sat))
-    
+    n_sat = brentq(lambda n: pressure(par, n), n_lo, n_hi, xtol=1e-13)
+    at_sat = _snm(par, n_sat)
+
+    EA = lambda n: energy_per_baryon(par, n)
+    d2 = (EA(n_sat + h) - 2.0 * EA(n_sat) + EA(n_sat - h)) / h**2
+    d3 = (EA(n_sat + 2 * h) - 2.0 * EA(n_sat + h)
+          + 2.0 * EA(n_sat - h) - EA(n_sat - 2 * h)) / (2.0 * h**3)
+    dEs = (esym(par, n_sat + h) - esym(par, n_sat - h)) / (2.0 * h)
+    d2Es = (esym(par, n_sat + h) - 2.0 * esym(par, n_sat)
+            + esym(par, n_sat - h)) / h**2
+
+    m_N = 0.5 * (par.m_n + par.m_p)
     return {
-        'n_sat': n_sat,
-        'B_sat': B_sat,
-        'sigma': sigma,
-        'omega': omega,
-        'm_eff_ratio': m_eff_ratio,
-        'K': K,
-        'Q': Q,
-        'J': J,
-        'L': L,
-        'K_sym': K_sym,
-        'M_N': M_N
+        "n_sat": n_sat,
+        "E_sat": EA(n_sat),
+        "m_eff_ratio": at_sat.m_eff("n") / m_N,
+        "K_sat": 9.0 * n_sat**2 * d2,
+        "Q_sat": 27.0 * n_sat**3 * d3,
+        "E_sym": esym(par, n_sat),
+        "L_sym": 3.0 * n_sat * dEs,
+        "K_sym": 9.0 * n_sat**2 * d2Es,
+        "P_sat": at_sat.P,
     }
-
-
-def compute_nuclear_properties(params: Optional[SFHoParams] = None) -> Dict[str, float]:
-    """
-    Compute nuclear matter properties at saturation.
-    
-    Returns dictionary with:
-        - sigma, omega: meson fields at n_sat
-        - m_eff_ratio: m*/M effective mass ratio
-        - E_over_A: binding energy per nucleon
-    """
-    return compute_all_nuclear_properties(params)
 
 
 # =============================================================================
@@ -462,136 +365,37 @@ def create_custom_parametrization(
 
 
 # =============================================================================
-# PRINT SUMMARY OF ALL PARAMETRIZATIONS
+# A SUMMARY, FOR READING RATHER THAN FOR SOLVING
 # =============================================================================
-def print_parametrization_summary():
-    """Print summary of all parametrizations including potentials."""
-    
-    print("="*80)
-    print("NUCLEAR SATURATION PROPERTIES (Typel 2022 definitions)")
-    print("="*80)
-    
-    # Compute all nuclear properties
-    print("\nFinding saturation density (P = 0)...")
-    props = compute_all_nuclear_properties()
-    
-    # Reference values from CompOSE / literature for SFHo
-    # Note: CompOSE values are from tabulated EOS, may differ from uniform matter RMF
-    refs = {
-        'n_sat': 0.1583,   # fm^-3
-        'B_sat': 16.19,    # MeV (E/A = -16.19 MeV)
-        'm_eff_ratio': 0.76,
-        'K': 245.0,        # MeV
-        'Q': -467.0,       # MeV (approximate)
-        'J': 31.57,        # MeV (CompOSE tabulated)
-        'L': 47.10,        # MeV (CompOSE tabulated)
-        'K_sym': -146.0,   # MeV (approximate)
-    }
-    
-    print(f"\n{'Property':<20} {'This Model':>15} {'CompOSE Ref':>15} {'Diff':>12}")
-    print("-"*65)
-    print(f"{'n_sat (fm⁻³)':<20} {props['n_sat']:>15.4f} {refs['n_sat']:>15.4f} "
-          f"{(props['n_sat']-refs['n_sat'])*1000:>+11.2f}×10⁻³")
-    print(f"{'B_sat (MeV)':<20} {props['B_sat']:>15.2f} {refs['B_sat']:>15.2f} "
-          f"{props['B_sat']-refs['B_sat']:>+12.2f}")
-    print(f"{'m*/M':<20} {props['m_eff_ratio']:>15.4f} {refs['m_eff_ratio']:>15.2f} "
-          f"{props['m_eff_ratio']-refs['m_eff_ratio']:>+12.4f}")
-    print(f"{'K (MeV)':<20} {props['K']:>15.1f} {refs['K']:>15.1f} "
-          f"{props['K']-refs['K']:>+12.1f}")
-    print(f"{'Q (MeV)':<20} {props['Q']:>15.1f} {refs['Q']:>15.1f} "
-          f"{props['Q']-refs['Q']:>+12.1f}")
-    print("-"*65)
-    print("Isospin properties (Typel eq 6.5: E_sym = ½[ε(PNM)-2ε(SNM)+ε(PPM)]):")
-    print(f"{'J (MeV)':<20} {props['J']:>15.2f} {refs['J']:>15.2f} "
-          f"{props['J']-refs['J']:>+12.2f}")
-    print(f"{'L (MeV)':<20} {props['L']:>15.1f} {refs['L']:>15.1f} "
-          f"{props['L']-refs['L']:>+12.1f}")
-    print(f"{'K_sym (MeV)':<20} {props['K_sym']:>15.1f} {refs['K_sym']:>15.1f} "
-          f"{props['K_sym']-refs['K_sym']:>+12.1f}")
-    
-    print(f"\nMeson fields at saturation:")
-    print(f"  σ = {props['sigma']:.3f} MeV")
-    print(f"  ω = {props['omega']:.3f} MeV")
-    sigma = props['sigma']
-    omega = props['omega']
-    n_sat = props['n_sat']
-    
-    # All parametrizations
-    parametrizations = {
-        'SFHoY (Fortin)': get_sfhoy_fortin(),
-        'SFHoY* (SU6)': get_sfhoy_star_fortin(),
-        '2fam_phi': get_sfho_2fam_phi(),
-        '2fam': get_sfho_2fam(),
-    }
-    
-    print("\n" + "="*80)
-    print("HYPERON COUPLING RATIOS AND POTENTIAL DEPTHS")
-    print("="*80)
-    print(f"\n{'Parametrization':<18} | {'R_σΛ':>6} {'R_σΣ':>6} {'R_σΞ':>6} | "
-          f"{'U_Λ':>8} {'U_Σ':>8} {'U_Ξ':>8}")
-    print("-"*80)
-    
-    for name, p in parametrizations.items():
-        potentials = compute_hyperon_potentials(p, sigma, omega)
-        
-        R_sL = p.couplings_map.get('lambda', {}).get('sigma', 0) / p.g_sigma_N
-        R_sS = p.couplings_map.get('sigma+', {}).get('sigma', 0) / p.g_sigma_N
-        R_sX = p.couplings_map.get('xi0', {}).get('sigma', 0) / p.g_sigma_N
-        
-        U_L = potentials.get('U_Lambda', 0)
-        U_S = potentials.get('U_Sigma', 0)
-        U_X = potentials.get('U_Xi', 0)
-        
-        print(f"{name:<18} | {R_sL:>6.3f} {R_sS:>6.3f} {R_sX:>6.3f} | "
-              f"{U_L:>+8.2f} {U_S:>+8.2f} {U_X:>+8.2f} MeV")
-    
-    print("\n" + "="*80)
-    print("CUSTOM PARAMETRIZATION EXAMPLE")
-    print("="*80)
-    
-    # Example: create custom param with target potentials and enhanced vectors
-    custom = create_custom_parametrization(
-        U_Lambda_N=-30.0,
-        U_Sigma_N=+30.0,
-        U_Xi_N=-14.0,
-        y_Lambda=1.5,     # g_ωΛ = 1.5 × (2/3) × g_ωN = 1.0 × g_ωN
-        y_Sigma=1.5,      # g_ωΣ = 1.5 × (2/3) × g_ωN = 1.0 × g_ωN
-        y_Xi=1.875,       # g_ωΞ = 1.875 × (1/3) × g_ωN = 0.625 × g_ωN
-        x_sigma_delta=0,
-        name="Custom_Test"
-    )
-    
-    potentials = compute_hyperon_potentials(custom, sigma, omega)
-    print(f"\nCreated custom parametrization with target potentials:")
-    print(f"  Resulting vector ratios:")
-    
-    R_wL = custom.couplings_map['lambda']['omega'] / custom.g_omega_N
-    R_wS = custom.couplings_map['sigma+']['omega'] / custom.g_omega_N
-    R_wX = custom.couplings_map['xi0']['omega'] / custom.g_omega_N
-    
-    print(f"    R_ωΛ = {R_wL:.4f}")
-    print(f"    R_ωΣ = {R_wS:.4f}")
-    print(f"    R_ωΞ = {R_wX:.4f}")
-    
-    print(f"  Computed R_σ values:")
-    
-    R_sL = custom.couplings_map['lambda']['sigma'] / custom.g_sigma_N
-    R_sS = custom.couplings_map['sigma+']['sigma'] / custom.g_sigma_N
-    R_sX = custom.couplings_map['xi0']['sigma'] / custom.g_sigma_N
-    
-    print(f"    R_σΛ = {R_sL:.4f}")
-    print(f"    R_σΣ = {R_sS:.4f}")
-    print(f"    R_σΞ = {R_sX:.4f}")
-    
-    print(f"  Verification - computed potentials:")
-    print(f"    U_Λ = {potentials['U_Lambda']:+.2f} MeV (target: -30)")
-    print(f"    U_Σ = {potentials['U_Sigma']:+.2f} MeV (target: +30)")
-    print(f"    U_Ξ = {potentials['U_Xi']:+.2f} MeV (target: -18)")
+#: Steiner, Hempel & Fischer, ApJ 774 (2013) 17, as tabulated by Fortin,
+#: Oertel & Providencia, PASA 35 (2018) e044 Table 2 and by the CompOSE
+#: HS(SFHo) entry. Q_sat and K_sym are not fitted quantities and carry no
+#: published value here; `compute_nmp` reports them as predictions.
+PUBLISHED_NMP = {
+    "n_sat": 0.1583, "E_sat": -16.19, "m_eff_ratio": 0.76,
+    "K_sat": 245.4, "E_sym": 31.57, "L_sym": 47.10,
+}
 
 
-# =============================================================================
-# MAIN
-# =============================================================================
+def print_nmp_summary(par=None):
+    """Print the nuclear-matter parameters beside their published values.
+
+    A reading aid, not part of any solve: nothing in `eos` calls it, and
+    `verify/run_full_check.py` is what asserts the agreement.
+    """
+    par = par or get_sfho_nucleonic()
+    nmp = compute_nmp(par)
+    print(f"nuclear-matter parameters, {getattr(par, 'name', '?')}")
+    print(f"{'':14s} {'this model':>12s} {'published':>12s} {'difference':>12s}")
+    for key in ("n_sat", "E_sat", "m_eff_ratio", "K_sat", "E_sym", "L_sym"):
+        got, want = nmp[key], PUBLISHED_NMP[key]
+        print(f"  {key:12s} {got:12.4f} {want:12.4f} {got - want:+12.4f}")
+    print("  predictions, imposed by no fit:")
+    for key in ("Q_sat", "K_sym"):
+        print(f"  {key:12s} {nmp[key]:12.4f}")
+    print(f"  {'P_sat':12s} {nmp['P_sat']:12.3e}   (zero by construction)")
+
+
 if __name__ == "__main__":
-    print_parametrization_summary()
+    print_nmp_summary()
 

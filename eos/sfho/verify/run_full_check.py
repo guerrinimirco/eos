@@ -43,6 +43,7 @@ from eos.sfho.solver import (
     solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
     solve_beta_eq_neutrino_trapped, solve_isentropic_beta_eq,
 )
+from eos.sfho.nmp import esym as symmetry_energy_analytic
 from eos.sfho.thermodynamics import thermal_meson_thermo
 
 NUCLEONS = SpeciesFlags()
@@ -173,24 +174,6 @@ def symmetry_energy(par, n_B, delta=0.05):
     return (e_plus + e_minus - 2 * e_zero) / (2 * delta**2)
 
 
-def symmetry_energy_analytic(par, n_B):
-    """E_sym from Steiner, Prakash, Lattimer & Ellis (2005), Eq. (20):
-
-        E_sym = k_F^2 / (6 E_F*) + n_B / [ 8 ( m_rho^2/g_rho^2 + 2 f ) ]
-
-    with A = g_rho^2 f. Independent of the energy density -- it comes from the
-    rho-field response -- so it is a genuine second opinion on E_sym rather
-    than the same computation rearranged.
-    """
-    r = solve_fixed_yc(par, n_B, 0.5, NUCLEONS_NOGAMMA, T=0.01)
-    k_F = hc * (3.0 * np.pi**2 * n_B / 2.0) ** (1.0 / 3.0)
-    E_F = np.sqrt(k_F**2 + r.m_eff("n")**2)
-    A = par.compute_A(r.sigma, r.omega)
-    kinetic = k_F**2 / (6.0 * E_F)
-    potential = n_B * hc3 * par.g_rho_N**2 / (8.0 * (par.m_rho**2 + 2.0 * A))
-    return kinetic + potential
-
-
 def _check_nmp(par):
     n_sat = PUBLISHED["n_sat"]
     E_sat = _energy_per_baryon(par, n_sat, 0.5)
@@ -210,6 +193,16 @@ def _check_nmp(par):
 
 
 def _check_esym_two_ways(par):
+    """The delta^2 curvature of E/A against the rho-field closed form.
+
+    Two independent routes to E_sym: this one differentiates the energy
+    density twice in the isospin asymmetry, `eos.sfho.nmp.esym` evaluates the
+    rho response of Steiner, Prakash, Lattimer & Ellis Eq. (20). An error in
+    eps moves the first and leaves the second alone, which is the whole point
+    of running both -- so the analytic side is IMPORTED rather than copied
+    here, but the curvature side stays local and must not be replaced by a
+    call to `compute_nmp`.
+    """
     n_sat = PUBLISHED["n_sat"]
     curvature = symmetry_energy(par, n_sat)
     analytic = symmetry_energy_analytic(par, n_sat)
