@@ -33,12 +33,15 @@ from dataclasses import dataclass
 from typing import Optional
 from scipy.optimize import root
 
+from eos.general.fermi_integrals import invert_fermi_density
 from eos.general.physics_constants import hc, PI2
 from eos.general.thermodynamics_leptons import (
     electron_thermo, neutrino_thermo, photon_thermo,
 )
 from eos.zl.parameters import Parameters
-from eos.zl.thermodynamics import effective_state, thermo_from_mu_n
+from eos.zl.thermodynamics import (
+    G_NUCLEON, effective_state, interaction_potentials, thermo_from_mu_n,
+)
 
 #: The modes this model closes, and the fractions each one consumes. The names
 #: are the repository's, shared with every other model, so the same point is
@@ -49,8 +52,14 @@ MODE_FRACTIONS = {
     "fixed_YC": ("Y_C",),
 }
 
-#: Post-solve gate on the sum of squares of the raw equilibrium residuals.
-RESIDUAL_TOL = 0.01
+#: Post-solve gate on the equilibrium residuals, each divided by the scale of
+#: the quantity its equation balances. Matches the tolerance the other models
+#: in this repository accept their solves at.
+RESIDUAL_TOL = 1.0e-10
+
+#: Floor on the potential scale, so a pathological iterate passing through
+#: mu_B = 0 cannot divide by zero. Physical nucleonic matter has mu_B ~ 10^3.
+MU_SCALE_FLOOR = 1.0
 
 
 # =============================================================================
@@ -60,13 +69,15 @@ RESIDUAL_TOL = 0.01
 class EoSPoint:
     """One solved ZL state, with the status a caller must test first.
 
-    `converged` is judged on `error`, the sum of squared equilibrium
-    residuals, against `RESIDUAL_TOL`. When `converged` is False every other
-    field holds the last iterate reached, which is not a physical state.
+    `converged` is judged on `error`, the largest equilibrium residual after
+    each has been divided by the scale of the quantity it balances (see
+    `scaled_residual_max`); it is dimensionless, and the gate is
+    `RESIDUAL_TOL`. When `converged` is False every other field holds the best
+    iterate reached, which is not a physical state.
     """
     # Convergence info
     converged: bool = False
-    error: float = 0.0     # sum of squared residuals
+    error: float = 0.0     # largest scaled residual, dimensionless
 
     # Inputs
     n_B: float = 0.0       # baryon density (fm^-3)
@@ -108,19 +119,39 @@ class EoSPoint:
 def default_guess(mode: str, n_B: float, T: float, params: Parameters,
                   Y_C: float = None, Y_Le: float = None,
                   leptons: bool = True) -> np.ndarray:
-    """The cold start of one mode: a free gas plus a mean-field estimate.
+    """The cold start of one mode.
 
-    Each nucleon potential is estimated as sqrt(k_F^2 + m^2) at the Fermi
-    momentum of an assumed composition, shifted by half the symmetric part of
-    the interaction; mu_e follows from beta equilibrium or from charge
-    neutrality, whichever the mode imposes. The layouts are the unknown
-    vectors of each mode's residual, so a guess is only valid within its own
-    mode.
+    In `fixed_YC` the composition is known, so the guess is not an estimate:
+    inverting the Fermi integrals at n_i and adding mu_Hv_i(n_p, n_n) gives
+    the EXACT root of the two self-consistency rows, leaving only mu_e to be
+    solved for. That matters rather than merely being tidy -- mu_Hv_p reaches
+    +312 MeV at n_B = 0.8 fm^-3 and Y_C = 0.1, so a guess that omits it puts
+    mu_eff_p below the nucleon mass, where the T = 0 density is identically
+    zero and the row has no gradient for the solver to follow.
+
+    Where the composition is unknown the potentials are estimated as
+    sqrt(k_F^2 + m^2) at the Fermi momentum of an assumed proton fraction,
+    shifted by half the symmetric part of the interaction; mu_e then follows
+    from beta equilibrium.
+
+    The layouts are the unknown vectors of each mode's residual, so a guess is
+    only valid within its own mode.
     """
     m_p, m_n, n0 = params.m_p, params.m_n, params.n0
 
     if mode == "fixed_YC":
         n_p, n_n = Y_C * n_B, (1.0 - Y_C) * n_B
+        mu_Hv_p, mu_Hv_n = interaction_potentials(n_p, n_n, params)
+        mu_p = invert_fermi_density(n_p, T, m_p, G_NUCLEON) + mu_Hv_p
+        mu_n = invert_fermi_density(n_n, T, m_n, G_NUCLEON) + mu_Hv_n
+        if not leptons:
+            return np.array([mu_p, mu_n])
+        # n_e = n_p is what charge neutrality will ask for.
+        kF_e = hc * (3 * PI2 * n_p)**(1.0/3.0) if n_p > 0 else 0.0
+        m_e = 0.511
+        mu_e = np.sqrt(kF_e**2 + m_e**2) if n_p > 0 else m_e
+        return np.array([mu_p, mu_n, mu_e])
+
     else:
         # Proton fraction of beta-equilibrated matter: low and cold, rising
         # with temperature as the entropy of the leptons grows.
@@ -132,15 +163,6 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
     kF_n = hc * (6.0 * PI2 * n_n / 2.0)**(1.0/3.0) if n_n > 0 else 0.0
     mu_p_eff = np.sqrt(kF_p**2 + m_p**2) if n_p > 0 else m_p
     mu_n_eff = np.sqrt(kF_n**2 + m_n**2) if n_n > 0 else m_n
-
-    if mode == "fixed_YC":
-        if not leptons:
-            return np.array([mu_p_eff, mu_n_eff])
-        # n_e = n_p is what charge neutrality will ask for.
-        kF_e = hc * (3 * PI2 * n_p)**(1.0/3.0) if n_p > 0 else 0.0
-        m_e = 0.511
-        mu_e = np.sqrt(kF_e**2 + m_e**2) if n_p > 0 else m_e
-        return np.array([mu_p_eff, mu_n_eff, mu_e])
 
     # The mean field, estimated from the symmetric part of the interaction and
     # split evenly between the two species.
@@ -161,17 +183,53 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
 # =============================================================================
 # THE SOLVE AND ITS GATE
 # =============================================================================
-def solve_system(residual, x0):
-    """Solve one equilibrium system: Powell's hybrid method, then, if it
-    reports failure, Levenberg-Marquardt. Both are bounded internally.
+def scaled_residual_max(residuals, scales):
+    """The largest residual once each is divided by its own scale.
 
-    Returns (x, sum of squared residuals, converged).
+    The rows of a mode carry mixed units: densities and charge conditions in
+    fm^-3, of order 10^-1, and equalities between chemical potentials in MeV,
+    of order 10^3. A norm of the raw vector is therefore dominated by whichever
+    row happens to be largest, and accepts states that satisfy the others only
+    loosely. Dividing each residual by the scale of the quantity it balances
+    -- n_B for a density, mu_B for a potential -- makes the components
+    comparable, so one tolerance means the same thing for all of them.
     """
-    sol = root(residual, x0, method='hybr')
-    if not sol.success:
-        sol = root(residual, x0, method='lm')
-    error = sum(r**2 for r in residual(sol.x))
-    return sol.x, error, bool(error < RESIDUAL_TOL)
+    return max(abs(r) / s for r, s in zip(residuals, scales))
+
+
+def solve_system(residual, x0, scales_at, x0_fallback=None):
+    """Solve one equilibrium system and judge it on its scaled residual.
+
+    Powell's hybrid method first, Levenberg-Marquardt if that does not reach
+    the gate, and -- when the caller passed a warm start -- one more hybrid
+    attempt from the mode's own cold guess, since a warm start carried across
+    a threshold can land outside the basin. Three attempts at most: a
+    parameter scan must always get an answer back, and every attempt is
+    bounded internally.
+
+    `scales_at(x)` returns the per-equation scales at the point x, so the
+    residual is judged in dimensionless terms (see `scaled_residual_max`).
+
+    Returns (x, scaled residual, converged) for the best attempt made.
+    """
+    attempts = [('hybr', x0), ('lm', x0)]
+    if x0_fallback is not None:
+        attempts.append(('hybr', x0_fallback))
+
+    best_x, best_err = np.asarray(x0, dtype=float), np.inf
+    for method, guess in attempts:
+        sol = root(residual, guess, method=method)
+        err = scaled_residual_max(residual(sol.x), scales_at(sol.x))
+        if err < best_err:
+            best_x, best_err = sol.x, err
+        if best_err <= RESIDUAL_TOL:
+            break
+    return best_x, best_err, bool(best_err <= RESIDUAL_TOL)
+
+
+def _mu_scale(mu_n):
+    """The scale a potential equality is judged against: mu_B = mu_n."""
+    return max(abs(mu_n), MU_SCALE_FLOOR)
 
 
 def _finish(result, mu_p, mu_n, n_p, n_n, T, params, include_photons,
@@ -234,8 +292,9 @@ def solve_beta_eq_neutrinoless(
         params = Parameters.default()
 
     result = EoSPoint(n_B=n_B, T=T)
-    x0 = (default_guess("beta_eq_neutrinoless", n_B, T, params)
-          if initial_guess is None else initial_guess)
+    cold = default_guess("beta_eq_neutrinoless", n_B, T, params)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_p, mu_n, mu_e, n_p, n_n = x
@@ -247,7 +306,11 @@ def solve_beta_eq_neutrinoless(
                 mu_n - mu_p - mu_e,
                 state.n_C - n_e]
 
-    x, error, converged = solve_system(residual, x0)
+    def scales_at(x):
+        """Four densities against n_B, the beta condition against mu_B."""
+        return [n_B, n_B, n_B, _mu_scale(x[1]), n_B]
+
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     mu_p, mu_n, mu_e, n_p, n_n = x
     result.converged, result.error = converged, error
 
@@ -308,9 +371,10 @@ def solve_fixed_yc(
     n_p = Y_C * n_B
     n_n = (1.0 - Y_C) * n_B
 
-    x0 = (default_guess("fixed_YC", n_B, T, params, Y_C=Y_C,
-                        leptons=include_electrons)
-          if initial_guess is None else initial_guess)
+    cold = default_guess("fixed_YC", n_B, T, params, Y_C=Y_C,
+                         leptons=include_electrons)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     if include_electrons:
         def residual(x):
@@ -327,7 +391,13 @@ def solve_fixed_yc(
             return [state.n_p_calc - n_p,
                     state.n_n_calc - n_n]
 
-    x, error, converged = solve_system(residual, x0)
+    n_rows = 3 if include_electrons else 2
+
+    def scales_at(x):
+        """Every row of this mode balances a density."""
+        return [n_B] * n_rows
+
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     result.converged, result.error = converged, error
 
     if include_electrons:
@@ -398,9 +468,10 @@ def solve_beta_eq_neutrino_trapped(
         params = Parameters.default()
 
     result = EoSPoint(n_B=n_B, T=T, Y_L=Y_Le)
-    x0 = (default_guess("beta_eq_neutrino_trapped", n_B, T, params,
-                        Y_Le=Y_Le)
-          if initial_guess is None else initial_guess)
+    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, params,
+                         Y_Le=Y_Le)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_p, mu_n, mu_e, mu_nu, n_p, n_n = x
@@ -414,7 +485,12 @@ def solve_beta_eq_neutrino_trapped(
                 state.n_C - n_e,
                 (n_e + n_nu) / n_B - Y_Le]
 
-    x, error, converged = solve_system(residual, x0)
+    def scales_at(x):
+        """Four densities against n_B, the beta condition against mu_B; the
+        lepton-fraction row is already dimensionless."""
+        return [n_B, n_B, n_B, _mu_scale(x[1]), n_B, 1.0]
+
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     mu_p, mu_n, mu_e, mu_nu, n_p, n_n = x
     result.converged, result.error = converged, error
 

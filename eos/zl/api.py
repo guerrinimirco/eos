@@ -34,7 +34,8 @@ from eos.zl.table import TableSpec, build_table, solve_at
 class PointResult:
     """One eos_point outcome: a convergence status the caller can test.
 
-    `ok` is judged on the solver's own gate; when it is False, `point` is None
+    `ok` is judged on the largest scaled equilibrium residual (see
+    `eos.zl.solver.scaled_residual_max`); when it is False, `point` is None
     and `message` says what the residual reached.
     """
     ok: bool
@@ -121,7 +122,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     if not point.converged:
         return PointResult(
             False, f"ZL {mode} solve did not converge at n_B={n_B}, T={T}: "
-                   f"residual {point.error:.2e}")
+                   f"largest scaled residual {point.error:.2e}")
     return PointResult(True, "converged", point)
 
 

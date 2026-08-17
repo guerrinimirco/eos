@@ -24,7 +24,8 @@ from eos.zl.thermodynamics import (
     thermo_from_mu_n, thermo_from_mu, thermo_from_n,
 )
 from eos.zl.solver import (
-    EoSPoint, MODE_FRACTIONS, RESIDUAL_TOL, solve_system,
+    EoSPoint, MODE_FRACTIONS, RESIDUAL_TOL, scaled_residual_max,
+    solve_system,
     solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
     solve_fixed_yc, solve_fixed_yc_ys, default_guess, warm_start,
 )
@@ -42,7 +43,8 @@ __all__ = [
     "kinetic_thermo", "interaction_energy", "interaction_pressure",
     "interaction_potentials", "effective_potentials", "effective_state",
     "thermo_from_mu_n", "thermo_from_mu", "thermo_from_n",
-    "EoSPoint", "MODE_FRACTIONS", "RESIDUAL_TOL", "solve_system",
+    "EoSPoint", "MODE_FRACTIONS", "RESIDUAL_TOL", "scaled_residual_max",
+    "solve_system",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys", "default_guess", "warm_start",
     "TableSpec", "TableResult", "build_table", "rows_from_result",

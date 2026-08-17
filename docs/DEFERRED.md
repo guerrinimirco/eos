@@ -648,6 +648,8 @@ a reason that has nothing to do with seeding.
   identical to `eos/vmit/eos.py`'s except for the scale of a potential row.
   Neither model may import the other (section 1), so the duplication is
   deliberate until a third consumer justifies moving it to `general/`.
+  alphabag will be that third consumer and should make the move rather than
+  write it a fourth time.
 
 ### vmit
 - `eos_response` implements the freeze `equilibrium` only, and computes it by
