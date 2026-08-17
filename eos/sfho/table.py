@@ -1,18 +1,31 @@
 """
 table.py
 ========
-User-friendly script for generating SFHo EOS tables with OPTIMIZED initial guesses.
+The grid driver: a `TableSpec` naming the parametrization, the mode, the axes
+and the active species, and `build_table` solving that grid.
 
-Key speed optimization: Uses solutions from previous parameter values (T, Y_C)
-as initial guesses for the next, dramatically reducing solver iterations.
+One driver, not one per mode. A mode is a declaration (`eos.general.modes`),
+`MODES` below says which declaration each table mode name means, and the sweep
+never branches on it again. The density axis is the stiff one, so it is swept
+innermost and warm-started -- the continuation tactics are on
+`_continuation_guess`. The temperature axis is given either as 'T' or, per
+CLAUDE.md section 3, as entropy per baryon 'SnB', which moves T into the
+unknown vector.
 
-Usage:
-    1. Edit the CONFIGURATION section below
-    2. Run: python -m eos.sfho.table
-    
-    OR import and use programmatically:
-    
-    from eos.sfho.table import compute_table, TableSettings
+`eos.dd2.table` has the same three names with the same meanings -- `TableSpec`,
+`build_table`, `TableResult` -- and `build_table(rows=True)` emits the same row
+keys, so a purely hadronic table from either model concatenates with a hybrid
+table from `eos.mixed` without renaming a column.
+
+The second half of this file is the first-generation .dat writer and reader
+(`save_results`, `load_eos_table`, `build_interpolators`) and the settings
+object that drives them. That is the on-disk format the published 2fam PNS
+tables were written in, so it is kept as it stands; `compute_table` is now a
+thin adapter onto `build_table` rather than a second sweep.
+
+References:
+- Fortin, Oertel, Providencia, PASA 35 (2018) e044
+- Steiner, Hempel, Fischer, ApJ 774 (2013) 17
 """
 
 import numpy as np
@@ -21,25 +34,14 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Union, Dict, Any, Tuple
 from itertools import product
 
-# Import SFHo EOS modules
+from eos.general import modes
 from eos.sfho.species import SpeciesFlags
 from eos.sfho.solver import (
-    SFHoEOSResult,
-    solve_beta_eq_neutrinoless,
-    solve_fixed_yc,
-    solve_fixed_yc_ys,
-    solve_beta_eq_neutrino_trapped,
-    solve_isentropic_beta_eq,
-    solve_isentropic_trapped,
-    result_to_guess,
-    get_default_guess_beta_eq,
-    get_default_guess_fixed_yc,
-    get_default_guess_fixed_yc_ys,
-    get_default_guess_trapped,
+    SFHoEOSResult, solve_mode, default_guess, warm_start,
 )
 from eos.sfho.parameters import (
-    SFHoParams, 
-    get_sfho_nucleonic, 
+    SFHoParams,
+    get_sfho_nucleonic,
     get_sfhoy_fortin,
     get_sfhoy_star_fortin,
     get_sfho_2fam_phi,
@@ -47,29 +49,349 @@ from eos.sfho.parameters import (
 )
 
 
-#==============================================================================
-# SETTINGS DATACLASS
-#==============================================================================
+# =============================================================================
+# THE MODES A TABLE CAN BE BUILT IN
+# =============================================================================
+
+#: Table mode name -> the `eos.general.modes` factory that declares it, plus
+#: whether neutralizing leptons are present. The names are CLAUDE.md section
+#: 3's, and match the ones `eos.dd2.table` and `eos.mixed` offer, so the same
+#: table is requested from any of the three the same way:
+#:
+#:   beta_eq_neutrinoless      charge-neutral beta equilibrium, neutrinos escape
+#:   beta_eq_neutrino_trapped  ... with the electron family trapped at Y_Le
+#:   fixed_YC                  fixed non-leptonic charge fraction, no leptons
+#:                             (charged matter -- what a mixed phase needs)
+#:   fixed_YC_neutral          ... plus the neutralizing electrons
+#:   fixed_YC_YS               charge and strangeness fixed, no leptons
+#:   fixed_YC_YS_neutral       ... plus the neutralizing electrons
+MODES = {
+    "beta_eq_neutrinoless":     dict(spec=modes.beta_eq_neutrinoless),
+    "beta_eq_neutrino_trapped": dict(spec=modes.beta_eq_neutrino_trapped),
+    "fixed_YC":                 dict(spec=modes.fixed_YC, leptons=False),
+    "fixed_YC_neutral":         dict(spec=modes.fixed_YC, leptons=True),
+    "fixed_YC_YS":              dict(spec=modes.fixed_YC_YS, leptons=False),
+    "fixed_YC_YS_neutral":      dict(spec=modes.fixed_YC_YS, leptons=True),
+}
+
+#: mode name -> the fractions it consumes, in the order its factory takes
+#: them. Supplied either as a `TableSpec.axes` grid, to be swept, or as a
+#: scalar in `TableSpec.fixed`.
+MODE_FRACTIONS = {
+    "beta_eq_neutrinoless": (),
+    "beta_eq_neutrino_trapped": ("Y_Le",),
+    "fixed_YC": ("Y_C",),
+    "fixed_YC_neutral": ("Y_C",),
+    "fixed_YC_YS": ("Y_C", "Y_S"),
+    "fixed_YC_YS_neutral": ("Y_C", "Y_S"),
+}
+
+#: The equilibrium names the settings object at the bottom of this file uses,
+#: mapped onto the modes above. `include_electrons` picks the neutral flavour
+#: of a fixed-fraction mode, and the two isentropic names are the same modes
+#: on the 'SnB' axis rather than modes of their own.
+_LEGACY_EQUILIBRIA = {
+    "beta_eq": ("beta_eq_neutrinoless", "T"),
+    "trapped_neutrinos": ("beta_eq_neutrino_trapped", "T"),
+    "fixed_yc": ("fixed_YC", "T"),
+    "fixed_yc_ys": ("fixed_YC_YS", "T"),
+    "isentropic_beta_eq": ("beta_eq_neutrinoless", "SnB"),
+    "isentropic_trapped": ("beta_eq_neutrino_trapped", "SnB"),
+}
+
+
+def mode_spec(mode: str, fracs: Dict[str, float]) -> modes.ModeSpec:
+    """The `ModeSpec` a table mode name declares, at these fractions.
+
+    One place where a name becomes a declaration; nothing downstream of here
+    branches on the name again.
+    """
+    if mode not in MODES:
+        raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
+    entry = dict(MODES[mode])
+    factory = entry.pop("spec")
+    values = []
+    for key in MODE_FRACTIONS[mode]:
+        if key not in fracs:
+            raise ValueError(f"mode {mode!r} needs fixed[{key!r}]")
+        values.append(fracs[key])
+    return factory(*values, **entry)
+
+
+# =============================================================================
+# ONE POINT AS A ROW
+# =============================================================================
+
+def hadronic_row(r: SFHoEOSResult) -> Dict[str, Any]:
+    """Flatten one solved point into a dict row.
+
+    Keyed the way `eos.dd2.table.hadronic_row` and `eos.mixed.composition_row`
+    key theirs, so a pure-hadronic table and a hybrid table concatenate without
+    renaming anything. chi = 0 and phase = 'H': no quark matter is present.
+
+    Y_C and Y_S are the TOTAL non-leptonic fractions read off the solved state,
+    so they count the thermal meson gas as well as the baryons (CLAUDE.md
+    section 2) -- at T = 40 MeV with pions the two differ by 10 to 20 percent.
+    """
+    n_B = r.n_B
+    row = dict(n_B=n_B, T=r.T, chi=0.0, phase="H",
+               P=r.P_total, eps=r.e_total, s=r.s_total,
+               S_per_B=(r.s_total / n_B if n_B else 0.0),
+               mu_B=r.mu_B, Y_C=r.Y_C, Y_S=r.Y_S,
+               mu_e=r.mu_e, mu_S=r.mu_S, mu_nue=r.mu_nue,
+               Y_e=r.n_e / n_B, **{"Y_mu-": 0.0})
+    for name, n in r.baryon_densities.items():
+        row[f"Y_{name}"] = n / n_B
+    if r.n_nu:
+        row["Y_nue"] = r.n_nu / n_B
+    return row
+
+
+# =============================================================================
+# THE REQUEST AND THE RESULT
+# =============================================================================
+
+@dataclass
+class TableSpec:
+    """One table request.
+
+    parametrization: the SFHoParams to solve with -- an argument, never module
+        state, because inference varies it (CLAUDE.md section 6)
+    mode : a key of MODES
+    axes : {'nB': grid, exactly one of 'T'/'SnB': grid, and optionally any of
+           'Y_C'/'Y_S'/'Y_Le': grid to sweep that fraction as a further axis}
+    include: the active degrees of freedom
+    fixed: scalar values for the fractions the mode needs that are not swept
+    """
+    parametrization: SFHoParams
+    mode: str
+    axes: dict
+    include: SpeciesFlags = field(default_factory=SpeciesFlags)
+    fixed: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        if "nB" not in self.axes:
+            raise ValueError("TableSpec.axes must contain 'nB'")
+        temp_axes = [k for k in self.axes if k in ("T", "SnB")]
+        if len(temp_axes) != 1:
+            raise ValueError("TableSpec.axes needs exactly one of 'T' / 'SnB'")
+        self._temp_key = temp_axes[0]
+        if self.mode not in MODES:
+            raise ValueError(f"unknown mode {self.mode!r}; expected one of "
+                             f"{list(MODES)}")
+        self._frac_keys = [k for k in ("Y_C", "Y_S", "Y_Le") if k in self.axes]
+        # Validate early that every fraction the mode needs is supplied, by an
+        # axis or a scalar; an axis value stands in here only for the check.
+        probe = dict(self.fixed)
+        probe.update({k: 0.0 for k in self._frac_keys})
+        mode_spec(self.mode, probe)
+
+
+@dataclass
+class TableResult:
+    spec: TableSpec
+    nB: np.ndarray
+    temp_values: np.ndarray               # the T or S/A grid
+    temp_key: str                         # 'T' or 'SnB'
+    points: list                          # points[i_combo][i_nB] SFHoEOSResult
+    #: [(temperature value, {fraction: value}), ...], parallel to `points`.
+    #: One entry per line; with no fraction axes it is one entry per
+    #: temperature and the dict is empty.
+    combos: list = None
+
+
+def _print_progress(info):
+    """The built-in progress printer (verbose=True)."""
+    fracs = "".join(f" {k}={v:g}" for k, v in info["fracs"].items())
+    print(f"[{info['line']}/{info['n_lines']}] {info['mode']} "
+          f"{info['temp_key']}={info['temp']:g}{fracs}: "
+          f"{info['n_solved']}/{info['n_requested']} points "
+          f"in {info['elapsed_s']:.1f}s")
+
+
+# =============================================================================
+# THE WARM-STARTED SWEEP
+# =============================================================================
+
+def _continuation_guess(seeds, seed_nB, n_B):
+    """The seed for the next density from the ones already solved on this line.
+
+    Linear extrapolation in n_B from the last two converged points, which is
+    what makes a fine density sweep cheap: every unknown varies smoothly with
+    n_B away from a threshold, so a first-order step lands close enough that
+    the solve takes a few iterations. With only one point behind it there is
+    nothing to extrapolate along and that point is reused as it stands.
+
+    Returns None when the line is empty, and the caller falls back to the
+    cold start.
+    """
+    if len(seeds) >= 2 and abs(seed_nB[-1] - seed_nB[-2]) > 1e-15:
+        slope = (seeds[-1] - seeds[-2]) / (seed_nB[-1] - seed_nB[-2])
+        return seeds[-1] + slope * (n_B - seed_nB[-1])
+    if seeds:
+        return seeds[-1].copy()
+    return None
+
+
+def build_table(spec: TableSpec, skip_errors: bool = False,
+                rows: bool = False, progress=None, verbose: bool = False):
+    """
+    Solve the TableSpec grid over the product of its temperature and fraction
+    axes. Within each combination the n_B sweep is warm-started along density
+    (the stiff axis); the 'SnB' axis puts T in the unknown vector instead of
+    imposing it.
+
+    rows=False (default) returns a `TableResult`, whose `points` are indexed
+    [i_combination][i_nB] -- one line per (temperature, fractions) pair, in the
+    order `TableResult.combos` records.
+
+    rows=True instead returns `(rows, {})` in the long format
+    `eos.dd2.build_table` and `eos.mixed.build_mixed_table` return -- one flat
+    dict per CONVERGED point, ready for `eos.general.table_io`. The empty
+    second element is where the mixed builder returns its phase windows, which
+    purely hadronic matter has none of; it is returned anyway so the two calls
+    unpack the same way.
+
+    skip_errors: SFHo reports non-convergence as a return value rather than an
+    exception (CLAUDE.md section 6), so this chooses what happens to such a
+    point rather than whether it is fatal: True drops it from its line and
+    resets the warm start, False keeps it in place with converged=False for
+    the caller to filter. Either way `rows=True` emits converged points only.
+
+    progress: optional callable, invoked once per completed line with a dict
+    {mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,
+    elapsed_s} -- the same shape every table builder in this repository uses.
+    Default is silent; verbose=True installs the built-in one-line printer.
+    Deep solver code never prints.
+    """
+    if verbose and progress is None:
+        progress = _print_progress
+    par = spec.parametrization
+    flags = spec.include
+    nB = np.asarray(spec.axes["nB"], dtype=float)
+    temp = np.asarray(spec.axes[spec._temp_key], dtype=float)
+    isentropic = spec._temp_key == "SnB"
+    frac_keys = spec._frac_keys
+    frac_grids = [np.atleast_1d(np.asarray(spec.axes[k], float))
+                  for k in frac_keys]
+    n_lines = len(temp) * max(1, int(np.prod([len(g) for g in frac_grids])))
+
+    points, combos = [], []
+    previous_line = None      # the line before this one, seeds it point by point
+    # Fractions outermost, temperature innermost, so consecutive lines differ
+    # by a step in T (or S/A) at the same composition. That is the smaller step
+    # for every unknown, which is what makes the line-to-line seeding below
+    # worth having; `TableResult.combos` records the order it produced.
+    for combo in product(*frac_grids) if frac_grids else [()]:
+        for tv in temp:
+            fracs = dict(spec.fixed)
+            fracs.update(zip(frac_keys, (float(c) for c in combo)))
+            spec_mode = mode_spec(spec.mode, fracs)
+            T = None if isentropic else float(tv)
+            SnB = float(tv) if isentropic else None
+            # The cold start needs a temperature even when T is an unknown;
+            # 10 MeV is the solver's own default seed for that case.
+            T_seed = 10.0 if isentropic else float(tv)
+
+            combos.append((float(tv), dict(zip(frac_keys, map(float, combo)))))
+            t_line = time.time()
+            line, seeds, seed_nB = [], [], []
+            for i, n in enumerate(nB):
+                cold = default_guess(spec_mode, float(n), T_seed, par,
+                                     SnB=SnB)
+                x0 = _continuation_guess(seeds, seed_nB, float(n))
+                if x0 is None and previous_line is not None and i < len(previous_line):
+                    # Nothing solved yet on this line: take the point at the
+                    # same density from the previous one. A step in T or in a
+                    # fraction moves the unknowns far less than a step in n_B.
+                    neighbour = previous_line[i]
+                    if neighbour.converged:
+                        x0 = warm_start(neighbour, spec_mode, isentropic)
+                if x0 is None:
+                    x0 = cold
+                r = solve_mode(par, float(n), flags, spec_mode, T=T, SnB=SnB,
+                               x0=x0)
+                if not r.converged and x0 is not cold:
+                    r = solve_mode(par, float(n), flags, spec_mode, T=T,
+                                   SnB=SnB, x0=cold)
+                if r.converged:
+                    seeds.append(warm_start(r, spec_mode, isentropic))
+                    seed_nB.append(float(n))
+                    if len(seeds) > 2:
+                        seeds.pop(0)
+                        seed_nB.pop(0)
+                    line.append(r)
+                elif skip_errors:
+                    seeds, seed_nB = [], []     # reset the warm start past a gap
+                else:
+                    line.append(r)
+            points.append(line)
+            previous_line = line
+            if progress is not None:
+                progress(dict(mode=spec.mode, line=len(points),
+                              n_lines=n_lines, temp_key=spec._temp_key,
+                              temp=float(tv), fracs=combos[-1][1],
+                              n_solved=sum(1 for r in line if r.converged),
+                              n_requested=len(nB),
+                              elapsed_s=time.time() - t_line))
+
+    result = TableResult(spec=spec, nB=nB, temp_values=temp,
+                         temp_key=spec._temp_key, points=points, combos=combos)
+    return (rows_from_result(result), {}) if rows else result
+
+
+def rows_from_result(result: TableResult) -> List[Dict[str, Any]]:
+    """A solved `TableResult` to the long-format rows `eos.general.table_io`
+    writes -- the same shape `eos.dd2.rows_from_result` produces.
+
+    Separate from `build_table` so a table already solved for its
+    `TableResult` can be written out without being solved a second time.
+    Non-converged points are dropped here: a row is a state, and a point that
+    did not converge is not one.
+    """
+    out = []
+    for (tv, fracs), line in zip(result.combos, result.points):
+        for r in line:
+            if not r.converged:
+                continue
+            row = hadronic_row(r)
+            row.update(fracs)
+            if result.temp_key == "SnB":
+                row["SnB"] = tv
+            out.append(row)
+    return out
+
+
+
+# =============================================================================
+# THE SETTINGS-OBJECT INTERFACE
+# =============================================================================
+# The first-generation script interface: one object describing a whole run, a
+# single call, and a .dat file out. It is kept because the published 2fam PNS
+# nucleation tables were produced through it and are read back through
+# `load_eos_table` below, so its column layout is a format on disk and not an
+# implementation detail. It is now an ADAPTER onto `build_table` -- the sweep
+# lives in one place, and this half only translates names and writes files.
+
+
 @dataclass
 class TableSettings:
     """
     Configuration for SFHo EOS table generation (supports multi-dimensional grids).
-    
-    Speed optimizations:
-    - Within n_B: uses quadratic extrapolation from previous 3 points
-    - Across parameters: uses solution at same n_B from previous (T, Y_C, ...) as guess
-    
+
     Equilibrium types:
     - 'beta_eq': Beta equilibrium with charge neutrality
-    - 'fixed_yc': Fixed charge fraction Y_C (hadrons only)
+    - 'fixed_yc': Fixed charge fraction Y_C
     - 'fixed_yc_ys': Fixed Y_C and Y_S (requires hyperons)
     - 'trapped_neutrinos': Trapped neutrinos with fixed Y_Le
-    
+    - 'isentropic_beta_eq', 'isentropic_trapped': the same two beta-equilibrium
+      modes with entropy per baryon imposed instead of temperature
+
     Custom parametrization:
         Use custom_params to pass a SFHoParams object directly. Example:
-        
+
         from eos.sfho.parameters import create_custom_parametrization
-        
+
         my_params = create_custom_parametrization(
             U_Lambda_N=-28.0, U_Sigma_N=+30.0, U_Xi_N=-18.0,
             name="MyCustom"
@@ -82,42 +404,41 @@ class TableSettings:
     # Model selection
     parametrization: str = 'sfho'        # 'sfho', 'sfhoy', 'sfhoy_star', '2fam_phi'
     particle_content: str = 'nucleons'   # 'nucleons', 'nucleons_hyperons', 'nucleons_hyperons_deltas'
-    equilibrium: str = 'beta_eq'         # 'beta_eq', 'fixed_yc', 'fixed_yc_ys', 'trapped_neutrinos',
-                                         # 'isentropic_beta_eq', 'isentropic_trapped'
+    equilibrium: str = 'beta_eq'         # a key of _LEGACY_EQUILIBRIA
     custom_params: Any = None            # SFHoParams object for custom parametrization
-    
+
     # Grid definition
     n_B_values: np.ndarray = field(default_factory=lambda: np.logspace(-2, 0, 50) * 0.16)
     T_values: List[float] = field(default_factory=lambda: [10.0])
     S_values: List[float] = field(default_factory=lambda: [1.0])  # Entropy per baryon for isentropic
-    
+
     # Constraint parameters - can be single values OR arrays for multidimensional tables
     Y_C_values: Union[float, List[float], None] = None
     Y_S_values: Union[float, List[float], None] = None
     Y_L_values: Union[float, List[float], None] = None
-    
+
     # Options
     include_muons: bool = False
     include_photons: bool = True
     include_electrons: bool = False      # For fixed_yc modes: add electrons for charge neutrality
     include_thermal_neutrinos: bool = False  # Add thermal neutrinos with μ_ν=0
     include_pseudoscalar_mesons: bool = False
-    
+
     # Output control
     print_results: bool = True
     print_first_n: int = 5
     print_errors: bool = True
     print_timing: bool = True
-    
+
     # File output
     save_to_file: bool = False
     output_filename: Optional[str] = None
     output_columns: List[str] = field(default_factory=lambda: [
-        'n_B', 'T', 
+        'n_B', 'T',
         'sigma', 'omega', 'rho', 'phi',
         'mu_B', 'mu_C', 'mu_S', 'mu_e', 'mu_nue',
         'P_total', 'e_total', 's_total',
-        'Y_C', 'Y_S', 'Y_Le', 
+        'Y_C', 'Y_S', 'Y_Le',
         'converged'
     ])
 
@@ -135,7 +456,7 @@ def _get_params(settings: TableSettings) -> SFHoParams:
     """Get SFHoParams from settings."""
     if settings.custom_params is not None:
         return settings.custom_params
-    
+
     param_map = {
         'sfho': get_sfho_nucleonic,
         'sfhoy': get_sfhoy_fortin,
@@ -143,7 +464,7 @@ def _get_params(settings: TableSettings) -> SFHoParams:
         '2fam_phi': get_sfho_2fam_phi,
         '2fam': get_sfho_2fam,
     }
-    
+
     if settings.parametrization.lower() in param_map:
         return param_map[settings.parametrization.lower()]()
     else:
@@ -166,318 +487,89 @@ def _get_flags(settings: TableSettings) -> SpeciesFlags:
     )
 
 
-#: eq_type -> the named mode that solves it. One dispatch, so the six modes
-#: are six lines rather than six copies of the guess/solve/retry dance.
-def _solve_one(eq_type, par, flags, n_B, x0, leptons=False,
-               T=None, S=None, Y_C=None, Y_S=None, Y_Le=None):
-    if eq_type == 'beta_eq':
-        return solve_beta_eq_neutrinoless(par, n_B, flags, T=T, x0=x0)
-    if eq_type == 'fixed_yc':
-        return solve_fixed_yc(par, n_B, Y_C, flags, T=T, x0=x0, leptons=leptons)
-    if eq_type == 'fixed_yc_ys':
-        return solve_fixed_yc_ys(par, n_B, Y_C, Y_S, flags, T=T, x0=x0,
-                                 leptons=leptons)
-    if eq_type == 'trapped_neutrinos':
-        return solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, flags, T=T, x0=x0)
-    if eq_type == 'isentropic_beta_eq':
-        return solve_isentropic_beta_eq(par, n_B, S, flags, x0=x0)
-    if eq_type == 'isentropic_trapped':
-        return solve_isentropic_trapped(par, n_B, S, Y_Le, flags, x0=x0)
-    raise ValueError(f"Unknown equilibrium type: {eq_type}")
+def _settings_to_spec(settings: TableSettings) -> Tuple[TableSpec, List[str]]:
+    """(TableSpec, the names of the grid axes beyond n_B) for one settings object.
 
-
-def _cold_start(eq_type, par, n_B, T=None, Y_C=None, Y_S=None, Y_Le=None):
-    """The default guess for one point, in the unknown order the mode uses."""
-    if eq_type == 'beta_eq':
-        return get_default_guess_beta_eq(n_B, T, par)
-    if eq_type == 'fixed_yc':
-        return get_default_guess_fixed_yc(n_B, Y_C, T, par)
-    if eq_type == 'fixed_yc_ys':
-        return get_default_guess_fixed_yc_ys(n_B, Y_C, Y_S, T, par)
-    if eq_type == 'trapped_neutrinos':
-        return get_default_guess_trapped(n_B, Y_Le, T, par)
-    if eq_type == 'isentropic_beta_eq':
-        return np.append(get_default_guess_beta_eq(n_B, 10.0, par), 10.0)
-    if eq_type == 'isentropic_trapped':
-        return np.append(get_default_guess_trapped(n_B, Y_Le, 10.0, par), 10.0)
-    raise ValueError(f"Unknown equilibrium type: {eq_type}")
-
-
-def _result_to_guess_array(result: SFHoEOSResult, eq_type: str) -> np.ndarray:
-    """Convert SFHoEOSResult to guess array."""
-    return result_to_guess(result, eq_type)
-
-
-def _get_guess_linear_extrapolation(
-    previous_solutions: List[np.ndarray],
-    previous_nB: np.ndarray,
-    current_nB: float
-) -> Optional[np.ndarray]:
-    """Linear extrapolation from last 2 non-None points."""
-    # Get last 2 non-None solutions with their indices
-    valid = [(i, s) for i, s in enumerate(previous_solutions) if s is not None]
-    if len(valid) < 2:
-        return None
-    
-    idx1, s1 = valid[-2]
-    idx2, s2 = valid[-1]
-    n1, n2 = previous_nB[idx1], previous_nB[idx2]
-    
-    if abs(n2 - n1) > 1e-15:
-        slope = (s2 - s1) / (n2 - n1)
-        return s2 + slope * (current_nB - n2)
-    return None
-
-
-def _get_guess_previous(
-    previous_solutions: List[np.ndarray]
-) -> Optional[np.ndarray]:
-    """Return the most recent non-None solution."""
-    # Find last non-None solution
-    for sol in reversed(previous_solutions):
-        if sol is not None:
-            return sol.copy()
-    return None
-
-
-def _get_guess_quadratic_extrapolation(
-    previous_solutions: List[np.ndarray],
-    previous_nB: np.ndarray,
-    current_nB: float
-) -> Optional[np.ndarray]:
-    """Quadratic extrapolation from last 3 non-None points (Lagrange)."""
-    # Get last 3 non-None solutions with their indices
-    valid = [(i, s) for i, s in enumerate(previous_solutions) if s is not None]
-    if len(valid) < 3:
-        return None
-    
-    idx1, s1 = valid[-3]
-    idx2, s2 = valid[-2]
-    idx3, s3 = valid[-1]
-    n1, n2, n3 = previous_nB[idx1], previous_nB[idx2], previous_nB[idx3]
-    
-    denom1 = (n1 - n2) * (n1 - n3)
-    denom2 = (n2 - n1) * (n2 - n3)  
-    denom3 = (n3 - n1) * (n3 - n2)
-    
-    if abs(denom1) < 1e-30 or abs(denom2) < 1e-30 or abs(denom3) < 1e-30:
-        return None
-    
-    L1 = ((current_nB - n2) * (current_nB - n3)) / denom1
-    L2 = ((current_nB - n1) * (current_nB - n3)) / denom2
-    L3 = ((current_nB - n1) * (current_nB - n2)) / denom3
-    
-    return L1 * s1 + L2 * s2 + L3 * s3
-
-
-def _try_guess_strategies(
-    previous_solutions: List[np.ndarray],
-    previous_nB: np.ndarray,
-    current_nB: float
-) -> Optional[np.ndarray]:
+    The names come back because the .dat writer puts the independent variables
+    in the leading columns and keys `compute_table`'s result dict by them.
     """
-    Try guess strategies in order:
-    1. Linear extrapolation (best for smooth continuation)
-    2. Previous n_B result (safe fallback)
-    3. Quadratic extrapolation (for non-linear regions)
-    """
-    # Strategy 1: Linear extrapolation
-    guess = _get_guess_linear_extrapolation(previous_solutions, previous_nB, current_nB)
-    if guess is not None:
-        return guess
-    
-    # Strategy 2: Previous result
-    guess = _get_guess_previous(previous_solutions)
-    if guess is not None:
-        return guess
-    
-    # Strategy 3: Quadratic extrapolation
-    guess = _get_guess_quadratic_extrapolation(previous_solutions, previous_nB, current_nB)
-    if guess is not None:
-        return guess
-    
-    return None
-
-
-#==============================================================================
-# OPTIMIZED TABLE GENERATOR
-#==============================================================================
-def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
-    """
-    Compute SFHo EOS table(s) with OPTIMIZED initial guesses.
-    
-    Speed optimizations:
-    1. Within n_B sweep: quadratic extrapolation from last 3 points
-    2. Across parameters: use solution at same n_B index from previous table
-       (e.g., use T=10 solutions as guess for T=20)
-    """
-    params = _get_params(settings)
-    flags = _get_flags(settings)
-    eq_type_str = settings.equilibrium.lower()
-    
-    # Build parameter grid
-    T_list = list(settings.T_values)
-    S_list = list(settings.S_values)
-    Y_C_list = _to_list(settings.Y_C_values)
-    Y_S_list = _to_list(settings.Y_S_values)
-    Y_L_list = _to_list(settings.Y_L_values)
-    
-    # Determine grid structure
-    # Order: composition constraints (Y_C, Y_S, Y_Le) outer, T/S inner
-    # This way cross-parameter guesses come from previous T/S at same composition,
-    # which is physically more sensible (T/S changes are more continuous)
-    if eq_type_str == 'beta_eq':
-        grid_params = list(product(T_list))
-        param_names = ['T']
-    elif eq_type_str == 'fixed_yc':
-        grid_params = list(product(Y_C_list, T_list))
-        param_names = ['Y_C', 'T']
-    elif eq_type_str == 'fixed_yc_ys':
-        grid_params = list(product(Y_C_list, Y_S_list, T_list))
-        param_names = ['Y_C', 'Y_S', 'T']
-    elif eq_type_str == 'trapped_neutrinos':
-        grid_params = list(product(Y_L_list, T_list))
-        param_names = ['Y_Le', 'T']
-    elif eq_type_str == 'isentropic_beta_eq':
-        grid_params = list(product(S_list))
-        param_names = ['S']
-    elif eq_type_str == 'isentropic_trapped':
-        grid_params = list(product(Y_L_list, S_list))
-        param_names = ['Y_Le', 'S']
-    else:
+    eq = settings.equilibrium.lower()
+    if eq not in _LEGACY_EQUILIBRIA:
         raise ValueError(f"Unknown equilibrium type: {settings.equilibrium}")
-    
-    n_B_arr = np.asarray(settings.n_B_values)
-    n_points = len(n_B_arr)
-    n_tables = len(grid_params)
-    
-    if settings.print_results:
-        print("=" * 70)
-        print("SFHo EOS TABLE GENERATION (OPTIMIZED)")
-        print("=" * 70)
-        print(f"\nModel: {params.name if hasattr(params, 'name') else settings.parametrization}")
-        print(f"Particles: {settings.particle_content}")
-        print(f"Equilibrium: {settings.equilibrium}")
-        print(f"\nDensity grid: {n_points} points")
-        print(f"  n_B range: [{n_B_arr[0]:.4e}, {n_B_arr[-1]:.4e}] fm^-3")
-        print(f"\nParameter grid: {n_tables} tables")
-        print(f"  Parameters: {param_names}")
-        print(f"\nTotal points: {n_points * n_tables}")
-        print(f"\n[Using optimized cross-parameter guess propagation]")
-        print()
-    
-    all_results = {}
-    previous_table_results = None  # Store results from previous parameter combination
-    total_start = time.time()
-    
-    for idx, grid_param in enumerate(grid_params):
-        param_dict = dict(zip(param_names, grid_param))
-        T = param_dict.get('T')
-        S = param_dict.get('S')  # For isentropic modes
-        Y_C = param_dict.get('Y_C')
-        Y_S = param_dict.get('Y_S')
-        Y_Le = param_dict.get('Y_Le')
-        
-        if settings.print_results:
-            param_str = ", ".join(f"{k}={v}" for k, v in param_dict.items() if v is not None)
-            print("-" * 70)
-            print(f"[{idx+1}/{n_tables}] Computing table for {param_str}...")
-        
-        start_time = time.time()
-        results = []
-        previous_solutions = []  # For within-table extrapolation
-        previous_nB_values = []  # n_B values corresponding to previous_solutions
-        
-        for i, n_B in enumerate(n_B_arr):
-            # Determine initial guess (OPTIMIZED)
-            # Priority for n_B > first point:
-            #   1. Linear extrapolation from previous n_B steps
-            #   2. Previous n_B result
-            #   3. Quadratic extrapolation
-            # Fallback: Cross-parameter guess or default
-            
-            guess = None
-            
-            # Priority 1-3: Within-table strategies (linear, previous, quadratic)
-            if len(previous_solutions) > 0:
-                guess = _try_guess_strategies(
-                    previous_solutions, np.array(previous_nB_values), n_B
-                )
-            
-            # Fallback: Cross-parameter guess (from previous table, same n_B index)
-            if guess is None and previous_table_results is not None and i < len(previous_table_results):
-                prev_result = previous_table_results[i]
-                if prev_result.converged:
-                    guess = _result_to_guess_array(prev_result, eq_type_str)
-            
-            # Solve, warm-started; fall back to the cold start once.
-            default_guess = _cold_start(eq_type_str, params, n_B, T=T,
-                                        Y_C=Y_C, Y_S=Y_S, Y_Le=Y_Le)
-            if guess is None:
-                guess = default_guess
-            call = dict(par=params, flags=flags, n_B=n_B,
-                        leptons=settings.include_electrons,
-                        T=T, S=S, Y_C=Y_C, Y_S=Y_S, Y_Le=Y_Le)
-            result = _solve_one(eq_type_str, x0=guess, **call)
-            if not result.converged and not np.allclose(guess, default_guess):
-                result = _solve_one(eq_type_str, x0=default_guess, **call)
+    mode, temp_key = _LEGACY_EQUILIBRIA[eq]
+    if mode in ("fixed_YC", "fixed_YC_YS") and settings.include_electrons:
+        mode += "_neutral"
 
-            results.append(result)
-            
-            # Store for within-table extrapolation
-            if result.converged:
-                sol_array = _result_to_guess_array(result, eq_type_str)
-                previous_solutions.append(sol_array)
-                previous_nB_values.append(n_B)
-                if len(previous_solutions) > 3:
-                    previous_solutions.pop(0)
-                    previous_nB_values.pop(0)
-            
-            # Print if requested
-            if settings.print_results:
-                should_print = False
-                if i < settings.print_first_n:
-                    should_print = True
-                elif settings.print_errors and not result.converged:
-                    should_print = True
-                
-                if should_print:
-                    status = "OK" if result.converged else "FAILED"
-                    print(f"[{i:4d}] n_B={n_B:.4e} [{status}] err={result.error:.2e}")
-        
-        elapsed = time.time() - start_time
-        all_results[grid_param] = results
-        previous_table_results = results  # Store for next table
-        
-        if settings.print_timing:
-            n_converged = sum(1 for r in results if r.converged)
-            # Build parameter string for display
-            param_parts = []
-            if Y_C is not None:
-                param_parts.append(f"Y_C={Y_C:.2f}")
-            if Y_S is not None:
-                param_parts.append(f"Y_S={Y_S:.2f}")
-            if Y_Le is not None:
-                param_parts.append(f"Y_Le={Y_Le:.2f}")
-            if T is not None:
-                param_parts.append(f"T={T:.1f}")
-            if S is not None:
-                param_parts.append(f"S={S:.2f}")
-            param_str = " ".join(param_parts)
-            
-            print(f"\n  Completed {param_str} in {elapsed:.2f} s ({elapsed*1000/n_points:.1f} ms/point)")
-            print(f"  Converged: {n_converged}/{n_points} ({100*n_converged/n_points:.1f}%)")
-    
+    grids = {"Y_C": settings.Y_C_values, "Y_S": settings.Y_S_values,
+             "Y_Le": settings.Y_L_values}
+    axes = {"nB": np.asarray(settings.n_B_values, dtype=float)}
+    frac_names = []
+    for key in MODE_FRACTIONS[mode]:
+        values = _to_list(grids[key])
+        if values == [None]:
+            raise ValueError(f"equilibrium {settings.equilibrium!r} needs "
+                             f"{key} values")
+        axes[key] = np.asarray(values, dtype=float)
+        frac_names.append(key)
+    axes[temp_key] = np.asarray(
+        settings.T_values if temp_key == "T" else settings.S_values, dtype=float)
+
+    spec = TableSpec(parametrization=_get_params(settings), mode=mode,
+                     axes=axes, include=_get_flags(settings))
+    # 'S' rather than 'SnB': the .dat column has been called S since the first
+    # tables were written, and files on disk carry that header.
+    return spec, frac_names + [temp_key if temp_key == "T" else "S"]
+
+
+def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
+    """Solve the grid a `TableSettings` describes.
+
+    An adapter onto `build_table`: same sweep, same warm start, keyed and
+    printed the way this interface always was. Returns {grid point -> the n_B
+    line solved there}, where a grid point is the tuple of the fractions and
+    the temperature (or entropy) that line was solved at, in the order the
+    columns are written.
+    """
+    spec, param_names = _settings_to_spec(settings)
+    n_points = len(spec.axes["nB"])
+
+    if settings.print_results:
+        params = spec.parametrization
+        print("=" * 70)
+        print("SFHo EOS TABLE GENERATION")
+        print("=" * 70)
+        print(f"\nModel: {getattr(params, 'name', settings.parametrization)}")
+        print(f"Particles: {settings.particle_content}")
+        print(f"Equilibrium: {settings.equilibrium} -> mode {spec.mode!r}")
+        print(f"\nDensity grid: {n_points} points")
+        print(f"  n_B range: [{spec.axes['nB'][0]:.4e}, "
+              f"{spec.axes['nB'][-1]:.4e}] fm^-3")
+        print(f"  Parameters: {param_names}")
+        print()
+
+    total_start = time.time()
+    result = build_table(spec, verbose=settings.print_timing)
     total_elapsed = time.time() - total_start
-    
+
+    all_results = {}
+    for (tv, fracs), line in zip(result.combos, result.points):
+        key = tuple(fracs[k] for k in param_names[:-1]) + (float(tv),)
+        all_results[key] = line
+        if settings.print_errors:
+            failed = [r.n_B for r in line if not r.converged]
+            if failed:
+                print(f"  {key}: {len(failed)} points did not converge, "
+                      f"n_B from {min(failed):.4e} to {max(failed):.4e}")
+
     if settings.print_timing:
+        n_total = n_points * len(all_results)
         print("\n" + "=" * 70)
         print(f"Total time: {total_elapsed:.2f} s")
-        print(f"Average: {total_elapsed*1000/(n_points * n_tables):.1f} ms/point")
-    
+        print(f"Average: {total_elapsed * 1000 / n_total:.1f} ms/point")
+
     if settings.save_to_file:
         save_results(all_results, settings, param_names)
-    
+
     return all_results
 
 
@@ -586,44 +678,6 @@ def results_to_arrays(results: List[SFHoEOSResult]) -> Dict[str, np.ndarray]:
     arrays['converged'] = np.array([r.converged for r in results])
     
     return arrays
-
-
-#==============================================================================
-# CONFIGURATION (EDIT THIS SECTION)
-#==============================================================================
-settings = TableSettings(
-    # ===================== MODEL =====================
-    parametrization='2fam_phi',  # 'sfho', 'sfhoy', 'sfhoy_star', '2fam_phi', 
-    particle_content='nucleons',  # 'nucleons', 'nucleons_hyperons', 'nucleons_hyperons_deltas'
-    
-    # ===================== EQUILIBRIUM =====================
-    # Options: 'beta_eq', 'fixed_yc', 'fixed_yc_ys', 'trapped_neutrinos'
-    equilibrium='beta_eq',
-    
-    # ===================== GRID =====================
-    n_B_values=np.linspace(0.1, 10, 300) * 0.1583,
-    T_values=[0,0.1],#np.concatenate((np.array([0.1]), np.arange(2.5, 100, 2.5))),
-    S_values=np.arange(0.5, 3, 0.5),
-    # ===================== CONSTRAINTS =====================
-    Y_C_values=np.arange(0., .5, 0.05),     # For fixed_yc modes
-    Y_S_values=np.linspace(0., 1, 11),     # For fixed_yc_ys mode
-    Y_L_values=np.arange(0.1, 0.4, 0.05),     # For trapped_neutrinos mode
-    
-    # ===================== OPTIONS =====================
-    include_photons=False,
-    include_muons=False,
-    include_electrons=True,
-    include_thermal_neutrinos=False,
-    include_pseudoscalar_mesons=False,
-    
-    # ===================== OUTPUT =====================
-    print_results=True, 
-    print_first_n=3,
-    print_errors=True,
-    print_timing=True,
-    save_to_file=True,
-    output_filename="testT0.dat",  # Auto-generate
-)
 
 
 #==============================================================================
@@ -971,19 +1025,18 @@ def build_interpolators(table: EOSTableData,
 #==============================================================================
 if __name__ == "__main__":
     print("\n" + "=" * 70)
-    print("SFHo EOS TABLE GENERATOR (OPTIMIZED)")
+    print("SFHo EOS TABLE GENERATOR")
     print("=" * 70 + "\n")
-    
-    all_results = compute_table(settings)
-    
-    if len(all_results) == 1:
-        key = list(all_results.keys())[0]
-        data = results_to_arrays(all_results[key])
-        print("\n" + "=" * 70)
-        print("DONE!")
-        print(f"  n_B: [{data['n_B'].min():.4e}, {data['n_B'].max():.4e}] fm^-3")
-        print(f"  P:   [{data['P_total'].min():.4e}, {data['P_total'].max():.4e}] MeV/fm^3")
-    else:
-        print(f"\nGenerated {len(all_results)} tables")
-    
+
+    spec = TableSpec(
+        parametrization=get_sfho_2fam_phi(),
+        mode="beta_eq_neutrinoless",
+        axes={"nB": np.linspace(0.1, 10, 40) * 0.1583, "T": [0.0, 10.0]},
+        include=SpeciesFlags(),
+    )
+    result = build_table(spec, verbose=True)
+    for (T, _), line in zip(result.combos, result.points):
+        P = [r.P_total for r in line if r.converged]
+        print(f"T={T:5.1f} MeV: {len(P)}/{len(spec.axes['nB'])} converged, "
+              f"P in [{min(P):.4e}, {max(P):.4e}] MeV/fm^3")
     print("=" * 70 + "\n")

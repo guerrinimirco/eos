@@ -183,9 +183,13 @@ own session where the baseline and `test_imports.py` are already being run:
               them the reference and fast flavors of one thing, and backends/
               has to stay deletable); nmp.py + nmp_inverter.py merged; xp.py
               deleted.
-    sfho      eos.py -> solver.py, compute_tables.py -> table.py,
+    sfho      DONE: eos.py -> solver.py, compute_tables.py -> table.py,
               nuclear_saturation_properties.py -> nmp.py,
-              thermodynamics_hadrons.py -> thermodynamics.py
+              thermodynamics_hadrons.py -> thermodynamics.py, and species.py
+              and api.py added. `result_to_guess(result, eq_type)` is
+              `warm_start(result, spec)`, reading the mode declaration rather
+              than a string. What is left is the records (above) and the
+              parameter dataclass name, `SFHoParams` -> `Parameters`.
     vmit      eos.py -> solver.py
     zl        eos.py -> solver.py, compute_tables.py -> table.py,
               thermodynamics_nucleons.py -> thermodynamics.py
@@ -364,24 +368,30 @@ both touch the same code.
   and inverse nuclear-matter-parameter maps. `nmp.py` today computes
   saturation properties by re-solving the model, not through the analytic map.
 - The records are still sfho's own (`SFHoEOSResult`, `SFHoThermo`), not
-  `eos.general.state`'s `PhaseThermo` / `EoSPoint`, and there is no
-  `species.py` or `api.py`: the baryon content is passed as a list of
-  `Particle` and each sector as its own `include_*` boolean, so `eos_point`,
-  `eos_table` and `eos_response` do not exist for this model.
-- `solve_isentropic_beta_eq` and `solve_isentropic_trapped` are separate
-  entry points; §3 wants the entropy axis as an `SnB=` argument on the mode
-  itself. The solver already treats it that way internally (`System.SnB`),
-  so the merge is at the wrapper layer.
+  `eos.general.state`'s `PhaseThermo` / `EoSPoint`. `species.py` and `api.py`
+  now exist, so `eos_point`, `eos_table` and `eos_response` do, and the
+  records are what is left of that entry.
+- `eos_response` is not implemented at all: no sound speed, heat capacity,
+  adiabatic index or susceptibility matrix. It raises naming this file.
+  SFHo has no analytic Jacobian either, so both the reference
+  finite-difference flavour and the fast one are missing; `eos.dd2.responses`
+  and `eos.dd2.backends.responses_jac` are the worked examples.
 - An isentropic fixed-Y_C solve with neutralizing leptons raises: the
   electrons follow from n_C only after the solve, so they are missing from
   the entropy row that fixes T. Wiring it means putting mu_e in the unknown
   vector for that mode.
-- `table.py` is a six-way branch over `eq_type` strings with its own
-  file-format column maps; §5 wants one `build_table(spec, ...)` driver with
-  the `progress` callback. Its `mu_nue` column used to be reconstructed as
-  `mu_e + mu_nu` from a result field the solvers never set -- wrong relation
-  (it is `mu_e + mu_C`) on a column of zeros. Tables written before that fix
-  carry zeros there.
+- The `.dat` writer and reader (`save_results`, `load_eos_table`,
+  `build_interpolators`, `COLUMN_MAPS`, `GRID_AXES`) are a per-equilibrium
+  column layout of `table.py`'s own, rather than `eos.general.table_io`. It is
+  kept deliberately: the published 2fam PNS nucleation tables were written in
+  that format and are read back through it, so unifying it changes files on
+  disk and belongs with the nucleation propagation, not with a refactor.
+  `TableSettings` / `compute_table` are kept for the same reason and are now a
+  thin adapter onto `build_table` rather than a second sweep -- the shape
+  `vmit/compute_tables.py` already has. `load_eos_table`'s `mu_nue` column used
+  to be reconstructed as `mu_e + mu_nu` from a result field the solvers never
+  set -- wrong relation (it is `mu_e + mu_C`) on a column of zeros. Tables
+  written before that fix carry zeros there.
 - `TableSettings.Y_L_values` keeps its name because zl and vmit spell it the
   same way; the §2 rename to `Y_Le_values` lands once, across all three.
 

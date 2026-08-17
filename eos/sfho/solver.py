@@ -760,6 +760,24 @@ def solve_isentropic_trapped(
                          n_B, SnB=SnB), x0=x0)
 
 
+def solve_mode(
+    par: SFHoParams, n_B: float, flags: SpeciesFlags, spec: ModeSpec,
+    T: Optional[float] = None, SnB: Optional[float] = None,
+    x0: Optional[np.ndarray] = None
+) -> SFHoEOSResult:
+    """One point of an arbitrary mode, given as a `ModeSpec` rather than a name.
+
+    The named modes above are the readable vocabulary and are what a notebook
+    calls; this is the same solve with the declaration passed in, which is what
+    a driver sweeping a grid of modes wants (`table.build_table`). Exactly one
+    of T and SnB is given, per CLAUDE.md section 3's rule that an entropy per
+    baryon may stand in for a temperature anywhere.
+    """
+    if (T is None) == (SnB is None):
+        raise ValueError("exactly one of T / SnB must be given")
+    return solve(_system(par, flags, spec, n_B, T=T, SnB=SnB), x0=x0)
+
+
 def _system(par, flags, spec, n_B, T=None, SnB=None):
     """The `System` a named mode hands to `solve`.
 
@@ -779,27 +797,26 @@ def _system(par, flags, spec, n_B, T=None, SnB=None):
 # =============================================================================
 # WARM START
 # =============================================================================
-def result_to_guess(
-    result: SFHoEOSResult, eq_type: str = 'fixed_yc'
-) -> np.ndarray:
-    """
-    The seed the next point of a sweep starts from: this point's unknowns.
+def warm_start(result: SFHoEOSResult, spec: ModeSpec,
+               isentropic: bool = False) -> np.ndarray:
+    """The seed the next point of a sweep starts from: this point's unknowns.
+
+    Read off the mode declaration, in the order `unknown_names` documents, so
+    there is no second list of layouts to drift out of step with the residual.
 
     Args:
-        result: Previous result
-        eq_type: 'beta_eq', 'fixed_yc', 'fixed_yc_ys', 'trapped',
-                 'isentropic_beta_eq', 'isentropic_trapped'
+        result: the previous converged point
+        spec: the mode being swept — it decides which potentials are unknowns
+        isentropic: True when T is an unknown rather than an input
     """
     x = [result.sigma, result.omega, result.rho, result.phi,
          result.mu_B, result.mu_C]
-    if eq_type == 'fixed_yc_ys':
+    if spec.is_fixed("S"):
         x.append(result.mu_S)
-    elif eq_type in ('trapped', 'trapped_neutrinos'):
+    if spec.is_fixed("L_e"):
         x.append(result.mu_nue)
-    elif eq_type == 'isentropic_beta_eq':
+    if isentropic:
         x.append(result.T)
-    elif eq_type == 'isentropic_trapped':
-        x += [result.mu_nue, result.T]
     return np.array(x)
 
 
