@@ -27,11 +27,23 @@ about DD2 and vMIT passes through one interface:
 which solves that phase's *own* internal self-consistency — meson fields for a
 density-dependent RMF, the vector fixed point for a bag — at the given
 potentials, and reports `{n_i}`, `n_B`, `n_C`, `n_S`, `P`, `eps`, `s`,
-`mu_B`, `mu_C`, `mu_S`. There is no `eta`, no mixing and no neutrality in it:
-those are conditions on the *pair* of phases. Pairing a different hadronic or
-quark model is writing an adapter, not editing the solver.
+`mu_B`, `mu_C`, `mu_S`, `condensation`. There is no `eta`, no mixing and no
+neutrality in it: those are conditions on the *pair* of phases. Pairing a
+different hadronic or quark model is writing an adapter, not editing the
+solver.
 
-Two properties are load-bearing. Both adapters report the same projection
+`condensation = max_j |mu*_j|/m_j` over the phase's thermal meson gas is on
+the contract for a non-cosmetic reason. A Bose condensate is implemented
+nowhere in this repository; the shared Bose routine caps mu*_j at m_j instead
+of diverging, so a condensed phase does not blow up — it quietly stops
+absorbing charge and returns an entropy that drifts negative, while every
+solve around it converges beautifully. The mixed system sees a phase only
+through this interface, so it has no other way to know. A point with
+`condensation >= 1` in either phase is REFUSED. The quark phase has no meson
+gas and reports 0, which is the physical answer, not a missing value.
+
+Two further properties are load-bearing. Both adapters report the same
+projection
 `mu_i = B_i mu_B + C_i mu_C + S_i mu_S`, with `C` the non-leptonic charge and
 `S = +1` per s quark, so the coexistence conditions can be written without
 either side knowing which engine produced the other. And an adapter must be a
@@ -116,7 +128,29 @@ is the repository's `mu_C + mu_e = 0`. Strangeness self-equilibrates,
 
 **Totals.** Matter phases volume-averaged; local leptons weighted `eta` and
 themselves volume-averaged; global leptons weighted `1-eta`; photons and
-trapped neutrinos uniform and counted once. The pressure is read off one phase
+trapped neutrinos uniform and counted once:
+
+    P    = P^H + eta P_l^H + (1-eta) P_l^G + P_nu + P_gamma
+    eps  = (1-chi) eps^H + chi eps^Q + eta <eps_l> + (1-eta) eps_l^G
+           + eps_nu + eps_gamma
+    s    = (1-chi) s^H   + chi s^Q   + eta <s_l>   + (1-eta) s_l^G
+           + s_nu + s_gamma          with <X_l> = (1-chi) X_l^H + chi X_l^Q
+
+Each lepton block is an ideal Fermi gas at the potential its own neutrality
+row fixed (`mu_eL^H`, `mu_eL^Q` local, `mu_eG` global), with antiparticles:
+
+    n   = g/(2 pi^2 hc^3) ∫dk k^2      (f+ - f-)
+    eps = g/(2 pi^2 hc^3) ∫dk k^2 E    (f+ + f-)
+    P   = g/(6 pi^2 hc^3) ∫dk k^4 / E  (f+ + f-)
+    s   = (eps + P - mu n) / T
+
+with `E = sqrt(k^2 + m^2)`, `f± = 1/(1 + exp((E ∓ mu)/T))`, g = 2 (g = 1 and
+m = 0 for neutrinos) — the same shared routines the phases use. The muon,
+where enabled, is transparent (`mu_mu = mu_e` within each population, and
+`n_l = n_e + n_mu`). Photons: `P = pi^2 T^4/(45 hc^3)`, `eps = 3P`,
+`s = 4 pi^2 T^3/(45 hc^3)`, `mu = 0`.
+
+The pressure is read off one phase
 rather than averaged, because the mechanical row has made the two equal. The
 Euler relation `eps + P = T s + sum_i mu_i n_i` is NOT an algebraic identity
 here — it holds only if every thermal and lepton term is weighted consistently

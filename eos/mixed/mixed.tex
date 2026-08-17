@@ -74,7 +74,7 @@ interface. An adapter is a map
 \big( \text{the phase's conserved-charge potentials},\, T \big)
 \;\longmapsto\;
 \big\{ n_i \big\},\; \nB,\, \nC,\, \nS,\; P,\, \varepsilon,\, s;\;
-\muB,\, \muC,\, \muS ,
+\muB,\, \muC,\, \muS;\; \kappa ,
 \label{eq:adapter}
 \end{equation}
 %
@@ -86,7 +86,19 @@ and no neutrality: those are conditions on the \emph{pair} of phases. An
 adapter describes one phase in isolation, and pairing a different hadronic or
 quark model is writing an adapter, not editing the solver.
 
-Two properties of Eq.~(\ref{eq:adapter}) are load-bearing.
+The last entry, $\kappa = \max_j |\mu^{*}_j| / m_j$ over the phase's thermal
+meson gas, is the phase's distance from Bose condensation, and it is on the
+contract for a reason that is not cosmetic. A Bose--Einstein condensate is not
+implemented anywhere in this repository; the shared Bose routine caps
+$\mu^{*}_j$ at $m_j$ instead of diverging, so a condensed phase does not blow
+up --- it quietly stops absorbing charge and returns an entropy that drifts
+negative, while every solve around it converges beautifully. The mixed system
+has no other way to see that, because it sees a phase only through
+Eq.~(\ref{eq:adapter}), so a point with $\kappa \ge 1$ in either phase is
+REFUSED rather than returned. A quark phase has no meson gas and reports
+$\kappa = 0$, which is the physical answer rather than a missing value.
+
+Two further properties of Eq.~(\ref{eq:adapter}) are load-bearing.
 
 \paragraph{One decomposition.} Both adapters report the same projection
 %
@@ -312,6 +324,41 @@ s &= (1-\chi)\, s^\phH + \chi\, s^\phQ
 with $\langle X_\ell \rangle = (1-\chi) X_\ell^\phH + \chi X_\ell^\phQ$. The
 pressure is read off one phase rather than averaged because
 Eq.~(\ref{eq:res_P}) has made the two equal.
+
+Each lepton block is an ideal Fermi gas at its own potential, with
+antiparticles: for a species of mass $m$, degeneracy $g = 2$ ($g = 1$ for
+neutrinos, $m = 0$), $E = \sqrt{k^2 + m^2}$ and
+$f_\pm = \big[ 1 + e^{(E \mp \mu)/T} \big]^{-1}$,
+%
+\begin{align}
+n &= \frac{g}{2\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; k^2
+     \big( f_+ - f_- \big) ,
+\qquad
+\varepsilon = \frac{g}{2\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; k^2 E
+     \big( f_+ + f_- \big) ,
+\nonumber\\
+P &= \frac{g}{6\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; \frac{k^4}{E}
+     \big( f_+ + f_- \big) ,
+\qquad
+s = \frac{\varepsilon + P - \mu n}{T} ,
+\label{eq:leptonkin}
+\end{align}
+%
+evaluated through the same shared routines the phases use, and the photons are
+%
+\begin{equation}
+P_\gamma = \frac{\pi^2 T^4}{45 (\hbar c)^3}, \qquad
+\varepsilon_\gamma = 3 P_\gamma, \qquad
+s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} , \qquad \mu_\gamma = 0 .
+\label{eq:photons}
+\end{equation}
+%
+Each lepton population is evaluated at the potential its own neutrality row
+fixed: $\mu_e^{\mathrm{L},\phH}$ and $\mu_e^{\mathrm{L},\phQ}$ for the local
+gases of Eq.~(\ref{eq:neutral_local}), $\mu_e^{\mathrm{G}}$ for the global one
+of Eq.~(\ref{eq:neutral_global}). The muon, where enabled, is transparent:
+$\mu_\mu = \mu_e$ within each population, and $n_\ell$ in
+Eqs.~(\ref{eq:neutral_local})--(\ref{eq:neutral_global}) is $n_e + n_\mu$.
 
 \paragraph{Euler / Hugenholtz--Van Hove.} The identity
 %

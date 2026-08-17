@@ -454,6 +454,30 @@ potential, parameters and the reference they fit, field equations,
 equilibrium conditions, how each mode closes the system. It is part of the
 model, not optional documentation.
 
+**Every equation the code solves, and every quantity it returns, is written
+out.** The test is that a physicist can reproduce the model from the document
+without opening the source. Three things this rules out, all of which the
+first drafts did:
+
+- naming a term instead of defining it. `eps = sum_i eps_kin_i + ...` is not
+  a statement of the energy density until `eps_kin_i` is given in closed form.
+- leaving the ideal-gas integrals to a citation. The Fermi and Bose integrals
+  are shared code (§7) but each document states them anyway: a paper-style
+  description is self-contained, and a reader of one model's `.tex` must not
+  have to open another's. Duplication in prose is not the duplication §7
+  forbids in code.
+- omitting a quantity because nothing derives from it. `s` and `n_s` are
+  returned by every model and must appear, including the identities they are
+  computed through rather than integrated — `n_s = (eps - 3P)/m*` from the
+  trace of the energy-momentum tensor, `s = (eps + P - sum_i mu_i n_i)/T`.
+
+So the document states, explicitly: the residual — every row, in the order
+the solver assembles them, with the unknown vector; the field or gap
+equations; the single-species thermodynamics at T = 0 and T > 0; every
+model-specific contribution to P, eps and s, with the terms that differ
+between P and eps called out; and the assembly of the totals. Where a mode
+changes the rows, the table of modes says which rows.
+
 ## 12. Testing
 
 - Tests live in `test/<model>/`, named after the physics they check

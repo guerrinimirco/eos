@@ -198,12 +198,130 @@ of effective mass and effective chemical potential
 %
 There is no rearrangement term: the couplings do not depend on the state, so
 $\Sigma^R = 0$ identically. That is the single structural simplification
-relative to DD2, and it is stated in the code rather than omitted. At $T=0$
-the gas integrals are closed forms; at $T>0$ they are evaluated with the
-Johns--Ellis--Lattimer approximants~\cite{JohnsEllisLattimer1996} from
-\texttt{eos/general/fermi\_integrals} (the single home of all Fermi and Bose
-integrals in this repository). In code, $\mueff{i}$ and $\meff{i}$ are named
-\texttt{mu\_eff\_i} and \texttt{m\_eff\_i}.
+relative to DD2, and it is stated in the code rather than omitted. In code, $\mueff{i}$ and $\meff{i}$ are named \texttt{mu\_eff\_i} and
+\texttt{m\_eff\_i}.
+
+\subsection{One species as an ideal gas}
+\label{sec:kinetic}
+
+Every baryon enters as an ideal Fermi gas of mass $\meff{i}$ at potential
+$\mueff{i}$, with degeneracy $g_i$ ($2$ for the octet, $4$ for the $\Delta$)
+and antiparticles included. With $E = \sqrt{k^2 + \meff{i}{}^2}$ and
+$f_\pm = \big[ 1 + e^{(E \mp \mueff{i})/T} \big]^{-1}$,
+%
+\begin{align}
+n_i &= \frac{g_i}{2\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; k^2
+       \big( f_+ - f_- \big) ,
+\label{eq:nkin}\\
+\varepsilon_i &= \frac{g_i}{2\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; k^2 E
+       \big( f_+ + f_- \big) ,
+\label{eq:ekin}\\
+P_i &= \frac{g_i}{6\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\;
+       \frac{k^4}{E} \big( f_+ + f_- \big) .
+\label{eq:pkin}
+\end{align}
+%
+The remaining two are \emph{not} integrated. The scalar density follows from
+the trace of the energy--momentum tensor and the entropy density from the
+Euler relation for one species,
+%
+\begin{equation}
+n^s_i = \frac{\varepsilon_i - 3 P_i}{\meff{i}} ,
+\qquad
+s_i = \frac{\varepsilon_i + P_i - \mueff{i}\, n_i}{T} ,
+\label{eq:nsandS}
+\end{equation}
+%
+which is how the code obtains them, and is worth stating because it means an
+error in $\varepsilon_i$ or $P_i$ propagates into $n^s_i$ --- and $n^s_i$
+sources the $\sigma$ field, so such an error is not confined to the totals.
+
+At $T = 0$ the integrals are elementary. With
+$k_{F} = \sqrt{\mueff{i}{}^2 - \meff{i}{}^2}$ (and everything vanishing when
+$|\mueff{i}| \le \meff{i}$), writing $L = \ln\big[(k_F + |\mueff{i}|)/\meff{i}\big]$,
+%
+\begin{align}
+n_i &= \mathrm{sgn}(\mueff{i})\, \frac{g_i\, k_F^3}{6\pi^2 (\hbar c)^3} ,
+\qquad
+n^s_i = \frac{g_i\, \meff{i}}{4\pi^2 (\hbar c)^3}
+        \Big( k_F |\mueff{i}| - \meff{i}{}^2 L \Big) ,
+\nonumber\\
+P_i &= \frac{g_i}{48\pi^2 (\hbar c)^3}
+       \Big[ \big( 2k_F^3 - 3\meff{i}{}^2 k_F \big) |\mueff{i}|
+             + 3 \meff{i}{}^4 L \Big] ,
+\label{eq:T0}\\
+\varepsilon_i &= \frac{g_i}{16\pi^2 (\hbar c)^3}
+       \Big[ \big( 2k_F^3 + \meff{i}{}^2 k_F \big) |\mueff{i}|
+             - \meff{i}{}^4 L \Big] ,
+\qquad s_i = 0 .
+\nonumber
+\end{align}
+%
+At $T>0$ Eqs.~\eqref{eq:nkin}--\eqref{eq:pkin} are evaluated with the
+Johns--Ellis--Lattimer rational approximants~\cite{JohnsEllisLattimer1996},
+accurate to $\sim 10^{-4}$, from
+\texttt{eos/general/fermi\_integrals} --- the single home of all Fermi and
+Bose integrals in this repository, so that no model carries its own. A
+Gauss--Laguerre quadrature of the same integrals is available there as the
+accuracy reference.
+
+The four source terms of Eq.~\eqref{eq:fieldeqs} are then
+%
+\begin{equation}
+S_\sigma = \sum_i g_{\sigma i}\, n^s_i, \quad
+S_\omega = \sum_i g_{\omega i}\, n_i, \quad
+S_\rho = \sum_i g_{\rho i}\, I_{3i}\, n_i, \quad
+S_\phi = \sum_i g_{\phi i}\, n_i ,
+\label{eq:sources}
+\end{equation}
+%
+and the conserved-charge densities are
+$\nB = \sum_i B_i n_i$, $n_C = \sum_i C_i n_i + n_C^{\mathrm{mes}}$,
+$n_S = \sum_i S_i n_i + n_S^{\mathrm{mes}}$, the meson terms being those of
+Sec.~\ref{sec:gas}.
+
+\subsection{The totals}
+\label{sec:totals}
+
+The matter block is the baryons plus the mean fields plus any thermal gas,
+%
+\begin{equation}
+\varepsilon = \sum_i \varepsilon_i + \varepsilon_{\mathrm{mf}}
+              + \varepsilon_{\mathrm{mes}},
+\qquad
+P = \sum_i P_i + P_{\mathrm{mf}} + P_{\mathrm{mes}},
+\qquad
+s = \sum_i s_i + s_{\mathrm{mes}} ,
+\label{eq:matter}
+\end{equation}
+%
+with $P_{\mathrm{mf}}$ and $\varepsilon_{\mathrm{mf}}$ from
+Eqs.~\eqref{eq:Pmf}--\eqref{eq:epsmf}. Leptons and photons are added on top by
+the solver rather than by the matter block, because they are shared by the
+whole system rather than belonging to a phase: electrons (and positrons) as an
+ideal Fermi gas through the same Eqs.~\eqref{eq:nkin}--\eqref{eq:T0} at
+$m = m_e$, $g = 2$; trapped electron neutrinos likewise at $m = 0$, $g = 1$;
+and photons as
+%
+\begin{equation}
+P_\gamma = \frac{\pi^2 T^4}{45 (\hbar c)^3}, \qquad
+\varepsilon_\gamma = 3 P_\gamma, \qquad
+s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} .
+\label{eq:photons}
+\end{equation}
+%
+The Euler sum reported with the state is
+%
+\begin{equation}
+\sum_i \mu_i n_i
+  = \sum_i \big( B_i \muB + C_i \muC + S_i \muS \big) n_i
+  + \sum_j \mu^{*}_j n_j
+  + \mu_e n_e + \munue n_{\nu_e} ,
+\label{eq:eulersum}
+\end{equation}
+%
+with the baryons at their FULL potentials and the meson gas at its EFFECTIVE
+ones --- see Sec.~\ref{sec:gas} for why the two differ.
 
 The meson fields contribute to the pressure and the energy density
 %
@@ -265,9 +383,10 @@ The muon family is not tracked by this model: $\mu$ appears in no residual and
 in no total, and requesting it raises rather than being silently ignored.
 
 \section{The thermal meson gas}
+\label{sec:gas}
 
-At $T>0$ the pseudoscalar mesons ($\pi$, $K$, $\eta$) ride on the mean field
-as one-body Bose gases~\cite{Lavagno2010}, with effective potentials tied to
+At $T>0$ the pseudoscalar nonet ($\pi$, $K$, $\eta$, $\eta'$) rides on the
+mean field as one-body Bose gases~\cite{Lavagno2010}, with effective potentials tied to
 the same vector fields that generate the baryon interactions:
 %
 \begin{align}
@@ -286,7 +405,46 @@ the same vector fields that generate the baryon interactions:
 with $\mu^{*}_{j^-} = -\mu^{*}_{j^+}$ and $\mu^{*}_j = 0$ for strangeless
 neutral mesons. The $\omega$ shift on the kaons is the light/strange asymmetry
 of the vector coupling --- a kaon carries one light quark and one strange
-antiquark --- and the $\rho$ shifts follow isospin. The gas carries electric
+antiquark --- and the $\rho$ shifts follow isospin.
+
+Each species is an ideal Bose gas of its PHYSICAL mass $m_j$: $m_{\pi^\pm} =
+139.570$, $m_{\pi^0} = 134.977$, $m_{K^\pm} = 493.677$, $m_{K^0} =
+m_{\bar K^0} = 497.611$, $m_\eta = 547.862$, $m_{\eta'} = 957.780$~MeV. The
+charged and neutral partners are kept apart rather than averaged: the
+splitting is $4.6$~MeV on the pion, and the two carry different charges, so
+averaging them would misplace $n_C^{\mathrm{mes}}$ as well as the population.
+Nine species in all, since $K^-$ and $\bar K^0$ are tracked separately from
+$K^+$ and $K^0$. With $E = \sqrt{k^2 + m_j^2}$, $g_j = 1$, and
+$b_\pm = \big[ e^{(E \mp \mu^{*}_j)/T} - 1 \big]^{-1}$,
+%
+\begin{align}
+n_j &= \frac{g_j}{2\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; k^2
+       \big( b_+ - b_- \big) ,
+\qquad
+\varepsilon_j = \frac{g_j}{2\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; k^2 E
+       \big( b_+ + b_- \big) ,
+\nonumber\\
+P_j &= \frac{g_j}{6\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\;
+       \frac{k^4}{E} \big( b_+ + b_- \big) ,
+\qquad
+s_j = \frac{\varepsilon_j + P_j - \mu^{*}_j n_j}{T} ,
+\label{eq:bose}
+\end{align}
+%
+evaluated with the Bose-case Johns--Ellis--Lattimer
+approximants~\cite{JohnsEllisLattimer1996} in
+\texttt{eos/general/bose\_integrals}. The gas totals are
+$P_{\mathrm{mes}} = \sum_j P_j$, $\varepsilon_{\mathrm{mes}} = \sum_j
+\varepsilon_j$, $s_{\mathrm{mes}} = \sum_j s_j$, and its charges
+%
+\begin{equation}
+n_C^{\mathrm{mes}} = \sum_j C_j n_j , \qquad
+n_S^{\mathrm{mes}} = \sum_j S_j n_j ,
+\label{eq:gascharges}
+\end{equation}
+%
+which are what enter Eq.~\eqref{eq:sources}'s neighbours and the residual rows
+of Sec.~\ref{sec:modes}. The gas carries electric
 charge and strangeness --- under this sign convention $K^-$ and $\bar K^0$
 carry $S=+1$ --- and those densities \emph{enter the equilibrium
 constraints}: charge neutrality and the fixed-$Y_C$/$Y_S$ conditions are
@@ -310,6 +468,7 @@ high $T$ and low $\muB$; negatively charged baryons ($\Sigma^-$, $\Delta^-$)
 take over the neutralisation, collapse $\mu_e$, and push the boundary away.
 
 \section{Equilibrium modes and their closures}
+\label{sec:modes}
 
 All modes are solved by one residual system over the unknown vector
 %
@@ -325,10 +484,48 @@ fields are always unknowns --- a mean field does not know what is being held
 fixed --- and $\muC$ is an unknown in every mode; what the mode changes is the
 row that closes it.
 
-The first four residuals are the field equations~\eqref{eq:fieldeqs}, each
-divided by $m_M^2$ times a typical field scale so that every row is
-dimensionless and of order unity; then $\sum_i n_i - \nB$ (baryon number;
-thermal mesons carry none); then per mode:
+The residual is assembled in this order, and these are all of its rows:
+%
+\begin{align}
+R_1 &= \Big[ m_\sigma^2 \sigma + g_2 \sigma^2 + g_3 \sigma^3
+        - \tfrac{\partial A}{\partial \sigma}\rho^2
+        - (\hbar c)^3 S_\sigma \Big] \big/ \big( m_\sigma^2 \sigma_{\mathrm{sc}} \big) ,
+\nonumber\\
+R_2 &= \Big[ m_\omega^2 \omega + c_3 \omega^3
+        + \tfrac{\partial A}{\partial \omega}\rho^2
+        - (\hbar c)^3 S_\omega \Big] \big/ \big( m_\omega^2 \sigma_{\mathrm{sc}} \big) ,
+\nonumber\\
+R_3 &= \Big[ m_\rho^2 \rho + c_4 \rho^3 + 2 A \rho
+        - (\hbar c)^3 S_\rho \Big] \big/ \big( m_\rho^2 \sigma_{\mathrm{sc}} \big) ,
+\nonumber\\
+R_4 &= \Big[ m_\phi^2 \phi - (\hbar c)^3 S_\phi \Big]
+        \big/ \big( m_\phi^2 \sigma_{\mathrm{sc}} \big) ,
+\label{eq:residual}\\
+R_5 &= \sum_i B_i n_i - \nB^{\mathrm{target}} ,
+\nonumber\\
+R_6 &= \begin{cases}
+  \sum_i C_i n_i + n_C^{\mathrm{mes}} - n_e & \text{$C$ equilibrated} \\
+  \sum_i C_i n_i + n_C^{\mathrm{mes}} - Y_C\, \nB & \text{$Y_C$ imposed}
+\end{cases}
+\nonumber\\
+R_7 &= \sum_i S_i n_i + n_S^{\mathrm{mes}} - Y_S\, \nB
+       \qquad \text{(iff $Y_S$ imposed)},
+\nonumber\\
+R_8 &= \big( n_e + n_{\nu_e} \big) / \nB - Y_{L_e}
+       \qquad \text{(iff the electron family is trapped)},
+\nonumber\\
+R_9 &= s_{\mathrm{tot}} / \nB - (S/A)
+       \qquad \text{(iff an entropy per baryon replaces $T$)}.
+\nonumber
+\end{align}
+%
+The sources $S_M$ are Eq.~\eqref{eq:sources}, the gas charges
+Eq.~\eqref{eq:gascharges}, and $\sigma_{\mathrm{sc}} = 30$~MeV is a typical scalar field
+at saturation, so that the four field rows are dimensionless and of order
+unity rather than of order $m_M^2 \sigma \sim 10^7$~MeV$^3$ --- without that
+scaling they would dominate the residual norm and the charge rows would never
+be converged. Rows $R_1$--$R_6$ are always present; the last three appear with
+their conditions. Per mode:
 %
 \begin{center}
 \begin{tabular}{llll}

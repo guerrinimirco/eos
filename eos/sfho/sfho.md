@@ -43,23 +43,93 @@ y = 1.5 (Lambda, Sigma) and 1.875 (Xi) of Fortin, Oertel & Providência, PASA
 35 (2018) e044; scalar ratios either the published SFHoY values or inverted
 from the potentials U_Lambda = -30, U_Sigma = +30, U_Xi = -14 MeV in saturated
 symmetric matter. Deltas: universal vector coupling by default, or
-x_Delta_sigma from U_Delta. Thermal pi/K/eta as Bose gases whose effective
-potentials are shifted by the same vector mean fields (Lavagno 2010); the gas
-contributes charge and strangeness to the equilibrium constraints, no baryon
-number, and no field sources. Bose condensation is REFUSED, not approximated:
-every entry point reports `condensation = max_j |mu*_j|/m_j` and a state at or
-past 1 comes back with `converged = False`.
+x_Delta_sigma from U_Delta. The thermal pseudoscalar nonet (pi, K, eta, eta')
+enters as Bose gases whose effective potentials are shifted by the same vector
+mean fields (Lavagno 2010); the gas contributes charge and strangeness to the
+equilibrium constraints, no baryon number, and no field sources. Bose
+condensation is REFUSED, not approximated: every entry point reports
+`condensation = max_j |mu*_j|/m_j` and a state at or past 1 comes back with
+`converged = False`.
+
+**Field equations.** Solved for (sigma, omega, rho, phi) together with the
+potentials — three of the four are nonlinear in the fields, so none can be
+eliminated algebraically the way DD2's can:
+
+    m_sigma^2 sigma + g2 sigma^2 + g3 sigma^3 - (dA/dsigma) rho^2 = hc^3 S_sigma
+    m_omega^2 omega + c3 omega^3     + (dA/domega) rho^2          = hc^3 S_omega
+    m_rho^2   rho   + c4 rho^3       + 2 A rho                    = hc^3 S_rho
+    m_phi^2   phi                                                 = hc^3 S_phi
+
+    S_sigma = sum_i g_sigma_i ns_i     S_omega = sum_i g_omega_i n_i
+    S_rho   = sum_i g_rho_i I3_i n_i   S_phi   = sum_i g_phi_i n_i
+
+with `m*_i = m_i - g_sigma_i sigma` and
+`mu_eff_i = mu_i - g_omega_i omega - g_rho_i I3_i rho - g_phi_i phi`.
+
+**One species as an ideal gas.** Each baryon is a Fermi gas of mass `m*_i` at
+`mu_eff_i`, degeneracy g_i (2 for the octet, 4 for the Delta), antiparticles
+included. With `E = sqrt(k^2 + m*_i^2)` and
+`f± = 1/(1 + exp((E ∓ mu_eff_i)/T))`:
+
+    n_i   = g_i/(2 pi^2 hc^3) ∫dk k^2       (f+ - f-)
+    eps_i = g_i/(2 pi^2 hc^3) ∫dk k^2 E     (f+ + f-)
+    P_i   = g_i/(6 pi^2 hc^3) ∫dk k^4 / E   (f+ + f-)
+
+The other two are NOT integrated — they come from the trace of the
+energy-momentum tensor and the one-species Euler relation:
+
+    ns_i = (eps_i - 3 P_i) / m*_i          s_i = (eps_i + P_i - mu_eff_i n_i)/T
+
+which matters: an error in eps_i or P_i propagates into ns_i, and ns_i sources
+the sigma field, so it does not stay confined to the totals. At T = 0, with
+`kF = sqrt(mu_eff^2 - m*^2)` and `L = ln((kF + |mu_eff|)/m*)`, everything is
+elementary (n ∝ kF^3, s = 0); the closed forms are in `sfho.tex` Eq. (T0). At
+T > 0 the integrals are the Johns-Ellis-Lattimer approximants from
+`eos/general/fermi_integrals` (~1e-4 accurate), with a Gauss-Laguerre
+quadrature there as the accuracy reference.
+
+The thermal mesons are the same expressions with Bose statistics,
+`b± = 1/(exp((E ∓ mu*_j)/T) - 1)`, g_j = 1, at their PHYSICAL masses — pi±
+139.570, pi0 134.977, K± 493.677, K0/K0bar 497.611, eta 547.862, eta' 957.780
+MeV — from `eos/general/bose_integrals`. Nine species: the charged and neutral
+partners are kept apart rather than averaged, since they carry different
+charges and averaging would misplace n_C_mes as well as the population.
+
+**The totals.**
+
+    eps = sum_i eps_i + eps_mf + eps_mes        (+ leptons, photons)
+    P   = sum_i P_i   + P_mf   + P_mes          (+ leptons, photons)
+    s   = sum_i s_i             + s_mes         (+ leptons, photons)
+    n_B = sum_i B_i n_i     n_C = sum_i C_i n_i + n_C_mes
+                            n_S = sum_i S_i n_i + n_S_mes
+
+with P_mf, eps_mf the mean-field terms above. Photons:
+`P = pi^2 T^4/(45 hc^3)`, `eps = 3P`, `s = 4 pi^2 T^3/(45 hc^3)`. The Euler sum
+reported with the state takes baryons at their FULL potentials and the meson
+gas at its EFFECTIVE ones:
+`sum_i mu_i n_i + sum_j mu*_j n_j + mu_e n_e + mu_nue n_nue`.
 
 **Solving.** One residual system for all modes over
 `x = [sigma, omega, rho, phi, mu_B, mu_C, (mu_S), (mu_nue), (T)]`; species
-potentials follow `mu_i = B_i mu_B + C_i mu_C + S_i mu_S`. All four fields are
-always unknowns — a mean field does not know what is being held fixed — and
-mu_C is an unknown in every mode; the mode changes only the row that closes
-it. Modes: `beta_eq_neutrinoless`, `beta_eq_neutrino_trapped` (electron family
-trapped), `fixed_YC` (leptons on/off), `fixed_YC_YS`. A temperature axis may
-be replaced by entropy per baryon, with T joining the unknown vector and
-`s/n_B = S/A` joining the rows. Non-convergence is a return value at every
-layer, never an exception.
+potentials follow `mu_i = B_i mu_B + C_i mu_C + S_i mu_S`. The rows, in the
+order they are assembled:
+
+    R1..R4  the four field equations, each divided by m_M^2 x 30 MeV so the
+            row is dimensionless and O(1) rather than O(1e7) MeV^3 — without
+            that scaling they dominate the norm and the charge rows never
+            converge
+    R5      sum_i B_i n_i - n_B                                    always
+    R6      n_C - n_e   (C equilibrated)  |  n_C - Y_C n_B  (Y_C imposed)
+    R7      n_S - Y_S n_B                                iff Y_S imposed
+    R8      (n_e + n_nue)/n_B - Y_Le      iff the electron family is trapped
+    R9      s/n_B - S/A                   iff an entropy per baryon replaces T
+
+All four fields are always unknowns — a mean field does not know what is being
+held fixed — and mu_C is an unknown in every mode; the mode changes only the
+row that closes it. Modes: `beta_eq_neutrinoless`,
+`beta_eq_neutrino_trapped` (electron family trapped), `fixed_YC` (leptons
+on/off), `fixed_YC_YS`. Non-convergence is a return value at every layer,
+never an exception.
 
 The muon lepton family is not tracked at all; requesting it raises.
 

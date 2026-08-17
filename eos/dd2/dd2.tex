@@ -165,11 +165,87 @@ of effective mass and effective chemical potential
 \label{eq:mueff}
 \end{equation}
 %
-At $T=0$ the gas integrals are closed forms; at $T>0$ they are evaluated with
-the Johns--Ellis--Lattimer approximants~\cite{JohnsEllisLattimer1996} from
-\texttt{eos/general/fermi\_integrals} (the single home of all Fermi and Bose
-integrals in this repository). In code, $\mueff{i}$ and $\meff{i}$ are named
-\texttt{mu\_eff\_i} and \texttt{m\_eff\_i}.
+In code, $\mueff{i}$ and $\meff{i}$ are named \texttt{mu\_eff\_i} and
+\texttt{m\_eff\_i}.
+
+\subsection{One species as an ideal gas}
+\label{sec:kinetic}
+
+Every baryon enters as an ideal Fermi gas of mass $\meff{i}$ at potential
+$\mueff{i}$, with degeneracy $g_i$ ($2$ for the octet, $4$ for the $\Delta$)
+and antiparticles included. With $E = \sqrt{k^2 + \meff{i}{}^2}$ and
+$f_\pm = \big[ 1 + e^{(E \mp \mueff{i})/T} \big]^{-1}$,
+%
+\begin{align}
+n_i &= \frac{g_i}{2\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\; k^2
+       \big( f_+ - f_- \big) ,
+\qquad
+\varepsilon^{\mathrm{kin}}_i = \frac{g_i}{2\pi^2 (\hbar c)^3}
+       \int_0^\infty \!\! dk\; k^2 E \big( f_+ + f_- \big) ,
+\nonumber\\
+P^{\mathrm{kin}}_i &= \frac{g_i}{6\pi^2 (\hbar c)^3} \int_0^\infty \!\! dk\;
+       \frac{k^4}{E} \big( f_+ + f_- \big) .
+\label{eq:kin}
+\end{align}
+%
+The scalar density and the entropy density are \emph{not} integrated. They
+follow from the trace of the energy--momentum tensor and from the Euler
+relation for a single species,
+%
+\begin{equation}
+n^s_i = \frac{\varepsilon^{\mathrm{kin}}_i - 3 P^{\mathrm{kin}}_i}{\meff{i}} ,
+\qquad
+s_i = \frac{\varepsilon^{\mathrm{kin}}_i + P^{\mathrm{kin}}_i
+            - \mueff{i}\, n_i}{T} ,
+\label{eq:nsandS}
+\end{equation}
+%
+which is how the code obtains them, and is worth stating because it means an
+error in $\varepsilon^{\mathrm{kin}}_i$ or $P^{\mathrm{kin}}_i$ propagates
+into $n^s_i$ --- and $n^s_i$ sources the $\sigma$ field, so such an error does
+not stay confined to the totals.
+
+At $T = 0$ the integrals are elementary. With
+$k_F = \sqrt{\mueff{i}{}^2 - \meff{i}{}^2}$ (everything vanishing when
+$|\mueff{i}| \le \meff{i}$) and $L = \ln\big[(k_F + |\mueff{i}|)/\meff{i}\big]$,
+%
+\begin{align}
+n_i &= \mathrm{sgn}(\mueff{i})\, \frac{g_i\, k_F^3}{6\pi^2 (\hbar c)^3} ,
+\qquad
+n^s_i = \frac{g_i\, \meff{i}}{4\pi^2 (\hbar c)^3}
+        \Big( k_F |\mueff{i}| - \meff{i}{}^2 L \Big) ,
+\nonumber\\
+P^{\mathrm{kin}}_i &= \frac{g_i}{48\pi^2 (\hbar c)^3}
+       \Big[ \big( 2k_F^3 - 3\meff{i}{}^2 k_F \big) |\mueff{i}|
+             + 3 \meff{i}{}^4 L \Big] ,
+\label{eq:T0}\\
+\varepsilon^{\mathrm{kin}}_i &= \frac{g_i}{16\pi^2 (\hbar c)^3}
+       \Big[ \big( 2k_F^3 + \meff{i}{}^2 k_F \big) |\mueff{i}|
+             - \meff{i}{}^4 L \Big] ,
+\qquad s_i = 0 .
+\nonumber
+\end{align}
+%
+At $T>0$ Eq.~\eqref{eq:kin} is evaluated with the Johns--Ellis--Lattimer
+rational approximants~\cite{JohnsEllisLattimer1996}, accurate to
+$\sim 10^{-4}$, from \texttt{eos/general/fermi\_integrals} --- the single home
+of all Fermi and Bose integrals in this repository, so that no model carries
+its own. A Gauss--Laguerre quadrature of the same integrals is available there
+as the accuracy reference. The $T = 0$ branch is additionally Numba-compiled
+(\S\,\ref{sec:numerics}).
+
+The conserved-charge densities assembled from these are
+%
+\begin{equation}
+\nB = \sum_i B_i n_i , \qquad
+n_C = \sum_i Q_i n_i + n_C^{\mathrm{mes}} , \qquad
+n_S = \sum_i S_i n_i + n_S^{\mathrm{mes}} ,
+\label{eq:charges}
+\end{equation}
+%
+the meson terms being those of Sec.~\ref{sec:gas}. Note that $n_C$ and $n_S$
+are the TOTALS, gas included: that is what the neutrality and fixed-fraction
+conditions below are stated in terms of.
 
 The density dependence of the couplings produces the rearrangement
 self-energy, identical for all baryons because the couplings depend on the
@@ -199,15 +275,46 @@ density --- this is what makes the model thermodynamically consistent:
 P &= \sum_i P^{\mathrm{kin}}_i
   + \tfrac12 \big( -m_\sigma^2 \sigma^2 + m_\omega^2 \omega_0^2
                  + m_\rho^2 \rho_0^2 + m_\phi^2 \phi_0^2 \big)
-  + \nB\, \SigR + P_{\mathrm{lep}} + P_\gamma + P_{\mathrm{mes}} .
-\label{eq:P}
+  + \nB\, \SigR + P_{\mathrm{lep}} + P_\gamma + P_{\mathrm{mes}} ,
+\label{eq:P}\\
+s &= \sum_i s_i + s_{\mathrm{lep}} + s_\gamma + s_{\mathrm{mes}} .
+\label{eq:s}
 \end{align}
+%
+The mean fields carry no entropy, so $s$ has no field term --- the asymmetry
+between Eqs.~\eqref{eq:eps} and \eqref{eq:P} is entirely the sign of the
+$\sigma$ mass term and the rearrangement term $\nB \SigR$, and those are the
+two places a mean-field model is most easily got wrong. Leptons and photons
+are added by the solver rather than by the matter block, because they are
+shared by the whole system rather than belonging to a phase: electrons and
+muons through Eqs.~\eqref{eq:kin}--\eqref{eq:T0} at their own masses with
+$g = 2$, trapped electron neutrinos likewise at $m = 0$, $g = 1$, and photons
+as
+%
+\begin{equation}
+P_\gamma = \frac{\pi^2 T^4}{45 (\hbar c)^3}, \qquad
+\varepsilon_\gamma = 3 P_\gamma, \qquad
+s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} .
+\label{eq:photons}
+\end{equation}
 %
 Every assembled state is checked against the Hugenholtz--Van Hove
 identity~\cite{HugenholtzVanHove1958}
-$\varepsilon + P - T s = \sum_i \mu_i n_i$ (sum over every species present,
-including leptons and thermal mesons) to a relative $10^{-8}$; a violation
-raises rather than returning a state.
+$\varepsilon + P - T s = \sum_i \mu_i n_i$ to a relative $10^{-8}$; a
+violation raises rather than returning a state. The sum runs over every
+species present, with the baryons and leptons at their FULL potentials and the
+thermal meson gas at its EFFECTIVE ones,
+%
+\begin{equation}
+\sum_i \mu_i n_i
+  = \sum_i \big( B_i \muB + Q_i \muC + S_i \muS \big) n_i
+  + \sum_j \mu^{*}_j n_j
+  + \mu_e n_e + \mu_\mu n_\mu + \munue n_{\nu_e} ,
+\label{eq:eulersum}
+\end{equation}
+%
+because the vector shifts the gas carries are sourced by the baryons alone and
+so have no partner in the field energy to cancel against.
 
 The nucleon-mass convention of the uniform-matter kernel is selectable: the
 default (\texttt{"average"}) gives both nucleons the mass
@@ -236,6 +343,7 @@ $\mu_e = \munue - \muC$, $\mu_{\nu_e} = \munue$; the muon family remains
 transparent ($\mu_\mu = -\muC$, no $\nu_\mu$ tracked).
 
 \section{The thermal meson gas}
+\label{sec:gas}
 
 At $T>0$ the pseudoscalar nonet ($\pi$, $K$, $\eta$, $\eta'$) and optionally
 the vector nonet ($\rho$, $\omega$, $K^*$, $\phi$) ride on the mean field as
@@ -286,9 +394,45 @@ iteration --- $\muB = \tilde\mu_B + \SigR$ is restored at assembly --- and
 makes warm-started density sweeps well conditioned, because the effective
 potentials vary smoothly along $\nB$ where the full potentials jump.
 
-The first $3$--$4$ residuals are the field equations
-\eqref{eq:fieldeqs} (scaled by $m_N$); then $\sum_i n_i/\nB - 1$ (baryon
-number; thermal mesons carry none); then per mode:
+The residual is assembled in this order, and these are all of its rows. The
+mean fields are eliminated against their own sources, so a field row is
+$\text{field} - \text{source}/m_M^2$ rather than the raw field equation, and
+every row is divided by $m_N$ or by $\nB$ so that all of them are
+dimensionless and of order unity:
+%
+\begin{align}
+R_1 &= \Big[ \sigma - \textstyle\sum_i \Gamma_{\sigma i} n^s_i \big/ m_\sigma^2
+        \Big] \big/ m_N ,
+\qquad
+R_2 = \Big[ \omega_0 - \textstyle\sum_i \Gamma_{\omega i} n_i \big/ m_\omega^2
+        \Big] \big/ m_N ,
+\nonumber\\
+R_3 &= \Big[ \rho_0 - \textstyle\sum_i \Gamma_{\rho i} t_{3i} n_i
+        \big/ m_\rho^2 \Big] \big/ m_N ,
+\qquad
+R_4 = \Big[ \phi_0 - \textstyle\sum_i \Gamma_{\phi i} n_i \big/ m_\phi^2
+        \Big] \big/ m_N
+\;\;\text{(iff $\phi_0$ active)} ,
+\nonumber\\
+R_5 &= \Big[ \textstyle\sum_i B_i n_i - \nB \Big] \big/ \nB ,
+\label{eq:residual}\\
+R_6 &= \Big[ n_C - n_e - n_\mu \Big] \big/ \nB
+        \quad\text{($C$ equilibrated)} ,
+\qquad
+R_6 = \Big[ n_C - Y_C \nB \Big] \big/ \nB
+        \quad\text{($Y_C$ imposed)} ,
+\nonumber\\
+R_7 &= \Big[ n_S - Y_S \nB \Big] \big/ \nB
+        \qquad \text{(iff $Y_S$ imposed)} ,
+\nonumber\\
+R_8 &= \Big[ n_e + n_{\nu_e} - Y_{L_e} \nB \Big] \big/ \nB
+        \qquad \text{(iff the electron family is trapped)} .
+\nonumber
+\end{align}
+%
+$n_C$ and $n_S$ are Eq.~\eqref{eq:charges}'s totals, thermal meson gas
+included; the gas carries no baryon number, so it is absent from $R_5$. Per
+mode:
 %
 \begin{center}
 \begin{tabular}{llll}
@@ -366,6 +510,7 @@ jittered seeds (deterministically) before declaring a target unrepresentable,
 and no feasibility boundary may be inferred from a scan run without restarts.
 
 \section{Numerical implementation}
+\label{sec:numerics}
 
 Two backends solve the same residual: the reference path (NumPy/SciPy,
 finite-difference Jacobian) and the fast path (hand-derived analytic
