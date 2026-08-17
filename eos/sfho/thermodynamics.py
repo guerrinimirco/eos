@@ -111,6 +111,11 @@ class MesonThermoResult:
         P_mesons: Total meson pressure (MeV/fm³)
         e_mesons: Total meson energy density (MeV/fm³)
         s_mesons: Total meson entropy density (fm⁻³)
+        mu_dot_n_mesons: Σ_i μ*_i n_i over the gas (MeV/fm³), at the EFFECTIVE
+            potentials above. The vector fields shift each μ* but are sourced
+            by the baryons alone, so this is the combination the Euler identity
+            of the whole system closes on; `eos.dd2.thermodynamics.assemble`
+            adds the gas the same way.
         densities: Dictionary of individual meson densities
     """
     n_C_mesons: float  # Meson charge density
@@ -118,6 +123,7 @@ class MesonThermoResult:
     P_mesons: float    # Meson pressure
     e_mesons: float    # Meson energy density
     s_mesons: float    # Meson entropy density
+    mu_dot_n_mesons: float       # Σ_i μ*_i n_i over the gas
     densities: Dict[str, float]  # Individual meson densities
 
 
@@ -488,12 +494,17 @@ def thermal_meson_thermo(
     P_tot = 0.0
     e_tot = 0.0
     s_tot = 0.0
+    # Σ_i μ*_i n_i. Only the charged and strange members contribute: π⁰, η and
+    # η' sit at μ* = 0 exactly, which is why an energy-density term dropped for
+    # one of them shows up in the Euler identity and nowhere else.
+    mu_dot_n = 0.0
     densities = {}
-    
+
     if T <= 0:
         return MesonThermoResult(
             n_C_mesons=0.0, n_S_mesons=0.0,
             P_mesons=0.0, e_mesons=0.0, s_mesons=0.0,
+            mu_dot_n_mesons=0.0,
             densities={}
         )
     
@@ -515,6 +526,7 @@ def thermal_meson_thermo(
             n_pip, P_pip, e_pip, s_pip, _ = solve_bose_jel(mu_pip_eff, T, m_pi, g=1.0, include_antiparticles=False)
             densities['pi+'] = n_pip
             n_C_tot += n_pip  # Q = +1
+            mu_dot_n += mu_pip_eff * n_pip
             P_tot += P_pip
             e_tot += e_pip
             s_tot += s_pip
@@ -527,6 +539,7 @@ def thermal_meson_thermo(
             n_pim, P_pim, e_pim, s_pim, _ = solve_bose_jel(mu_pim_eff, T, m_pi, g=1.0, include_antiparticles=False)
             densities['pi-'] = n_pim
             n_C_tot -= n_pim  # Q = -1
+            mu_dot_n += mu_pim_eff * n_pim
             P_tot += P_pim
             e_tot += e_pim
             s_tot += s_pim
@@ -553,6 +566,7 @@ def thermal_meson_thermo(
             densities['K+'] = n_kp
             n_C_tot += n_kp      # Q = +1
             n_S_tot -= n_kp      # S = -1
+            mu_dot_n += mu_kp_eff * n_kp
             P_tot += P_kp
             e_tot += e_kp
             s_tot += s_kp
@@ -565,6 +579,7 @@ def thermal_meson_thermo(
             n_k0, P_k0, e_k0, s_k0, _ = solve_bose_jel(mu_k0_eff, T, m_k_0, g=1.0, include_antiparticles=False)
             densities['K0'] = n_k0
             n_S_tot -= n_k0      # S = -1
+            mu_dot_n += mu_k0_eff * n_k0
             P_tot += P_k0
             e_tot += e_k0
             s_tot += s_k0
@@ -578,6 +593,7 @@ def thermal_meson_thermo(
             densities['K-'] = n_km
             n_C_tot -= n_km      # Q = -1
             n_S_tot += n_km      # S = +1
+            mu_dot_n += mu_km_eff * n_km
             P_tot += P_km
             e_tot += e_km
             s_tot += s_km
@@ -590,6 +606,7 @@ def thermal_meson_thermo(
             n_k0bar, P_k0bar, e_k0bar, s_k0bar, _ = solve_bose_jel(mu_k0bar_eff, T, m_k_0, g=1.0, include_antiparticles=False)
             densities['K0_bar'] = n_k0bar
             n_S_tot += n_k0bar   # S = +1
+            mu_dot_n += mu_k0bar_eff * n_k0bar
             P_tot += P_k0bar
             e_tot += e_k0bar
             s_tot += s_k0bar
@@ -603,7 +620,7 @@ def thermal_meson_thermo(
         n_eta, P_eta, e_eta, s_eta, _ = solve_bose_jel(0.0, T, m_eta, g=1.0, include_antiparticles=False)
         densities['eta'] = n_eta
         P_tot += P_eta
-        e_tot 
+        e_tot += e_eta
         s_tot += s_eta
         
         # η'
@@ -620,6 +637,7 @@ def thermal_meson_thermo(
         P_mesons=P_tot,
         e_mesons=e_tot,
         s_mesons=s_tot,
+        mu_dot_n_mesons=mu_dot_n,
         densities=densities
     )
 

@@ -357,10 +357,6 @@ both touch the same code.
   other models reach the spec API, so it lands as one rename, not five.
 
 ### sfho
-- Eta-meson energy density is dropped when `include_pseudoscalar_mesons=True`
-  at T > 0 (`thermodynamics.py`, in the total-energy accumulation).
-  Known, deliberate to fix later: the fix changes numbers, so it is made in
-  its own commit against a regenerated baseline with the delta quoted.
 - The muon lepton family is not wired: it appears in no residual, no
   neutrality row and no total. `include_muons=True` now raises (CLAUDE.md §4)
   where it used to be accepted and ignored.

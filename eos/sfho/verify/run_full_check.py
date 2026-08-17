@@ -24,6 +24,12 @@ solver converged perfectly on an eps that was wrong by up to 1.8 percent in
 asymmetric matter, which put E_sym at 18.7 MeV instead of 31.6 and made L
 negative. The Euler identity localises exactly that class of error, and it is
 cheap.
+
+It caught nothing twice, though, for the sibling error in the thermal meson
+gas: the eta's energy density was dropped from the same accumulation. The
+check ran with the gas OFF, and the eta is 548 MeV, so it needs T near 50 MeV
+before there is an eta to miss. Both are covered now — the gas enters at its
+effective potentials, and the meson cases sit at T = 50.
 """
 from dataclasses import dataclass, field
 import os
@@ -37,10 +43,12 @@ from eos.sfho.solver import (
     solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
     solve_beta_eq_neutrino_trapped, solve_isentropic_beta_eq,
 )
+from eos.sfho.thermodynamics import thermal_meson_thermo
 
 NUCLEONS = SpeciesFlags()
 NUCLEONS_NOGAMMA = SpeciesFlags(photons=False)
 WITH_HYPERONS = SpeciesFlags(hyperons=True)
+WITH_MESONS = SpeciesFlags(thermal_mesons=True)
 
 #: Steiner, Hempel & Fischer, ApJ 774 (2013) 17, as tabulated by Fortin,
 #: Oertel & Providencia, PASA 35 (2018) e044, Table 2.
@@ -77,13 +85,18 @@ class FullCheckReport:
 # =============================================================================
 # 1. EULER / HUGENHOLTZ-VAN HOVE
 # =============================================================================
-def euler_residual(result, flags):
+def euler_residual(par, result, flags):
     """(eps + P - T s - sum_i mu_i n_i) / eps for one solved point.
 
-    The species potentials are rebuilt from the conserved-charge basis,
+    The baryon potentials are rebuilt from the conserved-charge basis,
     mu_i = B_i mu_B + C_i mu_C + S_i mu_S (CLAUDE.md §2), and the leptons are
     added at their own potentials. Photons need no term: they carry mu = 0 and
     satisfy eps + P = T s on their own.
+
+    The thermal meson gas enters at its EFFECTIVE potentials — mu*_i, carrying
+    the omega and rho shifts — because those fields are sourced by the baryons
+    alone, so the shift has no partner in the field energy to cancel against.
+    `eos.dd2.thermodynamics.assemble` sums the gas the same way.
     """
     mu_dot_n = 0.0
     for p in active_baryons(flags):
@@ -92,6 +105,10 @@ def euler_residual(result, flags):
               + p.strangeness * result.mu_S)
         mu_dot_n += mu * n
     mu_dot_n += result.mu_e * result.n_e + result.mu_nue * result.n_nu
+    if flags.thermal_mesons:
+        gas = thermal_meson_thermo(result.T, result.mu_C, result.mu_S,
+                                   result.omega, result.rho, par)
+        mu_dot_n += gas.mu_dot_n_mesons
     if result.e_total == 0.0:
         return 0.0
     return ((result.e_total + result.P_total - result.T * result.s_total
@@ -102,27 +119,33 @@ def _check_euler(nuc, hyp, grid):
     worst, where = 0.0, ""
     for n_B in grid:
         cases = [
-            ("beta T=0", NUCLEONS,
+            ("beta T=0", nuc, NUCLEONS,
              solve_beta_eq_neutrinoless(nuc, n_B, NUCLEONS, T=0.0)),
-            ("beta T=30", NUCLEONS,
+            ("beta T=30", nuc, NUCLEONS,
              solve_beta_eq_neutrinoless(nuc, n_B, NUCLEONS, T=30.0)),
-            ("beta hyperons", WITH_HYPERONS,
+            ("beta hyperons", hyp, WITH_HYPERONS,
              solve_beta_eq_neutrinoless(hyp, n_B, WITH_HYPERONS, T=10.0)),
-            ("fixed Y_C", NUCLEONS,
+            ("fixed Y_C", nuc, NUCLEONS,
              solve_fixed_yc(nuc, n_B, 0.1, NUCLEONS, T=10.0)),
-            ("fixed Y_C leptons", NUCLEONS,
+            ("fixed Y_C leptons", nuc, NUCLEONS,
              solve_fixed_yc(nuc, n_B, 0.1, NUCLEONS, T=10.0, leptons=True)),
-            ("fixed Y_C Y_S", WITH_HYPERONS,
+            ("fixed Y_C Y_S", hyp, WITH_HYPERONS,
              solve_fixed_yc_ys(hyp, n_B, 0.4, 0.1, WITH_HYPERONS, T=10.0)),
-            ("trapped", NUCLEONS,
+            ("trapped", nuc, NUCLEONS,
              solve_beta_eq_neutrino_trapped(nuc, n_B, 0.4, NUCLEONS, T=10.0)),
-            ("isentropic", NUCLEONS,
+            ("isentropic", nuc, NUCLEONS,
              solve_isentropic_beta_eq(nuc, n_B, 1.0, NUCLEONS)),
+            # T = 50 MeV, not 30: the eta is 548 MeV, so below about 40 MeV its
+            # population underflows to zero and a dropped eta term is invisible.
+            ("beta mesons T=50", nuc, WITH_MESONS,
+             solve_beta_eq_neutrinoless(nuc, n_B, WITH_MESONS, T=50.0)),
+            ("fixed Y_C mesons T=50", nuc, WITH_MESONS,
+             solve_fixed_yc(nuc, n_B, 0.1, WITH_MESONS, T=50.0, leptons=True)),
         ]
-        for tag, flags, r in cases:
+        for tag, par, flags, r in cases:
             if not r.converged:
                 continue
-            err = abs(euler_residual(r, flags))
+            err = abs(euler_residual(par, r, flags))
             if err > worst:
                 worst, where = err, f"{tag} at n_B={n_B:g}"
     return CheckResult("Euler / HVH, all modes", worst < 1e-8, worst, where)
