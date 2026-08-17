@@ -19,7 +19,9 @@ Checks:
   6. backend parity — the analytic Jacobian of `backends/` against a central
      difference of the residual, CLAUDE.md §9's gate on the fast flavour;
   7. the susceptibility matrix against the inverse map dmu_a/dn_b, which the
-     fixed-Y_C-Y_S mode supplies without touching the Jacobian.
+     fixed-Y_C-Y_S mode supplies without touching the Jacobian;
+  8. the NMP forward and inverse maps against each other, at targets away
+     from the published set so the seed is not the answer.
 
 Why check 1 earns its place: SFHo shipped for a long time with an energy
 density missing the omega(dA/domega) rho^2 partner of the omega field
@@ -328,6 +330,46 @@ def _check_jacobian(nuc, hyp):
                        f"worst at {where}")
 
 
+def _check_nmp_roundtrip():
+    """compute_nmp(invert_nmp(x)) = x — the forward and inverse maps agree.
+
+    The two directions share the NMP list, its ordering and its stencils, so
+    this is the check that they also share their PHYSICS: the inverse imposes
+    {P(n_sat) = 0, E_sat, m*/m, K_sat} on the isoscalar side and
+    {E_sym, L_sym} on the isovector one, and the forward map recomputes all six
+    from the recovered couplings by a route that knows nothing about how they
+    were found.
+
+    Three targets away from the published set, so the seed is not the answer.
+    Q_sat and K_sym are excluded: this closure predicts them rather than
+    imposing them, and a prediction has nothing to round-trip against.
+    """
+    from eos.sfho.nmp import compute_nmp, invert_nmp
+
+    keys = ("n_sat", "E_sat", "m_eff_ratio", "K_sat", "E_sym", "L_sym")
+    targets = [
+        dict(n_sat=0.160, E_sat=-16.00, m_eff_ratio=0.75, K_sat=240.0,
+             E_sym=32.0, L_sym=60.0),
+        dict(n_sat=0.155, E_sat=-15.80, m_eff_ratio=0.70, K_sat=260.0,
+             E_sym=30.0, L_sym=40.0),
+        dict(n_sat=0.165, E_sat=-16.50, m_eff_ratio=0.80, K_sat=220.0,
+             E_sym=34.0, L_sym=90.0),
+    ]
+    worst, where = 0.0, ""
+    for target in targets:
+        par, status = invert_nmp(**target)
+        if not status.ok:
+            return CheckResult("NMP forward/inverse", False, 1.0,
+                               f"L_sym={target['L_sym']:g}: {status.message}")
+        forward = compute_nmp(par)
+        for key in keys:
+            err = abs(forward[key] - target[key]) / max(abs(target[key]), 1e-3)
+            if err > worst:
+                worst, where = err, f"{key} at L_sym={target['L_sym']:g}"
+    return CheckResult("NMP forward/inverse", worst < 1e-5, worst,
+                       f"worst on {where}")
+
+
 def _check_susceptibilities(hyp, n_B=0.8, T=10.0, rel=1e-4):
     """chi_ab = dn_a/dmu_b against the inverse map, dmu_a/dn_b.
 
@@ -391,6 +433,7 @@ def run_full_check(par=None, hyp=None, grid=None):
     report.results.append(_check_compose(par))
     report.results.append(_check_jacobian(par, hyp))
     report.results.append(_check_susceptibilities(hyp))
+    report.results.append(_check_nmp_roundtrip())
     return report
 
 

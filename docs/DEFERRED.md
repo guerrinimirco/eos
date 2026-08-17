@@ -495,37 +495,40 @@ belongs in the mixed session.
 - The muon lepton family is not wired: it appears in no residual, no
   neutrality row and no total. `include_muons=True` now raises (CLAUDE.md §4)
   where it used to be accepted and ignored.
-- No `invert_nmp` / `from_nmp`. The forward map is done — `compute_nmp` returns
-  dd2's key set and reproduces every published SFHo value — but the inverse is
-  not written, and it needs a CLOSURE decided before it can be.
+- The NMP inversion is written, closed as {g_sigma_N, g_omega_N, g2, g3}
+  against {n_sat, E_sat, K_sat, m*/m} in the isoscalar sector and
+  **(g_rho_N, b1)** against {E_sym, L_sym} in the isovector one. What remains
+  open is smaller and is recorded here rather than in the module, which states
+  the closure it uses and why.
 
-  The isoscalar sector is well posed and classical: four conditions
-  {n_sat, E_sat, K_sat, m*/m} against four unknowns {g_sigma_N, g_omega_N, g2,
-  g3}, with m_sigma, m_omega and the omega self-coupling c3 held at their
-  published values. That is the Boguta-Bodmer inversion every nonlinear RMF
-  fit uses.
+  Q_sat and K_sym are PREDICTIONS, as in dd2. Unlike dd2 there is no option to
+  impose Q_sat instead: doing so would need a fifth isoscalar knob, and the
+  natural candidate is c3, which is currently held at its published value
+  because it is a high-density vector parameter that saturation says little
+  about. Worth adding if a target set ever carries Q_sat.
 
-  The isovector sector is NOT. Two conditions {E_sym, L_sym} face ten
-  parameters: g_rho_N plus the nine shape coefficients of
+  The hyperon and Delta sectors are NOT refitted by the inversion. Their
+  couplings are stored as absolute values derived from ratios against the
+  NUCLEON couplings, which the inversion has just changed, so a parameter set
+  inverted from a base carrying hyperons keeps hyperon couplings that no
+  longer correspond to the potential depths they were built from.
+  `create_custom_parametrization` has to be re-run on the result to hold
+  U_Lambda, U_Sigma, U_Xi. The docstring says so; folding it in automatically
+  would mean deciding whether the depths or the ratios are the thing held,
+  and that is the caller's physics.
 
-      A(sigma, omega) = g_rho_N^2 [ sum_i a_i sigma^i + sum_j b_j omega^2j ]
-
-  which SFHo carries as six a_i and three b_j. Exactly two must be freed and
-  the rest pinned, and the choice is physics rather than bookkeeping, because
-  it decides how E_sym behaves ABOVE saturation where no NMP constrains it:
-
-      (g_rho_N, a1)   a1 = -38.1 dominates the sigma dependence, so it is what
-                      moves L_sym most directly
-      (g_rho_N, b1)   b1 = 5.51 dominates the omega dependence
-      (g_rho_N, s)    s an overall scale on f, keeping the published SHAPE of
-                      A and deforming it by one number -- the least invasive
-                      of the three, and the only one that cannot distort the
-                      fitted sigma/omega balance
-
-  dd2 faced the same question and answered it differently, because its
-  isovector sector is a single density-dependent Gamma_rho(n) with two shape
-  parameters and no cross coupling at all. So sfho's closure cannot be copied
-  from it and has to be chosen on its own terms.
+  The closure has a second branch, and it is refused rather than returned.
+  E_sym's potential term is n g_rho^2 / [8 (m_rho^2 + 2A)] with A = g_rho^2 f,
+  so it SATURATES at n/(16 f) as g_rho grows: a runaway (g_rho_N, b1) can
+  reproduce a target set exactly. A target at low m*/m and low L_sym
+  (0.60, 20 MeV) has ONLY that root — a 19x23 seed scan finds no other — and
+  it fits every NMP to 1e-9 at 2A/m_rho^2 = +108.9, against +0.37 for
+  published SFHo. `invert_nmp` therefore checks |2A| < m_rho^2 at saturation
+  after converging and reports ok=False when the fit lands there. Every
+  accepted fit from L_sym = 40 to 140 sits inside [-0.40, +0.69]. The limit is
+  the assumption the model form is written under — A is a correction to the
+  rho mass term, not a replacement for it — but it is a single number, and
+  where exactly the physical branch ends has not been mapped.
 - The mean fields are `sigma, omega, rho, phi` here and `sigma, omega0, rho0,
   phi0` in dd2, in `EoSPoint` and in `PhaseThermo.fields` alike. One name per
   job (section 13), so one of the two spellings has to go; sfho's is also the

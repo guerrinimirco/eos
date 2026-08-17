@@ -161,6 +161,7 @@ universal vector coupling ($g_{\Delta i} = g_{Ni}$), or $g_{\sigma\Delta}$ is
 fixed by the same inversion from a chosen $U_\Delta$.
 
 \section{Mean fields and thermodynamics}
+\label{sec:fields}
 
 In static uniform matter the meson field equations follow from
 Eq.~\eqref{eq:lagrangian}. They are no longer algebraic in the sources, as
@@ -392,15 +393,56 @@ $E/A$ in the isospin asymmetry, and requires the two to agree: the closed form
 is a $\rho$-field response and the curvature is a property of $\varepsilon$,
 so an error in the energy density moves one and not the other.
 
-The inverse map is not yet written. Its isoscalar half is the classical
-Boguta--Bodmer inversion, $\{\nsat, E_{\mathrm{sat}}, K_{\mathrm{sat}},
-m^*/m\}$ against $\{g_{\sigma N}, g_{\omega N}, g_2, g_3\}$ at fixed
-$m_\sigma$, $m_\omega$, $c_3$. Its isovector half is not well posed as stated:
-two conditions $\{E_{\mathrm{sym}}, L_{\mathrm{sym}}\}$ face $g_{\rho N}$ plus
-the nine shape coefficients of Eq.~\eqref{eq:Afunction}, so a closure --- which
-two of the ten are freed --- has to be chosen, and that choice is physics
-rather than bookkeeping, because it decides how $E_{\mathrm{sym}}$ behaves
-above saturation where no nuclear-matter parameter constrains it.
+The inverse map is triangular, and that is a property of the model rather than
+a solver tactic: in symmetric matter $\rho$ and $A(\sigma,\omega)\rho^2$ drop
+out of every equation of Sec.~\ref{sec:fields}, so the isoscalar sector does
+not see the isovector couplings at all and is solved first.
+
+Its isoscalar half is the classical Boguta--Bodmer
+inversion~\cite{BogutaBodmer1977}: four conditions $\{P(\nsat) = 0,
+E_{\mathrm{sat}}, m^*/m, K_{\mathrm{sat}}\}$ against four unknowns
+$\{g_{\sigma N}, g_{\omega N}, g_2, g_3\}$ at fixed $m_\sigma$, $m_\omega$,
+$c_3$, with no structural closure needed. It is solved in the reduced
+self-couplings the published table states, $g_2 = b\, m_N g_{\sigma N}^3$ and
+$g_3 = c\, g_{\sigma N}^4$, because $b \sim 7\times10^{-3}$ and
+$c \sim -4\times10^{-3}$ sit beside couplings of order ten where $g_2$ and
+$g_3$ span $3\times10^3$~MeV and $-12$.
+
+Its isovector half needs a choice: two conditions $\{E_{\mathrm{sym}},
+L_{\mathrm{sym}}\}$ face $g_{\rho N}$ plus the nine shape coefficients of
+Eq.~\eqref{eq:Afunction}, so exactly two of the ten are freed and the rest
+pinned. That choice is physics rather than bookkeeping, because it decides how
+$E_{\mathrm{sym}}$ behaves above saturation where no nuclear-matter parameter
+constrains it. The closure used is $(g_{\rho N}, b_1)$, for three reasons. It
+is the best conditioned of the candidates --- the $2\times2$ Jacobian in
+logarithmic knobs at the SFHo point has condition number $3.40$, against
+$3.53$ for an overall scale on $f$ and $11.60$ for $a_1$, which moves
+$L_{\mathrm{sym}}$ by less than $2$~MeV per $e$-fold. It has by far the widest
+reach: scanning both knobs at $E_{\mathrm{sym}}$ held near $31.5$~MeV, the
+accessible $L_{\mathrm{sym}}$ spans $[-6, 146]$~MeV, against $[-34, 59]$ for
+the scale and $[27, 69]$ for $a_1$. And $b_1$ IS the Horowitz--Piekarewicz
+$\Lambda_v \omega^2\rho^2$ coupling~\cite{HorowitzPiekarewicz2001}, the
+standard way this family tunes $L_{\mathrm{sym}}$ at fixed
+$E_{\mathrm{sym}}$, so an inverted parameter set stays comparable to published
+ones. Note that the overall scale, which looks least invasive because it
+preserves the \emph{shape} of $A$, is the most invasive to the physics:
+scaling $A$ changes how $2A$ competes with $m_\rho^2$ in
+Eq.~\eqref{eq:esym} as density rises, and at $L_{\mathrm{sym}} = 70$~MeV it
+puts $E_{\mathrm{sym}}(3\nsat)$ at $55.8$~MeV against $52.2$ for $b_1$ and
+$49.6$ for $a_1$.
+
+$Q_{\mathrm{sat}}$ and $K_{\mathrm{sym}}$ are then \emph{predictions} of the
+closure and are reported as such. One caveat belongs in the specification: the
+isovector system has a second branch. The potential term of
+Eq.~\eqref{eq:esym} saturates at $\nB/(16 f)$ as $g_{\rho N}$ grows, because
+$A = g_{\rho N}^2 f$ carries the same coupling in the denominator, so a
+runaway $(g_{\rho N}, b_1)$ can reproduce a target set exactly --- at low
+$m^*/m$ and low $L_{\mathrm{sym}}$ it is the only root there is. The inversion
+therefore checks $|2A| < m_\rho^2$ at saturation after converging, which is
+the assumption the model form is written under, and reports a fit that lands
+outside it as a failure rather than returning it. Published SFHo sits at
+$2A/m_\rho^2 = +0.37$ and every accepted fit from $L_{\mathrm{sym}} = 40$ to
+$140$~MeV inside $[-0.40, +0.69]$.
 
 \section{Numerical implementation}
 

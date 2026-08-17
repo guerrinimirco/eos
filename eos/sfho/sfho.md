@@ -69,10 +69,36 @@ same key set `eos.dd2.compute_nmp` returns. It reproduces the published SFHo
 values (0.158 fm^-3, -16.2, 31.6, 47.1 MeV) to better than 0.3 percent. E_sym
 uses the closed form `k_F^2/(6 E_F*) + n_B g_rho^2 / [8 (m_rho^2 + 2A)]`, and
 the verify suite compares it against the delta^2 curvature of E/A, which is an
-independent route through eps. The INVERSE map is not written: its isoscalar
-half is the classical Boguta-Bodmer inversion, but its isovector half needs a
-closure — two conditions {E_sym, L_sym} face g_rho_N plus nine shape
-coefficients — and that choice decides how E_sym behaves above saturation.
+independent route through eps.
+
+Inverse map: `invert_nmp` / `from_nmp`. The inversion is TRIANGULAR, because in
+symmetric matter the rho field and A rho^2 drop out of every equation and the
+isoscalar sector never sees the isovector couplings. Isoscalar half is the
+classical Boguta-Bodmer inversion, {g_sigma_N, g_omega_N, g2, g3} against
+{P(n_sat) = 0, E_sat, m*/m, K_sat} at fixed m_sigma, m_omega, c3 — four
+against four, no structural closure needed — solved in the reduced (b, c) the
+published table states, since b ~ 7e-3 and c ~ -4e-3 scale far better than
+g2 ~ 3e3 MeV and g3 ~ -12.
+
+Isovector half needs a closure: {E_sym, L_sym} face g_rho_N plus NINE shape
+coefficients of A, so exactly two are freed. The choice is **(g_rho_N, b1)**,
+for three measured reasons: best conditioned of the candidates (2x2 Jacobian
+in log-knobs, cond 3.40 against 3.53 for an overall scale on f and 11.60 for
+a1); widest reach (L_sym from -6 to 146 MeV at E_sym ~ 31.5, against [-34, 59]
+and [27, 69]); and b1 IS the Horowitz-Piekarewicz Lambda_v omega^2 rho^2
+coupling, so an inverted set stays comparable to published ones. Note that an
+overall scale on f, which looks least invasive because it preserves the SHAPE
+of A, is the MOST invasive to the physics: scaling A changes how 2A competes
+with m_rho^2 as density rises, so at L_sym = 70 it puts E_sym(3 n_sat) at 55.8
+MeV against b1's 52.2 and a1's 49.6.
+
+Q_sat and K_sym come back as predictions. Two failure modes are RETURN VALUES,
+not exceptions: an isoscalar or isovector solve that misses its gate, and a
+fit that lands on the runaway cross-coupling branch — E_sym's potential term
+saturates as g_rho grows, so a physically absurd (g_rho_N, b1) can reproduce a
+target exactly, and |2A| < m_rho^2 at saturation is checked afterwards to
+refuse it. Hyperon and Delta couplings are NOT refitted; they ride along from
+the base set and no longer match the potential depths they were built from.
 
 **Backends.** Reference: NumPy/SciPy with MINPACK's own forward-difference
 Jacobian — the correctness oracle, and the default. `backends/jacobian.py`
