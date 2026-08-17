@@ -672,113 +672,6 @@ def get_sfho_general(
     return p
 
 
-def create_custom_parametrization(
-    # Hyperon potential depths (MeV) at saturation
-    U_Lambda_N: float = -30.0,
-    U_Sigma_N: float = +30.0,
-    U_Xi_N: float = -18.0,
-    # Vector coupling enhancement factors (per hyperon family)
-    y_Lambda: float = 1.0,
-    y_Sigma: float = 1.0,
-    y_Xi: float = 1.0,
-    # Delta couplings
-    x_sigma_delta: float = 1.15,
-    x_omega_delta: float = 1.0,
-    x_rho_delta: float = 1.0,
-    # Name
-    name: str = "Custom"
-) -> SFHoParams:
-    """
-    Create custom parametrization from target hyperon potential depths.
-    
-    The scalar coupling R_σH is computed from the target potential depth:
-        U_H = -g_σH × σ + g_ωH × ω  at n_sat, Y_C = 0.5
-        R_σH = (R_ωH × g_ωN × ω - U_H) / (g_σN × σ)
-    
-    Vector couplings follow SU(6) symmetry × y_H enhancement per family:
-        g_ωΛ = g_ωN × (2/3) × y_Lambda
-        g_ωΣ = g_ωN × (2/3) × y_Sigma  
-        g_ωΞ = g_ωN × (1/3) × y_Xi
-    
-    Args:
-        U_Lambda_N: Λ potential at n_sat in SNM (MeV), default -30
-        U_Sigma_N: Σ potential at n_sat in SNM (MeV), default +30
-        U_Xi_N: Ξ potential at n_sat in SNM (MeV), default -18
-        y_Lambda, y_Sigma, y_Xi: Enhancement factors (1.0 = SU(6))
-        x_sigma_delta, x_omega_delta, x_rho_delta: Delta coupling ratios
-        name: Parametrization name
-        
-    Example:
-        params = create_custom_parametrization(
-            U_Lambda_N=-28.0, U_Sigma_N=+30.0, U_Xi_N=-18.0,
-            name="My_Custom"
-        )
-    """
-    p = _get_base_sfho()
-    p.name = name
-    
-    # Saturation fields for SFHo at n_sat = 0.158 fm^-3
-    SIGMA_SAT = 29.697  # MeV
-    OMEGA_SAT = 18.354  # MeV
-    
-    # SU(6) vector ratios with enhancement
-    R_omega_Lambda = (2.0/3.0) * y_Lambda
-    R_omega_Sigma = (2.0/3.0) * y_Sigma
-    R_omega_Xi = (1.0/3.0) * y_Xi
-    
-    R_phi_Lambda = (-SQRT2/3.0) * y_Lambda
-    R_phi_Sigma = (-SQRT2/3.0) * y_Sigma
-    R_phi_Xi = (-2.0*SQRT2/3.0) * y_Xi
-    
-    # Compute R_σ from potential depth
-    def compute_R_sigma(U_H: float, R_omega: float) -> float:
-        return (R_omega * p.g_omega_N * OMEGA_SAT - U_H) / (p.g_sigma_N * SIGMA_SAT)
-    
-    R_sigma_Lambda = compute_R_sigma(U_Lambda_N, R_omega_Lambda)
-    R_sigma_Sigma = compute_R_sigma(U_Sigma_N, R_omega_Sigma)
-    R_sigma_Xi = compute_R_sigma(U_Xi_N, R_omega_Xi)
-    
-    # Lambda
-    p.couplings_map['lambda'] = {
-        'sigma': R_sigma_Lambda * p.g_sigma_N,
-        'omega': R_omega_Lambda * p.g_omega_N,
-        'phi': R_phi_Lambda * p.g_omega_N,
-        'rho': 0.0,
-    }
-    
-    # Sigma
-    sigma_couplings = {
-        'sigma': R_sigma_Sigma * p.g_sigma_N,
-        'omega': R_omega_Sigma * p.g_omega_N,
-        'phi': R_phi_Sigma * p.g_omega_N,
-        'rho': 2.0 * p.g_rho_N,
-    }
-    for s_name in ['sigma+', 'sigma0', 'sigma-']:
-        p.couplings_map[s_name] = sigma_couplings.copy()
-    
-    # Xi
-    xi_couplings = {
-        'sigma': R_sigma_Xi * p.g_sigma_N,
-        'omega': R_omega_Xi * p.g_omega_N,
-        'phi': R_phi_Xi * p.g_omega_N,
-        'rho': 1.0 * p.g_rho_N,
-    }
-    for x_name in ['xi0', 'xi-']:
-        p.couplings_map[x_name] = xi_couplings.copy()
-    
-    # Delta
-    delta_couplings = {
-        'sigma': x_sigma_delta * p.g_sigma_N,
-        'omega': x_omega_delta * p.g_omega_N,
-        'phi': 0.0,
-        'rho': x_rho_delta * p.g_rho_N,
-    }
-    for d_name in ['delta++', 'delta+', 'delta0', 'delta-']:
-        p.couplings_map[d_name] = delta_couplings.copy()
-    
-    return p
-
-
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
@@ -845,16 +738,6 @@ if __name__ == "__main__":
         name="Custom_Test"
     )
     print_params_summary(p_general)
-    
-    # Test custom parametrization
-    print("\n" + "=" * 70)
-    print("Testing create_custom_parametrization:")
-    print("-" * 50)
-    p_custom = create_custom_parametrization(
-        U_Lambda_N=-28.0, U_Sigma_N=+30.0, U_Xi_N=-18.0,
-        name="Custom_From_Potentials"
-    )
-    print_params_summary(p_custom)
     
     # Verify coupling retrieval
     print("\n" + "=" * 70)

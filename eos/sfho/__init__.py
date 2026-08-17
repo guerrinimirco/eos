@@ -31,6 +31,10 @@ from eos.sfho.table import (
     TableSettings, compute_table, save_results, results_to_arrays,
     load_eos_table, build_interpolators, EOSTableData,
 )
+from eos.sfho.nmp import (
+    create_custom_parametrization, compute_saturation_fields,
+    compute_hyperon_potentials,
+)
 from eos.sfho.api import (
     eos_point, eos_table, eos_response, PointResult, RESPONSE_FREEZES,
 )
@@ -45,6 +49,8 @@ __all__ = [
     "MODES", "MODE_FRACTIONS", "hadronic_row", "rows_from_result",
     "TableSettings", "compute_table", "save_results", "results_to_arrays",
     "load_eos_table", "build_interpolators", "EOSTableData",
+    "create_custom_parametrization", "compute_saturation_fields",
+    "compute_hyperon_potentials",
     "eos_point", "eos_table", "eos_response", "PointResult",
     "RESPONSE_FREEZES",
 ]

@@ -345,11 +345,22 @@ def create_custom_parametrization(
 ) -> SFHoParams:
     """
     Create custom parametrization from target hyperon potential depths.
-    
+
     The scalar coupling R_σH is determined from the target potential depth:
         U_H = -g_σH × σ + g_ωH × ω
         R_σH = (R_ωH × y_H × g_ωN × ω - U_H) / (g_σN × σ)
-    
+
+    σ and ω are SOLVED for at saturation, by `compute_saturation_fields`, and
+    that is why this function lives in `nmp.py` rather than in `parameters.py`:
+    it is an inverse map from a physical observable to a coupling, so it needs
+    the solver, and `parameters.py` is the bottom of the import layer and
+    cannot reach it (CLAUDE.md §5). A second copy did live there, with the two
+    fields written in as constants; the constants were mutually inconsistent —
+    no single density reproduces both — and the couplings they produced missed
+    the requested depths by about 3 MeV, so asking for U_Λ = -30 delivered
+    -33.07. Hardcoding them is also wrong in principle for an inference run,
+    where the base couplings vary and the saturation fields move with them.
+
     Vector couplings follow SU(6) symmetry × y_H enhancement factor per family:
         g_ωΛ = g_ωN × (2/3) × y_Lambda
         g_ωΣ = g_ωN × (2/3) × y_Sigma  
