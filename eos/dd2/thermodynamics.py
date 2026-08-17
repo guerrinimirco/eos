@@ -248,7 +248,10 @@ def thermal_meson_thermo(par, n_B, mu_C, mu_S, omega0, rho0, T,
     fm-based units, with the couplings evaluated at this n_B.
     """
     if T <= 0.0 or not (include_pseudoscalars or include_thermal_vectors):
-        return dict(P=0.0, e=0.0, s=0.0, n_C=0.0, n_S=0.0, mu_dot_n=0.0)
+        # Every key the shared gas returns, `condensation` included: a caller
+        # reading one of them must not have to know whether the gas was on.
+        return dict(P=0.0, e=0.0, s=0.0, n_C=0.0, n_S=0.0, mu_dot_n=0.0,
+                    densities={}, condensation=0.0)
     _, Gw, Gr, _, _, _ = par.couplings_at(n_B)
     mu_pi, mu_Kp, mu_K0 = meson_potentials(Gw, Gr, lambda_omega_ratio(par),
                                            mu_C, mu_S, omega0, rho0)
@@ -522,6 +525,7 @@ def assemble(par, ctx, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S):
         mu_dot_n=mu_dot_n,
         Sigma_R=Sig_R,
         extra_charges=(0.0, gas_C / hc3, gas_S / hc3),
+        condensation=gas["condensation"],
     )
 
 

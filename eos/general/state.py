@@ -126,6 +126,15 @@ class PhaseThermo(_PicklableFrozenMaps):
     #: Rearrangement self-energy; enters mu and P, never eps. Zero for a model
     #: whose couplings do not depend on density.
     Sigma_R: float = 0.0                # MeV
+    #: max_j |mu*_j| / m_j over the thermal meson gas; 0 without one. At 1 the
+    #: gas Bose-condenses and the ideal-gas expressions stop describing it, so
+    #: every consumer of this record has to be able to see it: `solve_bose_jel`
+    #: caps mu at m rather than diverging, which means a condensed phase comes
+    #: back looking perfectly converged. Carried on the phase rather than
+    #: recomputed by each consumer because it is a property OF the phase --
+    #: `eos.mixed` reads it across the phase-adapter contract for exactly that
+    #: reason (see docs/DEFERRED.md for what a condensate would need).
+    condensation: float = 0.0
 
     _MAP_FIELDS = ("fields", "densities", "mu_i", "mu_eff_i", "m_eff_i")
 
@@ -167,7 +176,7 @@ class PhaseThermo(_PicklableFrozenMaps):
     @classmethod
     def assemble(cls, T, mu_B, mu_C, mu_S, fields, densities, mu_eff_i,
                  m_eff_i, P, eps, s, mu_dot_n, Sigma_R=0.0,
-                 extra_charges=(0.0, 0.0, 0.0)):
+                 extra_charges=(0.0, 0.0, 0.0), condensation=0.0):
         """Build a state, deriving everything section 2 says is derived.
 
         The caller supplies what only the model knows -- its fields, its
@@ -195,7 +204,8 @@ class PhaseThermo(_PicklableFrozenMaps):
                    densities=densities, mu_i=mu_i, mu_eff_i=mu_eff_i,
                    m_eff_i=m_eff_i, n_B=n_B + extra_B, n_C=n_C + extra_C,
                    n_S=n_S + extra_S,
-                   P=P, eps=eps, s=s, mu_dot_n=mu_dot_n, Sigma_R=Sigma_R)
+                   P=P, eps=eps, s=s, mu_dot_n=mu_dot_n, Sigma_R=Sigma_R,
+                   condensation=condensation)
 
 
 @dataclass(frozen=True)

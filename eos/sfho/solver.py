@@ -69,10 +69,8 @@ from eos.general.modes import (
 )
 from eos.sfho.parameters import SFHoParams
 from eos.sfho.species import SpeciesFlags, active_baryons, check_couplings
-from eos.general import thermal_mesons as _gas
 from eos.sfho.thermodynamics import (
-    baryon_thermo, field_residuals, meson_potentials,
-    thermal_meson_thermo, thermo_from_mu,
+    baryon_thermo, field_residuals, thermal_meson_thermo, thermo_from_mu,
 )
 from eos.general.thermodynamics_leptons import (
     electron_thermo, photon_thermo, neutrino_thermo, electron_thermo_from_density
@@ -657,10 +655,10 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
         Y_C=matter.Y_C, Y_S=matter.Y_S,
         Y_Le=spec.targets["Y_Le"] if spec.is_fixed("L_e") else 0.0,
         P_hadrons=matter.P, P_leptons=P_leptons, P_photons=P_photons,
-        condensation=(_gas.condensation_ratio(
-            *meson_potentials(mu_C, mu_S, omega, rho, par),
-            include_pseudoscalars=True) if sys.thermal_mesons and T > 0.0
-            else 0.0),
+        # Read off the matter block rather than recomputed: `thermo_from_mu`
+        # already evaluated the gas, and one quantity computed twice is one
+        # quantity that can disagree with itself.
+        condensation=matter.condensation,
     )
 
 

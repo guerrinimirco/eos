@@ -42,7 +42,7 @@ seed — in particular re-running a full beta-equilibrium solve just to get a
 starting field configuration — dominates the cost. Both adapters accept an
 `x0`, and `MixedCtx` caches the converged internal state between calls.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Mapping
 
 import numpy as np
@@ -75,6 +75,12 @@ class PhaseThermo:
     mu_B, mu_C, mu_S : conserved-charge potentials [MeV]
     mu_i : {species name -> mu [MeV]}, mu_i = B_i mu_B + C_i mu_C + S_i mu_S
     mu_dot_n : sum_i mu_i n_i [MeV/fm^3], including any thermal meson gas
+    condensation : max_j |mu*_j| / m_j over this phase's thermal meson gas,
+        0 without one. Part of the contract because a phase that has
+        Bose-condensed is OUTSIDE its model, and the mixed residual cannot see
+        that any other way: `solve_bose_jel` caps mu at m rather than
+        diverging, so a condensed phase reports a perfectly converged block.
+        A quark phase has no meson gas and leaves it at 0.
     """
     densities: Mapping[str, float]
     n_B: float
@@ -88,6 +94,7 @@ class PhaseThermo:
     mu_S: float
     mu_i: Mapping[str, float]
     mu_dot_n: float = 0.0
+    condensation: float = 0.0
 
 
 # =============================================================================
@@ -141,10 +148,21 @@ def hadronic_seed(par, flags, T, n_B_guess):
     what makes the mixed solve affordable, and because the seed is identical
     every time, it changes no converged number.
 
+    The thermal meson gas is switched OFF for the seed, and must be. The gas
+    sources none of the four field equations -- it rides on them -- so it
+    changes nothing this function returns except whether it can return at all:
+    `eos.dd2` REFUSES a Bose-condensed gas by raising, and in beta equilibrium
+    the gas is condensed above n_B ~ 0.3 fm^-3 at these temperatures, so a
+    seed built with the flags passed through simply raised. That made the
+    hadronic adapter unusable with the gas on, and it hid the condensation
+    check downstream, which never got the chance to run.
+
     Returns [sigma, omega0, rho0, (phi0), nB_nat]; the density is in natural
     units, the rest in MeV.
     """
-    base = solve_beta_eq_octet(par, n_B_guess, flags, T=T,
+    fields_only = replace(flags, include_pseudoscalars=False,
+                          include_thermal_vectors=False)
+    base = solve_beta_eq_octet(par, n_B_guess, fields_only, T=T,
                                include_photons=False, check_consistency=False)
     x = [base.sigma, base.omega0, base.rho0]
     if flags.phi_field and flags.hyperons:
@@ -208,6 +226,6 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
         densities=dict(state.densities), n_B=state.n_B, n_C=state.n_C,
         n_S=state.n_S, P=state.P, eps=state.eps, s=state.s,
         mu_B=state.mu_B, mu_C=state.mu_C, mu_S=state.mu_S,
-        mu_i=dict(state.mu_i), mu_dot_n=state.mu_dot_n)
+        mu_i=dict(state.mu_i), mu_dot_n=state.mu_dot_n,
+        condensation=state.condensation)
     return (th, internal) if return_state else th
-    return th

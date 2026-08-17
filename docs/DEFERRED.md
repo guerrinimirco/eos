@@ -404,18 +404,47 @@ Deltas and check `condensation` rather than assume.
 
 How far it reaches today. In SFHo, over beta equilibrium and fixed
 Y_C = 0.05 / 0.5, nucleons and hyperons, |mu*|/m reaches 3.11 (pi+), 3.52 (K+)
-and 2.62 (K0) by n_B = 1.2 fm^-3. In DD2 the ratio is above 1 for every
-n_B >= 0.3 at T <= 40 MeV and only falls back below it above T ~ 80. There is
-therefore NO state that is both inside the DD2+vMIT coexistence window and
-outside condensation, which is pinned in
-`test/mixed/test_muons_and_mesons.py`.
+and 2.62 (K0) by n_B = 1.2 fm^-3. In DD2 BETA EQUILIBRIUM the ratio is above 1
+for every n_B >= 0.3 at T <= 40 MeV and only falls back below it above T ~ 80.
 
-One consumer is still unguarded: `eos/mixed`'s hadronic adapter calls the same
-gas through `thermo_at_potentials`, and a condensed hadronic phase inside a
-mixed solve has no defined behaviour -- the adapter neither refuses nor
-reports. It should carry the ratio out through `PhaseThermo` so the mixed
-residual can refuse, which is a change to the phase-adapter contract and
-belongs in the mixed session.
+A claim that used to stand here -- that there is therefore NO state both inside
+the DD2+vMIT coexistence window and outside condensation -- was WRONG, and is
+withdrawn. It was measured through a broken seed (below), which refused on the
+BETA-EQUILIBRIUM gas rather than on the mixed phase's own; the mixed phase sits
+at different potentials and its gas is markedly less critical. Solvable states
+inside the window, eta = 0.5:
+
+      T     n_B     chi    |mu*|/m
+     60    0.50   0.480      0.914
+     60    0.60   0.967      0.756
+     70    0.40   0.418      0.755
+     70    0.50   0.954      0.627
+     80    0.40   0.825      0.491
+
+And ETA decides it, more strongly than temperature does. At eta = 0 (Gibbs)
+only GLOBAL neutrality is imposed, the hadronic phase stays positively charged,
+mu_C is far less negative than in beta equilibrium, and mu*_pi- = -mu_C +
+Gamma_rhoN rho0 stays below m_pi. At n_B = 0.7, T = 20 MeV -- deep in the
+region the old code refused outright -- eta = 0 gives chi = 0.342 and
+|mu*|/m = 0.907, inside the window and inside the model, while eta = 0.5 and
+eta = 1.0 at the same point are condensed and are refused. That is the same
+mechanism by which Sigma- and Delta- suppress condensation in a pure hadronic
+phase, with the quark phase playing the negative-charge carrier.
+
+So the hybrid engine IS usable with a thermal meson gas: at eta = 0 across the
+transition, and at any eta above about T = 60 MeV.
+
+Every consumer is now guarded. `PhaseThermo` carries `condensation` -- the
+shared record and `eos/mixed`'s own -- both adapters fill it (a quark phase has
+no meson gas and reports 0), and `solve_mixed` refuses a condensed phase the
+way dd2 does. What that uncovered: `eos/mixed` could not run with the gas AT
+ALL. Both `solvers/point.default_guess` and `adapters.hadronic_seed` built
+their starting configuration from a full beta-equilibrium dd2 solve carrying
+the meson flags, and dd2 raises on a condensed gas -- so every gas-enabled
+mixed call died in its seed, and the condensation check downstream never ran.
+The gas sources none of the four field equations and adds no unknown to either
+vector being seeded, so both seeds now switch it off: a seed must not fail for
+a reason that has nothing to do with seeding.
 
 ## Per model
 

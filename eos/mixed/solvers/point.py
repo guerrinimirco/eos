@@ -15,7 +15,7 @@ in. chi <= 0 means the point is still pure hadronic, chi >= 1 that it is
 already pure quark, and 0 < chi < 1 that it lies in the mixed window. The table
 builders use exactly that to locate the phase boundaries.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from scipy.optimize import root
 
@@ -76,9 +76,19 @@ def default_guess(ctx):
     far better than a single shared mu_e would, and is a sound seed at eta=0
     too. chi starts mid-window. If vMIT does not converge at this density the
     quark seed falls back to the hadronic potentials.
+
+    The thermal meson gas is switched OFF for the seed, for the same reason
+    `eos.mixed.adapters.hadronic_seed` switches it off: the gas adds no unknown
+    to the vector being seeded, so it can only change whether this function
+    returns at all. `eos.dd2` refuses a Bose-condensed gas by raising, and in
+    beta equilibrium the gas is condensed above n_B ~ 0.3 fm^-3 at the
+    temperatures the transition lives at -- so with the flags passed through,
+    the cold start raised and the condensation check below never ran.
     """
     from eos.vmit.eos import solve_vmit_beta_eq
-    base = solve_beta_eq_octet(ctx.par, ctx.n_B, ctx.flags, T=ctx.T,
+    seed_flags = replace(ctx.flags, include_pseudoscalars=False,
+                         include_thermal_vectors=False)
+    base = solve_beta_eq_octet(ctx.par, ctx.n_B, seed_flags, T=ctx.T,
                                include_photons=False, check_consistency=False)
     mu_tilde_B = base.mu_B - base.Sigma_R
     try:
@@ -215,6 +225,23 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
         converged=True, error=res_max, n_B=n_B, T=T, eta=eta, chi=chi,
         th_H=th_H, th_Q=th_Q, potentials=d, mu_B=th_H.mu_B,
         P=P_total, eps=eps_total, s=s_total, extras=extras)
+
+    # Bose-Einstein condensation is not implemented, so a condensed hadronic
+    # phase is outside the model rather than a hard point. It has to be checked
+    # HERE and not left to the caller: `solve_bose_jel` caps mu*_j at m_j
+    # instead of diverging, so the phase converges happily on a saturated gas
+    # that is not the physical state, and every residual row it feeds -- the
+    # charge rows above all, since the gas carries n_C and n_S -- is then
+    # quietly wrong. Refused rather than returned, matching how `eos.dd2`
+    # refuses the same condition; `eos.mixed.eos_point` turns it into a status.
+    # The quark phase has no meson gas and reports 0.
+    condensation = max(th_H.condensation, th_Q.condensation)
+    if condensation >= 1.0:
+        raise ValueError(
+            f"the hadronic phase's thermal meson gas Bose-condenses at "
+            f"n_B={n_B}, T={T}, eta={eta} (max |mu*|/m = {condensation:.3f}); "
+            f"a condensate is not implemented, so this state is outside the "
+            f"model")
 
     if check_consistency and result.in_mixed_phase:
         dP = (th_H.P + eta * L_H.P) - (th_Q.P + eta * L_Q.P)

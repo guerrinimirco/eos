@@ -481,7 +481,7 @@ def thermo_from_mu(
         mu_dot_n += (p.baryon_no * mu_B + p.charge * mu_C
                      + p.strangeness * mu_S) * st.n
 
-    gas_C = gas_S = 0.0
+    gas_C = gas_S = condensation = 0.0
     # Optional: pseudoscalar mesons (π, K, η)
     if include_pseudoscalar_mesons:
         gas = thermal_meson_thermo(T, mu_C, mu_S, omega, rho, params)
@@ -490,6 +490,7 @@ def thermo_from_mu(
         s_total += gas["s"]
         gas_C = gas["n_C"]
         gas_S = gas["n_S"]
+        condensation = gas["condensation"]
         mu_dot_n += gas["mu_dot_n"]
 
     return PhaseThermo.assemble(
@@ -499,6 +500,7 @@ def thermo_from_mu(
         P=P_total, eps=e_total, s=s_total, mu_dot_n=mu_dot_n,
         Sigma_R=0.0,
         extra_charges=(0.0, gas_C, gas_S),
+        condensation=condensation,
     )
 
 
