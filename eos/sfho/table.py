@@ -22,6 +22,7 @@ from typing import List, Optional, Union, Dict, Any, Tuple
 from itertools import product
 
 # Import SFHo EOS modules
+from eos.sfho.species import SpeciesFlags
 from eos.sfho.solver import (
     SFHoEOSResult,
     solve_beta_eq_neutrinoless,
@@ -35,7 +36,6 @@ from eos.sfho.solver import (
     get_default_guess_fixed_yc,
     get_default_guess_fixed_yc_ys,
     get_default_guess_trapped,
-    BARYONS_N, BARYONS_NY, BARYONS_NYD
 )
 from eos.sfho.parameters import (
     SFHoParams, 
@@ -150,18 +150,57 @@ def _get_params(settings: TableSettings) -> SFHoParams:
         raise ValueError(f"Unknown parametrization: {settings.parametrization}")
 
 
-def _get_particles(settings: TableSettings) -> list:
-    """Get particle list from settings."""
-    particle_map = {
-        'nucleons': BARYONS_N,
-        'nucleons_hyperons': BARYONS_NY,
-        'nucleons_hyperons_deltas': BARYONS_NYD,
-    }
-    
-    if settings.particle_content.lower() in particle_map:
-        return particle_map[settings.particle_content.lower()]
-    else:
+def _get_flags(settings: TableSettings) -> SpeciesFlags:
+    """The species flags this table asks for (CLAUDE.md section 4)."""
+    content = settings.particle_content.lower()
+    known = ('nucleons', 'nucleons_hyperons', 'nucleons_hyperons_deltas')
+    if content not in known:
         raise ValueError(f"Unknown particle content: {settings.particle_content}")
+    return SpeciesFlags(
+        hyperons='hyperons' in content,
+        deltas='deltas' in content,
+        muons=settings.include_muons,
+        thermal_mesons=settings.include_pseudoscalar_mesons,
+        thermal_neutrinos=settings.include_thermal_neutrinos,
+        photons=settings.include_photons,
+    )
+
+
+#: eq_type -> the named mode that solves it. One dispatch, so the six modes
+#: are six lines rather than six copies of the guess/solve/retry dance.
+def _solve_one(eq_type, par, flags, n_B, x0, leptons=False,
+               T=None, S=None, Y_C=None, Y_S=None, Y_Le=None):
+    if eq_type == 'beta_eq':
+        return solve_beta_eq_neutrinoless(par, n_B, flags, T=T, x0=x0)
+    if eq_type == 'fixed_yc':
+        return solve_fixed_yc(par, n_B, Y_C, flags, T=T, x0=x0, leptons=leptons)
+    if eq_type == 'fixed_yc_ys':
+        return solve_fixed_yc_ys(par, n_B, Y_C, Y_S, flags, T=T, x0=x0,
+                                 leptons=leptons)
+    if eq_type == 'trapped_neutrinos':
+        return solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, flags, T=T, x0=x0)
+    if eq_type == 'isentropic_beta_eq':
+        return solve_isentropic_beta_eq(par, n_B, S, flags, x0=x0)
+    if eq_type == 'isentropic_trapped':
+        return solve_isentropic_trapped(par, n_B, S, Y_Le, flags, x0=x0)
+    raise ValueError(f"Unknown equilibrium type: {eq_type}")
+
+
+def _cold_start(eq_type, par, n_B, T=None, Y_C=None, Y_S=None, Y_Le=None):
+    """The default guess for one point, in the unknown order the mode uses."""
+    if eq_type == 'beta_eq':
+        return get_default_guess_beta_eq(n_B, T, par)
+    if eq_type == 'fixed_yc':
+        return get_default_guess_fixed_yc(n_B, Y_C, T, par)
+    if eq_type == 'fixed_yc_ys':
+        return get_default_guess_fixed_yc_ys(n_B, Y_C, Y_S, T, par)
+    if eq_type == 'trapped_neutrinos':
+        return get_default_guess_trapped(n_B, Y_Le, T, par)
+    if eq_type == 'isentropic_beta_eq':
+        return np.append(get_default_guess_beta_eq(n_B, 10.0, par), 10.0)
+    if eq_type == 'isentropic_trapped':
+        return np.append(get_default_guess_trapped(n_B, Y_Le, 10.0, par), 10.0)
+    raise ValueError(f"Unknown equilibrium type: {eq_type}")
 
 
 def _result_to_guess_array(result: SFHoEOSResult, eq_type: str) -> np.ndarray:
@@ -273,7 +312,7 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
        (e.g., use T=10 solutions as guess for T=20)
     """
     params = _get_params(settings)
-    particles = _get_particles(settings)
+    flags = _get_flags(settings)
     eq_type_str = settings.equilibrium.lower()
     
     # Build parameter grid
@@ -371,128 +410,18 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
                 if prev_result.converged:
                     guess = _result_to_guess_array(prev_result, eq_type_str)
             
-            # Call appropriate solver
-            if eq_type_str == 'beta_eq':
-                default_guess = get_default_guess_beta_eq(n_B, T, params)
-                if guess is None:
-                    guess = default_guess
-                result = solve_beta_eq_neutrinoless(
-                    n_B, T, params, particles,
-                    include_photons=settings.include_photons,
-                    include_muons=settings.include_muons,
-                    include_thermal_neutrinos=settings.include_thermal_neutrinos,
-                    include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                    initial_guess=guess
-                )
-                # Retry with default guess if first attempt failed
-                if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_beta_eq_neutrinoless(
-                        n_B, T, params, particles,
-                        include_photons=settings.include_photons,
-                        include_muons=settings.include_muons,
-                        include_thermal_neutrinos=settings.include_thermal_neutrinos,
-                        include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                        initial_guess=default_guess
-                    )
-            elif eq_type_str == 'fixed_yc':
-                default_guess = get_default_guess_fixed_yc(n_B, Y_C, T, params)
-                if guess is None:
-                    guess = default_guess
-                result = solve_fixed_yc(
-                    n_B, Y_C, T, params, particles,
-                    include_electrons=settings.include_electrons,
-                    include_photons=settings.include_photons,
-                    include_thermal_neutrinos=settings.include_thermal_neutrinos,
-                    include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                    initial_guess=guess
-                )
-                # Retry with default guess if first attempt failed
-                if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_fixed_yc(
-                        n_B, Y_C, T, params, particles,
-                        include_electrons=settings.include_electrons,
-                        include_photons=settings.include_photons,
-                        include_thermal_neutrinos=settings.include_thermal_neutrinos,
-                        include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                        initial_guess=default_guess
-                    )
-            elif eq_type_str == 'fixed_yc_ys':
-                default_guess = get_default_guess_fixed_yc_ys(n_B, Y_C, Y_S, T, params)
-                if guess is None:
-                    guess = default_guess
-                result = solve_fixed_yc_ys(
-                    n_B, Y_C, Y_S, T, params, particles,
-                    include_electrons=settings.include_electrons,
-                    include_photons=settings.include_photons,
-                    include_thermal_neutrinos=settings.include_thermal_neutrinos,
-                    include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                    initial_guess=guess
-                )
-                # Retry with default guess if first attempt failed
-                if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_fixed_yc_ys(
-                        n_B, Y_C, Y_S, T, params, particles,
-                        include_electrons=settings.include_electrons,
-                        include_photons=settings.include_photons,
-                        include_thermal_neutrinos=settings.include_thermal_neutrinos,
-                        include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                        initial_guess=default_guess
-                    )
-            elif eq_type_str == 'trapped_neutrinos':
-                default_guess = get_default_guess_trapped(n_B, Y_Le, T, params)
-                if guess is None:
-                    guess = default_guess
-                result = solve_beta_eq_neutrino_trapped(
-                    n_B, Y_Le, T, params, particles,
-                    include_photons=settings.include_photons,
-                    include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                    initial_guess=guess
-                )
-                # Retry with default guess if first attempt failed
-                if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_beta_eq_neutrino_trapped(
-                        n_B, Y_Le, T, params, particles,
-                        include_photons=settings.include_photons,
-                        include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                        initial_guess=default_guess
-                    )
-            elif eq_type_str == 'isentropic_beta_eq':
-                # Isentropic beta equilibrium: T is unknown, S is fixed
-                default_guess = np.append(get_default_guess_beta_eq(n_B, 10.0, params), 10.0)
-                if guess is None:
-                    guess = default_guess
-                result = solve_isentropic_beta_eq(
-                    n_B, S, params, particles,
-                    include_photons=settings.include_photons,
-                    include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                    initial_guess=guess
-                )
-                # Retry with default guess if first attempt failed
-                if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_isentropic_beta_eq(
-                        n_B, S, params, particles,
-                        include_photons=settings.include_photons,
-                        include_pseudoscalar_mesons=settings.include_pseudoscalar_mesons,
-                        initial_guess=default_guess
-                    )
-            elif eq_type_str == 'isentropic_trapped':
-                # Isentropic trapped: T is unknown, S and Y_Le are fixed
-                default_guess = np.append(get_default_guess_trapped(n_B, Y_Le, 10.0, params), 10.0)
-                if guess is None:
-                    guess = default_guess
-                result = solve_isentropic_trapped(
-                    n_B, S, Y_Le, params, particles,
-                    include_photons=settings.include_photons,
-                    initial_guess=guess
-                )
-                # Retry with default guess if first attempt failed
-                if not result.converged and not np.allclose(guess, default_guess):
-                    result = solve_isentropic_trapped(
-                        n_B, S, Y_Le, params, particles,
-                        include_photons=settings.include_photons,
-                        initial_guess=default_guess
-                    )
-            
+            # Solve, warm-started; fall back to the cold start once.
+            default_guess = _cold_start(eq_type_str, params, n_B, T=T,
+                                        Y_C=Y_C, Y_S=Y_S, Y_Le=Y_Le)
+            if guess is None:
+                guess = default_guess
+            call = dict(par=params, flags=flags, n_B=n_B,
+                        leptons=settings.include_electrons,
+                        T=T, S=S, Y_C=Y_C, Y_S=Y_S, Y_Le=Y_Le)
+            result = _solve_one(eq_type_str, x0=guess, **call)
+            if not result.converged and not np.allclose(guess, default_guess):
+                result = _solve_one(eq_type_str, x0=default_guess, **call)
+
             results.append(result)
             
             # Store for within-table extrapolation

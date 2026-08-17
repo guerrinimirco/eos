@@ -32,11 +32,15 @@ import numpy as np
 
 from eos.general.physics_constants import hc, hc3
 from eos.sfho.parameters import get_sfho_nucleonic, get_sfhoy_fortin
+from eos.sfho.species import SpeciesFlags, active_baryons
 from eos.sfho.solver import (
-    BARYONS_N, BARYONS_NY,
     solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
     solve_beta_eq_neutrino_trapped, solve_isentropic_beta_eq,
 )
+
+NUCLEONS = SpeciesFlags()
+NUCLEONS_NOGAMMA = SpeciesFlags(photons=False)
+WITH_HYPERONS = SpeciesFlags(hyperons=True)
 
 #: Steiner, Hempel & Fischer, ApJ 774 (2013) 17, as tabulated by Fortin,
 #: Oertel & Providencia, PASA 35 (2018) e044, Table 2.
@@ -73,7 +77,7 @@ class FullCheckReport:
 # =============================================================================
 # 1. EULER / HUGENHOLTZ-VAN HOVE
 # =============================================================================
-def euler_residual(result, particles):
+def euler_residual(result, flags):
     """(eps + P - T s - sum_i mu_i n_i) / eps for one solved point.
 
     The species potentials are rebuilt from the conserved-charge basis,
@@ -82,7 +86,7 @@ def euler_residual(result, particles):
     satisfy eps + P = T s on their own.
     """
     mu_dot_n = 0.0
-    for p in particles:
+    for p in active_baryons(flags):
         n = result.baryon_densities.get(p.name, 0.0)
         mu = (p.baryon_no * result.mu_B + p.charge * result.mu_C
               + p.strangeness * result.mu_S)
@@ -98,28 +102,27 @@ def _check_euler(nuc, hyp, grid):
     worst, where = 0.0, ""
     for n_B in grid:
         cases = [
-            ("beta T=0", BARYONS_N,
-             solve_beta_eq_neutrinoless(n_B, 0.0, nuc, BARYONS_N)),
-            ("beta T=30", BARYONS_N,
-             solve_beta_eq_neutrinoless(n_B, 30.0, nuc, BARYONS_N)),
-            ("beta hyperons", BARYONS_NY,
-             solve_beta_eq_neutrinoless(n_B, 10.0, hyp, BARYONS_NY)),
-            ("fixed Y_C", BARYONS_N,
-             solve_fixed_yc(n_B, 0.1, 10.0, nuc, BARYONS_N)),
-            ("fixed Y_C leptons", BARYONS_N,
-             solve_fixed_yc(n_B, 0.1, 10.0, nuc, BARYONS_N,
-                            include_electrons=True)),
-            ("fixed Y_C Y_S", BARYONS_NY,
-             solve_fixed_yc_ys(n_B, 0.4, 0.1, 10.0, hyp, BARYONS_NY)),
-            ("trapped", BARYONS_N,
-             solve_beta_eq_neutrino_trapped(n_B, 0.4, 10.0, nuc, BARYONS_N)),
-            ("isentropic", BARYONS_N,
-             solve_isentropic_beta_eq(n_B, 1.0, nuc, BARYONS_N)),
+            ("beta T=0", NUCLEONS,
+             solve_beta_eq_neutrinoless(nuc, n_B, NUCLEONS, T=0.0)),
+            ("beta T=30", NUCLEONS,
+             solve_beta_eq_neutrinoless(nuc, n_B, NUCLEONS, T=30.0)),
+            ("beta hyperons", WITH_HYPERONS,
+             solve_beta_eq_neutrinoless(hyp, n_B, WITH_HYPERONS, T=10.0)),
+            ("fixed Y_C", NUCLEONS,
+             solve_fixed_yc(nuc, n_B, 0.1, NUCLEONS, T=10.0)),
+            ("fixed Y_C leptons", NUCLEONS,
+             solve_fixed_yc(nuc, n_B, 0.1, NUCLEONS, T=10.0, leptons=True)),
+            ("fixed Y_C Y_S", WITH_HYPERONS,
+             solve_fixed_yc_ys(hyp, n_B, 0.4, 0.1, WITH_HYPERONS, T=10.0)),
+            ("trapped", NUCLEONS,
+             solve_beta_eq_neutrino_trapped(nuc, n_B, 0.4, NUCLEONS, T=10.0)),
+            ("isentropic", NUCLEONS,
+             solve_isentropic_beta_eq(nuc, n_B, 1.0, NUCLEONS)),
         ]
-        for tag, particles, r in cases:
+        for tag, flags, r in cases:
             if not r.converged:
                 continue
-            err = abs(euler_residual(r, particles))
+            err = abs(euler_residual(r, flags))
             if err > worst:
                 worst, where = err, f"{tag} at n_B={n_B:g}"
     return CheckResult("Euler / HVH, all modes", worst < 1e-8, worst, where)
@@ -129,8 +132,7 @@ def _check_euler(nuc, hyp, grid):
 # 2, 3. NUCLEAR MATTER PARAMETERS
 # =============================================================================
 def _energy_per_baryon(par, n_B, Y_C):
-    r = solve_fixed_yc(n_B, Y_C, 0.01, par, BARYONS_N,
-                       include_electrons=False, include_photons=False)
+    r = solve_fixed_yc(par, n_B, Y_C, NUCLEONS_NOGAMMA, T=0.01)
     m_N = 0.5 * (par.m_n + par.m_p)
     return r.e_total / n_B - m_N
 
@@ -157,8 +159,7 @@ def symmetry_energy_analytic(par, n_B):
     rho-field response -- so it is a genuine second opinion on E_sym rather
     than the same computation rearranged.
     """
-    r = solve_fixed_yc(n_B, 0.5, 0.01, par, BARYONS_N,
-                       include_electrons=False, include_photons=False)
+    r = solve_fixed_yc(par, n_B, 0.5, NUCLEONS_NOGAMMA, T=0.01)
     k_F = hc * (3.0 * np.pi**2 * n_B / 2.0) ** (1.0 / 3.0)
     E_F = np.sqrt(k_F**2 + r.m_eff["n"]**2)
     A = par.compute_A(r.sigma, r.omega)
@@ -201,7 +202,7 @@ def _check_esym_two_ways(par):
 def _check_causality(par, grid):
     P, eps = [], []
     for n_B in grid:
-        r = solve_beta_eq_neutrinoless(n_B, 0.0, par, BARYONS_N)
+        r = solve_beta_eq_neutrinoless(par, n_B, NUCLEONS, T=0.0)
         if not r.converged:
             return CheckResult("causality, monotone P", False, 1.0,
                                f"no convergence at n_B={n_B:g}")
@@ -244,9 +245,8 @@ def _check_compose(par, compose_dir=SFHO_COMPOSE):
             eps_ref = float(data.e[iT, iN, iY])
             if not (np.isfinite(P_ref) and np.isfinite(eps_ref)):
                 continue
-            r = solve_fixed_yc(nb, float(data.Y_C_values[iY]), T, par,
-                               BARYONS_N, include_electrons=True,
-                               include_photons=True)
+            r = solve_fixed_yc(par, nb, float(data.Y_C_values[iY]),
+                               NUCLEONS, T=T, leptons=True)
             err = max(abs(r.P_total - P_ref) / abs(P_ref),
                       abs(r.e_total - eps_ref) / abs(eps_ref))
             if err > worst:

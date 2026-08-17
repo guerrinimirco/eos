@@ -66,7 +66,8 @@ from eos.general import modes
 from eos.general.modes import (
     ModeSpec, electron_potential, strangeness_potential
 )
-from eos.sfho.parameters import SFHoParams, get_sfho_2fam_phi
+from eos.sfho.parameters import SFHoParams
+from eos.sfho.species import SpeciesFlags, active_baryons, check_couplings
 from eos.sfho.thermodynamics import field_residuals, thermo_from_mu
 from eos.general.thermodynamics_leptons import (
     electron_thermo, photon_thermo, neutrino_thermo, electron_thermo_from_density
@@ -599,18 +600,16 @@ def solve(sys: System, x0=None) -> SFHoEOSResult:
 # =============================================================================
 # THE NAMED MODES  (CLAUDE.md section 3)
 # =============================================================================
-# Each is one line of declaration plus the sectors it carries. They are
+# Each is one line of declaration plus the sectors `flags` carries. They are
 # configurations of `solve` above, not separate solvers.
+#
+# Signatures follow the repository order: the parameters first and never
+# optional, then n_B, then the fractions the mode fixes, then the species
+# flags, then the temperature axis. `eos.dd2` reads the same way.
 
 def solve_beta_eq_neutrinoless(
-    n_B: float, T: float,
-    params: SFHoParams,
-    particles: List[Particle],
-    include_photons: bool = True,
-    include_muons: bool = False,
-    include_thermal_neutrinos: bool = False,
-    include_pseudoscalar_mesons: bool = False,
-    initial_guess: Optional[np.ndarray] = None
+    par: SFHoParams, n_B: float, flags: SpeciesFlags,
+    T: float = 0.0, x0: Optional[np.ndarray] = None
 ) -> SFHoEOSResult:
     """
     Beta equilibrium with free-streaming neutrinos. Variables (n_B, T).
@@ -622,33 +621,19 @@ def solve_beta_eq_neutrinoless(
     charge neutrality n_C = n_e.
 
     Args:
+        par: SFHo parameters
         n_B: Baryon density (fm⁻³)
+        flags: active degrees of freedom
         T: Temperature (MeV)
-        params: SFHo parameters
-        particles: List of baryon species
-        include_photons: Include photon contributions
-        include_muons: NOT WIRED -- raises if True (CLAUDE.md section 4)
-        include_thermal_neutrinos: three μ = 0 flavours, none of them tracked
-        include_pseudoscalar_mesons: Include π, K, η meson contributions
-        initial_guess: Initial guess [σ, ω, ρ, φ, μ_B, μ_C]
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C]
     """
-    _reject_muons(include_muons)
-    return solve(System(
-        params=params, particles=particles, spec=modes.beta_eq_neutrinoless(),
-        n_B=n_B, T=T, thermal_mesons=include_pseudoscalar_mesons,
-        photons=include_photons, thermal_neutrinos=include_thermal_neutrinos,
-    ), x0=initial_guess)
+    return solve(_system(par, flags, modes.beta_eq_neutrinoless(), n_B, T=T),
+                 x0=x0)
 
 
 def solve_fixed_yc(
-    n_B: float, Y_C: float, T: float,
-    params: SFHoParams,
-    particles: List[Particle],
-    include_electrons: bool = False,
-    include_photons: bool = False,
-    include_thermal_neutrinos: bool = False,
-    include_pseudoscalar_mesons: bool = False,
-    initial_guess: Optional[np.ndarray] = None
+    par: SFHoParams, n_B: float, Y_C: float, flags: SpeciesFlags,
+    T: float = 0.0, x0: Optional[np.ndarray] = None, leptons: bool = False
 ) -> SFHoEOSResult:
     """
     Fixed non-leptonic charge fraction Y_C. Variables (n_B, Y_C, T).
@@ -656,41 +641,28 @@ def solve_fixed_yc(
     6 unknowns [σ, ω, ρ, φ, μ_B, μ_C]; the charge row is n_C = Y_C n_B, and
     n_C is the TOTAL, thermal meson gas included (CLAUDE.md section 2).
 
-    `include_electrons=False` leaves the matter electrically charged, which is
-    what a mixed-phase construction needs per pure phase; True adds the
-    neutralizing electrons, which enter no equation because n_C is already
-    pinned -- mu_e is whatever gives n_e = n_C.
+    `leptons=False` leaves the matter electrically charged, which is what a
+    mixed-phase construction needs per pure phase; True adds the neutralizing
+    electrons, which enter no equation because n_C is already pinned -- mu_e is
+    whatever gives n_e = n_C.
 
     Args:
+        par: SFHo parameters
         n_B: Baryon density (fm⁻³)
         Y_C: Charge fraction n_C/n_B
+        flags: active degrees of freedom
         T: Temperature (MeV)
-        params: SFHo parameters
-        particles: List of baryon species
-        include_electrons: If True, add electrons with n_e = n_C for neutrality
-        include_photons: Include photon contributions
-        include_thermal_neutrinos: three μ = 0 flavours, none of them tracked
-        include_pseudoscalar_mesons: Include π, K, η meson contributions
-        initial_guess: Initial guess [σ, ω, ρ, φ, μ_B, μ_C], optionally with a
-            seed for μ_e appended past the end
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C], optionally with a seed for μ_e
+            appended past the end
+        leptons: add neutralizing electrons with n_e = n_C
     """
-    return solve(System(
-        params=params, particles=particles,
-        spec=modes.fixed_YC(Y_C, leptons=include_electrons),
-        n_B=n_B, T=T, thermal_mesons=include_pseudoscalar_mesons,
-        photons=include_photons, thermal_neutrinos=include_thermal_neutrinos,
-    ), x0=initial_guess)
+    return solve(_system(par, flags, modes.fixed_YC(Y_C, leptons=leptons),
+                         n_B, T=T), x0=x0)
 
 
 def solve_fixed_yc_ys(
-    n_B: float, Y_C: float, Y_S: float, T: float,
-    params: SFHoParams,
-    particles: List[Particle],
-    include_electrons: bool = False,
-    include_photons: bool = False,
-    include_thermal_neutrinos: bool = False,
-    include_pseudoscalar_mesons: bool = False,
-    initial_guess: Optional[np.ndarray] = None
+    par: SFHoParams, n_B: float, Y_C: float, Y_S: float, flags: SpeciesFlags,
+    T: float = 0.0, x0: Optional[np.ndarray] = None, leptons: bool = False
 ) -> SFHoEOSResult:
     """
     Fixed charge AND strangeness fractions. Variables (n_B, Y_C, Y_S, T).
@@ -700,34 +672,24 @@ def solve_fixed_yc_ys(
     symmetric nuclear matter, for heavy-ion comparisons.
 
     Args:
+        par: SFHo parameters
         n_B: Baryon density (fm⁻³)
         Y_C: Charge fraction n_C/n_B
         Y_S: Strangeness fraction n_S/n_B, S = +1 per s quark
+        flags: active degrees of freedom (hyperons wanted, or Y_S is
+            unreachable and mu_S is unconstrained)
         T: Temperature (MeV)
-        params: SFHo parameters
-        particles: List of baryon species (should include hyperons)
-        include_electrons: If True, add electrons with n_e = n_C
-        include_photons: Include photon contributions
-        include_thermal_neutrinos: three μ = 0 flavours, none of them tracked
-        include_pseudoscalar_mesons: Include π, K, η meson contributions
-        initial_guess: Initial guess [σ, ω, ρ, φ, μ_B, μ_C, μ_S], optionally
-            with a seed for μ_e appended past the end
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, μ_S]
+        leptons: add neutralizing electrons with n_e = n_C
     """
-    return solve(System(
-        params=params, particles=particles,
-        spec=modes.fixed_YC_YS(Y_C, Y_S, leptons=include_electrons),
-        n_B=n_B, T=T, thermal_mesons=include_pseudoscalar_mesons,
-        photons=include_photons, thermal_neutrinos=include_thermal_neutrinos,
-    ), x0=initial_guess)
+    return solve(_system(par, flags,
+                         modes.fixed_YC_YS(Y_C, Y_S, leptons=leptons),
+                         n_B, T=T), x0=x0)
 
 
 def solve_beta_eq_neutrino_trapped(
-    n_B: float, Y_Le: float, T: float,
-    params: SFHoParams,
-    particles: List[Particle],
-    include_photons: bool = True,
-    include_pseudoscalar_mesons: bool = False,
-    initial_guess: Optional[np.ndarray] = None
+    par: SFHoParams, n_B: float, Y_Le: float, flags: SpeciesFlags,
+    T: float = 0.0, x0: Optional[np.ndarray] = None
 ) -> SFHoEOSResult:
     """
     Beta equilibrium with trapped neutrinos. Variables (n_B, Y_Le, T).
@@ -737,68 +699,46 @@ def solve_beta_eq_neutrino_trapped(
     zero and beta equilibrium reads μ_C + μ_e = μ_nue.
 
     Args:
+        par: SFHo parameters
         n_B: Baryon density (fm⁻³)
         Y_Le: Electron lepton fraction (n_e + n_nue)/n_B
+        flags: active degrees of freedom
         T: Temperature (MeV)
-        params: SFHo parameters
-        particles: List of baryon species
-        include_photons: Include photon contributions
-        include_pseudoscalar_mesons: Include π, K, η meson contributions
-        initial_guess: Initial guess [σ, ω, ρ, φ, μ_B, μ_C, μ_nue]
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, μ_nue]
     """
-    return solve(System(
-        params=params, particles=particles,
-        spec=modes.beta_eq_neutrino_trapped(Y_Le),
-        n_B=n_B, T=T, thermal_mesons=include_pseudoscalar_mesons,
-        photons=include_photons,
-    ), x0=initial_guess)
+    return solve(_system(par, flags, modes.beta_eq_neutrino_trapped(Y_Le),
+                         n_B, T=T), x0=x0)
 
 
 def solve_isentropic_beta_eq(
-    n_B: float, S_target: float,
-    params: SFHoParams,
-    particles: List[Particle],
-    include_photons: bool = True,
-    include_muons: bool = False,
-    include_pseudoscalar_mesons: bool = False,
-    initial_guess: Optional[np.ndarray] = None
+    par: SFHoParams, n_B: float, SnB: float, flags: SpeciesFlags,
+    x0: Optional[np.ndarray] = None
 ) -> SFHoEOSResult:
     """
     Beta equilibrium at fixed entropy per baryon. Variables (n_B, S/A).
 
     The same mode as `solve_beta_eq_neutrinoless` with the temperature axis
     replaced by S/A (CLAUDE.md section 3), so T becomes a seventh unknown and
-    s/n_B = S_target the seventh row. The entropy counted is the total,
-    photons included where they are.
+    s/n_B = SnB the seventh row. The entropy counted is the total, photons
+    included where they are.
 
     Args:
+        par: SFHo parameters
         n_B: Baryon density (fm⁻³)
-        S_target: Entropy per baryon (dimensionless)
-        params: SFHo parameters
-        particles: List of baryon species
-        include_photons: Include photon contributions
-        include_muons: NOT WIRED -- raises if True (CLAUDE.md section 4)
-        include_pseudoscalar_mesons: Include π, K, η meson contributions
-        initial_guess: Initial guess [σ, ω, ρ, φ, μ_B, μ_C, T]
+        SnB: Entropy per baryon (dimensionless)
+        flags: active degrees of freedom
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, T]
 
     Returns:
         SFHoEOSResult with the solved T in `result.T`
     """
-    _reject_muons(include_muons)
-    return solve(System(
-        params=params, particles=particles, spec=modes.beta_eq_neutrinoless(),
-        n_B=n_B, SnB=S_target, thermal_mesons=include_pseudoscalar_mesons,
-        photons=include_photons,
-    ), x0=initial_guess)
+    return solve(_system(par, flags, modes.beta_eq_neutrinoless(),
+                         n_B, SnB=SnB), x0=x0)
 
 
 def solve_isentropic_trapped(
-    n_B: float, S_target: float, Y_Le_target: float,
-    params: SFHoParams,
-    particles: List[Particle],
-    include_photons: bool = True,
-    include_pseudoscalar_mesons: bool = False,
-    initial_guess: Optional[np.ndarray] = None
+    par: SFHoParams, n_B: float, SnB: float, Y_Le: float, flags: SpeciesFlags,
+    x0: Optional[np.ndarray] = None
 ) -> SFHoEOSResult:
     """
     Trapped neutrinos at fixed entropy per baryon. Variables (n_B, Y_Le, S/A).
@@ -806,37 +746,34 @@ def solve_isentropic_trapped(
     8 unknowns [σ, ω, ρ, φ, μ_B, μ_C, μ_nue, T].
 
     Args:
+        par: SFHo parameters
         n_B: Baryon density (fm⁻³)
-        S_target: Entropy per baryon
-        Y_Le_target: Electron lepton fraction (n_e + n_nue)/n_B
-        params: SFHo parameters
-        particles: List of baryon species
-        include_photons: Include photon contributions
-        include_pseudoscalar_mesons: Include π, K, η meson contributions
-        initial_guess: Initial guess [σ, ω, ρ, φ, μ_B, μ_C, μ_nue, T]
+        SnB: Entropy per baryon
+        Y_Le: Electron lepton fraction (n_e + n_nue)/n_B
+        flags: active degrees of freedom
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, μ_nue, T]
 
     Returns:
         SFHoEOSResult with the solved T in `result.T`
     """
-    return solve(System(
-        params=params, particles=particles,
-        spec=modes.beta_eq_neutrino_trapped(Y_Le_target),
-        n_B=n_B, SnB=S_target, thermal_mesons=include_pseudoscalar_mesons,
-        photons=include_photons,
-    ), x0=initial_guess)
+    return solve(_system(par, flags, modes.beta_eq_neutrino_trapped(Y_Le),
+                         n_B, SnB=SnB), x0=x0)
 
 
-def _reject_muons(include_muons):
-    """CLAUDE.md section 4: a flag a model does not implement RAISES.
+def _system(par, flags, spec, n_B, T=None, SnB=None):
+    """The `System` a named mode hands to `solve`.
 
-    The muon sector is not wired in SFHo -- it appears in no residual, no
-    neutrality row and no total. Accepting the flag and ignoring it silently
-    produced tables that claimed a muon population they never had.
+    One place where species flags become the sector booleans the residual
+    reads, and the one place that checks the parametrization actually couples
+    the sectors the flags switched on (CLAUDE.md §4; see species.py).
     """
-    if include_muons:
-        raise NotImplementedError(
-            "eos.sfho: the muon lepton family is not wired. See "
-            "docs/DEFERRED.md; eos.dd2 implements it (SpeciesFlags(muons=True)).")
+    check_couplings(par, flags)
+    return System(
+        params=par, particles=active_baryons(flags), spec=spec,
+        n_B=n_B, T=T, SnB=SnB,
+        thermal_mesons=flags.thermal_mesons, photons=flags.photons,
+        thermal_neutrinos=flags.thermal_neutrinos,
+    )
 
 
 # =============================================================================
@@ -870,63 +807,33 @@ def result_to_guess(
 # SELF-TEST
 # =============================================================================
 if __name__ == "__main__":
+    from eos.sfho.parameters import get_sfho_2fam_phi, get_sfhoy_fortin
+
+    par, n_B, T = get_sfho_2fam_phi(), 0.16, 10.0
+    nucleons = SpeciesFlags()
+    hyperons = SpeciesFlags(hyperons=True)
+
     print("SFHo EOS Solvers Test")
     print("=" * 60)
-
-    params = get_sfho_2fam_phi()
-    n_B = 0.16
-    T = 10.0
-
     print(f"\nTest at n_B = {n_B} fm^-3, T = {T} MeV")
 
-    print("\n" + "-" * 50)
-    print("TEST 1: Beta equilibrium (nucleons only)")
-    r = solve_beta_eq_neutrinoless(n_B, T, params, BARYONS_N)
-    print(f"  converged = {r.converged}, error = {r.error:.2e}")
-    print(f"  sigma = {r.sigma:.2f} MeV, omega = {r.omega:.2f} MeV")
-    print(f"  Y_C = {r.Y_C:.4f}, P = {r.P_total:.2f} MeV/fm^3")
-    print(f"  n_p = {r.baryon_densities.get('p', 0):.4e} fm^-3")
-    print(f"  n_n = {r.baryon_densities.get('n', 0):.4e} fm^-3")
-
-    print("\n" + "-" * 50)
-    print("TEST 2: Beta equilibrium (nucleons + hyperons)")
-    r = solve_beta_eq_neutrinoless(0.32, T, params, BARYONS_NY)
-    print(f"  converged = {r.converged}, error = {r.error:.2e}")
-    print(f"  Y_C = {r.Y_C:.4f}, Y_S = {r.Y_S:.4f}")
-    print(f"  P = {r.P_total:.2f} MeV/fm^3")
-
-    print("\n" + "-" * 50)
-    print("TEST 3: Fixed Y_C = 0.3 (hadrons only)")
-    r = solve_fixed_yc(n_B, Y_C=0.3, T=T, params=params, particles=BARYONS_N)
-    print(f"  converged = {r.converged}, error = {r.error:.2e}")
-    print(f"  Y_C = {r.Y_C:.4f}, P = {r.P_total:.2f} MeV/fm^3")
-
-    print("\n" + "-" * 50)
-    print("TEST 4: Fixed Y_C = 0.5 (symmetric matter)")
-    r = solve_fixed_yc(n_B, Y_C=0.5, T=T, params=params, particles=BARYONS_N)
-    print(f"  converged = {r.converged}, error = {r.error:.2e}")
-    print(f"  P = {r.P_total:.2f} MeV/fm^3")
-    print(f"  n_p = {r.baryon_densities.get('p', 0):.4e} fm^-3")
-    print(f"  n_n = {r.baryon_densities.get('n', 0):.4e} fm^-3")
-
-    print("\n" + "-" * 50)
-    print("TEST 5: Fixed Y_C = 0.4, Y_S = 0.1 (with hyperons)")
-    r = solve_fixed_yc_ys(0.32, Y_C=0.4, Y_S=0.1, T=T,
-                          params=params, particles=BARYONS_NY)
-    print(f"  converged = {r.converged}, error = {r.error:.2e}")
-    print(f"  Y_C = {r.Y_C:.4f}, Y_S = {r.Y_S:.4f}")
-    print(f"  P = {r.P_total:.2f} MeV/fm^3")
-    print(f"  mu_S = {r.mu_S:.2f} MeV")
-
-    print("\n" + "-" * 50)
-    print("TEST 6: Trapped neutrinos Y_Le = 0.4")
-    r = solve_beta_eq_neutrino_trapped(n_B, Y_Le=0.4, T=50.0, params=params,
-                                       particles=BARYONS_N)
-    print(f"  converged = {r.converged}, error = {r.error:.2e}")
-    print(f"  Y_C = {r.Y_C:.4f}, Y_Le = {r.Y_Le:.4f}")
-    print(f"  n_e = {r.n_e:.4e}, n_nu = {r.n_nu:.4e}")
-    print(f"  mu_nue = {r.mu_nue:.2f} MeV")
-    print(f"  P = {r.P_total:.2f} MeV/fm^3")
-
+    r = solve_beta_eq_neutrinoless(par, n_B, nucleons, T=T)
+    print("\nbeta eq, nucleons        "
+          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P_total:.2f}")
+    r = solve_beta_eq_neutrinoless(par, 0.32, hyperons, T=T)
+    print("beta eq, +hyperons       "
+          f"converged={r.converged}  Y_C={r.Y_C:.4f}  Y_S={r.Y_S:.4f}")
+    r = solve_fixed_yc(par, n_B, 0.3, nucleons, T=T)
+    print("fixed Y_C = 0.3          "
+          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P_total:.2f}")
+    r = solve_fixed_yc_ys(get_sfhoy_fortin(), 0.32, 0.4, 0.1,
+                          hyperons, T=T)
+    print("fixed Y_C, Y_S           "
+          f"converged={r.converged}  Y_S={r.Y_S:.4f}  mu_S={r.mu_S:.2f}")
+    r = solve_beta_eq_neutrino_trapped(par, n_B, 0.4, nucleons, T=50.0)
+    print("trapped, Y_Le = 0.4      "
+          f"converged={r.converged}  mu_nue={r.mu_nue:.2f}  n_nu={r.n_nu:.3e}")
+    r = solve_isentropic_beta_eq(par, n_B, 1.0, nucleons)
+    print("isentropic, S/A = 1      "
+          f"converged={r.converged}  T={r.T:.3f} MeV  P={r.P_total:.2f}")
     print("\n" + "=" * 60)
-    print("All tests completed!")
