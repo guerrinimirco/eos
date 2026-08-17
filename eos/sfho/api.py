@@ -141,22 +141,71 @@ def eos_table(par, mode, species, axes, fixed=None, skip_errors=True,
                        progress=progress, verbose=verbose)
 
 
-#: The freezes eos_response implements — none yet. Each would answer "what is
-#: held fixed while the derivative is taken", which encodes which reactions are
-#: faster than the perturbation (CLAUDE.md section 5).
-RESPONSE_FREEZES = ()
+#: The freezes eos_response implements. Each answers "what is held fixed while
+#: the derivative is taken", which encodes which reactions are faster than the
+#: perturbation (CLAUDE.md section 5). The freezes that hold a composition —
+#: per-species Y_i, or the conserved fractions with the species free — are
+#: recorded in docs/DEFERRED.md.
+RESPONSE_FREEZES = ("equilibrium",)
 
 
-def eos_response(par, mode, species, frozen="equilibrium", **conditions):
-    """Second-derivative quantities at one state — not implemented for SFHo.
+def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
+                 **conditions):
+    """Second-derivative quantities at one state.
 
-    Raises, naming the gap, rather than returning a number computed under a
-    conditioning nobody asked for: a second derivative is only defined once
-    one says what is held fixed. `eos.dd2.eos_response` implements the
-    'equilibrium' and 'composition' freezes and is the worked example; SFHo
-    has no analytic Jacobian and no finite-difference response module yet.
+    frozen='equilibrium' — nothing is held: the composition re-equilibrates
+        under the perturbation. Returns
+
+            cs2_isothermal   (dP/dn_B)_T / (deps/dn_B)_T along the mode's
+                             own sequence
+            cs2_adiabatic    the same at fixed entropy per baryon, larger by
+                             the heat-capacity ratio (only at T > 0)
+            C_V, C_P         heat capacities per baryon (only at T > 0)
+            Gamma_th         thermal index against the T = 0 state of the same
+                             mode (only at T > 0)
+            chi              the susceptibility matrix chi_ab = dn_a/dmu_b for
+                             a, b in (B, C, S), in fm^-3 MeV^-1
+
+        The first four come from `eos.sfho.responses`, by finite differences
+        along re-solved sequences. `chi` comes from the analytic Jacobian in
+        `backends/`, which is the only route to it — the solver never varies
+        the three potentials independently, so there is no sequence to
+        difference along — and it is therefore the one quantity here that a
+        deleted `backends/` costs.
+
+    Both sound speeds are named for the thermal condition they are taken at,
+    because at T > 0 they are different numbers (CLAUDE.md section 5).
+
+    Returns a dict; raises NotImplementedError, naming the gap, for freezes
+    not yet wired.
     """
-    raise NotImplementedError(
-        "eos.sfho has no response functions: c_s^2, C_V, C_P, Gamma and the "
-        "susceptibility matrix are not implemented for this model "
-        "(see docs/DEFERRED.md). eos.dd2.eos_response has them.")
+    if frozen != "equilibrium":
+        raise NotImplementedError(
+            f"frozen={frozen!r} is not wired for eos.sfho; implemented: "
+            f"{RESPONSE_FREEZES}. Holding a composition needs the species "
+            f"fractions in the residual, which SFHo does not carry "
+            f"(see docs/DEFERRED.md)")
+    if n_B is None:
+        raise ValueError("eos_response needs n_B [fm^-3]")
+    mode, fracs = _normalize(mode, dict(conditions))
+    spec = mode_spec(mode, fracs)
+
+    from eos.sfho import responses as _fd
+    out = {"cs2_isothermal": _fd.sound_speed_isothermal(par, n_B, species,
+                                                        spec, T=T)}
+    if T > 0.0:
+        out["C_V"] = _fd.heat_capacity_V(par, n_B, species, spec, T)
+        out["C_P"] = _fd.heat_capacity_P(par, n_B, species, spec, T)
+        out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(par, n_B, species,
+                                                         spec, T)
+        out["Gamma_th"] = _fd.thermal_index(par, n_B, species, spec, T)
+    try:
+        from eos.sfho.backends.responses_jac import susceptibilities
+    except ImportError:
+        # `backends/` is optional (CLAUDE.md section 5). Everything above is
+        # unchanged without it; only chi_ab has no reference flavour to fall
+        # back to.
+        pass
+    else:
+        out["chi"] = susceptibilities(par, n_B, species, T=T, spec=spec)
+    return out

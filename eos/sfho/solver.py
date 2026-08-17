@@ -43,7 +43,7 @@ Usage:
     params = get_sfho_2fam_phi()
     result = solve_beta_eq_neutrinoless(n_B=0.16, T=10.0, params=params,
                                         particles=BARYONS_N)
-    print(f"P = {result.P_total} MeV/fm^3")
+    print(f"P = {result.P} MeV/fm^3")
 
 References:
 - Fortin, Oertel, Providencia, PASA 35 (2018) e044
@@ -77,6 +77,14 @@ from eos.sfho.thermodynamics import (
 from eos.general.thermodynamics_leptons import (
     electron_thermo, photon_thermo, neutrino_thermo, electron_thermo_from_density
 )
+
+try:
+    from eos.sfho.backends.jacobian import residual_jacobian
+except ImportError:
+    # `backends/` is optional: CLAUDE.md section 5 defines it by the property
+    # that deleting it changes no number, only the speed. Without it MINPACK
+    # builds a forward-difference Jacobian instead.
+    residual_jacobian = None
 
 
 # =============================================================================
@@ -404,6 +412,16 @@ class System(NamedTuple):
     thermal_mesons: bool = False       # the pi, K, eta Bose gas
     photons: bool = True
     thermal_neutrinos: bool = False    # flavours the composition does not track
+    #: Select the analytic-Jacobian backend (CLAUDE.md section 9). It is OFF by
+    #: default because it is not faster here: it cuts the residual evaluations
+    #: of a warm-started sweep from ~18 to ~11.5 per point, but a T > 0 kinetic
+    #: derivative costs four JEL evaluations per species, so the wall clock
+    #: moves the wrong way -- 0.49 -> 0.53 ms/pt for nucleons at T = 10 MeV,
+    #: 1.50 -> 2.01 ms/pt for the octet with a meson gas at T = 30 MeV. What it
+    #: is for is the second-derivative quantities, which need dR/dx itself
+    #: rather than a faster root. The finite-difference path stays the
+    #: reference, and the two agree to solver tolerance.
+    analytic_jac: bool = False
 
     @property
     def isentropic(self):
@@ -646,6 +664,22 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
     )
 
 
+def _jacobian(sys: System):
+    """The Jacobian MINPACK should use, or None for a forward difference.
+
+    The reference path is `residual` with no Jacobian: plain NumPy/SciPy, and
+    the oracle the analytic one is judged against (CLAUDE.md section 9). The
+    analytic one lives in `backends/`, which section 5 makes optional, so a
+    missing directory lands here rather than raising.
+
+    An isentropic solve always takes the reference path: the entropy row and
+    the temperature unknown are not differentiated analytically.
+    """
+    if residual_jacobian is None or not sys.analytic_jac or sys.isentropic:
+        return None
+    return lambda x: residual_jacobian(x, sys)
+
+
 def solve(sys: System, x0=None) -> EoSPoint:
     """Solve one point of the mode `sys.spec` declares.
 
@@ -677,9 +711,11 @@ def solve(sys: System, x0=None) -> EoSPoint:
     def equations(x):
         return residual(x, sys)
 
-    sol = root(equations, x0, method='hybr', options={'maxfev': maxit})
+    jac = _jacobian(sys)
+    sol = root(equations, x0, jac=jac, method='hybr', options={'maxfev': maxit})
     if not sol.success:
-        sol = root(equations, x0, method='lm', options={'maxiter': maxit})
+        sol = root(equations, x0, jac=jac, method='lm',
+                   options={'maxiter': maxit})
 
     error = max(abs(r) for r in equations(sol.x))
     converged = (error < tight) or (sol.success and error < loose)
@@ -939,13 +975,13 @@ if __name__ == "__main__":
 
     r = solve_beta_eq_neutrinoless(par, n_B, nucleons, T=T)
     print("\nbeta eq, nucleons        "
-          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P_total:.2f}")
+          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P:.2f}")
     r = solve_beta_eq_neutrinoless(par, 0.32, hyperons, T=T)
     print("beta eq, +hyperons       "
           f"converged={r.converged}  Y_C={r.Y_C:.4f}  Y_S={r.Y_S:.4f}")
     r = solve_fixed_yc(par, n_B, 0.3, nucleons, T=T)
     print("fixed Y_C = 0.3          "
-          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P_total:.2f}")
+          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P:.2f}")
     r = solve_fixed_yc_ys(get_sfhoy_fortin(), 0.32, 0.4, 0.1,
                           hyperons, T=T)
     print("fixed Y_C, Y_S           "
@@ -955,5 +991,5 @@ if __name__ == "__main__":
           f"converged={r.converged}  mu_nue={r.mu_nue:.2f}  n_nu={r.n_nu:.3e}")
     r = solve_isentropic_beta_eq(par, n_B, 1.0, nucleons)
     print("isentropic, S/A = 1      "
-          f"converged={r.converged}  T={r.T:.3f} MeV  P={r.P_total:.2f}")
+          f"converged={r.converged}  T={r.T:.3f} MeV  P={r.P:.2f}")
     print("\n" + "=" * 60)
