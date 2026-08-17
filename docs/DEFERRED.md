@@ -106,7 +106,7 @@ in `eos/` and in `nucleation/` now goes through
 
 ---
 
-### Only dd2 returns the shared state records; six models still return their own
+### `state.EoSPoint` and `LeptonThermo` are written but adopted by nobody
 
 `eos/general/state.py` holds the records every model is meant to hand back —
 `PhaseThermo` (matter only: the model's own fields under its own names, EVERY
@@ -114,9 +114,27 @@ active species' density, mu_i, mu_eff_i and m_eff_i per species, the conserved
 charges, P, eps, s), `LeptonThermo` (all four potentials explicit, so a
 transparent muon family is a visible assumption rather than a hidden
 `mu_mu = -mu_C`), and `EoSPoint` (what a mode returns). `eos/general/modes.py`
-holds `ModeSpec`, the mode as one choice per conserved charge. dd2's
-thermodynamics returns `PhaseThermo` and its solver takes a `ModeSpec`. The
-others do not, and `eos/mixed` still carries a second `PhaseThermo` of its own.
+holds `ModeSpec`, the mode as one choice per conserved charge.
+
+Where this actually stands: `PhaseThermo` is adopted by dd2 and sfho, whose
+`thermodynamics.py` both return it, and `ModeSpec` by dd2, sfho and mixed.
+`EoSPoint` and `LeptonThermo` are adopted by NOBODY — dd2's solver returns a
+flat `EoSPoint` of its own, and sfho now returns the same flat record, field
+for field, because two models returning one shape is worth more than one model
+leading the way to a third. `eos/mixed` still carries a second `PhaseThermo`.
+
+Converting to the shared `EoSPoint` is therefore ONE commit across dd2 and
+sfho together, not a per-model step: doing it in either alone puts two record
+shapes in the repository at the same time, which is the single thing section
+13 exists to prevent. What it buys is the nesting — `point.matter` as a
+`PhaseThermo` and `point.leptons` as a `LeptonThermo`, with the totals on top —
+and it costs both models' baselines a key rename. What it must keep is
+`converged` / `error` on the record: sfho reports non-convergence as a return
+value at every layer, and its table sweep reads the flag point by point, while
+dd2 raises and wraps at `api.py`. `LeptonThermo` also has no home in dd2 or
+sfho until the muon family is wired.
+
+The rest of this entry is the design the flat records already implement.
 
 What each model has to supply is decided by ONE question — what its internal
 self-consistent solution is — because the rest of the state is (chemical
@@ -367,10 +385,12 @@ both touch the same code.
 - No `compute_nmp` / `invert_nmp`. dd2 has both; sfho needs the same forward
   and inverse nuclear-matter-parameter maps. `nmp.py` today computes
   saturation properties by re-solving the model, not through the analytic map.
-- The records are still sfho's own (`SFHoEOSResult`, `SFHoThermo`), not
-  `eos.general.state`'s `PhaseThermo` / `EoSPoint`. `species.py` and `api.py`
-  now exist, so `eos_point`, `eos_table` and `eos_response` do, and the
-  records are what is left of that entry.
+- The mean fields are `sigma, omega, rho, phi` here and `sigma, omega0, rho0,
+  phi0` in dd2, in `EoSPoint` and in `PhaseThermo.fields` alike. One name per
+  job (section 13), so one of the two spellings has to go; sfho's is also the
+  `.dat` column header the published 2fam PNS tables carry, so the rename is a
+  file-format change and belongs with the table-I/O unification rather than
+  with a record swap.
 - `eos_response` is not implemented at all: no sound speed, heat capacity,
   adiabatic index or susceptibility matrix. It raises naming this file.
   SFHo has no analytic Jacobian either, so both the reference

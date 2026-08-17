@@ -37,7 +37,7 @@ from itertools import product
 from eos.general import modes
 from eos.sfho.species import SpeciesFlags
 from eos.sfho.solver import (
-    SFHoEOSResult, solve_mode, default_guess, warm_start,
+    EoSPoint, solve_mode, default_guess, warm_start,
 )
 from eos.sfho.parameters import (
     SFHoParams,
@@ -122,7 +122,7 @@ def mode_spec(mode: str, fracs: Dict[str, float]) -> modes.ModeSpec:
 # ONE POINT AS A ROW
 # =============================================================================
 
-def hadronic_row(r: SFHoEOSResult) -> Dict[str, Any]:
+def hadronic_row(r: EoSPoint) -> Dict[str, Any]:
     """Flatten one solved point into a dict row.
 
     Keyed the way `eos.dd2.table.hadronic_row` and `eos.mixed.composition_row`
@@ -135,12 +135,12 @@ def hadronic_row(r: SFHoEOSResult) -> Dict[str, Any]:
     """
     n_B = r.n_B
     row = dict(n_B=n_B, T=r.T, chi=0.0, phase="H",
-               P=r.P_total, eps=r.e_total, s=r.s_total,
-               S_per_B=(r.s_total / n_B if n_B else 0.0),
+               P=r.P, eps=r.eps, s=r.s,
+               S_per_B=r.entropy_per_baryon,
                mu_B=r.mu_B, Y_C=r.Y_C, Y_S=r.Y_S,
                mu_e=r.mu_e, mu_S=r.mu_S, mu_nue=r.mu_nue,
                Y_e=r.n_e / n_B, **{"Y_mu-": 0.0})
-    for name, n in r.baryon_densities.items():
+    for name, n in r.composition:
         row[f"Y_{name}"] = n / n_B
     if r.n_nu:
         row["Y_nue"] = r.n_nu / n_B
@@ -193,7 +193,7 @@ class TableResult:
     nB: np.ndarray
     temp_values: np.ndarray               # the T or S/A grid
     temp_key: str                         # 'T' or 'SnB'
-    points: list                          # points[i_combo][i_nB] SFHoEOSResult
+    points: list                          # points[i_combo][i_nB] EoSPoint
     #: [(temperature value, {fraction: value}), ...], parallel to `points`.
     #: One entry per line; with no fraction axes it is one entry per
     #: temperature and the dict is empty.
@@ -521,7 +521,7 @@ def _settings_to_spec(settings: TableSettings) -> Tuple[TableSpec, List[str]]:
     return spec, frac_names + [temp_key if temp_key == "T" else "S"]
 
 
-def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
+def compute_table(settings: TableSettings) -> Dict[Tuple, List[EoSPoint]]:
     """Solve the grid a `TableSettings` describes.
 
     An adapter onto `build_table`: same sweep, same warm start, keyed and
@@ -573,7 +573,17 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[SFHoEOSResult]]:
     return all_results
 
 
-def save_results(all_results: Dict[Tuple, List[SFHoEOSResult]], 
+#: .dat column name -> the attribute of `EoSPoint` that fills it. The two
+#: differ because the column names are a FORMAT ON DISK -- the published
+#: 2fam PNS tables carry these headers and are read back by `load_eos_table`
+#: -- while the record now uses the repository's names (P, eps, s).
+_COLUMN_ATTR = {
+    'P_total': 'P', 'e_total': 'eps', 's_total': 's',
+    'f_total': 'free_energy_density',
+}
+
+
+def save_results(all_results: Dict[Tuple, List[EoSPoint]], 
                  settings: TableSettings,
                  param_names: List[str]):
     """Save results to file."""
@@ -645,7 +655,7 @@ def save_results(all_results: Dict[Tuple, List[SFHoEOSResult]],
                         elif col == 'mu_C':
                             val = r.mu_C
                         else:
-                            val = getattr(r, col, 0.0)
+                            val = getattr(r, _COLUMN_ATTR.get(col, col), 0.0)
                         if val is None:
                             val = 0.0
                         if isinstance(val, bool):
@@ -656,13 +666,13 @@ def save_results(all_results: Dict[Tuple, List[SFHoEOSResult]],
     print(f"\nSaved to: {filename}")
 
 
-def results_to_arrays(results: List[SFHoEOSResult]) -> Dict[str, np.ndarray]:
-    """Convert list of SFHoEOSResult to dictionary of numpy arrays."""
+def results_to_arrays(results: List[EoSPoint]) -> Dict[str, np.ndarray]:
+    """Convert list of EoSPoint to dictionary of numpy arrays."""
     attrs = [
         'n_B', 'T', 'P_total', 'e_total', 's_total', 'f_total',
         'sigma', 'omega', 'rho', 'phi', 'mu_B', 'mu_C', 'mu_S', 'mu_nue', 'mu_e',
         'Y_C', 'Y_S', 'n_C', 'n_e', 'error'
-    ]
+    ]   # keyed by COLUMN name; see _COLUMN_ATTR
     arrays = {}
     
     # Filter to converged only
@@ -671,7 +681,7 @@ def results_to_arrays(results: List[SFHoEOSResult]) -> Dict[str, np.ndarray]:
     for attr in attrs:
         vals = []
         for r in converged_results:
-            val = getattr(r, attr, np.nan)
+            val = getattr(r, _COLUMN_ATTR.get(attr, attr), np.nan)
             vals.append(val if val is not None else np.nan)
         arrays[attr] = np.array(vals)
     
@@ -1036,7 +1046,7 @@ if __name__ == "__main__":
     )
     result = build_table(spec, verbose=True)
     for (T, _), line in zip(result.combos, result.points):
-        P = [r.P_total for r in line if r.converged]
+        P = [r.P for r in line if r.converged]
         print(f"T={T:5.1f} MeV: {len(P)}/{len(spec.axes['nB'])} converged, "
               f"P in [{min(P):.4e}, {max(P):.4e}] MeV/fm^3")
     print("=" * 70 + "\n")

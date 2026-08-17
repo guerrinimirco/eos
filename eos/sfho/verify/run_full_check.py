@@ -100,7 +100,7 @@ def euler_residual(par, result, flags):
     """
     mu_dot_n = 0.0
     for p in active_baryons(flags):
-        n = result.baryon_densities.get(p.name, 0.0)
+        n = result.n(p.name)
         mu = (p.baryon_no * result.mu_B + p.charge * result.mu_C
               + p.strangeness * result.mu_S)
         mu_dot_n += mu * n
@@ -109,10 +109,10 @@ def euler_residual(par, result, flags):
         gas = thermal_meson_thermo(result.T, result.mu_C, result.mu_S,
                                    result.omega, result.rho, par)
         mu_dot_n += gas.mu_dot_n_mesons
-    if result.e_total == 0.0:
+    if result.eps == 0.0:
         return 0.0
-    return ((result.e_total + result.P_total - result.T * result.s_total
-             - mu_dot_n) / result.e_total)
+    return ((result.eps + result.P - result.T * result.s
+             - mu_dot_n) / result.eps)
 
 
 def _check_euler(nuc, hyp, grid):
@@ -157,7 +157,7 @@ def _check_euler(nuc, hyp, grid):
 def _energy_per_baryon(par, n_B, Y_C):
     r = solve_fixed_yc(par, n_B, Y_C, NUCLEONS_NOGAMMA, T=0.01)
     m_N = 0.5 * (par.m_n + par.m_p)
-    return r.e_total / n_B - m_N
+    return r.eps / n_B - m_N
 
 
 def symmetry_energy(par, n_B, delta=0.05):
@@ -184,7 +184,7 @@ def symmetry_energy_analytic(par, n_B):
     """
     r = solve_fixed_yc(par, n_B, 0.5, NUCLEONS_NOGAMMA, T=0.01)
     k_F = hc * (3.0 * np.pi**2 * n_B / 2.0) ** (1.0 / 3.0)
-    E_F = np.sqrt(k_F**2 + r.m_eff["n"]**2)
+    E_F = np.sqrt(k_F**2 + r.m_eff("n")**2)
     A = par.compute_A(r.sigma, r.omega)
     kinetic = k_F**2 / (6.0 * E_F)
     potential = n_B * hc3 * par.g_rho_N**2 / (8.0 * (par.m_rho**2 + 2.0 * A))
@@ -229,8 +229,8 @@ def _check_causality(par, grid):
         if not r.converged:
             return CheckResult("causality, monotone P", False, 1.0,
                                f"no convergence at n_B={n_B:g}")
-        P.append(r.P_total)
-        eps.append(r.e_total)
+        P.append(r.P)
+        eps.append(r.eps)
     P, eps = np.asarray(P), np.asarray(eps)
     cs2 = np.gradient(P, eps)
     dP = np.diff(P)
@@ -270,8 +270,8 @@ def _check_compose(par, compose_dir=SFHO_COMPOSE):
                 continue
             r = solve_fixed_yc(par, nb, float(data.Y_C_values[iY]),
                                NUCLEONS, T=T, leptons=True)
-            err = max(abs(r.P_total - P_ref) / abs(P_ref),
-                      abs(r.e_total - eps_ref) / abs(eps_ref))
+            err = max(abs(r.P - P_ref) / abs(P_ref),
+                      abs(r.eps - eps_ref) / abs(eps_ref))
             if err > worst:
                 worst, where = err, f"Y_q={data.Y_C_values[iY]:.2f} n_B={nb:.3f}"
     return CheckResult("CompOSE HS(SFHo)", worst < 2e-3, worst,

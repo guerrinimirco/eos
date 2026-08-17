@@ -34,7 +34,7 @@ from eos.sfho.thermodynamics import (
 from eos.sfho.solver import (
     solve_beta_eq_neutrinoless as solve_pure_H_beta,
     solve_fixed_yc as solve_pure_H_fixed_yc,
-    SFHoEOSResult
+    EoSPoint as SFHoEOSResult
 )
 
 # AlphaBag (quark) modules

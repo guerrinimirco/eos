@@ -130,7 +130,7 @@ def find_saturation_density(params: Optional[SFHoParams] = None,
     def pressure_at_density(n_B: float) -> float:
         result = solve_fixed_yc(params, n_B, 0.5, SpeciesFlags(photons=False),
                            T=0.01)
-        return result.P_total  # For hadrons-only, P_total = P_hadrons
+        return result.P  # hadrons only, so the total IS P_hadrons
     
     # Find where P = 0
     n_sat = brentq(pressure_at_density, n_min, n_max)
@@ -153,8 +153,8 @@ def compute_energy_per_baryon(params: Optional[SFHoParams], n_B: float, Y_C: flo
     if not result.converged:
         raise RuntimeError(f"Failed to converge at n_B={n_B}, Y_C={Y_C}")
     
-    # For hadrons-only calculation (no electrons/photons), e_total = e_hadrons
-    epsilon = result.e_total / result.n_B - M_N
+    # Hadrons only (no electrons, no photons), so the total IS eps_hadrons
+    epsilon = result.eps / result.n_B - M_N
     return epsilon
 
 
@@ -169,7 +169,7 @@ def compute_pressure(params: Optional[SFHoParams], n_B: float, Y_C: float = 0.5)
     result = solve_fixed_yc(params, n_B, Y_C, SpeciesFlags(photons=False),
                            T=0.01)
     
-    return result.P_total  # For hadrons-only, P_total = P_hadrons
+    return result.P  # hadrons only, so the total IS P_hadrons
 
 
 def compute_symmetry_energy(params: Optional[SFHoParams], n_B: float) -> float:

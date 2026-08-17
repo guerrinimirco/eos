@@ -16,7 +16,7 @@ n_B in fm^-3, T and potentials in MeV, eps and P in MeV/fm^3.
 
 NON-CONVERGENCE IS A RETURN VALUE here, not an exception: a sampler walks into
 unphysical corners constantly and must be able to score the point and move on.
-SFHo's solvers report it that way all the way down — `SFHoEOSResult.converged`
+SFHo's solvers report it that way all the way down — `EoSPoint.converged`
 against the residual norm in `.error`, with a bounded iteration count — so
 this surface only has to pass it on.
 
@@ -26,7 +26,7 @@ References:
 """
 from dataclasses import dataclass
 
-from eos.sfho.solver import SFHoEOSResult, solve_mode
+from eos.sfho.solver import EoSPoint, solve_mode
 from eos.sfho.table import MODES, TableSpec, build_table, mode_spec
 
 
@@ -39,7 +39,7 @@ class PointResult:
     """
     ok: bool
     message: str
-    point: SFHoEOSResult = None
+    point: EoSPoint = None
 
 
 def _normalize(mode, conditions):

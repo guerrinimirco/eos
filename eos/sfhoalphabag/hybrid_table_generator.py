@@ -86,7 +86,7 @@ from eos.sfho.parameters import (
     get_sfho_2fam
 )
 from eos.sfho.solver import (
-    solve_beta_eq_neutrinoless, solve_fixed_yc, SFHoEOSResult,
+    solve_beta_eq_neutrinoless, solve_fixed_yc, EoSPoint as SFHoEOSResult,
     BARYONS_N, BARYONS_NY, BARYONS_NYD
 )
 from eos.sfho.table import TableSettings as SFHoTableSettings, compute_table as compute_sfho_table

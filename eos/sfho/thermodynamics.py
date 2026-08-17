@@ -27,6 +27,7 @@ from eos.general.physics_constants import hc, hc3
 from eos.general.particles import Particle
 from eos.general.fermi_integrals import solve_fermi_jel
 from eos.general.bose_integrals import solve_bose_jel
+from eos.general.state import PhaseThermo
 from eos.sfho.parameters import SFHoParams
 
 
@@ -125,50 +126,6 @@ class MesonThermoResult:
     s_mesons: float    # Meson entropy density
     mu_dot_n_mesons: float       # Σ_i μ*_i n_i over the gas
     densities: Dict[str, float]  # Individual meson densities
-
-
-@dataclass
-class SFHoThermo:
-    """
-    Full thermodynamic result for SFHo hadronic matter.
-    
-    This is the SFHo equivalent of ZLThermo and VMITThermo.
-    The meson fields (sigma, omega, rho, phi) play the same role as
-    particle densities (n_p, n_n or n_u, n_d, n_s) in ZL/vMIT.
-    
-    Includes source terms for field equations (src_sigma, src_omega, src_rho, src_phi)
-    to avoid redundant baryon_thermo calls in solvers.
-    """
-    # Meson fields
-    sigma: float = 0.0
-    omega: float = 0.0
-    rho: float = 0.0
-    phi: float = 0.0
-    # Densities
-    n_B: float = 0.0
-    n_C: float = 0.0
-    n_S: float = 0.0
-    Y_C: float = 0.0
-    Y_S: float = 0.0
-    # Temperature
-    T: float = 0.0
-    # Chemical potentials
-    mu_B: float = 0.0
-    mu_C: float = 0.0
-    mu_S: float = 0.0
-    # Thermodynamics
-    P: float = 0.0
-    e: float = 0.0
-    s: float = 0.0
-    f: float = 0.0
-    # Source terms for field equations (for solver use)
-    src_sigma: float = 0.0
-    src_omega: float = 0.0
-    src_rho: float = 0.0
-    src_phi: float = 0.0
-    # Individual hadron states (name -> HadronState)
-    states: Dict[str, HadronState] = field(default_factory=dict)
-
 
 
 # =============================================================================
@@ -649,15 +606,28 @@ def thermo_from_mu(
     particles: List[Particle],
     params: SFHoParams,
     include_pseudoscalar_mesons: bool = False
-) -> SFHoThermo:
+) -> PhaseThermo:
     """
-    Compute full SFHo thermodynamics from (μ_B, μ_C, μ_S, σ, ω, ρ, φ, T).
-    
-    This is the main user-facing function that takes all inputs and returns
-    complete thermodynamic results. Analogous to ZL's compute_zl_thermo_from_mu_n()
-    and vMIT's compute_vmit_thermo_from_mu_n().
+    The matter state at (μ_B, μ_C, μ_S, σ, ω, ρ, φ, T), as a `PhaseThermo`.
 
-    
+    MATTER ONLY — baryons, the meson mean fields and any thermal π/K/η gas.
+    No leptons and no photons: those are shared by the whole system rather
+    than belonging to a phase, so `solver.py` adds them.
+
+    The gas carries electric charge and strangeness, so it enters n_C and n_S
+    (CLAUDE.md §2) — through `extra_charges`, because most of its members are
+    not yet in `eos.general.particles` and so cannot be summed as species.
+    `eos.dd2.thermodynamics.assemble` does the same, and both are the same
+    record, so a caller reads either model's state the same way.
+
+    Σᵢ μᵢ nᵢ is supplied rather than derived: the baryons enter at their full
+    potentials μᵢ = Bᵢμ_B + Cᵢμ_C + Sᵢμ_S, but the gas enters at its EFFECTIVE
+    potentials, since the ω and ρ shifts it carries have no partner in the
+    field energy to cancel against (they are sourced by the baryons alone).
+
+    SFHo's couplings are constants, so there is no rearrangement self-energy:
+    Σ^R = 0, and it is stated rather than omitted.
+
     Args:
         mu_B, mu_C, mu_S: Conserved charge chemical potentials (MeV)
         sigma, omega, rho, phi: Meson fields (MeV)
@@ -665,55 +635,51 @@ def thermo_from_mu(
         particles: List of baryon species
         params: Model parameters
         include_pseudoscalar_mesons: Include π, K, η contributions
-        
+
     Returns:
-        SFHoThermo with full thermodynamic state
+        PhaseThermo — the shared record of `eos.general.state`
     """
     # Compute baryon thermodynamics
     hadron_result = baryon_thermo(
         T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, particles, params
     )
-    
+
     # Mean-field meson contributions (σ, ω, ρ, φ)
     P_mf, e_mf = meson_field_thermo(sigma, omega, rho, phi, params)
-    
+
     # Total from baryons + mean-field mesons
     P_total = hadron_result.P_hadrons + P_mf
     e_total = hadron_result.e_hadrons + e_mf
     s_total = hadron_result.s_hadrons
-    
-    # Conserved densities start from hadron contributions
-    n_B = hadron_result.n_B
-    n_C = hadron_result.n_C
-    n_S = hadron_result.n_S
-    
+
+    densities, mu_eff_i, m_eff_i = {}, {}, {}
+    mu_dot_n = 0.0
+    for p in particles:
+        st = hadron_result.states[p.name]
+        densities[p.name] = st.n
+        mu_eff_i[p.name] = st.mu_eff
+        m_eff_i[p.name] = st.m_eff
+        mu_dot_n += (p.baryon_no * mu_B + p.charge * mu_C
+                     + p.strangeness * mu_S) * st.n
+
+    gas_C = gas_S = 0.0
     # Optional: pseudoscalar mesons (π, K, η)
     if include_pseudoscalar_mesons:
         meson_result = thermal_meson_thermo(T, mu_C, mu_S, omega, rho, params)
         P_total += meson_result.P_mesons
         e_total += meson_result.e_mesons
         s_total += meson_result.s_mesons
-        n_C += meson_result.n_C_mesons
-        n_S += meson_result.n_S_mesons
-    
-    # Free energy density
-    f_total = e_total - s_total * T
-    
-    Y_C = n_C / n_B if n_B > 1e-15 else 0.0
-    Y_S = n_S / n_B if n_B > 1e-15 else 0.0
-    
-    return SFHoThermo(
-        sigma=sigma, omega=omega, rho=rho, phi=phi,
-        n_B=n_B, n_C=n_C, n_S=n_S,
-        Y_C=Y_C, Y_S=Y_S,
-        T=T,
-        mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
-        P=P_total, e=e_total, s=s_total, f=f_total,
-        src_sigma=hadron_result.src_sigma,
-        src_omega=hadron_result.src_omega,
-        src_rho=hadron_result.src_rho,
-        src_phi=hadron_result.src_phi,
-        states=hadron_result.states
+        gas_C = meson_result.n_C_mesons
+        gas_S = meson_result.n_S_mesons
+        mu_dot_n += meson_result.mu_dot_n_mesons
+
+    return PhaseThermo.assemble(
+        T=T, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
+        fields={"sigma": sigma, "omega": omega, "rho": rho, "phi": phi},
+        densities=densities, mu_eff_i=mu_eff_i, m_eff_i=m_eff_i,
+        P=P_total, eps=e_total, s=s_total, mu_dot_n=mu_dot_n,
+        Sigma_R=0.0,
+        extra_charges=(0.0, gas_C, gas_S),
     )
 
 
@@ -764,155 +730,3 @@ def get_residual_vector(
 # =============================================================================
 # SELF-TEST
 # =============================================================================
-if __name__ == "__main__":
-    from particles import Proton, Neutron, Lambda, SigmaP, Sigma0, SigmaM, Xi0, XiM
-    from particles import DeltaPP, DeltaP, Delta0, DeltaM
-    from eos.sfho.parameters import get_sfho_2fam_phi, print_params_summary
-    
-    print("Hadron Thermodynamics Module (SFHo)")
-    print("=" * 70)
-    
-    # Load parameters
-    params = get_sfho_2fam_phi()
-    print_params_summary(params)
-    
-    # Test parameters
-    T = 10.0  # MeV
-    mu_B = 950.0  # MeV (typical for n ~ n_sat)
-    mu_C = -20.0  # MeV (slightly neutron-rich)
-    mu_S = 0.0    # MeV
-    
-    # Initial guess for fields (MeV)
-    sigma = 50.0  # Attractive scalar
-    omega = 100.0 # Repulsive vector
-    rho = 5.0     # Isovector (small for near-symmetric)
-    phi = 0.0     # Strangeness (zero for nucleons only)
-    
-    # Test with nucleons only
-    print("\n" + "=" * 70)
-    print("TEST 1: Nucleons only")
-    print("-" * 50)
-    nucleons = [Proton, Neutron]
-    
-    result = baryon_thermo(
-        T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, nucleons, params
-    )
-    
-    print(f"T = {T} MeV, μ_B = {mu_B} MeV, μ_C = {mu_C} MeV")
-    print(f"σ = {sigma} MeV, ω = {omega} MeV, ρ = {rho} MeV")
-    print()
-    print(f"n_B = {result.n_B:.4e} fm⁻³")
-    print(f"n_C = {result.n_C:.4e} fm⁻³")
-    print(f"P_hadrons = {result.P_hadrons:.4e} MeV/fm³")
-    print(f"e_hadrons = {result.e_hadrons:.4e} MeV/fm³")
-    print(f"s_hadrons = {result.s_hadrons:.4e} fm⁻³")
-    print()
-    print("Individual states:")
-    for name, state in result.states.items():
-        print(f"  {name}: n={state.n:.4e}, m*={state.m_eff:.1f} MeV, μ*={state.mu_eff:.1f} MeV")
-    
-    # Field residuals
-    res = field_residuals(
-        sigma, omega, rho, phi,
-        result.src_sigma, result.src_omega, result.src_rho, result.src_phi,
-        params
-    )
-    print(f"\nField residuals (should be ~0 at solution):")
-    print(f"  res_σ = {res[0]:.4e}")
-    print(f"  res_ω = {res[1]:.4e}")
-    print(f"  res_ρ = {res[2]:.4e}")
-    print(f"  res_φ = {res[3]:.4e}")
-    
-    # Meson contribution
-    P_m, e_m = meson_field_thermo(sigma, omega, rho, phi, params)
-    print(f"\nMeson contributions:")
-    print(f"  P_meson = {P_m:.4e} MeV/fm³")
-    print(f"  e_meson = {e_m:.4e} MeV/fm³")
-    
-    # Test with hyperons
-    print("\n" + "=" * 70)
-    print("TEST 2: Nucleons + Hyperons")
-    print("-" * 50)
-    
-    mu_S = 50.0  # Non-zero strangeness potential
-    phi = 10.0   # Non-zero φ field
-    
-    baryons = [Proton, Neutron, Lambda, SigmaP, Sigma0, SigmaM, Xi0, XiM]
-    
-    result = baryon_thermo(
-        T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, baryons, params
-    )
-    
-    print(f"T = {T} MeV, μ_B = {mu_B} MeV, μ_C = {mu_C} MeV, μ_S = {mu_S} MeV")
-    print()
-    print(f"n_B = {result.n_B:.4e} fm⁻³")
-    print(f"n_S = {result.n_S:.4e} fm⁻³")
-    print(f"P_hadrons = {result.P_hadrons:.4e} MeV/fm³")
-    print()
-    print("Individual states:")
-    for name, state in result.states.items():
-        if abs(state.n) > 1e-10:
-            print(f"  {name:10s}: n={state.n:.4e}, m*={state.m_eff:.1f} MeV")
-    
-    # Test with Deltas
-    print("\n" + "=" * 70)
-    print("TEST 3: Full baryon octet + Deltas")
-    print("-" * 50)
-    
-    all_baryons = baryons + [DeltaPP, DeltaP, Delta0, DeltaM]
-    
-    result = baryon_thermo(
-        T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, all_baryons, params
-    )
-    
-    print(f"Total baryons: {len(all_baryons)}")
-    print(f"n_B = {result.n_B:.4e} fm⁻³")
-    print()
-    print("Non-zero densities:")
-    for name, state in result.states.items():
-        if abs(state.n) > 1e-10:
-            print(f"  {name:10s}: n={state.n:.4e}")
-    
-    # Test pseudoscalar mesons
-    print("\n" + "=" * 70)
-    print("TEST 4: Pseudoscalar mesons (π, K, η)")
-    print("-" * 50)
-    
-    T_high = 50.0  # Higher T to have significant meson density
-    mu_C_test = 10.0
-    mu_S_test = 20.0
-    
-    print(f"T = {T_high} MeV, μ_C = {mu_C_test} MeV, μ_S = {mu_S_test} MeV")
-    print()
-    
-    meson_result = thermal_meson_thermo(T_high, mu_C_test, mu_S_test, params)
-    
-    print(f"n_C (mesons) = {meson_result.n_C_mesons:.4e} fm⁻³")
-    print(f"n_S (mesons) = {meson_result.n_S_mesons:.4e} fm⁻³")
-    print(f"P_mesons = {meson_result.P_mesons:.4e} MeV/fm³")
-    print(f"e_mesons = {meson_result.e_mesons:.4e} MeV/fm³")
-    print(f"s_mesons = {meson_result.s_mesons:.4e} fm⁻³")
-    print()
-    print("Individual meson densities:")
-    for name, n in meson_result.densities.items():
-        if n > 1e-10:
-            print(f"  {name:10s}: n = {n:.4e} fm⁻³")
-    
-    # Test thermo_from_mu with mesons
-    print("\n" + "=" * 70)
-    print("TEST 5: Total EOS with baryons and mesons")
-    print("-" * 50)
-    
-    P_tot, e_tot, s_tot, hadron_res, meson_res = thermo_from_mu(
-        T_high, mu_B, mu_C_test, mu_S_test, sigma, omega, rho, phi,
-        all_baryons, params, include_pseudoscalar_mesons=True
-    )
-    
-    print(f"P_total = {P_tot:.4e} MeV/fm³")
-    print(f"e_total = {e_tot:.4e} MeV/fm³")
-    print(f"s_total = {s_tot:.4e} fm⁻³")
-    if meson_res:
-        print(f"\nMeson contribution to P: {meson_res.P_mesons:.4e} MeV/fm³")
-    
-    print("\n" + "=" * 70)
-    print("All tests completed!")

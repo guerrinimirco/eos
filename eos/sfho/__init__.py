@@ -20,7 +20,7 @@ from eos.sfho.species import (
     SpeciesFlags, active_baryons, check_couplings,
 )
 from eos.sfho.solver import (
-    SFHoEOSResult, warm_start, default_guess, unknown_names,
+    EoSPoint, warm_start, default_guess, unknown_names,
     solve_mode, solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
     solve_fixed_yc, solve_fixed_yc_ys,
     solve_isentropic_beta_eq, solve_isentropic_trapped,
@@ -37,7 +37,7 @@ from eos.sfho.api import (
 
 __all__ = [
     "SFHoParams", "SpeciesFlags", "active_baryons", "check_couplings",
-    "SFHoEOSResult", "warm_start", "default_guess", "unknown_names",
+    "EoSPoint", "warm_start", "default_guess", "unknown_names",
     "solve_mode", "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",
     "solve_isentropic_beta_eq", "solve_isentropic_trapped",
