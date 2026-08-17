@@ -361,20 +361,37 @@ def meson_field_thermo(
     Compute meson field contributions to pressure and energy density.
     
     The meson Lagrangian contributes to the thermodynamics:
-    
-    P_meson = -V(σ) + ½m²_ω ω² + (c₃/4)ω⁴ 
+
+    P_meson = -V(σ) + ½m²_ω ω² + (c₃/4)ω⁴
               + ½m²_ρ ρ² + (c₄/4)ρ⁴ + Aρ²
               + ½m²_φ φ²
-              
-    e_meson = +V(σ) + ½m²_ω ω² + (3c₃/4)ω⁴
+
+    e_meson = +V(σ) + ½m²_ω ω² + (3c₃/4)ω⁴ + ω(∂A/∂ω)ρ²
               + ½m²_ρ ρ² + (3c₄/4)ρ⁴ + Aρ²
               + ½m²_φ φ²
-    
+
     where V(σ) = ½m²_σ σ² + (g₂/3)σ³ + (g₃/4)σ⁴
-    
+
     Note: The sign conventions follow from the mean-field Lagrangian.
     The attractive σ field contributes negatively to pressure.
-    
+
+    The ω(∂A/∂ω)ρ² term in e_meson is the partner of the ∂A/∂ω ρ² source in
+    the ω field equation (`field_residuals`; Fortin, Oertel & Providência
+    2018, Eq. 8, and Steiner, Prakash, Lattimer & Ellis 2005, Eq. 56). A is a
+    function of ω as well as σ — A(σ,ω) = g²_ρN [Σᵢ aᵢσⁱ + Σⱼ bⱼω^2ʲ] — so
+    eliminating the ω source through its own field equation, which is what
+    turns ½m²_ω ω² into ½m²_ω ω² + (3c₃/4)ω⁴, leaves this term behind as well:
+
+        e_ω = -½m²_ω ω² - (c₃/4)ω⁴ + ω·src_ω
+            = ½m²_ω ω² + (3c₃/4)ω⁴ + ω(∂A/∂ω)ρ²
+
+    Keeping only b₁ gives A = g²_ρ b₁ ω², so ω(∂A/∂ω)ρ² = 2Aρ² and the cross
+    term enters e as 3Aρ² against Aρ² in P — the familiar factor of three of
+    the Horowitz-Piekarewicz Λ_v ω²ρ² coupling this generalises. σ has no such
+    partner: it reaches the baryons through m* and the scalar density rather
+    than through μ, so V(σ) cancels between e and P and the aᵢ keep
+    coefficient one.
+
     Args:
         sigma, omega, rho, phi: Meson fields (MeV)
         params: Model parameters
@@ -393,12 +410,17 @@ def meson_field_thermo(
     rho_sq = rho**2
     phi_sq = phi**2
     
-    # ω contribution
-    P_omega = 0.5 * params.m_omega**2 * omega_sq + (params.c3 / 4.0) * omega**4
-    e_omega = 0.5 * params.m_omega**2 * omega_sq + (3.0 * params.c3 / 4.0) * omega**4
-    
     # ρ contribution (including A-function)
     A = params.compute_A(sigma, omega)
+    dA_domega = params.compute_dA_domega(omega)
+
+    # ω contribution. The energy density also carries ω(∂A/∂ω)ρ², the partner
+    # of the ∂A/∂ω ρ² source in the ω field equation — see the docstring.
+    P_omega = 0.5 * params.m_omega**2 * omega_sq + (params.c3 / 4.0) * omega**4
+    e_omega = (0.5 * params.m_omega**2 * omega_sq
+               + (3.0 * params.c3 / 4.0) * omega**4
+               + omega * dA_domega * rho_sq)
+
     P_rho = 0.5 * params.m_rho**2 * rho_sq + (params.c4 / 4.0) * rho**4 + A * rho_sq
     e_rho = 0.5 * params.m_rho**2 * rho_sq + (3.0 * params.c4 / 4.0) * rho**4 + A * rho_sq
     

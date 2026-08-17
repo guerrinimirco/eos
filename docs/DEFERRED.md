@@ -357,57 +357,6 @@ both touch the same code.
   other models reach the spec API, so it lands as one rename, not five.
 
 ### sfho
-
-**The energy density is missing the omega-derivative of the A(sigma,omega)
-cross term, and Euler fails by exactly that much.**
-
-The Euler / Hugenholtz-Van Hove identity of CLAUDE.md section 8,
-
-    eps + P = T s + sum_i mu_i n_i
-
-is a thermodynamic identity, so a model either satisfies it or is wrong. SFHo
-as shipped misses it by 1.1e-2 to 1.8e-2 relative -- and by exactly
-
-    -omega (dA/domega) rho^2 / (hbar c)^3
-
-The derivation is short. The kinetic Euler holds per species at the effective
-potential, and mu_i = mu*_i + (g_w w + g_r t3 r + g_p f), so
-
-    eps + P - T s - sum_i mu_i n_i
-        = (eps_mf + P_mf) - (w src_w + r src_r + f src_f)
-
-Each field equation turns a term on the right into its partner on the left --
-sigma cancels outright, since it reaches the baryons through m* and the scalar
-density rather than through mu -- except the omega equation's dA/domega * rho^2,
-which has no partner in `meson_field_thermo`. Working eps back out of
-eps = -P + T s + sum mu_i n_i gives
-
-    eps_omega = m_w^2 w^2 / 2 + (3 c3 / 4) w^4 + w (dA/dw) r^2
-
-and the code carries the first two terms only. The 3 c3 / 4, the rho sector's
-A r^2 and the phi sector are all correct; this one term is the whole gap.
-
-Measured (SFHo nucleonic and SFHo-Y, T = 0, 10 and 30 MeV, n_B = 0.04 to 0.8):
-the ratio of the Euler miss to the predicted term is 1.00000 at every point,
-and in symmetric matter, where rho = 0 and the term vanishes, the Euler
-residual drops to 1.1e-9 -- solver precision. So the rest of the model is
-thermodynamically consistent and this is the only violation.
-
-Adding the term changes **eps only**, by up to 1.79e-2 relative, and leaves P
-and s bit-identical: eps enters no residual, so nothing re-solves. It is zero
-in symmetric matter and grows with the isospin asymmetry. Every SFHo table's
-eps -- and so every TOV mass and radius drawn from one -- is affected.
-
-Not fixed here because the isovector sector needs one look, not two: with the
-term added the slope of the symmetry energy goes from an unphysical
-L = -8.9 MeV to L = 45.9 MeV against the published 47.10 MeV (Steiner, Hempel
-& Fischer, ApJ 774 (2013) 17), which is a strong confirmation -- but E_sym at
-saturation goes from 24.8 to 37.7 MeV against a published 31.57 MeV, so
-something else in that sector is also wrong. The fix is one line; it lands
-with a regenerated baseline, the E_sym question settled, and a comparison
-against the CompOSE HS(SFHo) table (which is on this machine under
-Research/Compose/SFHO_Compose) quoted.
-
 - Eta-meson energy density is dropped when `include_pseudoscalar_mesons=True`
   at T > 0 (`thermodynamics.py`, in the total-energy accumulation).
   Known, deliberate to fix later: the fix changes numbers, so it is made in
