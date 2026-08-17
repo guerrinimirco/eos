@@ -122,6 +122,11 @@ class EoSPoint:
     composition: tuple = ()   # n_i [fm^-3]
     mu_eff_i: tuple = ()      # mu_i - Sigma0_i [MeV]
     m_eff_i: tuple = ()       # Dirac effective mass m*_i [MeV]
+    #: max_j |mu*_j| / m_j over the thermal meson gas, 0 without it. At 1 the
+    #: gas Bose-condenses and the solve refuses the point; carried so a caller
+    #: can see how close a converged state sits to that boundary. `eos.sfho`
+    #: carries the same field (see `eos.general.thermal_mesons`).
+    condensation: float = 0.0
     #: The TOTAL non-leptonic charge and strangeness fractions of the state --
     #: baryons PLUS any thermal meson gas, which carries both. They are what
     #: the fixed-Y_C / fixed-Y_S conditions are stated in terms of, so a state
@@ -816,6 +821,23 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
         st["P"] += mg["P"] * hc3
         st["s"] += mg["s"] * hc3
         st["mu_dot_n"] += mg["mu_dot_n"] * hc3
+        condensation = mg["condensation"]
+        # Bose-Einstein condensation is not implemented. Past mu*_j = m_j the
+        # excited states saturate -- correctly, that IS the critical density --
+        # but the particles beyond it go into the p = 0 state, carrying charge
+        # and eps = m n_cond with NO pressure and NO entropy, and n_cond is a
+        # new unknown rather than a function of mu*. `solve_bose_jel` caps mu
+        # at m, so the gas silently stops absorbing charge and the entropy it
+        # reports drifts (it turns NEGATIVE by mu*/m ~ 3). The state is refused
+        # rather than returned wrong; `eos.sfho` refuses the same condition,
+        # there as a status because its solvers report rather than raise.
+        if condensation >= 1.0:
+            raise ValueError(
+                f"the thermal meson gas Bose-condenses at n_B={n_B}, T={T} "
+                f"(max |mu*|/m = {condensation:.3f}); a condensate is not "
+                f"implemented, so this state is outside the model")
+    else:
+        condensation = 0.0
 
     hvh_rel = (st["eps"] + st["P"] - T * st["s"] - st["mu_dot_n"]) / st["eps"]
     if check_consistency:
@@ -843,7 +865,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
         composition=tuple(sorted(st["densities"].items())),
         mu_eff_i=tuple(sorted(st["mu_eff_i"].items())),
         m_eff_i=tuple(sorted(st["m_eff_i"].items())),
-        Y_C=st["Y_C"], Y_S=st["Y_S"],
+        Y_C=st["Y_C"], Y_S=st["Y_S"], condensation=condensation,
     )
 
 

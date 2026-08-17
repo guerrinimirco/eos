@@ -121,16 +121,6 @@ class SFHoParams:
     m_phi: float = 1020.0                # φ (vector-isoscalar, hidden strangeness)
     
     # ---------------------------------------------------------
-    # 3. Pseudoscalar Meson Masses (MeV) - for thermal contributions
-    # ---------------------------------------------------------
-    m_pi_pm: float = 139.570   # π±
-    m_pi_0: float = 134.977    # π⁰
-    m_kaon_pm: float = 493.677 # K±
-    m_kaon_0: float = 497.611  # K⁰, K̄⁰
-    m_eta: float = 547.862     # η
-    m_eta_prime: float = 957.78 # η'
-
-    # ---------------------------------------------------------
     # 3. Nucleon Couplings (dimensionless g)
     # ---------------------------------------------------------
     g_sigma_N: float = 0.0
@@ -269,34 +259,6 @@ class SFHoParams:
         else:
             return 0.0
     
-    def get_meson_mass(self, meson_name: str) -> float:
-        """
-        Get pseudoscalar meson mass for thermal calculations.
-        
-        Args:
-            meson_name: Meson name (case-insensitive)
-            
-        Returns:
-            Mass in MeV
-        """
-        m_name = meson_name.lower()
-        
-        if m_name in ['pi+', 'pi-', 'pip', 'pim']:
-            return self.m_pi_pm
-        elif m_name in ['pi0']:
-            return self.m_pi_0
-        elif m_name in ['k+', 'k-', 'kp', 'km', 'kaon+', 'kaon-']:
-            return self.m_kaon_pm
-        elif m_name in ['k0', 'k0_bar', 'kaon0', 'kaon0bar']:
-            return self.m_kaon_0
-        elif m_name == 'eta':
-            return self.m_eta
-        elif m_name in ['eta_prime', 'etaprime', "eta'"]:
-            return self.m_eta_prime
-        else:
-            return 0.0
-
-
 # =============================================================================
 # BASE SFHo PARAMETERS (CompOSE table values)
 # =============================================================================

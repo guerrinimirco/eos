@@ -318,7 +318,7 @@ algebraically from the isothermal one and the heat-capacity ratio — one
 stencil instead of two. Worth doing when the freeze selector is built, since
 both touch the same code.
 
-### Bose-Einstein condensation of the thermal meson gas is not implemented
+### The ideal pion gas leaves its domain just above saturation
 
 `eos/general/thermal_mesons.py` is now the single implementation, with physical
 masses and the isospin partners split, and both dd2 and sfho go through it.
@@ -329,30 +329,93 @@ blows up -- a caller that does not look simply receives a saturated gas where
 a condensate belongs.
 
 Every entry point therefore reports `condensation`, the largest |mu*_j| / m_j
-over the active species, and `eos.sfho` REFUSES such a point: `solve` sets
-`converged=False` and `eos_point` says why. That is the agreed interim
-behaviour -- an error rather than a wrong number -- until a condensate is
-written.
+over the active species, and BOTH models refuse such a point -- sfho by
+setting `converged=False`, dd2 by raising, each matching how that model
+already reports a bad state. `eos_point` says which, in both. That is the
+agreed interim behaviour, an error rather than a wrong number, until a
+condensate is written.
 
-It is not a corner case. In SFHo, over beta equilibrium and fixed
-Y_C = 0.05 / 0.5, nucleons and hyperons:
+What a condensate needs, when it is written: mu*_j pinned AT m_j as an
+equation rather than derived, the condensed density n_cond,j as a new unknown
+of the solve, and its contribution added as eps = m_j n_cond,j with P = 0 and
+s = 0 -- the p = 0 state carries charge and energy but neither pressure nor
+entropy. The thermal part is already right: capping mu at m returns the
+critical density of the excited states, which is what it should be.
 
-      pi+   3.11   (T = 100 MeV, n_B = 1.2 fm^-3)
-      K+    3.52   (T = 100 MeV, n_B = 1.2 fm^-3)
-      K0    2.62   (T =  10 MeV, n_B = 1.2 fm^-3)
+WHY IT HAPPENS SO EARLY, which is the part worth understanding before anyone
+concludes the code is wrong. In beta equilibrium the pion potential is
 
-At T = 50 MeV in beta equilibrium the ratio passes 1 between n_B = 0.2 and
-0.4 fm^-3, so a meson table above about a third of saturation density stops
-there. That is the honest answer for now, and it is a strong argument for
-writing the condensate: the gas matters exactly where it is refused.
+    mu*_pi- = -mu_C + Gamma_rhoN rho0 = mu_e + Gamma_rhoN rho0
 
-Two things left when it is written. `eos.dd2` computes the same ratio through
-the same module but does not act on it, so a dd2 point past condensation is
-still returned silently -- it should refuse the same way, in dd2's own
-session. And `eos.sfho.parameters` still carries `m_pi_pm`, `m_pi_0`,
-`m_kaon_pm`, `m_kaon_0`, `m_eta`, `m_eta_prime`, which nothing reads any more
-now that the masses live in `general/`; they are dead fields on the parameter
-dataclass and go with the `SFHoParams` -> `Parameters` rename.
+and the rho term is NEGATIVE in neutron-rich matter, so it SUPPRESSES
+condensation. What drives it is mu_e alone (DD2, npe(mu) matter, T = 10 MeV):
+
+      n_B     mu_e   Gamma_rho rho0   mu*_pi-   /m_pi
+     0.10   102.25          -21.72     80.53    0.577
+     0.20   136.56          -20.63    115.93    0.831
+     0.25   149.94          -17.80    132.14    0.947
+     0.30   161.94          -14.78    147.15    1.054
+     0.60   213.56           -3.42    210.14    1.506
+
+mu_e crosses m_pi = 139.57 MeV at about n_B = 0.27 fm^-3. That is the textbook
+s-wave criterion for pi- condensation, mu_e >= m_pi*, and it is met just above
+saturation in every beta-equilibrium nucleonic model. The arithmetic here is
+right.
+
+What is missing is the repulsive s-wave piN interaction, which raises the
+in-medium pi- energy and is precisely what suppresses s-wave pion condensation
+in realistic matter. An IDEAL pion gas shifted only by the vector mean fields
+has no such term, so it condenses spuriously early. The domain where the gas
+as implemented is valid is the one it was written for -- heavy-ion and
+early-protoneutron-star conditions, high T and low mu_B, where mu_e is small
+(Lavagno) -- and NOT cold beta-equilibrium neutron-star matter above about
+0.25 fm^-3.
+
+So the refusal is not a nuisance to be worked around: it marks a real boundary
+of the model. Two things would move it, and they are different work. An
+in-medium pion self-energy (an s-wave optical potential) pushes the threshold
+up to where it physically belongs and is what makes the gas usable in
+beta-equilibrium matter at all. A condensate handles what happens past
+whatever threshold survives. The first is the more valuable.
+
+NEGATIVELY CHARGED BARYONS SUPPRESS IT, and strongly enough to matter. The
+condition is driven by mu_e, and Sigma- and Delta- take over the job of
+neutralising the protons, so the electrons are no longer needed and mu_e
+collapses. DD2/DD2Y, beta equilibrium, T = 10 MeV, mu*_pi- / m_pi:
+
+      n_B    nucleons   +hyperons   +hyperons+Deltas
+     0.25       0.947       0.947              0.942
+     0.30       1.054       1.052              0.975   <- peak with Deltas
+     0.40       1.239       1.120              0.860
+     0.60       1.506       0.992              0.608
+     1.00       1.840       0.592              0.212
+
+With nucleons alone the gas condenses from n_B ~ 0.28 upward and never
+recovers. With hyperons it condenses over a WINDOW, roughly 0.29 to 0.58, and
+comes back out above it as mu_e turns over. With the Deltas open as well the
+ratio peaks at 0.975 and the condition is never met at all.
+
+So the sector that makes the ideal gas usable in beta-equilibrium matter is the
+one that was physically motivated anyway. Two caveats: 0.975 is a thin margin,
+so it is parametrization-dependent -- the Delta coupling ratios move it -- and
+this is T = 10 MeV, with higher T lowering mu_e further and making it safer.
+A caller wanting the thermal gas in cold neutron-star matter should open the
+Deltas and check `condensation` rather than assume.
+
+How far it reaches today. In SFHo, over beta equilibrium and fixed
+Y_C = 0.05 / 0.5, nucleons and hyperons, |mu*|/m reaches 3.11 (pi+), 3.52 (K+)
+and 2.62 (K0) by n_B = 1.2 fm^-3. In DD2 the ratio is above 1 for every
+n_B >= 0.3 at T <= 40 MeV and only falls back below it above T ~ 80. There is
+therefore NO state that is both inside the DD2+vMIT coexistence window and
+outside condensation, which is pinned in
+`test/mixed/test_muons_and_mesons.py`.
+
+One consumer is still unguarded: `eos/mixed`'s hadronic adapter calls the same
+gas through `thermo_at_potentials`, and a condensed hadronic phase inside a
+mixed solve has no defined behaviour -- the adapter neither refuses nor
+reports. It should carry the ratio out through `PhaseThermo` so the mixed
+residual can refuse, which is a change to the phase-adapter contract and
+belongs in the mixed session.
 
 ## Per model
 
