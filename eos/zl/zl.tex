@@ -1,0 +1,468 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nC}{n_C}
+\newcommand{\nS}{n_S}
+\newcommand{\nsat}{n_{\mathrm{sat}}}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\munue}{\mu_{\nu_e}}
+\newcommand{\mueff}[1]{\mu^{*}_{#1}}
+\newcommand{\muHv}[1]{\mu^{Hv}_{#1}}
+
+\begin{document}
+
+\title{ZL: the Zhao--Lattimer nucleonic density functional \\
+       --- as implemented in \texttt{eos/zl}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/zl} subpackage implements the schematic nucleonic energy
+density functional of Zhao and Lattimer~\cite{ZhaoLattimer2020}, in the form
+used by Constantinou \textit{et
+al.}~\cite{Constantinou2021,Constantinou2023,Constantinou2025}. Nucleons are
+non-relativistic-mass Dirac particles moving in a density-dependent potential
+built from two terms --- one bilinear in $n_p n_n$, one quadratic in the
+isospin asymmetry $n_n - n_p$ --- each with a linear and a power-law piece, so
+that six parameters set the six lowest nuclear-matter parameters almost
+independently. There is no scalar field and therefore no effective mass: the
+Dirac mass is a parameter, and the only self-consistency is between the
+densities and the interaction potentials $\muHv{i}(n_p, n_n)$ they generate.
+This note states the functional, its thermodynamics, the conserved-charge
+bookkeeping, the residual of each equilibrium mode, and the nuclear-matter
+parameters the shipped set produces. It is written from the code, as its
+specification: every equation here is asserted by
+\texttt{eos/zl/verify/run\_full\_check.py} or by \texttt{test/baseline}.
+\end{abstract}
+
+\maketitle
+
+\section{The energy density functional}
+\label{sec:functional}
+
+Uniform matter of protons and neutrons at densities $n_p, n_n$ and temperature
+$T$ carries the energy density
+%
+\begin{equation}
+\varepsilon(n_p, n_n, T) \;=\; \varepsilon_{\mathrm{kin}}(n_p, n_n, T)
+   \;+\; V(n_p, n_n) ,
+\label{eq:eps}
+\end{equation}
+%
+where $\varepsilon_{\mathrm{kin}}$ is the kinetic energy density of two Fermi
+gases (Sec.~\ref{sec:kinetic}) and $V$ is the interaction term. The
+interaction is a function of the densities alone --- it carries no explicit
+temperature dependence and no momentum dependence --- so the entropy of the
+model is purely kinetic,
+%
+\begin{equation}
+s(n_p, n_n, T) \;=\; s_{\mathrm{kin}}(n_p, n_n, T) ,
+\label{eq:entropy}
+\end{equation}
+%
+and the nucleon mass in the Fermi integrals is the vacuum mass. This is what
+distinguishes ZL from a relativistic mean-field model: there is no
+$\sigma$ field, no gap equation, and no $m^*$.
+
+The interaction is~\cite{ZhaoLattimer2020}
+%
+\begin{equation}
+V(n_p, n_n) \;=\; 4\, n_p n_n \left[ \frac{a_0}{n_0}
+      + \frac{b_0}{n_0}\, u^{\gamma - 1} \right]
+   \;+\; (n_n - n_p)^2 \left[ \frac{a_1}{n_0}
+      + \frac{b_1}{n_0}\, u^{\gamma_1 - 1} \right] ,
+\qquad u \equiv \frac{\nB}{n_0} , \quad \nB = n_p + n_n ,
+\label{eq:V}
+\end{equation}
+%
+with $V \equiv 0$ enforced below $\nB = 10^{-15}\,\mathrm{fm}^{-3}$, where the
+powers of $u$ are numerically meaningless and the prefactors vanish anyway.
+Writing $\delta = (n_n - n_p)/\nB$ for the isospin asymmetry, so that
+$4 n_p n_n = \nB^2 (1 - \delta^2)$ and $(n_n-n_p)^2 = \nB^2 \delta^2$, the
+same expression per baryon reads
+%
+\begin{equation}
+\frac{V}{\nB} \;=\; (1 - \delta^2) \left[ a_0 u + b_0 u^{\gamma} \right]
+   \;+\; \delta^2 \left[ a_1 u + b_1 u^{\gamma_1} \right] ,
+\label{eq:Vperbaryon}
+\end{equation}
+%
+which is the form in which the parameters are read: the first bracket is the
+potential energy per baryon of symmetric matter, and the coefficient of
+$\delta^2$ --- $(a_1 - a_0) u + b_1 u^{\gamma_1} - b_0 u^{\gamma}$ --- is the
+potential part of the symmetry energy. Note that BOTH brackets enter the
+symmetry energy: the $a_0, b_0$ term is a proton--neutron cross interaction
+that switches off as matter becomes pure, not an isoscalar term. Reading
+$a_1 + b_1$ alone as the potential symmetry energy is the standard way to
+misread Eq.~\eqref{eq:V}, and gives the wrong sign.
+
+\subsection{Parameters}
+
+\begin{center}
+\begin{tabular}{llrl}
+\toprule
+symbol & code & value & meaning \\
+\midrule
+$n_0$      & \texttt{n0}     & $0.16\ \mathrm{fm}^{-3}$ & reference density of the functional \\
+$a_0$      & \texttt{a0}     & $-96.64$ MeV & cross term, linear in $u$ \\
+$b_0$      & \texttt{b0}     & $+58.85$ MeV & cross term, $\propto u^{\gamma}$ \\
+$\gamma$   & \texttt{gamma}  & $1.40$       & exponent of the cross term \\
+$a_1$      & \texttt{a1}     & $-26.06$ MeV & isovector term, linear in $u$ \\
+$b_1$      & \texttt{b1}     & $+7.34$ MeV  & isovector term, $\propto u^{\gamma_1}$ \\
+$\gamma_1$ & \texttt{gamma1} & $2.45$       & exponent of the isovector term \\
+$m_p, m_n$ & \texttt{m\_p}, \texttt{m\_n} & $939.5$ MeV & nucleon masses \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+The set is the one used in
+Refs.~\cite{Constantinou2021,Constantinou2023,Constantinou2025}. Both nucleons
+carry the same mass, $939.5$~MeV: the model has no isospin splitting of the
+kinetic term, and the isospin asymmetry enters only through $V$. Note that
+$n_0$ is a \emph{parameter of the functional} and not the saturation density
+the functional predicts; the two differ by $0.3\%$ (Sec.~\ref{sec:nmp}). All
+eight are fields of \texttt{Parameters} and are arguments everywhere --- nothing
+in the package reads a module-level coupling.
+
+\section{Single-nucleon thermodynamics}
+\label{sec:kinetic}
+
+Each nucleon species is a free Fermi gas of mass $m_i$ and degeneracy $g = 2$
+(spin), evaluated at the effective potential $\mueff{i}$ of
+Sec.~\ref{sec:potentials} with its antiparticles included:
+%
+\begin{align}
+n_i &= \frac{g}{2\pi^2 (\hbar c)^3} \int_0^\infty \! dk\, k^2
+       \left[ f(E_k - \mueff{i}) - f(E_k + \mueff{i}) \right] ,
+       & E_k &= \sqrt{k^2 + m_i^2} ,
+\label{eq:ni} \\
+P_i &= \frac{g}{6\pi^2 (\hbar c)^3} \int_0^\infty \! dk\, \frac{k^4}{E_k}
+       \left[ f(E_k - \mueff{i}) + f(E_k + \mueff{i}) \right] ,
+\label{eq:Pi} \\
+\varepsilon_i &= \frac{g}{2\pi^2 (\hbar c)^3} \int_0^\infty \! dk\, k^2 E_k
+       \left[ f(E_k - \mueff{i}) + f(E_k + \mueff{i}) \right] ,
+\label{eq:epsi}
+\end{align}
+%
+with $f(x) = [1 + e^{x/T}]^{-1}$. The entropy density is not integrated
+separately; it comes from the Euler relation of the free gas,
+%
+\begin{equation}
+s_i \;=\; \frac{\varepsilon_i + P_i - \mueff{i}\, n_i}{T} ,
+\label{eq:si}
+\end{equation}
+%
+which is exact for an ideal gas at the \emph{effective} potential and is why
+the interaction never enters $s$. At $T = 0$ the antiparticle terms vanish,
+the occupations become step functions at
+$k_{F,i} = \sqrt{\mueff{i}{}^2 - m_i^2}$ (and $n_i = 0$ when
+$\mueff{i} \le m_i$), and Eqs.~\eqref{eq:ni}--\eqref{eq:si} close in
+elementary functions:
+%
+\begin{align}
+n_i &= \frac{g\, k_{F,i}^3}{6\pi^2 (\hbar c)^3} , \\
+\varepsilon_i &= \frac{g}{16 \pi^2 (\hbar c)^3}
+   \left[ k_{F,i} \big( 2 k_{F,i}^2 + m_i^2 \big) E_{F,i}
+        - m_i^4 \ln \frac{k_{F,i} + E_{F,i}}{m_i} \right] , \\
+P_i &= \frac{g}{48 \pi^2 (\hbar c)^3}
+   \left[ k_{F,i} \big( 2 k_{F,i}^2 - 3 m_i^2 \big) E_{F,i}
+        + 3 m_i^4 \ln \frac{k_{F,i} + E_{F,i}}{m_i} \right] ,
+\qquad s_i = 0 ,
+\end{align}
+%
+with $E_{F,i} = \sqrt{k_{F,i}^2 + m_i^2} = \mueff{i}$. These integrals are not
+implemented in this subpackage: they come from
+\texttt{eos.general.fermi\_integrals}, which evaluates them through the
+Johns--Ellis--Lattimer analytic approximation~\cite{JohnsEllisLattimer1996},
+uniformly valid from the degenerate to the non-degenerate limit and exact at
+$T = 0$. The same module supplies the inverse $\mueff{i}(n_i, T, m_i)$ used by
+the density-first entry point.
+
+\section{Interaction potentials and pressure}
+\label{sec:potentials}
+
+The interaction contribution to the chemical potential of species $i$ is the
+derivative of $V$ at the other density fixed,
+$\muHv{i} = \partial V / \partial n_i$. Differentiating Eq.~\eqref{eq:V}, and
+using $\partial u / \partial n_i = 1/n_0$,
+%
+\begin{align}
+\muHv{p} &= 4 n_n \left[ \frac{a_0}{n_0} + \frac{b_0}{n_0} u^{\gamma-1} \right]
+  \;-\; 2 (n_n - n_p) \left[ \frac{a_1}{n_0}
+        + \frac{b_1}{n_0} u^{\gamma_1-1} \right]
+  \;+\; \frac{4 b_0\, n_p n_n (\gamma - 1)}{n_0^2}\, u^{\gamma-2}
+  \;+\; \frac{b_1 (n_n - n_p)^2 (\gamma_1 - 1)}{n_0^2}\, u^{\gamma_1-2} ,
+\label{eq:muHvp} \\[2pt]
+\muHv{n} &= 4 n_p \left[ \frac{a_0}{n_0} + \frac{b_0}{n_0} u^{\gamma-1} \right]
+  \;+\; 2 (n_n - n_p) \left[ \frac{a_1}{n_0}
+        + \frac{b_1}{n_0} u^{\gamma_1-1} \right]
+  \;+\; \frac{4 b_0\, n_p n_n (\gamma - 1)}{n_0^2}\, u^{\gamma-2}
+  \;+\; \frac{b_1 (n_n - n_p)^2 (\gamma_1 - 1)}{n_0^2}\, u^{\gamma_1-2} .
+\label{eq:muHvn}
+\end{align}
+%
+The two differ only in the first two terms; the last two, which come from
+differentiating the powers of $u = \nB/n_0$, are common to both because $u$
+depends on the densities only through their sum. The effective (kinetic)
+chemical potential that enters Eqs.~\eqref{eq:ni}--\eqref{eq:si} is
+%
+\begin{equation}
+\mueff{i} \;=\; \mu_i - \muHv{i}(n_p, n_n) ,
+\label{eq:mueff}
+\end{equation}
+%
+and the self-consistency of the model --- what plays the role of a mean-field
+equation in an RMF model --- is the fixed point
+%
+\begin{equation}
+n_i \;=\; n_i \big( \mueff{i}(\mu_i, n_p, n_n),\ T,\ m_i \big) ,
+\qquad i = p, n .
+\label{eq:selfconsistency}
+\end{equation}
+
+The interaction pressure follows from $P = \sum_i \mu_i n_i - \varepsilon +
+Ts$ together with Eqs.~\eqref{eq:eps}, \eqref{eq:entropy} and the free-gas
+Euler relation~\eqref{eq:si}: everything kinetic cancels and what is left is
+%
+\begin{equation}
+P_{\mathrm{int}} \;=\; \sum_i n_i \muHv{i} \;-\; V
+\;=\; 4 n_p n_n \left[ \frac{a_0}{n_0}
+        + \frac{\gamma\, b_0}{n_0}\, u^{\gamma-1} \right]
+   \;+\; (n_n - n_p)^2 \left[ \frac{a_1}{n_0}
+        + \frac{\gamma_1 b_1}{n_0}\, u^{\gamma_1-1} \right] .
+\label{eq:Pint}
+\end{equation}
+%
+The closed form on the right is what the code evaluates, and the identity
+between the two expressions is checked in \texttt{verify/}: the power-law
+pieces pick up the factors $\gamma$ and $\gamma_1$ while the linear pieces do
+not, which is the whole numerical content of the statement that $V$ is a
+functional of the densities and nothing else.
+
+\section{Assembly of the totals}
+\label{sec:assembly}
+
+The strongly-interacting sector sums to
+%
+\begin{equation}
+P_{\mathrm{had}} = P_p + P_n + P_{\mathrm{int}} , \qquad
+\varepsilon_{\mathrm{had}} = \varepsilon_p + \varepsilon_n + V , \qquad
+s_{\mathrm{had}} = s_p + s_n ,
+\end{equation}
+%
+with $P_i, \varepsilon_i, s_i$ from Eqs.~\eqref{eq:ni}--\eqref{eq:si} at
+$\mueff{i}$, and $V, P_{\mathrm{int}}$ from Eqs.~\eqref{eq:V}
+and~\eqref{eq:Pint}. The Euler relation then holds identically at the
+\emph{physical} potentials,
+%
+\begin{equation}
+\varepsilon_{\mathrm{had}} + P_{\mathrm{had}}
+  \;=\; T s_{\mathrm{had}} + \mu_p n_p + \mu_n n_n ,
+\label{eq:euler}
+\end{equation}
+%
+because the shift $\sum_i (\mu_i - \mueff{i}) n_i = \sum_i n_i \muHv{i}$ is
+exactly $V + P_{\mathrm{int}}$ by Eq.~\eqref{eq:Pint}. There is no
+rearrangement term to place: $V$ depends on the densities and not on any
+mean field solved separately from them, so $\muHv{i}$ IS the full derivative
+and no piece of it is left out of $P$. The free energy density is
+$f = \varepsilon - Ts = -P + \sum_i \mu_i n_i$.
+
+Leptons and photons are added on top, by the mode and the species flags, from
+\texttt{eos.general.thermodynamics\_leptons}: electrons (with positrons) at
+$\mu_e$, electron neutrinos (with antineutrinos) at $\munue$ in the trapped
+mode, and a photon gas
+$P_\gamma = \tfrac13 \varepsilon_\gamma = \pi^2 T^4 / [45 (\hbar c)^3]$,
+$s_\gamma = 4 \varepsilon_\gamma / (3T)$, which carries no conserved charge.
+The totals a solved point reports are
+%
+\begin{equation}
+P = P_{\mathrm{had}} + P_e + P_{\nu_e} + P_\gamma , \qquad
+\varepsilon = \varepsilon_{\mathrm{had}} + \varepsilon_e
+              + \varepsilon_{\nu_e} + \varepsilon_\gamma , \qquad
+s = s_{\mathrm{had}} + s_e + s_{\nu_e} + s_\gamma ,
+\end{equation}
+%
+with the lepton terms present only where the mode carries them.
+
+\section{Conserved charges}
+
+The model carries nucleons and nothing else, so with $S = +1$ per $s$ quark
+(this repository's convention, opposite to the PDG) and $C$ the charge of the
+strongly-interacting matter alone,
+%
+\begin{equation}
+\nB = n_p + n_n , \qquad \nC = n_p , \qquad \nS = 0 ,
+\end{equation}
+%
+and the species potentials decompose as
+$\mu_i = B_i \muB + C_i \muC + S_i \muS$, which for $(B, C, S) = (1,1,0)$ for
+the proton and $(1,0,0)$ for the neutron inverts to
+%
+\begin{equation}
+\muB = \mu_n , \qquad \muC = \mu_p - \mu_n , \qquad \muS \equiv 0 .
+\label{eq:basis}
+\end{equation}
+%
+The sign of $\muC$ is fixed by $\muC = \mu_p - \mu_n$, so beta equilibrium
+reads $\muC + \mu_e = 0$. Strangeness is not a degree of freedom of this
+model: $\nS$ vanishes identically, no equation of any mode responds to $\muS$,
+and it is reported as zero by convention rather than solved for. That is why
+the \texttt{fixed\_YC\_YS} mode raises rather than accepting a $Y_S$ it would
+have to ignore (Sec.~\ref{sec:modes}).
+
+\section{Equilibrium modes and their closures}
+\label{sec:modes}
+
+Every mode imposes the two self-consistency
+equations~\eqref{eq:selfconsistency}; the mode supplies the rest. The unknown
+vector always carries the physical potentials, and carries $(n_p, n_n)$ as
+well wherever the composition is not fixed in advance. Keeping the densities
+as unknowns rather than substituting Eq.~\eqref{eq:selfconsistency} into
+Eqs.~\eqref{eq:muHvp}--\eqref{eq:muHvn} is a conditioning choice: it keeps the
+residual polynomial in the interaction potentials instead of nesting Fermi
+integrals inside them. It is not a statement about the state, which is
+$(\mu_p, \mu_n, T)$ with $\muHv{i}(n_p, n_n)$ playing the part a mean field
+plays elsewhere.
+
+\paragraph{\texttt{beta\_eq\_neutrinoless}} $(\nB, T)$; unknowns
+$x = [\mu_p, \mu_n, \mu_e, n_p, n_n]$, five rows:
+%
+\begin{equation}
+\begin{aligned}
+r_1 &= n_p(\mueff{p}, T, m_p) - n_p , \qquad
+&r_2 &= n_n(\mueff{n}, T, m_n) - n_n , \\
+r_3 &= n_p + n_n - \nB , \qquad
+&r_4 &= \mu_n - \mu_p - \mu_e \;\;(= -\muC - \mu_e) , \\
+r_5 &= n_p - n_e(\mu_e, T) . &&
+\end{aligned}
+\label{eq:residual_beta}
+\end{equation}
+%
+Row $r_4$ is beta equilibrium with free-streaming neutrinos ($\munue = 0$),
+$r_5$ total electric neutrality.
+
+\paragraph{\texttt{beta\_eq\_neutrino\_trapped}} $(\nB, Y_{L_e}, T)$; unknowns
+$x = [\mu_p, \mu_n, \mu_e, \munue, n_p, n_n]$, six rows: $r_1, r_2, r_3, r_5$
+unchanged, with
+%
+\begin{equation}
+r_4 = \mu_n - \mu_p - \mu_e + \munue \;\;(= -\muC - \mu_e + \munue) ,
+\qquad
+r_6 = \frac{n_e + n_{\nu_e}}{\nB} - Y_{L_e} .
+\end{equation}
+%
+The muon family is not tracked, so $Y_{L_\mu}$ raises.
+
+\paragraph{\texttt{fixed\_YC}} $(\nB, Y_C, T)$. Here the composition is known
+before the solve --- $n_p = Y_C \nB$, $n_n = (1 - Y_C)\nB$ --- so both
+densities leave the unknown vector and rows $r_3$ and $r_4$ are not needed.
+With \texttt{leptons=True}, $x = [\mu_p, \mu_n, \mu_e]$ and the rows are
+$r_1, r_2$ and $r_5$; with \texttt{leptons=False}, $x = [\mu_p, \mu_n]$ and
+the rows are $r_1, r_2$ alone, the result being electrically charged nucleonic
+matter --- what a mixed-phase construction needs per pure phase before global
+neutrality is imposed.
+
+\paragraph{\texttt{fixed\_YC\_YS}} raises \texttt{NotImplementedError}. The
+mode is not unimplemented but meaningless here: $\nS \equiv 0$ for any state
+of the model, so the only value of $Y_S$ it could satisfy is zero and any
+other request has no solution. Silently ignoring $Y_S$ would return symmetric
+nuclear matter under a name that promised a strangeness condition.
+
+\medskip
+Wherever a temperature is accepted, entropy per baryon may be given in its
+place, through an outer one-dimensional solve for $T$ at fixed $\nB$ and
+fractions.
+
+\section{Nuclear-matter parameters}
+\label{sec:nmp}
+
+The functional is built so that its parameters map almost directly onto the
+nuclear-matter parameters. In symmetric matter ($\delta = 0$) the potential
+energy per baryon is $a_0 u + b_0 u^{\gamma}$ by
+Eq.~\eqref{eq:Vperbaryon}, so at $u = 1$
+%
+\begin{equation}
+\left. \frac{E}{A} \right|_{\mathrm{pot}} = a_0 + b_0 , \qquad
+K_{\mathrm{pot}} = 9\, b_0\, \gamma (\gamma - 1) ,
+\end{equation}
+%
+and the potential part of the symmetry energy and its slope are, from the
+$\delta^2$ coefficient of Eq.~\eqref{eq:Vperbaryon},
+%
+\begin{equation}
+E_{\mathrm{sym}}^{\mathrm{pot}}(u) = (a_1 - a_0) u + b_1 u^{\gamma_1}
+   - b_0 u^{\gamma} , \qquad
+L_{\mathrm{sym}}^{\mathrm{pot}} = 3 \left[ (a_1 - a_0)
+   + \gamma_1 b_1 - \gamma b_0 \right] ,
+\end{equation}
+%
+evaluated at $u = 1$. For the shipped set these are $-37.79$~MeV,
+$296.60$~MeV, $19.07$~MeV and $18.52$~MeV; the kinetic gas supplies the rest.
+
+The full parameters are quoted at the density the functional actually
+saturates at, the $P = 0$ root of cold symmetric matter, which is
+\emph{not} $n_0$. Evaluated from the code at $T = 0$, with $E_{\mathrm{sym}}$
+taken as the $\delta^2$ curvature of $E/A$ and $L, K$ as its density
+derivatives:
+%
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+$\nsat$              & $0.15951\ \mathrm{fm}^{-3}$ & $P(\nsat) = 0$, symmetric matter \\
+$E_{\mathrm{sat}}$   & $-16.00$ MeV & $E/A - m$ there \\
+$K_{\mathrm{sat}}$   & $250.2$ MeV  & $9 \nsat^2\, \partial_n^2 (E/A)$ \\
+$Q_{\mathrm{sat}}$   & $-352.8$ MeV & $27 \nsat^3\, \partial_n^3 (E/A)$ \\
+$E_{\mathrm{sym}}$   & $30.85$ MeV  & $\tfrac12 \partial_\delta^2 (E/A)$ \\
+$L_{\mathrm{sym}}$   & $41.26$ MeV  & $3 \nsat\, E_{\mathrm{sym}}'(\nsat)$ \\
+$K_{\mathrm{sym}}$   & $-88.86$ MeV & $9 \nsat^2\, E_{\mathrm{sym}}''(\nsat)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+No inverse map is implemented: unlike \texttt{eos.dd2} and \texttt{eos.sfho},
+whose couplings reach the nuclear-matter parameters only through a field
+solve, the ZL parameters are already close enough to them that a fit is a
+matter of six one-dimensional relations rather than of new physics, and none
+of the studies this model serves has needed one.
+
+\section{Numerics}
+
+Each mode is a system of two to six equations, solved with Powell's hybrid
+method and, if that does not reach the gate, with Levenberg--Marquardt; when a
+warm start was supplied and both fail, one further hybrid attempt is made from
+the mode's own cold guess, since a warm start carried across a threshold can
+land outside the basin. Every attempt is bounded internally and at most three
+are made: a parameter scan must always get an answer back.
+
+Convergence is judged on a dimensionless residual. The rows carry mixed units
+--- densities and charge conditions of order $10^{-1}\,\mathrm{fm}^{-3}$,
+equalities between chemical potentials of order $10^{3}$~MeV --- so each row
+is divided by the scale of the quantity it balances, $\nB$ for a density and
+$|\muB|$ for a potential (the lepton-fraction row $r_6$ is already
+dimensionless), and the state is accepted when the largest scaled component is
+below $10^{-10}$. A gate on the raw sum of squares is dominated by whichever
+row happens to be largest and accepts states that satisfy the others only
+loosely. Non-convergence is a return value carried on the solved record, never
+an exception and never an unbounded loop.
+
+Tables are built line by line --- one line per temperature and per combination
+of the fractions the mode fixes --- and swept along the baryon density with a
+warm start, each solved point seeding the next. That loop is
+\texttt{eos.general.tabulate}, shared with the other models; what this
+subpackage supplies is which solver a mode name means and what part of a
+solved point becomes the next guess.
+
+\begin{acknowledgments}
+Written as the specification of \texttt{eos/zl}.
+\end{acknowledgments}
+
+\bibliography{../../docs/eos}
+
+\end{document}
