@@ -28,6 +28,7 @@ from eos.general.particles import Particle
 from eos.general.fermi_integrals import solve_fermi_jel
 from eos.general.bose_integrals import solve_bose_jel
 from eos.general.state import PhaseThermo
+from eos.general import thermal_mesons as _gas
 from eos.sfho.parameters import SFHoParams
 
 
@@ -90,43 +91,6 @@ class HadronThermoResult:
     src_omega: float # ω source
     src_rho: float   # ρ source
     src_phi: float   # φ source
-
-@dataclass
-class MesonThermoResult:
-    """
-    Thermodynamic result for pseudoscalar mesons (π, K, η).
-    
-    Mesons are treated as free Bose gas with chemical potentials:
-    - π⁺: μ = +μ_C
-    - π⁻: μ = -μ_C
-    - π⁰: μ = 0
-    - K⁺: μ = +μ_C - μ_S
-    - K⁰: μ = -μ_S
-    - K⁻: μ = -μ_C + μ_S
-    - K̄⁰: μ = +μ_S
-    - η, η': μ = 0
-    
-    Attributes:
-        n_C_mesons: Total meson charge density (fm⁻³)
-        n_S_mesons: Total meson strangeness density (fm⁻³)
-        P_mesons: Total meson pressure (MeV/fm³)
-        e_mesons: Total meson energy density (MeV/fm³)
-        s_mesons: Total meson entropy density (fm⁻³)
-        mu_dot_n_mesons: Σ_i μ*_i n_i over the gas (MeV/fm³), at the EFFECTIVE
-            potentials above. The vector fields shift each μ* but are sourced
-            by the baryons alone, so this is the combination the Euler identity
-            of the whole system closes on; `eos.dd2.thermodynamics.assemble`
-            adds the gas the same way.
-        densities: Dictionary of individual meson densities
-    """
-    n_C_mesons: float  # Meson charge density
-    n_S_mesons: float  # Meson strangeness density
-    P_mesons: float    # Meson pressure
-    e_mesons: float    # Meson energy density
-    s_mesons: float    # Meson entropy density
-    mu_dot_n_mesons: float       # Σ_i μ*_i n_i over the gas
-    densities: Dict[str, float]  # Individual meson densities
-
 
 # =============================================================================
 # MAIN THERMODYNAMICS FUNCTIONS
@@ -399,204 +363,59 @@ def meson_field_thermo(
     return P_meson, e_meson
 
 
-def thermal_meson_thermo(
-    T: float,
-    mu_C: float, mu_S: float,
-    omega: float, rho: float,
-    params: SFHoParams,
-    include_pions: bool = True,
-    include_kaons: bool = True,
-    include_etas: bool = True
-) -> MesonThermoResult:
-    """
-    Compute thermodynamic quantities for pseudoscalar mesons (π, K, η).
-    
-    Mesons are treated as free Bose gas with effective chemical potentials
-    shifted by the vector meson fields:
-    
-    Pions (I=1, S=0):
-        π⁺: μ_eff = +μ_C - g_ρN × ρ
-        π⁻: μ_eff = -μ_C + g_ρN × ρ
-        π⁰: μ_eff = 0
-        
-    Kaons (I=1/2, S=±1):
-        K⁺:  μ_eff = +μ_C - μ_S - (g_ωN - g_ωΛ) × ω - (1/2) g_ρN × ρ
-        K⁰:  μ_eff = -μ_S - (g_ωN - g_ωΛ) × ω + (1/2) g_ρN × ρ
-        K⁻:  μ_eff = -μ_C + μ_S + (g_ωN - g_ωΛ) × ω + (1/2) g_ρN × ρ
-        K̄⁰:  μ_eff = +μ_S + (g_ωN - g_ωΛ) × ω - (1/2) g_ρN × ρ
-        
-    Eta (I=0, S=0):
-        η, η': μ_eff = 0
-    
-    Note: Bose-Einstein condensation occurs when μ_eff → m. This function
-    does not handle the condensed phase.
-    
-    Args:
-        T: Temperature (MeV)
-        mu_C: Charge chemical potential (MeV)
-        mu_S: Strangeness chemical potential (MeV)
-        omega: ω-meson field (MeV)
-        rho: ρ-meson field (MeV)
-        params: SFHoParams (for meson masses and couplings)
-        include_pions: Include π mesons
-        include_kaons: Include K mesons
-        include_etas: Include η, η' mesons
-        
-    Returns:
-        MesonThermoResult with all meson thermodynamics
-    """
-    # Initialize totals
-    n_C_tot = 0.0
-    n_S_tot = 0.0
-    P_tot = 0.0
-    e_tot = 0.0
-    s_tot = 0.0
-    # Σ_i μ*_i n_i. Only the charged and strange members contribute: π⁰, η and
-    # η' sit at μ* = 0 exactly, which is why an energy-density term dropped for
-    # one of them shows up in the Euler identity and nowhere else.
-    mu_dot_n = 0.0
-    densities = {}
+def meson_potentials(mu_C, mu_S, omega, rho, params):
+    """The three independent effective potentials of the thermal meson gas.
 
-    if T <= 0:
-        return MesonThermoResult(
-            n_C_mesons=0.0, n_S_mesons=0.0,
-            P_mesons=0.0, e_mesons=0.0, s_mesons=0.0,
-            mu_dot_n_mesons=0.0,
-            densities={}
-        )
-    
-    # Get relevant couplings from params
-    g_rho_N = params.get_coupling('n', 'rho')  # Nucleon-rho coupling
-    g_omega_N = params.get_coupling('n', 'omega')  # Nucleon-omega coupling
-    g_omega_Lambda = params.get_coupling('Lambda', 'omega')  # Lambda-omega coupling
-    
-    # Omega shift for kaons: (g_ωN - g_ωΛ)
-    delta_g_omega = g_omega_N - g_omega_Lambda
-    
-    # Pions (g=1 for each, spin-0)
-    if include_pions:
-        m_pi = params.m_pi_pm
-        
-        # π⁺: μ_eff = +μ_C - g_ρN × ρ
-        mu_pip_eff = mu_C - g_rho_N * rho
-        if abs(mu_pip_eff) < m_pi:  # No condensation
-            n_pip, P_pip, e_pip, s_pip, _ = solve_bose_jel(mu_pip_eff, T, m_pi, g=1.0, include_antiparticles=False)
-            densities['pi+'] = n_pip
-            n_C_tot += n_pip  # Q = +1
-            mu_dot_n += mu_pip_eff * n_pip
-            P_tot += P_pip
-            e_tot += e_pip
-            s_tot += s_pip
-        else:
-            densities['pi+'] = 0.0
-        
-        # π⁻: μ_eff = -μ_C + g_ρN × ρ
-        mu_pim_eff = -mu_C + g_rho_N * rho
-        if abs(mu_pim_eff) < m_pi:
-            n_pim, P_pim, e_pim, s_pim, _ = solve_bose_jel(mu_pim_eff, T, m_pi, g=1.0, include_antiparticles=False)
-            densities['pi-'] = n_pim
-            n_C_tot -= n_pim  # Q = -1
-            mu_dot_n += mu_pim_eff * n_pim
-            P_tot += P_pim
-            e_tot += e_pim
-            s_tot += s_pim
-        else:
-            densities['pi-'] = 0.0
-        
-        # π⁰: μ_eff = 0
-        m_pi0 = params.m_pi_0
-        n_pi0, P_pi0, e_pi0, s_pi0, _ = solve_bose_jel(0.0, T, m_pi0, g=1.0, include_antiparticles=False)
-        densities['pi0'] = n_pi0
-        P_tot += P_pi0
-        e_tot += e_pi0
-        s_tot += s_pi0
-    
-    # Kaons (g=1 for each)
-    if include_kaons:
-        m_k_pm = params.m_kaon_pm
-        m_k_0 = params.m_kaon_0
-        
-        # K⁺ (us̄): Q=+1, S=-1 → μ_eff = μ_C - μ_S - Δg_ω × ω - (1/2) g_ρN × ρ
-        mu_kp_eff = mu_C - mu_S - delta_g_omega * omega - 0.5 * g_rho_N * rho
-        if abs(mu_kp_eff) < m_k_pm:
-            n_kp, P_kp, e_kp, s_kp, _ = solve_bose_jel(mu_kp_eff, T, m_k_pm, g=1.0, include_antiparticles=False)
-            densities['K+'] = n_kp
-            n_C_tot += n_kp      # Q = +1
-            n_S_tot -= n_kp      # S = -1
-            mu_dot_n += mu_kp_eff * n_kp
-            P_tot += P_kp
-            e_tot += e_kp
-            s_tot += s_kp
-        else:
-            densities['K+'] = 0.0
-        
-        # K⁰ (ds̄): Q=0, S=-1 → μ_eff = -μ_S - Δg_ω × ω + (1/2) g_ρN × ρ
-        mu_k0_eff = -mu_S - delta_g_omega * omega + 0.5 * g_rho_N * rho
-        if abs(mu_k0_eff) < m_k_0:
-            n_k0, P_k0, e_k0, s_k0, _ = solve_bose_jel(mu_k0_eff, T, m_k_0, g=1.0, include_antiparticles=False)
-            densities['K0'] = n_k0
-            n_S_tot -= n_k0      # S = -1
-            mu_dot_n += mu_k0_eff * n_k0
-            P_tot += P_k0
-            e_tot += e_k0
-            s_tot += s_k0
-        else:
-            densities['K0'] = 0.0
-        
-        # K⁻ (ūs): Q=-1, S=+1 → μ_eff = -μ_C + μ_S + Δg_ω × ω + (1/2) g_ρN × ρ
-        mu_km_eff = -mu_C + mu_S + delta_g_omega * omega + 0.5 * g_rho_N * rho
-        if abs(mu_km_eff) < m_k_pm:
-            n_km, P_km, e_km, s_km, _ = solve_bose_jel(mu_km_eff, T, m_k_pm, g=1.0, include_antiparticles=False)
-            densities['K-'] = n_km
-            n_C_tot -= n_km      # Q = -1
-            n_S_tot += n_km      # S = +1
-            mu_dot_n += mu_km_eff * n_km
-            P_tot += P_km
-            e_tot += e_km
-            s_tot += s_km
-        else:
-            densities['K-'] = 0.0
-        
-        # K̄⁰ (d̄s): Q=0, S=+1 → μ_eff = +μ_S + Δg_ω × ω - (1/2) g_ρN × ρ
-        mu_k0bar_eff = mu_S + delta_g_omega * omega - 0.5 * g_rho_N * rho
-        if abs(mu_k0bar_eff) < m_k_0:
-            n_k0bar, P_k0bar, e_k0bar, s_k0bar, _ = solve_bose_jel(mu_k0bar_eff, T, m_k_0, g=1.0, include_antiparticles=False)
-            densities['K0_bar'] = n_k0bar
-            n_S_tot += n_k0bar   # S = +1
-            mu_dot_n += mu_k0bar_eff * n_k0bar
-            P_tot += P_k0bar
-            e_tot += e_k0bar
-            s_tot += s_k0bar
-        else:
-            densities['K0_bar'] = 0.0
-    
-    # Eta mesons (g=1, μ_eff=0)
-    if include_etas:
-        # η
-        m_eta = params.m_eta
-        n_eta, P_eta, e_eta, s_eta, _ = solve_bose_jel(0.0, T, m_eta, g=1.0, include_antiparticles=False)
-        densities['eta'] = n_eta
-        P_tot += P_eta
-        e_tot += e_eta
-        s_tot += s_eta
-        
-        # η'
-        m_etap = params.m_eta_prime
-        n_etap, P_etap, e_etap, s_etap, _ = solve_bose_jel(0.0, T, m_etap, g=1.0, include_antiparticles=False)
-        densities['eta_prime'] = n_etap
-        P_tot += P_etap
-        e_tot += e_etap
-        s_tot += s_etap
-    
-    return MesonThermoResult(
-        n_C_mesons=n_C_tot,
-        n_S_mesons=n_S_tot,
-        P_mesons=P_tot,
-        e_mesons=e_tot,
-        s_mesons=s_tot,
-        mu_dot_n_mesons=mu_dot_n,
-        densities=densities
-    )
+    This is SFHo's whole share of the gas (see `eos.general.thermal_mesons`):
+    the charge and strangeness potentials, shifted by the vector mean fields
+    that the meson's quark content couples to. Everything else -- the species
+    list, the conjugation mu*_{j-} = -mu*_{j+}, the neutral strangeless mesons
+    at mu* = 0, the masses and the sums -- is model-independent and lives
+    there.
+
+        mu*_pi+ = +mu_C - g_rhoN rho
+        mu*_K+  = +mu_C - mu_S - (g_omegaN - g_omegaLambda) omega
+                  - (1/2) g_rhoN rho
+        mu*_K0  =        -mu_S - (g_omegaN - g_omegaLambda) omega
+                  + (1/2) g_rhoN rho
+
+    The kaon omega shift is the u/d-vs-s asymmetry of the vector coupling: a
+    kaon carries one light quark and one strange antiquark (or the reverse),
+    so it feels the difference between the nucleon and Lambda omega couplings.
+    The rho shifts follow isospin: I_3 = +1 for pi+, +1/2 for K+ and -1/2 for
+    K0.
+
+    Args:
+        mu_C, mu_S: conserved-charge potentials (MeV)
+        omega, rho: the vector mean fields (MeV)
+        params: SFHoParams, for the couplings
+
+    Returns:
+        (mu_pi_plus, mu_K_plus, mu_K0) in MeV
+    """
+    g_rho_N = params.get_coupling('n', 'rho')
+    delta_g_omega = (params.get_coupling('n', 'omega')
+                     - params.get_coupling('Lambda', 'omega'))
+    mu_pi_plus = mu_C - g_rho_N * rho
+    mu_K_plus = mu_C - mu_S - delta_g_omega * omega - 0.5 * g_rho_N * rho
+    mu_K0 = -mu_S - delta_g_omega * omega + 0.5 * g_rho_N * rho
+    return mu_pi_plus, mu_K_plus, mu_K0
+
+
+def thermal_meson_thermo(T, mu_C, mu_S, omega, rho, params):
+    """The thermal pi/K/eta gas at SFHo's effective potentials.
+
+    A thin call into `eos.general.thermal_mesons`, which is the ONE
+    implementation of this gas in the repository (CLAUDE.md section 7). See
+    that module for the physics and for what `condensation` means -- SFHo
+    refuses a point where it reaches 1, in `solver.solve`.
+
+    Returns the dict that module returns: P, e, s, n_C, n_S, mu_dot_n, the
+    per-species densities, and condensation.
+    """
+    mu_pi, mu_Kp, mu_K0 = meson_potentials(mu_C, mu_S, omega, rho, params)
+    return _gas.thermal_meson_thermo(mu_pi, mu_Kp, mu_K0, T,
+                                     include_pseudoscalars=True)
 
 
 def thermo_from_mu(
@@ -665,13 +484,13 @@ def thermo_from_mu(
     gas_C = gas_S = 0.0
     # Optional: pseudoscalar mesons (π, K, η)
     if include_pseudoscalar_mesons:
-        meson_result = thermal_meson_thermo(T, mu_C, mu_S, omega, rho, params)
-        P_total += meson_result.P_mesons
-        e_total += meson_result.e_mesons
-        s_total += meson_result.s_mesons
-        gas_C = meson_result.n_C_mesons
-        gas_S = meson_result.n_S_mesons
-        mu_dot_n += meson_result.mu_dot_n_mesons
+        gas = thermal_meson_thermo(T, mu_C, mu_S, omega, rho, params)
+        P_total += gas["P"]
+        e_total += gas["e"]
+        s_total += gas["s"]
+        gas_C = gas["n_C"]
+        gas_S = gas["n_S"]
+        mu_dot_n += gas["mu_dot_n"]
 
     return PhaseThermo.assemble(
         T=T, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,

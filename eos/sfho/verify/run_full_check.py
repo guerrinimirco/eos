@@ -109,7 +109,7 @@ def euler_residual(par, result, flags):
     if flags.thermal_mesons:
         gas = thermal_meson_thermo(result.T, result.mu_C, result.mu_S,
                                    result.omega, result.rho, par)
-        mu_dot_n += gas.mu_dot_n_mesons
+        mu_dot_n += gas["mu_dot_n"]
     if result.eps == 0.0:
         return 0.0
     return ((result.eps + result.P - result.T * result.s

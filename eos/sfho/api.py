@@ -106,6 +106,11 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
     spec = mode_spec(mode, fracs)
     point = solve_mode(par, n_B, species, spec, T=T, SnB=SnB, x0=x0)
     if not point.converged:
+        if point.condensation >= 1.0:
+            return PointResult(
+                False, f"the thermal meson gas Bose-condenses here "
+                       f"(max |mu*|/m = {point.condensation:.3f}); "
+                       f"a condensate is not implemented", None)
         return PointResult(
             False, f"residual {point.error:.3e} above the mode's gate", None)
     return PointResult(True, "converged", point)

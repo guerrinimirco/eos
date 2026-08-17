@@ -69,8 +69,10 @@ from eos.general.modes import (
 )
 from eos.sfho.parameters import SFHoParams
 from eos.sfho.species import SpeciesFlags, active_baryons, check_couplings
+from eos.general import thermal_mesons as _gas
 from eos.sfho.thermodynamics import (
-    baryon_thermo, field_residuals, thermal_meson_thermo, thermo_from_mu
+    baryon_thermo, field_residuals, meson_potentials,
+    thermal_meson_thermo, thermo_from_mu,
 )
 from eos.general.thermodynamics_leptons import (
     electron_thermo, photon_thermo, neutrino_thermo, electron_thermo_from_density
@@ -160,6 +162,12 @@ class EoSPoint:
     Y_S: float = 0.0
     #: The trapped electron lepton fraction the mode imposed, 0 otherwise.
     Y_Le: float = 0.0
+    #: max_j |mu*_j| / m_j over the thermal meson gas, 0 without it. At 1 the
+    #: gas Bose-condenses and the ideal-gas expressions stop describing it, so
+    #: `solve` refuses such a point; carried because a caller that wants to
+    #: know HOW close a converged point sits to the boundary can only get it
+    #: from here (see `eos.general.thermal_mesons`).
+    condensation: float = 0.0
     #: The phase-by-phase pressure split, for figures that decompose it.
     P_hadrons: float = 0.0
     P_leptons: float = 0.0
@@ -510,9 +518,9 @@ def residual(x, sys: System):
         # The gas carries charge and strangeness, so it enters the charge rows
         # and not only the entropy one (CLAUDE.md section 2).
         gas = thermal_meson_thermo(T, mu_C, mu_S, omega, rho, par)
-        n_C += gas.n_C_mesons
-        n_S += gas.n_S_mesons
-        s_matter += gas.s_mesons
+        n_C += gas["n_C"]
+        n_S += gas["n_S"]
+        s_matter += gas["s"]
 
     res_sigma, res_omega, res_rho, res_phi = field_residuals(
         sigma, omega, rho, phi,
@@ -631,6 +639,10 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
         Y_C=matter.Y_C, Y_S=matter.Y_S,
         Y_Le=spec.targets["Y_Le"] if spec.is_fixed("L_e") else 0.0,
         P_hadrons=matter.P, P_leptons=P_leptons, P_photons=P_photons,
+        condensation=(_gas.condensation_ratio(
+            *meson_potentials(mu_C, mu_S, omega, rho, par),
+            include_pseudoscalars=True) if sys.thermal_mesons and T > 0.0
+            else 0.0),
     )
 
 
@@ -671,8 +683,21 @@ def solve(sys: System, x0=None) -> EoSPoint:
 
     error = max(abs(r) for r in equations(sol.x))
     converged = (error < tight) or (sol.success and error < loose)
-    return replace(assemble(sol.x, sys, x0=x0),
-                   error=error, converged=converged)
+    point = replace(assemble(sol.x, sys, x0=x0),
+                    error=error, converged=converged)
+
+    # Bose-Einstein condensation is not implemented. Where a meson's effective
+    # potential reaches its mass the ideal-gas expressions stop describing it,
+    # and `solve_bose_jel` caps mu at m rather than diverging -- so the solve
+    # converges happily on a saturated gas that is not the physical state. The
+    # point is refused rather than returned: a wrong number that looks
+    # converged is worse than no number, and CLAUDE.md section 6 wants that
+    # said as a return value. Only the CONVERGED state is tested; an iterate
+    # that passes through condensation on its way somewhere legitimate is not
+    # the solver's problem.
+    if point.converged and point.condensation >= 1.0:
+        point = replace(point, converged=False)
+    return point
 
 
 # =============================================================================
