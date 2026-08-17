@@ -115,7 +115,7 @@ class TableSettings:
     output_columns: List[str] = field(default_factory=lambda: [
         'n_B', 'T', 
         'sigma', 'omega', 'rho', 'phi',
-        'mu_B', 'mu_C', 'mu_S', 'mu_e', 'mu_nu',
+        'mu_B', 'mu_C', 'mu_S', 'mu_e', 'mu_nue',
         'P_total', 'e_total', 's_total',
         'Y_C', 'Y_S', 'Y_Le', 
         'converged'
@@ -623,8 +623,6 @@ def save_results(all_results: Dict[Tuple, List[SFHoEOSResult]],
                             val = getattr(r, 'mu_e', 0.0)
                         elif col == 'mu_C':
                             val = r.mu_C
-                        elif col == 'mu_nu':
-                            val = getattr(r, 'mu_nu', 0.0)
                         else:
                             val = getattr(r, col, 0.0)
                         if val is None:
@@ -641,7 +639,7 @@ def results_to_arrays(results: List[SFHoEOSResult]) -> Dict[str, np.ndarray]:
     """Convert list of SFHoEOSResult to dictionary of numpy arrays."""
     attrs = [
         'n_B', 'T', 'P_total', 'e_total', 's_total', 'f_total',
-        'sigma', 'omega', 'rho', 'phi', 'mu_B', 'mu_C', 'mu_S', 'mu_nue', 'mu_e', 'mu_nu',
+        'sigma', 'omega', 'rho', 'phi', 'mu_B', 'mu_C', 'mu_S', 'mu_nue', 'mu_e',
         'Y_C', 'Y_S', 'n_C', 'n_e', 'error'
     ]
     arrays = {}
@@ -707,31 +705,31 @@ settings = TableSettings(
 COLUMN_MAPS = {
     'beta_eq': {
         'n_B': 0, 'T': 1, 'sigma': 2, 'omega': 3, 'rho': 4, 'phi': 5,
-        'mu_B': 6, 'mu_C': 7, 'mu_S': 8, 'mu_e': 9, 'mu_nu': 10,
+        'mu_B': 6, 'mu_C': 7, 'mu_S': 8, 'mu_e': 9, 'mu_nue': 10,
         'P_total': 11, 'e_total': 12, 's_total': 13,
         'Y_C': 14, 'Y_S': 15, 'Y_Le': 16, 'converged': 17
     },
     'trapped_neutrinos': {
         'n_B': 0, 'Y_Le': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
-        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
+        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nue': 11,
         'P_total': 12, 'e_total': 13, 's_total': 14,
         'Y_C': 15, 'Y_S': 16, 'converged': 17
     },
     'fixed_yc': {
         'n_B': 0, 'Y_C': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
-        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
+        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nue': 11,
         'P_total': 12, 'e_total': 13, 's_total': 14,
         'Y_S': 15, 'Y_Le': 16, 'converged': 17
     },
     'isentropic_beta_eq': {
         'n_B': 0, 'S': 1, 'T': 2, 'sigma': 3, 'omega': 4, 'rho': 5, 'phi': 6,
-        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nu': 11,
+        'mu_B': 7, 'mu_C': 8, 'mu_S': 9, 'mu_e': 10, 'mu_nue': 11,
         'P_total': 12, 'e_total': 13, 's_total': 14,
         'Y_C': 15, 'Y_S': 16, 'Y_Le': 17, 'converged': 18
     },
     'isentropic_trapped': {
         'n_B': 0, 'Y_Le': 1, 'S': 2, 'T': 3, 'sigma': 4, 'omega': 5, 'rho': 6, 'phi': 7,
-        'mu_B': 8, 'mu_C': 9, 'mu_S': 10, 'mu_e': 11, 'mu_nu': 12,
+        'mu_B': 8, 'mu_C': 9, 'mu_S': 10, 'mu_e': 11, 'mu_nue': 12,
         'P_total': 13, 'e_total': 14, 's_total': 15,
         'Y_C': 16, 'Y_S': 17, 'converged': 18
     },
@@ -844,10 +842,11 @@ def load_eos_table(filepath: str, eq_type: str) -> EOSTableData:
             # T is computed (isentropic cases)
             data['f_total'] = data['e_total'] - data['T'] * data['s_total']
 
-    # mu_nue = mu_e + mu_nu for trapped cases (lepton chemical potential)
-    if eq_type in ['trapped_neutrinos', 'isentropic_trapped']:
-        if 'mu_e' in data and 'mu_nu' in data:
-            data['mu_nue'] = data['mu_e'] + data['mu_nu']
+    # mu_nue is read straight from its column. It used to be reconstructed
+    # here as mu_e + mu_nu, which was wrong twice over: the relation is
+    # mu_nue = mu_e + mu_C, and the mu_nu column was written from a result
+    # field the solvers never set, so it was a column of zeros. Tables written
+    # before that fix carry zeros in this column.
 
     # Print summary
     print(f"  Equilibrium: {eq_type}")
@@ -990,7 +989,6 @@ def build_interpolators(table: EOSTableData,
         result['mu_S'] = lambda nB, YL, T: interpolators['mu_S']((nB, YL, T))
         result['mu_nue'] = lambda nB, YL, T: interpolators['mu_nue']((nB, YL, T))
         result['mu_e'] = lambda nB, YL, T: interpolators['mu_e']((nB, YL, T))
-        result['mu_nu'] = lambda nB, YL, T: interpolators['mu_nu']((nB, YL, T))
         result['Y_C'] = lambda nB, YL, T: interpolators['Y_C']((nB, YL, T))
         result['Y_S'] = lambda nB, YL, T: interpolators['Y_S']((nB, YL, T))
 
@@ -1017,7 +1015,7 @@ def build_interpolators(table: EOSTableData,
         result['mu_C'] = lambda nB, S: interpolators['mu_C']((nB, S))
         result['mu_S'] = lambda nB, S: interpolators['mu_S']((nB, S))
         result['mu_e'] = lambda nB, S: interpolators['mu_e']((nB, S))
-        result['mu_nu'] = lambda nB, S: interpolators['mu_nu']((nB, S))
+        result['mu_nue'] = lambda nB, S: interpolators['mu_nue']((nB, S))
         result['Y_C'] = lambda nB, S: interpolators['Y_C']((nB, S))
         result['Y_S'] = lambda nB, S: interpolators['Y_S']((nB, S))
 
@@ -1032,7 +1030,6 @@ def build_interpolators(table: EOSTableData,
         result['mu_C'] = lambda nB, YL, S: interpolators['mu_C']((nB, YL, S))
         result['mu_S'] = lambda nB, YL, S: interpolators['mu_S']((nB, YL, S))
         result['mu_e'] = lambda nB, YL, S: interpolators['mu_e']((nB, YL, S))
-        result['mu_nu'] = lambda nB, YL, S: interpolators['mu_nu']((nB, YL, S))
         result['mu_nue'] = lambda nB, YL, S: interpolators['mu_nue']((nB, YL, S))
         result['Y_C'] = lambda nB, YL, S: interpolators['Y_C']((nB, YL, S))
         result['Y_S'] = lambda nB, YL, S: interpolators['Y_S']((nB, YL, S))

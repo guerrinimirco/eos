@@ -357,15 +357,88 @@ both touch the same code.
   other models reach the spec API, so it lands as one rename, not five.
 
 ### sfho
+
+**The energy density is missing the omega-derivative of the A(sigma,omega)
+cross term, and Euler fails by exactly that much.**
+
+The Euler / Hugenholtz-Van Hove identity of CLAUDE.md section 8,
+
+    eps + P = T s + sum_i mu_i n_i
+
+is a thermodynamic identity, so a model either satisfies it or is wrong. SFHo
+as shipped misses it by 1.1e-2 to 1.8e-2 relative -- and by exactly
+
+    -omega (dA/domega) rho^2 / (hbar c)^3
+
+The derivation is short. The kinetic Euler holds per species at the effective
+potential, and mu_i = mu*_i + (g_w w + g_r t3 r + g_p f), so
+
+    eps + P - T s - sum_i mu_i n_i
+        = (eps_mf + P_mf) - (w src_w + r src_r + f src_f)
+
+Each field equation turns a term on the right into its partner on the left --
+sigma cancels outright, since it reaches the baryons through m* and the scalar
+density rather than through mu -- except the omega equation's dA/domega * rho^2,
+which has no partner in `meson_field_thermo`. Working eps back out of
+eps = -P + T s + sum mu_i n_i gives
+
+    eps_omega = m_w^2 w^2 / 2 + (3 c3 / 4) w^4 + w (dA/dw) r^2
+
+and the code carries the first two terms only. The 3 c3 / 4, the rho sector's
+A r^2 and the phi sector are all correct; this one term is the whole gap.
+
+Measured (SFHo nucleonic and SFHo-Y, T = 0, 10 and 30 MeV, n_B = 0.04 to 0.8):
+the ratio of the Euler miss to the predicted term is 1.00000 at every point,
+and in symmetric matter, where rho = 0 and the term vanishes, the Euler
+residual drops to 1.1e-9 -- solver precision. So the rest of the model is
+thermodynamically consistent and this is the only violation.
+
+Adding the term changes **eps only**, by up to 1.79e-2 relative, and leaves P
+and s bit-identical: eps enters no residual, so nothing re-solves. It is zero
+in symmetric matter and grows with the isospin asymmetry. Every SFHo table's
+eps -- and so every TOV mass and radius drawn from one -- is affected.
+
+Not fixed here because the isovector sector needs one look, not two: with the
+term added the slope of the symmetry energy goes from an unphysical
+L = -8.9 MeV to L = 45.9 MeV against the published 47.10 MeV (Steiner, Hempel
+& Fischer, ApJ 774 (2013) 17), which is a strong confirmation -- but E_sym at
+saturation goes from 24.8 to 37.7 MeV against a published 31.57 MeV, so
+something else in that sector is also wrong. The fix is one line; it lands
+with a regenerated baseline, the E_sym question settled, and a comparison
+against the CompOSE HS(SFHo) table (which is on this machine under
+Research/Compose/SFHO_Compose) quoted.
+
 - Eta-meson energy density is dropped when `include_pseudoscalar_mesons=True`
-  at T > 0 (`thermodynamics_hadrons.py`, in the total-energy accumulation).
+  at T > 0 (`thermodynamics.py`, in the total-energy accumulation).
   Known, deliberate to fix later: the fix changes numbers, so it is made in
   its own commit against a regenerated baseline with the delta quoted.
-- `include_muons` is accepted but the muon sector is not wired everywhere the
-  spec requires; per CLAUDE.md §4 an unimplemented flag must raise rather than
-  be ignored.
+- The muon lepton family is not wired: it appears in no residual, no
+  neutrality row and no total. `include_muons=True` now raises (CLAUDE.md §4)
+  where it used to be accepted and ignored.
 - No `compute_nmp` / `invert_nmp`. dd2 has both; sfho needs the same forward
-  and inverse nuclear-matter-parameter maps.
+  and inverse nuclear-matter-parameter maps. `nmp.py` today computes
+  saturation properties by re-solving the model, not through the analytic map.
+- The records are still sfho's own (`SFHoEOSResult`, `SFHoThermo`), not
+  `eos.general.state`'s `PhaseThermo` / `EoSPoint`, and there is no
+  `species.py` or `api.py`: the baryon content is passed as a list of
+  `Particle` and each sector as its own `include_*` boolean, so `eos_point`,
+  `eos_table` and `eos_response` do not exist for this model.
+- `solve_isentropic_beta_eq` and `solve_isentropic_trapped` are separate
+  entry points; §3 wants the entropy axis as an `SnB=` argument on the mode
+  itself. The solver already treats it that way internally (`System.SnB`),
+  so the merge is at the wrapper layer.
+- An isentropic fixed-Y_C solve with neutralizing leptons raises: the
+  electrons follow from n_C only after the solve, so they are missing from
+  the entropy row that fixes T. Wiring it means putting mu_e in the unknown
+  vector for that mode.
+- `table.py` is a six-way branch over `eq_type` strings with its own
+  file-format column maps; §5 wants one `build_table(spec, ...)` driver with
+  the `progress` callback. Its `mu_nue` column used to be reconstructed as
+  `mu_e + mu_nu` from a result field the solvers never set -- wrong relation
+  (it is `mu_e + mu_C`) on a column of zeros. Tables written before that fix
+  carry zeros there.
+- `TableSettings.Y_L_values` keeps its name because zl and vmit spell it the
+  same way; the §2 rename to `Y_Le_values` lands once, across all three.
 
 ### zl
 - Convergence is judged on a sum of squares against a loose 0.01 gate rather
