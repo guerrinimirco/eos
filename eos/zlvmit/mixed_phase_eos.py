@@ -93,14 +93,12 @@ from typing import Optional, List
 from dataclasses import dataclass
 
 # ZL (hadronic) modules
-from eos.zl.parameters import ZLParams, get_zl_default
-from eos.zl.thermodynamics_nucleons import compute_zl_thermo_from_mu_n
-from eos.zl.eos import (
-    get_default_guess_beta_eq as get_zl_guess,
-    result_to_guess as zl_result_to_guess,
-    solve_zl_beta_eq as solve_pure_H_beta,
-    solve_zl_fixed_yc as solve_pure_H_fixed_yc,
-    solve_zl_trapped_neutrinos as solve_pure_H_trapped
+from eos.zl.parameters import Parameters as ZLParams
+from eos.zl.thermodynamics import thermo_from_mu_n as zl_thermo_from_mu_n
+from eos.zl.solver import (
+    solve_beta_eq_neutrinoless as solve_pure_H_beta,
+    solve_fixed_yc as solve_pure_H_fixed_yc,
+    solve_beta_eq_neutrino_trapped as solve_pure_H_trapped,
 )
 
 # vMIT (quark) modules
@@ -529,7 +527,7 @@ def solve_eta0_beta(n_B: float, T: float,
         note: µ_eG_H=µ_eG_Q by construction (=µ_eG)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -543,7 +541,7 @@ def solve_eta0_beta(n_B: float, T: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = x
 
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
         
@@ -599,7 +597,7 @@ def solve_eta0_beta(n_B: float, T: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = sol.x
 
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
     gamma_thermo = photon_thermo(T)
@@ -645,7 +643,7 @@ def solve_eta1_beta(n_B: float, T: float,
         13. P_H + P_eH = P_Q + P_eQ                (pressure equilibrium)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -658,7 +656,7 @@ def solve_eta1_beta(n_B: float, T: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, chi  = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -716,7 +714,7 @@ def solve_eta1_beta(n_B: float, T: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, chi = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -765,7 +763,7 @@ def solve_etaX_beta(n_B: float, T: float, eta: float,
         14.  P_H + η*P_eL_H = P_Q + η*P_eL_Q                (mechanical equilibrium)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -778,7 +776,7 @@ def solve_etaX_beta(n_B: float, T: float, eta: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -837,7 +835,7 @@ def solve_etaX_beta(n_B: float, T: float, eta: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -890,7 +888,7 @@ def solve_eta0_fixed_yc(n_B: float, Y_C: float, T: float,
         12. P_H = P_Q                              (mechanical equilibrium)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -904,7 +902,7 @@ def solve_eta0_fixed_yc(n_B: float, Y_C: float, T: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
         
@@ -958,7 +956,7 @@ def solve_eta0_fixed_yc(n_B: float, Y_C: float, T: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
     gamma_thermo = photon_thermo(T)
@@ -1007,7 +1005,7 @@ def solve_etaX_fixed_yc(n_B: float, Y_C: float, T: float, eta: float,
         14.  P_H + η*P_eL_H = P_Q + η*P_eL_Q                 (mechanical equilibrium)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1021,7 +1019,7 @@ def solve_etaX_fixed_yc(n_B: float, Y_C: float, T: float, eta: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1082,7 +1080,7 @@ def solve_etaX_fixed_yc(n_B: float, Y_C: float, T: float, eta: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, chi = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1135,7 +1133,7 @@ def solve_eta1_fixed_yc(n_B: float, Y_C: float, T: float,
         13.  (1-χ)*n_C_H + χ*n_C_Q = n_B * Y_C            (fixed Y_C constraint)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1153,7 +1151,7 @@ def solve_eta1_fixed_yc(n_B: float, Y_C: float, T: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, chi = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1210,7 +1208,7 @@ def solve_eta1_fixed_yc(n_B: float, Y_C: float, T: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, chi = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1256,7 +1254,7 @@ def solve_eta0_fixed_chi_beta(T: float, chi: float,
     Same equations as solve_eta0_beta, but with χ fixed.
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1269,7 +1267,7 @@ def solve_eta0_fixed_chi_beta(T: float, chi: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
         
@@ -1323,7 +1321,7 @@ def solve_eta0_fixed_chi_beta(T: float, chi: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = sol.x
 
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
     gamma_thermo = photon_thermo(T)
@@ -1367,7 +1365,7 @@ def solve_eta0_fixed_chi_yc(T: float, chi: float, Y_C: float,
     Same equations as solve_eta0_fixed_yc, but with χ fixed.
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1380,7 +1378,7 @@ def solve_eta0_fixed_chi_yc(T: float, chi: float, Y_C: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
         
@@ -1433,7 +1431,7 @@ def solve_eta0_fixed_chi_yc(T: float, chi: float, Y_C: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_eG, T, include_antiparticles=True)
     gamma_thermo = photon_thermo(T)
@@ -1480,7 +1478,7 @@ def solve_eta1_fixed_chi_yc(T: float, chi: float, Y_C: float,
     Same equations as solve_eta1_fixed_chi, but with χ fixed.
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1493,7 +1491,7 @@ def solve_eta1_fixed_chi_yc(T: float, chi: float, Y_C: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, n_B = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1550,7 +1548,7 @@ def solve_eta1_fixed_chi_yc(T: float, chi: float, Y_C: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, n_B = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1599,7 +1597,7 @@ def solve_eta1_fixed_chi_beta(T: float, chi: float,
     Same equations as solve_eta1_beta_eq, but with χ fixed.
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1612,7 +1610,7 @@ def solve_eta1_fixed_chi_beta(T: float, chi: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, n_B = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1671,7 +1669,7 @@ def solve_eta1_fixed_chi_beta(T: float, chi: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, n_p, n_n, n_u, n_d, n_s, n_B = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1718,7 +1716,7 @@ def solve_etaX_fixed_chi_beta(T: float, chi: float, eta: float,
     Same equations as solve_etaX_beta_eq, but with χ fixed.
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1731,7 +1729,7 @@ def solve_etaX_fixed_chi_beta(T: float, chi: float, eta: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1794,7 +1792,7 @@ def solve_etaX_fixed_chi_beta(T: float, chi: float, eta: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1840,7 +1838,7 @@ def solve_etaX_fixed_chi_yc(T: float, chi: float, eta: float, Y_C: float,
     Same equations as solve_etaX_fixed_yc, but with χ fixed.
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -1853,7 +1851,7 @@ def solve_etaX_fixed_chi_yc(T: float, chi: float, eta: float, Y_C: float,
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
         eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -1913,7 +1911,7 @@ def solve_etaX_fixed_chi_yc(T: float, chi: float, eta: float, Y_C: float,
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_eL_H, mu_eL_Q, mu_eG, n_p, n_n, n_u, n_d, n_s, n_B = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     eleH_sec = electron_thermo(mu_eL_H, T, include_antiparticles=True)
     eleQ_sec = electron_thermo(mu_eL_Q, T, include_antiparticles=True)
@@ -2345,7 +2343,7 @@ def get_default_guess(chi: float, eta: float, n_B_est: float, T: float,
         fixed_chi: If True, return guess for fixed-chi solver (fewer unknowns)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -2679,7 +2677,7 @@ def solve_offset_by_continuation(T: float, eta: float,
         MixedPhaseResult at χ=1 (or failed result if continuation breaks)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -2765,7 +2763,7 @@ def find_offset_by_nB_sweep(T: float, eta: float,
         MixedPhaseResult at the offset (where χ reaches chi_threshold)
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -3320,13 +3318,13 @@ def find_boundaries(T_values: np.ndarray, eta: float,
         eq_mode: "beta", "fixed_yc", or "trapped"
         Y_C: Charge fraction (for fixed_yc mode)
         Y_L: Lepton fraction (for trapped mode)
-        H_table_lookup: Dict of {(n_B, T): ZLEOSResult} from pre-computed pure H table
+        H_table_lookup: Dict of {(n_B, T): eos.zl.EoSPoint} from pre-computed pure H table
                        Used to get better initial guesses (μ_p, μ_n) for boundary finding
         Q_table_lookup: Dict of {(n_B, T): VMITEOSResult} from pre-computed pure Q table
                        Used to get better initial guesses (μ_u, μ_d, μ_s) for boundary finding
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -3793,7 +3791,7 @@ def get_or_compute_boundaries(eta: float, T_values: np.ndarray,
         If return_dict=True: Dict[float, dict] with keys T and values {'n_onset', 'n_offset', 'onset_guess'}
     """
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     

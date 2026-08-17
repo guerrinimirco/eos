@@ -121,7 +121,11 @@ Where this actually stands: `PhaseThermo` is adopted by dd2 and sfho, whose
 `EoSPoint` and `LeptonThermo` are adopted by NOBODY — dd2's solver returns a
 flat `EoSPoint` of its own, and sfho now returns the same flat record, field
 for field, because two models returning one shape is worth more than one model
-leading the way to a third. `eos/mixed` still carries a second `PhaseThermo`.
+leading the way to a third. `eos/mixed` still carries a second `PhaseThermo`. zl is a third: its solver returns a flat
+`EoSPoint` too, carrying (n_p, n_n) rather than a composition map, because a
+two-species model has nothing to iterate over. It is a smaller record than
+dd2's and sfho's, not a different convention, and it converges with them when
+the shared record is adopted.
 
 Converting to the shared `EoSPoint` is therefore ONE commit across dd2 and
 sfho together, not a per-model step: doing it in either alone puts two record
@@ -209,8 +213,25 @@ own session where the baseline and `test_imports.py` are already being run:
               than a string. What is left is the records (above) and the
               parameter dataclass name, `SFHoParams` -> `Parameters`.
     vmit      eos.py -> solver.py
-    zl        eos.py -> solver.py, compute_tables.py -> table.py,
-              thermodynamics_nucleons.py -> thermodynamics.py
+    zl        DONE: eos.py -> solver.py, compute_tables.py -> table.py,
+              thermodynamics_nucleons.py -> thermodynamics.py, and species.py
+              and api.py added. `ZLParams` is `Parameters` and
+              `get_zl_default()` is `Parameters.default()` -- the first model
+              to take the section 13 name, so sfho's `SFHoParams` and vmit's
+              `VMITParams` are now the two that differ.
+              `compute_zl_thermo_from_mu` is `thermo_from_mu`,
+              `compute_nucleon_thermo` is `kinetic_thermo`,
+              `compute_V_interaction` / `compute_P_interaction` are
+              `interaction_energy` / `interaction_pressure`, and
+              `compute_mu_pHv` / `compute_mu_nHv` are one function,
+              `interaction_potentials`, returning the pair. `result_to_guess`
+              is `warm_start(point, mode)` and `get_default_guess_*` is
+              `default_guess(mode, ...)`, both reading the mode name rather
+              than a private string. `eos/zlvmit` and the two ZLvMIT notebooks
+              moved with them; the legacy code imports `Parameters as
+              ZLParams` and `thermo_from_mu_n as zl_thermo_from_mu_n`, which
+              is disambiguation against the vMIT names in the same
+              signatures, not a compatibility alias.
     alphabag  eos.py -> solver.py, compute_tables.py -> table.py,
               thermodynamics_quarks.py -> thermodynamics.py
     abpr      eos.py -> solver.py
@@ -601,13 +622,32 @@ a reason that has nothing to do with seeding.
   same way; the §2 rename to `Y_Le_values` lands once, across all three.
 
 ### zl
-- Convergence is judged on a sum of squares against a loose 0.01 gate rather
-  than a residual norm. Tightening it reclassifies rows near the edges of the
-  tables, so it is a baseline-moving change. (vmit had the same gate; it now
-  uses a scaled residual norm at 1e-10, and `eos/vmit/eos.py` shows the
-  shape zl's should take.)
-- `fixed_YC_YS` is physically meaningless (no strangeness in the model) and
-  must raise rather than silently ignore Y_S.
+- `eos_response` implements the freeze `equilibrium` only, and computes it by
+  central differences along the mode's own sequence (c_s^2 = dP/deps at fixed
+  T, C_V = (T/n_B) ds/dT at fixed n_B) because ZL has no analytic Jacobian in
+  this repository. Frozen composition, frozen conserved fractions and the
+  leptonic re-neutralization variants all raise naming this file. An analytic
+  Jacobian is easy here -- the interaction is a closed-form function of two
+  densities, so d(mu_Hv_i)/dn_j is elementary -- and would give the
+  susceptibility matrix chi_ab as well.
+- The muon lepton family is not wired: `SpeciesFlags(muons=True)` raises, and
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) only.
+- `thermal_neutrinos` -- flavours not tracked in the composition, carried as
+  mu = 0 gases -- is not wired and raises.
+- `eos_point` takes the entropy-per-baryon axis; `TableSpec` does not, and
+  raises for `axes={'SnB': ...}` -- the same gap vmit has, and it closes the
+  same way.
+- `mu_S` is reported as 0.0 rather than as undefined. The model has no strange
+  degree of freedom at all, so unlike the flat-mu_S entry at the top of this
+  file this is a genuine convention rather than a weakly determined number;
+  `fixed_YC_YS` raises rather than accepting a Y_S it would have to ignore.
+  Whether the API should say "this charge does not exist here" differently
+  from "this potential is undetermined" is the same open question.
+- `solve_system` -- Powell hybrid, then Levenberg-Marquardt, then one cold
+  restart, judged on a scaled residual -- is written a second time here,
+  identical to `eos/vmit/eos.py`'s except for the scale of a potential row.
+  Neither model may import the other (section 1), so the duplication is
+  deliberate until a third consumer justifies moving it to `general/`.
 
 ### vmit
 - `eos_response` implements the freeze `equilibrium` only, and computes it by
@@ -633,13 +673,31 @@ a reason that has nothing to do with seeding.
   solver failures, but nothing in the API says so; a scan over fractions
   should either filter them or the result should carry a flag.
 
-### zl, vmit, alphabag
+### alphabag
 - `eos/general/tabulate.py` is the shared line-grid driver (warm-started
-  density sweep, skipping, progress callback). vmit uses it; zl and alphabag
-  still carry their own copies of the same loop in `compute_tables.py`, and
+  density sweep, skipping, progress callback). vmit and zl use it; alphabag
+  still carries its own copy of the same loop in `compute_tables.py`, and
   dd2's `table.py` has a richer version with bisected continuation through
-  onsets. When the second and third consumers arrive, the continuation tactics
-  should move into the shared driver too rather than being reimplemented.
+  onsets.
+
+  Moving that continuation into the shared driver was considered in the zl
+  session and deliberately NOT done there, because zl does not exercise it:
+  a nucleonic functional with no hyperon, no muon and no quark sector has no
+  threshold along a density sweep for a bisected step to walk through, so the
+  move would have landed with its second consumer unable to test it. alphabag
+  is the session for it -- the strange-quark onset and the CFL phase selector
+  are real thresholds -- and it is the third consumer, which is what section 9
+  asks for before a shared abstraction is written.
+
+### zlvmit
+- `get_default_guess` calls the ZL fixed-fraction and trapped solvers
+  with T and the fraction transposed -- `solve_pure_H_fixed_yc(n_B, T, Y_C,
+  ...)` where the signature is `(n_B, Y_C, T, ...)`, and the same in the
+  trapped branch. The call sits inside a `try` whose `except` falls back to
+  the analytic guess, and it only ever produces a SEED, so it cannot change a
+  converged answer; found while renaming the ZL entry points and left alone,
+  because zlvmit is kept for its published results and even a seed change
+  moves the last bits of a baseline row.
 
 ### enjl
 - Finite temperature is not implemented; the model is T = 0 only.

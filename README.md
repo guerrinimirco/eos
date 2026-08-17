@@ -246,23 +246,19 @@ settings = TableSettings(
 A phenomenological nucleonic model based on Zhao & Lattimer (2020).
 
 ```python
-from eos.zl.compute_tables import ZLTableSettings, compute_zl_table
+from eos.zl import Parameters, eos_table
 import numpy as np
 
-settings = ZLTableSettings(
-    equilibrium='beta_eq',             # 'beta_eq', 'fixed_yc', 'trapped_neutrinos'
-    n_B_values=np.linspace(0.1, 12, 300) * 0.16,
-    T_values=[0.1, 10.0, 50.0, 100.0],
-
-    # For fixed_yc mode
-    Y_C_values=[0.1, 0.2, 0.3, 0.4, 0.5],
-
-    include_photons=True,
-    include_leptons=True,  # Include electrons for fixed_yc mode
-    save_to_file=True
+table = eos_table(
+    Parameters.default(),
+    "fixed_YC",                        # or 'beta_eq_neutrinoless',
+                                       # 'beta_eq_neutrino_trapped'
+    axes={"nB": np.linspace(0.1, 12, 300) * 0.16,
+          "T": [0.1, 10.0, 50.0, 100.0],
+          "Y_C": [0.1, 0.2, 0.3, 0.4, 0.5]},
+    leptons=True,                      # neutralizing electrons
+    verbose=True,
 )
-
-results = compute_zl_table(settings)
 ```
 
 ### 3. AlphaBag Quark EOS

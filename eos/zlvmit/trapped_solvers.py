@@ -22,8 +22,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 # Import from parent modules
-from eos.zl.parameters import ZLParams, get_zl_default
-from eos.zl.thermodynamics_nucleons import compute_zl_thermo_from_mu_n
+from eos.zl.parameters import Parameters as ZLParams
+from eos.zl.thermodynamics import thermo_from_mu_n as zl_thermo_from_mu_n
 
 from eos.vmit.parameters import VMITParams, get_vmit_default
 from eos.vmit.thermodynamics import compute_vmit_thermo_from_mu_n
@@ -75,7 +75,7 @@ def solve_eta0_trapped(
     from eos.zlvmit.mixed_phase_eos import MixedPhaseResult
     
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -95,7 +95,7 @@ def solve_eta0_trapped(
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_e, mu_nu, n_p, n_n, n_u, n_d, n_s, n_nu, chi = x
         
         # Compute phase thermodynamics
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
@@ -176,7 +176,7 @@ def solve_eta0_trapped(
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_e, mu_nu, n_p, n_n, n_u, n_d, n_s, n_nu, chi = sol.x
     
     # Recompute thermodynamics at solution
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
     nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
@@ -234,7 +234,7 @@ def solve_eta0_fixed_chi_trapped(
     from eos.zlvmit.mixed_phase_eos import MixedPhaseResult
     
     if zl_params is None:
-        zl_params = get_zl_default()
+        zl_params = ZLParams.default()
     if vmit_params is None:
         vmit_params = get_vmit_default()
     
@@ -250,7 +250,7 @@ def solve_eta0_fixed_chi_trapped(
     def equations(x):
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_e, mu_nu, n_p, n_n, n_u, n_d, n_s, n_nu = x
         
-        had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+        had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
         qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
@@ -317,7 +317,7 @@ def solve_eta0_fixed_chi_trapped(
     
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_e, mu_nu, n_p, n_n, n_u, n_d, n_s, n_nu = sol.x
     
-    had_sec = compute_zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
+    had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
     qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
     nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
