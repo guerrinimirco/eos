@@ -51,8 +51,11 @@ before publication.
     └── docs/                     STRUCTURE.md, DEFERRED.md, eos.bib, model .tex sources
 
 Deleted outright, one line of justification each:
-- eos/sfhoalphabag/ — zero callers anywhere (grep across eos, test, notebooks,
-  nucleation); the 2fam paper uses sfho + alphabag pure phases directly.
+- eos/sfhoalphabag/ — DONE. Zero callers anywhere (grep across eos, test,
+  notebooks, nucleation); the 2fam paper uses sfho + alphabag pure phases
+  directly. What was worth keeping out of it — above all locating a phase
+  boundary by imposing chi and solving for n_B, which is one exact solve
+  against locate_window's couple of dozen — is written up in docs/SALVAGE.md.
 - eos/general/plotting_info.py — deprecation shim, no importers left.
 - eos/dd2/notebook_api.py — ruling: notebooks use library functions, no
   notebook-API modules.

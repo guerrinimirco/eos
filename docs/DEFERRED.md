@@ -268,9 +268,8 @@ from.
 
 ### The README's directory tree predates the refactor
 
-`README.md` still lists `sfhoalphabag/`, `general/plotting_info.py` and a
-one-file `tov/`, all of which are gone, and carries no `dd2/`, `mixed/` or
-`enjl/` at all. It is a rewrite rather than a patch, and Phase 5 does it
+`README.md` still lists `general/plotting_info.py` and a one-file `tov/`, both
+of which are gone, and carries no `dd2/`, `mixed/` or `enjl/` at all. It is a rewrite rather than a patch, and Phase 5 does it
 alongside the notebook rework; individual lines are corrected only where a
 rename in this phase would otherwise leave them newly wrong.
 

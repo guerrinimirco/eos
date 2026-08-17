@@ -160,7 +160,6 @@ eos/
 │   │   ├── table_reader.py         # Table I/O utilities
 │   │   └── plot_results.py         # Visualization tools
 │   │
-│   ├── sfhoalphabag/       # SFHo+AlphaBag hybrid model
 │   │   ├── mixed_phase_eos.py      # Phase transition solvers
 │   │   └── hybrid_table_generator.py  # Configuration & runner
 │   │
