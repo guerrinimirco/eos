@@ -40,7 +40,7 @@ from eos.mixed.charges import (
 )
 from eos.mixed.solver import mixed_slots
 from eos.mixed.solver import solve_mixed
-from eos.mixed.boundaries import locate_window
+from eos.mixed.boundaries import MixedWindow, locate_window, solve_fixed_chi
 from eos.mixed.solver import sweep_mixed
 
 #: The fraction axes a table may sweep, in the canonical order they are keyed
@@ -192,6 +192,10 @@ class MixedTableSpec:
     window_only: solve the mixed system only inside the located transition
                  window (the default and much faster). Set False to solve at
                  every grid point, e.g. when studying chi outside [0, 1].
+    refine     : how far each line's boundaries are sharpened — "bisect"
+                 stops at half a grid spacing, "exact" finishes with one
+                 fixed-chi solve per boundary and marches those solves along
+                 the temperature axis (see `_locate_chained`).
     """
     par: object
     flags: object
@@ -203,6 +207,7 @@ class MixedTableSpec:
     leptons: bool = True
     window_only: bool = True
     analytic_jac: bool = False
+    refine: str = "bisect"
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -213,9 +218,59 @@ class MixedTableSpec:
         if self.mode not in MODE_FRACTIONS:
             raise ValueError(f"unknown mode {self.mode!r}; expected one of "
                              f"{list(MODE_FRACTIONS)}")
+        if self.refine not in ("bisect", "exact"):
+            raise ValueError(f"refine must be 'bisect' or 'exact', "
+                             f"got {self.refine!r}")
 
 
-def _locate_chained(spec, nB, cs, vp, T, hint):
+def _march_boundaries(spec, nB, cs, vp, T, history):
+    """Both boundaries by direct fixed-chi solves, seeded by extrapolating
+    the last two converged boundary vectors along the temperature axis.
+
+    The boundaries move smoothly with T, and so does the whole unknown vector
+    at each of them — so once two isotherms have converged exact boundary
+    states, the next isotherm's boundaries are two warm-started
+    `solve_fixed_chi` calls, no scan at all. Extrapolating the ENTIRE vector,
+    not just the density, is what makes the march robust (the technique the
+    first-generation hybrids used, docs/SALVAGE.md section 3); only converged
+    states enter `history`, so a failed isotherm cannot poison it.
+
+    Returns the marched `MixedWindow`, or None when the march does not apply
+    (fewer than two converged isotherms) or its solves fail or land outside
+    the grid in the wrong order — the caller then falls back to the scan.
+    """
+    if len(history) < 2:
+        return None
+    (T1, on1, off1), (T2, on2, off2) = history[-2], history[-1]
+    if T2 == T1:
+        return None
+    w = (T - T2) / (T2 - T1)
+    slots = mixed_slots(cs, spec.eta, spec.flags, fixed_chi=True)
+    i_n = slots.index("n_B")
+
+    def extrap(a, b):
+        xa = [a.potentials[name] for name in slots]
+        xb = [b.potentials[name] for name in slots]
+        return [xb[i] + (xb[i] - xa[i]) * w for i in range(len(xb))]
+
+    x_on, x_off = extrap(on1, on2), extrap(off1, off2)
+    lo, hi = float(np.min(nB)), float(np.max(nB))
+    try:
+        on = solve_fixed_chi(spec.par, spec.flags, 0.0, spec.eta, cs,
+                             vmit_params=vp, T=T, n_B0=x_on[i_n], x0=x_on)
+        # The offset's hadronic phase no longer tracks n_B; its internal
+        # solve is seeded from the previous isotherm's own hadronic density.
+        off = solve_fixed_chi(spec.par, spec.flags, 1.0, spec.eta, cs,
+                              vmit_params=vp, T=T, n_B0=off2.th_H.n_B,
+                              x0=x_off)
+    except (RuntimeError, ValueError):
+        return None
+    if not (lo <= on.n_B < off.n_B <= hi):
+        return None
+    return MixedWindow(float(on.n_B), float(off.n_B), [], on, off)
+
+
+def _locate_chained(spec, nB, cs, vp, T, hint, history=()):
     """`locate_window`, told where the previous temperature found the window.
 
     A search over the whole density grid spreads its dozen probes across a
@@ -228,6 +283,10 @@ def _locate_chained(spec, nB, cs, vp, T, hint):
     look, and concentrating the probes there both finds the window and costs
     several times less.
 
+    With `refine="exact"` and two converged isotherms in `history`, the
+    T-march of `_march_boundaries` replaces the scan outright — two solves
+    per isotherm; the scan remains the fallback whenever the march declines.
+
     The hint is discarded and the full-grid search repeated when it finds
     nothing, or when a boundary lands on the edge of the hinted range: that
     means the window has moved out from under the hint, and the number would be
@@ -235,7 +294,12 @@ def _locate_chained(spec, nB, cs, vp, T, hint):
     genuinely disappears is still reported as gone, and one that jumps is still
     found -- the hint is an accelerator, never the source of the answer.
     """
-    kw = dict(vmit_params=vp, T=T, analytic_jac=spec.analytic_jac)
+    if spec.refine == "exact":
+        window = _march_boundaries(spec, nB, cs, vp, T, history)
+        if window is not None:
+            return window
+    kw = dict(vmit_params=vp, T=T, analytic_jac=spec.analytic_jac,
+              refine=spec.refine)
     if hint is not None:
         lo, hi = hint
         pad = max(0.15, hi - lo)          # generous: the docstring's advice
@@ -295,6 +359,7 @@ def build_mixed_table(spec, progress=None, verbose=False):
 
     rows, windows = [], {}
     hint_of = {}                  # last located window, per fraction combo
+    history_of = {}               # last two exact boundary states, per combo
     for i_line, conditions in enumerate(lines, start=1):
         t0 = time.time()
         temp_key, tv, fracs = split_conditions(conditions)
@@ -312,14 +377,32 @@ def build_mixed_table(spec, progress=None, verbose=False):
             window, n_requested = None, len(nB)
         elif spec.window_only:
             window = _locate_chained(spec, nB, cs, vp, float(tv),
-                                     hint_of.get(combo))
+                                     hint_of.get(combo),
+                                     history_of.get(combo, ()))
             if window.exists:
                 hint_of[combo] = (window.n_onset, window.n_offset)
+                sweep_kw = {}
+                if window.onset_state is not None:
+                    # An exact window carries the solved boundary states;
+                    # the T-march feeds on the last two converged isotherms,
+                    # and the onset state seeds the inside sweep's first
+                    # point in place of a cold start at the window's edge.
+                    if window.offset_state is not None:
+                        history_of[combo] = (list(history_of.get(combo, ()))
+                                             + [(float(tv),
+                                                 window.onset_state,
+                                                 window.offset_state)])[-2:]
+                    x_on = dict(window.onset_state.potentials, chi=0.0)
+                    slots_n = mixed_slots(cs, spec.eta, spec.flags)
+                    sweep_kw = dict(
+                        x0=[x_on[name] for name in slots_n],
+                        nH0=window.onset_state.th_H.n_B)
                 inside = nB[(nB >= window.n_onset) & (nB <= window.n_offset)]
                 results = sweep_mixed(spec.par, spec.flags, inside,
                                       spec.eta, cs, vmit_params=vp,
                                       T=float(tv),
-                                      analytic_jac=spec.analytic_jac)
+                                      analytic_jac=spec.analytic_jac,
+                                      **sweep_kw)
                 n_requested = len(inside)
             else:
                 results, n_requested = [], 0
