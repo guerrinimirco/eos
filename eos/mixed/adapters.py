@@ -47,6 +47,7 @@ import numpy as np
 from scipy.optimize import root
 
 from eos.general.physics_constants import hc, hc3
+from eos.general.basis import quark_potentials
 from eos.general.state import PhaseThermo
 from eos.dd2.thermodynamics import thermo_at_potentials
 from eos.dd2.solver import solve_beta_eq_octet
@@ -58,6 +59,91 @@ from eos.vmit.thermodynamics import (
 #: Post-solve residual gate for a phase-internal solve. Matches the tolerance
 #: eos/dd2/solver.py accepts its own equilibrium solves at.
 RESIDUAL_TOL = 1.0e-10
+
+
+@dataclass(frozen=True)
+class Phase:
+    """One phase of a pairing, as the solver consumes it.
+
+    A `Phase` bundles the adapter callable with everything the engine must
+    KNOW about it but must not ASSUME: which flavour of baryon potential its
+    slot carries, how it may be seeded, and which optional capabilities it
+    provides. Each factory below closes over its model's parameters, so
+    parameters remain arguments (CLAUDE.md section 6) and the engine never
+    sees a model type.
+
+    The engine labels the two phases of a pair POSITIONALLY as H and Q — the
+    historical hadronic/quark roles, generally the low- and high-density
+    phase — in its slot names, result fields (`th_H`, `th_Q`) and lepton
+    domains. `name` is the human label used in messages and reported branch
+    labels; for a same-model pairing (two ENJL branches) it is what tells the
+    two apart.
+
+    thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None, return_state=False)
+        The phase's block at given conserved-charge potentials, as a shared
+        `PhaseThermo`. `mu` is the slot potential — kinetic or physical per
+        `potential_kind`. `n_B_guess` and `x0` are seeding hints an adapter
+        may ignore; with `return_state=True` it returns `(block, state)`,
+        where `state` is an opaque internal vector (or None) that a Jacobian
+        may differentiate without re-solving.
+    potential_kind : "kinetic" | "physical"
+        What the baryon slot carries. DD2 wants the kinetic
+        mu_tilde_B = mu_B - Sigma^R because its rearrangement term depends on
+        the density it helps determine; models that carry Sigma^R inside
+        their own residual (ENJL) or have none (SFHo, vMIT) take the
+        physical potential. The residual's baryon-matching row reads the
+        PHYSICAL potential from either kind, so the two may be mixed freely.
+    seed(T, n_B_guess) -> x0
+        The adapter-internal starting configuration, a pure function of its
+        arguments. `seed_cacheable=False` forbids the solver's per-solve
+        memoization: for a branch-declared adapter the seed CHOOSES THE ROOT,
+        so caching would change physics, not speed (the ENJL rule).
+    cold_start(n_B, T) -> (mu_slot, mu_e, mu_B_physical)
+        A physical starting point for the mixed unknown vector, from the
+        phase's own equilibrium at density n_B. May raise; the solver then
+        falls back to the partner phase's physical values. None means the
+        phase cannot cold-start and a warm start must be supplied.
+    supports_S : bool
+        False for a strangeness-free model (ZL): a spec that conserves S
+        globally, or any nonzero mu_S, raises before a solve.
+    max_T : float or None
+        Highest temperature the adapter supports; None is unlimited. 0.0 for
+        the T = 0 ENJL surface: T > 0 raises before a solve.
+    wing_sweep(spec, n_B_grid, T) -> [(n_B, P, eps), ...]
+        The PURE phase swept at the spec's own equilibrium, for the hybrid
+        table's wings. None: `hybrid_table` raises naming the phase.
+    frozen_thermo(th, scale, T) -> (P, eps)
+        This phase compressed by `scale` at frozen composition — the
+        responses capability (see `eos.mixed.responses` for the convention).
+        None: `sound_speed_frozen` raises naming the phase.
+    jacobian_block(mu, mu_C, mu_S, T, state, th) -> ndarray
+        Analytic d(n_B, n_C, n_S, P[, mu_B])/d(mu, mu_C, mu_S) block, rows
+        [n_B, n_C, n_S, P] plus a fifth mu_B row for a kinetic-kind phase.
+        Optional by design (the handoff rule): absent means the solver uses
+        its numeric Jacobian, which is the reference path anyway.
+    """
+    name: str
+    thermo: object
+    potential_kind: str
+    seed: object = None
+    seed_cacheable: bool = True
+    cold_start: object = None
+    supports_S: bool = True
+    max_T: float = None
+    wing_sweep: object = None
+    frozen_thermo: object = None
+    jacobian_block: object = None
+
+    def __post_init__(self):
+        if self.potential_kind not in ("kinetic", "physical"):
+            raise ValueError(f"potential_kind must be 'kinetic' or "
+                             f"'physical', got {self.potential_kind!r}")
+
+    def slot(self, position):
+        """This phase's baryon-potential slot name at positional label
+        `position` ('H' or 'Q'): the prefix says what the slot carries."""
+        prefix = "mu_tilde_B_" if self.potential_kind == "kinetic" else "mu_B_"
+        return f"{prefix}{position}"
 
 
 # =============================================================================
@@ -377,3 +463,87 @@ def enjl_phase_thermo(point, mu_B, mu_C, mu_S):
         mu_i=mu_i, mu_eff_i=mu_eff, m_eff_i=m_eff,
         mu_dot_n=sum(mu_i[sp] * n[sp] for sp in n),
         condensation=0.0)
+
+
+# =============================================================================
+# THE SHIPPED PAIRINGS
+# =============================================================================
+# Each factory closes over one model's parameters and returns a `Phase`.
+# A pairing is any two of them; `default_pair` is the DD2 + vMIT hybrid the
+# engine's plain (par, flags, vmit_params) signatures have always meant.
+
+def dd2_phase(par, flags):
+    """The DD2 hadronic phase as a `Phase` (kinetic potential slot)."""
+    if getattr(flags, "sigma_star", False):
+        raise NotImplementedError(
+            "SpeciesFlags.sigma_star (hidden-strange scalar) is not wired in "
+            "the hadronic phase")
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        return hadronic_phase(par, flags, mu, mu_C, mu_S, T=T,
+                              n_B_guess=(0.2 if n_B_guess is None
+                                         else n_B_guess),
+                              x0=x0, return_state=return_state)
+
+    def seed(T, n_B_guess):
+        return hadronic_seed(par, flags, T, n_B_guess)
+
+    def cold_start(n_B, T):
+        # A charge-neutral beta-equilibrium solve: physical by construction
+        # and independent of the charge potentials. The meson gas is switched
+        # off for the same reason `hadronic_seed` switches it off.
+        seed_flags = replace(flags, include_pseudoscalars=False,
+                             include_thermal_vectors=False)
+        base = solve_beta_eq_octet(par, n_B, seed_flags, T=T,
+                                   include_photons=False,
+                                   check_consistency=False)
+        return base.mu_B - base.Sigma_R, base.mu_e, base.mu_B
+
+    try:                       # backends/ is deletable; absent means numeric
+        from eos.mixed.backends.jacobian import _hadronic_block
+        jac = (lambda mu, mu_C, mu_S, T, state, th:
+               _hadronic_block(par, flags, mu, mu_C, mu_S, T, state))
+    except ImportError:
+        jac = None
+
+    return Phase(name="DD2", thermo=thermo, potential_kind="kinetic",
+                 seed=seed, cold_start=cold_start, jacobian_block=jac)
+
+
+def vmit_phase(params=None):
+    """The vMIT quark phase as a `Phase` (physical potential slot).
+
+    The (mu_B, mu_C, mu_S) -> (mu_u, mu_d, mu_s) rotation happens HERE, so
+    the engine hands every adapter the same conserved-charge potentials and
+    no flavour basis leaks past this closure.
+    """
+    if params is None:
+        params = get_vmit_default()
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        mu_u, mu_d, mu_s = quark_potentials(mu, mu_C, mu_S)
+        th = quark_phase(mu_u, mu_d, mu_s, T=T, params=params)
+        return (th, None) if return_state else th
+
+    def cold_start(n_B, T):
+        from eos.vmit.eos import solve_vmit_beta_eq
+        q = solve_vmit_beta_eq(n_B, T, params=params)
+        return q.mu_B, q.mu_e, q.mu_B
+
+    try:
+        from eos.mixed.backends.jacobian import _quark_block
+        jac = (lambda mu, mu_C, mu_S, T, state, th:
+               _quark_block(mu, mu_C, mu_S, T, params, th))
+    except ImportError:
+        jac = None
+
+    return Phase(name="vMIT", thermo=thermo, potential_kind="physical",
+                 cold_start=cold_start, jacobian_block=jac)
+
+
+def default_pair(par, flags, vmit_params=None):
+    """The DD2 + vMIT pairing every plain (par, flags, vmit_params)
+    signature builds — the engine's historical default."""
+    return dd2_phase(par, flags), vmit_phase(vmit_params)

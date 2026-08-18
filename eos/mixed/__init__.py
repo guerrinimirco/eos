@@ -76,7 +76,8 @@ from eos.mixed.charges import (
 
 # --- the phase-adapter contract: the only surface onto a bulk engine --------
 from eos.mixed.adapters import (
-    PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
+    Phase, PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
+    dd2_phase, vmit_phase, default_pair,
 )
 
 # --- solving one point, and sweeping density -------------------------------
@@ -126,8 +127,9 @@ __all__ = [
     "ChargeSpec", "Regime", "Locality",
     # quantum numbers
     "QUARK_QN", "quark_charges", "hadronic_qn", "hadronic_charges",
-    # phase adapters
-    "PhaseThermo", "hadronic_phase", "hadronic_seed", "quark_phase",
+    # phase adapters and pairings
+    "Phase", "PhaseThermo", "hadronic_phase", "hadronic_seed", "quark_phase",
+    "dd2_phase", "vmit_phase", "default_pair",
     # solving
     "solve_mixed", "MixedResult",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",

@@ -53,7 +53,6 @@ from eos.mixed.charges import Regime
 from eos.general.basis import quark_potentials
 from eos.mixed.solver import has_leptons
 from eos.mixed.thermodynamics import charged_leptons
-from eos.mixed.adapters import hadronic_phase, quark_phase
 from eos.vmit.thermodynamics import compute_quark_density
 
 #: mu_flavor = _M @ mu_charge for mu_charge = (mu_B, mu_C, mu_S). Since
@@ -203,19 +202,23 @@ def mixed_jacobian(x, ctx):
     """
     spec, eta, slots = ctx.spec, ctx.eta, ctx.slots
     lep = has_leptons(spec)
-    muons = bool(ctx.flags.muons)
+    muons = ctx.muons
     ns, mus = ctx.n_scale, ctx.mu_scale
+    p_H, p_Q = ctx.pair
+    slot_H, slot_Q = slots[0], slots[1]
 
     d, mu_C_H, mu_C_Q, mu_S = _phase_potentials(x, ctx)
-    th_H, state_H = hadronic_phase(ctx.par, ctx.flags, d["mu_tilde_B_H"], mu_C_H,
-                                   mu_S, T=ctx.T, n_B_guess=ctx.n_B_guess,
-                                   x0=ctx.hadronic_seed(), return_state=True)
-    mu_u, mu_d, mu_s = quark_potentials(d["mu_B_Q"], mu_C_Q, mu_S)
-    th_Q = quark_phase(mu_u, mu_d, mu_s, T=ctx.T, params=ctx.vmit_params)
+    th_H, state_H = p_H.thermo(d[slot_H], mu_C_H, mu_S, ctx.T,
+                               n_B_guess=ctx.n_B_guess,
+                               x0=ctx.phase_seed(p_H, "H"), return_state=True)
+    th_Q, state_Q = p_Q.thermo(d[slot_Q], mu_C_Q, mu_S, ctx.T,
+                               n_B_guess=ctx.n_B_guess,
+                               x0=ctx.phase_seed(p_Q, "Q"), return_state=True)
 
-    bH = _hadronic_block(ctx.par, ctx.flags, d["mu_tilde_B_H"], mu_C_H, mu_S,
-                         ctx.T, state_H)                 # 5x3
-    bQ = _quark_block(d["mu_B_Q"], mu_C_Q, mu_S, ctx.T, ctx.vmit_params, th_Q)
+    # Each phase's analytic block is a capability it advertises; the solver
+    # already fell back to the numeric Jacobian if either is absent.
+    bH = p_H.jacobian_block(d[slot_H], mu_C_H, mu_S, ctx.T, state_H, th_H)
+    bQ = p_Q.jacobian_block(d[slot_Q], mu_C_Q, mu_S, ctx.T, state_Q, th_Q)
 
     mu_nue = d.get("mu_nue", 0.0)
     mu_eL_H, mu_eL_Q = d.get("mu_eL_H", 0.0), d.get("mu_eL_Q", 0.0)
@@ -255,8 +258,8 @@ def mixed_jacobian(x, ctx):
 
     def col(sj):
         """Derivative of every residual row with respect to slot `sj`."""
-        d_mutB = _sens(sj, "mu_tilde_B_H")
-        d_muBQ = _sens(sj, "mu_B_Q")
+        d_mutB = _sens(sj, slot_H)
+        d_muBQ = _sens(sj, slot_Q)
         d_chi = _sens(sj, "chi")
         d_muS = _sens(sj, "mu_S")
         if spec.C is Regime.NOT_CONSERVED:
