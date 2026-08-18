@@ -165,7 +165,8 @@ def _step(solve, conditions, previous, target, x0, warm_start, max_bisect,
 
 
 def sweep_lines(lines, axis_values, solve, warm_start=None, skip_errors=True,
-                progress=None, verbose=False, mode="", max_bisect=0):
+                progress=None, verbose=False, mode="", max_bisect=0,
+                reset_on_failure=True):
     """Solve every line, sweeping `axis_values` with a warm start within each.
 
     Returns a list of lines, each a list of solved points in the order of
@@ -177,6 +178,14 @@ def sweep_lines(lines, axis_values, solve, warm_start=None, skip_errors=True,
     behaviour a parameter scan needs, since a grid always has corners where
     uniform matter has no solution. skip_errors=False raises instead, which is
     what one wants while developing a solver.
+
+    reset_on_failure=False keeps the last successful warm start instead of
+    dropping it, so the sweep carries on from the point it last reached rather
+    than from a cold guess. That is what a model with more than one solution
+    branch needs: a cold start lands on whichever branch it lands on, so
+    restarting mid-sweep lets the sequence hop between branches from one grid
+    value to the next, which shows up as an equation of state that oscillates
+    rather than one that has a transition in it. `eos.enjl` sets it.
 
     max_bisect is how many times a missed step may be halved back towards the
     last solved point before it is given up on (see `_step`). It is 0 by
@@ -210,7 +219,8 @@ def sweep_lines(lines, axis_values, solve, warm_start=None, skip_errors=True,
                     raise RuntimeError(
                         f"no solution at value {value} "
                         f"for line {conditions}")
-                x0 = None            # start the next point fresh
+                if reset_on_failure:
+                    x0 = None        # start the next point fresh
                 continue
             line.append(point)
             previous = float(value)

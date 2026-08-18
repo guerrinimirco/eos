@@ -362,7 +362,7 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
 
 ### G1. The effective scalar density is capped at zero — pinned, not in the paper
 
-- **Where:** `eos/enjl/uniform.py::_effective_scalar_densities`.
+- **Where:** `eos/enjl/thermodynamics.py::effective_scalar_densities`.
 - **The issue:** Eq. (6) reads nbar^s_q = n^s_q + alpha_S sum_i N^q_i n^s_i.
   The quark term is negative (vacuum-subtracted) but the baryon cluster term is
   positive and grows with baryon density, so above chiral restoration the sum
@@ -409,7 +409,7 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
 
 ### G3. Branch selection above the transitions — UNRESOLVED, blocks Figs. 4-8
 
-- **Where:** `eos/enjl/eos_beta.py::beta_eos_table`, above the first-order
+- **Where:** `eos/enjl/table.py::build_table`, above the first-order
   transitions of each parameter set.
 - **The situation:** the local equations (23)-(24) have **three** solution
   branches, all self-consistent, all charge-neutral to 1e-15, all satisfying
@@ -444,7 +444,7 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
   implementation does not impose; a restriction that baryons cannot be removed
   by hand once bound; or the possibility that the author's solver simply never
   reaches it from a continuation and the branch is physical but not explored.
-  Until this is decided, `beta_eos_table` deliberately does *not* choose:
+  Until this is decided, `build_table` deliberately does *not* choose:
   it maps one branch per call, with `direction` selecting which.
 
 ### G4. Finite-temperature decisions — not yet taken

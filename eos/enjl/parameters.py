@@ -33,7 +33,7 @@ RHO_FACTOR: float = 9.0
 
 
 @dataclass(frozen=True)
-class ENJLParams:
+class Parameters:
     # --- RKH NJL parameter set (paper Sec. II.B) ---
     Lambda: float = 602.3          # 3-momentum cut-off [MeV]
     m_u0: float = 5.5              # current u-quark mass [MeV]
@@ -131,6 +131,40 @@ class ENJLParams:
         return -RHO_FACTOR * 4.0 * self.GS * self.aTV * math.exp(-x) / (self.nTV * hc3)
 
 
-#: Default parameter set (paper Table I + RKH).
-def get_enjl_default() -> ENJLParams:
-    return ENJLParams()
+
+    # ------------------------------------------------- published sets
+    @classmethod
+    def default(cls):
+        """The shipped set: RKH plus Table I, at f_q = 0.5 and B = 1 GeV/fm^3.
+
+        It is the parameter set of Figs. 4-6 of the paper, and the one
+        `test/baseline` is frozen at.
+        """
+        return cls()
+
+    @classmethod
+    def named(cls, name):
+        """One of the six (f_q, B) combinations the study spans.
+
+        f_q rescales the quark coupling to the vector fields and B is the
+        Pauli-blocking strength of Eq. (4); everything else is common to all
+        six. The names are those of the author's own tables, so a set and the
+        file that validates it are called the same thing.
+        """
+        if name not in PUBLISHED_SETS:
+            raise KeyError(f"unknown ENJL parameter set {name!r}; "
+                           f"published: {sorted(PUBLISHED_SETS)}")
+        f_q, B_GeV_fm3 = PUBLISHED_SETS[name]
+        return cls(f_q=f_q, B_GeV_fm3=B_GeV_fm3)
+
+
+#: The (f_q, B [GeV/fm^3]) pairs of the study. Five of the six have a
+#: published reference table; (0.5, 0) does not.
+PUBLISHED_SETS = {
+    "fq0.5_B0": (0.5, 0.0),
+    "fq0.5_B1": (0.5, 1.0),
+    "fq0.7_B0": (0.7, 0.0),
+    "fq0.7_B1": (0.7, 1.0),
+    "fq1.0_B0": (1.0, 0.0),
+    "fq1.0_B1": (1.0, 1.0),
+}

@@ -321,7 +321,7 @@ E₀ = −4263.849 MeV/fm³     (per-file means −4263.848 … −4263.856;
                             spread within a file 5×10⁻⁶ - 1.6×10⁻⁵ relative)
 ```
 
-matching `eos/enjl/uniform.vacuum_energy_density()` = −4263.8455 MeV/fm³ to
+matching `eos/enjl/thermodynamics.vacuum_energy_density()` = −4263.8455 MeV/fm³ to
 8×10⁻⁷ relative. **Both are negative**, in the sense that the assembled Eq. (13)
 sum minus the printed `E` is negative — i.e. E₀ is subtracted as written in the
 equation. Do not flip the sign to make a number look tidy.

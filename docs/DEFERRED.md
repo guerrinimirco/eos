@@ -290,7 +290,35 @@ own session where the baseline and `test_imports.py` are already being run:
               Every call site is inside eos (nucleation does not import abpr)
               and moved in the same commit: README section 6 and
               `notebooks/mass distribution.ipynb`.
-    enjl      eos_beta.py + uniform.py -> solver.py (a merge, not a rename)
+    enjl      DONE: `uniform.py` and `eos_beta.py` are gone, but not as the
+              merge the plan called for -- CLAUDE.md section 5 splits them
+              differently, and along the line the section draws.
+              `uniform.solve_point` takes DENSITIES and solves only the
+              model's own gap equation, so it is `thermo_from_n` and it went
+              to `thermodynamics.py` with the gap, the baryon masses, the
+              effective scalar densities, the mean fields, the vacuum and the
+              charge sums; `eos_beta`'s residual and solve are `solver.py`;
+              the continuation is `table.py`; and `api.py`, `species.py`'s
+              flags and `verify/` are new. `ENJLParams` is `Parameters` with
+              `default()` and `named()`, `get_enjl_default()` is gone,
+              `ENJLEoSPoint` is `EoSPoint`, `solve_beta_point` is
+              `solve_beta_eq_neutrinoless`, `beta_eos_table(grid, ...)` is
+              `build_table(TableSpec(...))`, `_continuation_state` is
+              `warm_start`, `_baryon_masses` and
+              `_effective_scalar_densities` lost their underscores (both were
+              imported by the notebook and the plot script, so they were
+              public whatever they were called), and `_evaluate` /
+              `_residual` are `state_at` / `residual`. The four `*_t0`
+              free-gas functions are gone: `kinetic_thermo(nu, m, g, Lambda)`
+              takes the medium part from `eos.general.fermi_integrals` and
+              adds the model's own Lambda vacuum terms, which is the whole
+              of CLAUDE.md section 7 here and the seam finite temperature
+              needs. `make_species` and its `Species` dataclass are gone too;
+              the quantum numbers are plain tables in `species.py`.
+              `P_kin_t0` and the old `kinetic_thermo` had no caller anywhere
+              and were deleted -- the second was also wrong, returning
+              eps = 0 below threshold where every live call site returned the
+              negative vacuum term.
 
 Function names go with them, per the §13 vocabulary: no name repeats its
 package (`compute_zl_thermo_from_mu` -> `thermo_from_mu`), and the same job
@@ -854,12 +882,104 @@ a reason that has nothing to do with seeding.
   moves the last bits of a baseline row.
 
 ### enjl
-- Finite temperature is not implemented; the model is T = 0 only.
+- Finite temperature is not implemented; the model is T = 0 only. The seam is
+  cut and measured: every integral in the model goes through the one function
+  `thermodynamics.kinetic_thermo(nu, m, g, Lambda)`, which already takes its
+  medium part from `general/fermi_integrals.solve_fermi_jel` at T = 0 and adds
+  the two Lambda vacuum terms, both T-independent by construction. Adding T is
+  that signature plus two arguments passed on. The cost is on the caller side:
+  at T > 0 the Fermi surface is not sharp, so `thermo_from_n`'s
+  density -> k_F -> nu path becomes a density -> nu inversion and
+  `solver.state_at`'s k_F clamp becomes a clamp on nu.
 - Cold starts stop converging around 0.5 fm^-3. The beta-equilibrium table is
-  built by continuation (`beta_eos_table`), and the "up" and "down" sweeps
+  built by continuation (`table.build_table`), and the "up" and "down" sweeps
   differ where more than one branch exists — that difference is the branch
   structure, and choosing between branches needs a Maxwell construction that
-  a single sweep cannot do.
+  a single sweep cannot do. `test/baseline` freezes BOTH sweeps for exactly
+  that reason.
+- **Three of the four modes raise, and each is a different size.**
+  `beta_eq_neutrino_trapped` needs an eleventh unknown, mu_nue, and one more
+  row, Y_Le n_B = n_e + n_nue: neutrinos are not among the model's degrees of
+  freedom and Eq. (23), mu_i = B_i mu_b - q_i mu_e, has mu_nu = 0 built into
+  it. `fixed_YC` is a one-row swap with `leptons=False` — replace the
+  neutrality row by n_C = Y_C n_B and read mu_e as -mu_C — but with
+  `leptons=True` the lepton potential parts company with mu_C, because total
+  neutrality n_e + n_mu = n_C becomes a separate condition, and the system
+  gains an unknown; CLAUDE.md section 3 requires both, so shipping the cheap
+  half would be a mode that is only half a mode. `fixed_YC_YS` needs mu_S
+  promoted to an unknown, which replaces the two-potential Eq. (23) by the
+  full mu_i = B_i mu_B + C_i mu_C + S_i mu_S over the six strongly
+  interacting species: as closed today mu_S = 0 identically, weak equilibrium
+  not conserving strangeness, so Y_S is an output. Call it half a day for
+  `fixed_YC` including tests, and a day each for the other two.
+- **The cap in Eq. (6) costs a little thermodynamic consistency, measured.**
+  `effective_scalar_densities` caps nbar^s_q at zero from above, which is
+  right — a positive value is a condensate of the wrong sign — but where the
+  cap binds, nbar^s_q stops responding to the densities and eps stops being
+  stationary with respect to that flavour's constituent mass. That
+  stationarity is what makes mu_i = d eps/d n_i hold. It costs nothing when
+  NO light flavour is capped, and nothing when BOTH are (the determinant term
+  then vanishes in both light channels, M_u = M_d = m_q0 exactly, and the
+  state sits in a flat region). It bites only when exactly one is: at
+  f_q = 0.5, B = 0, n_B = 0.8 fm^-3 the identity misses by 6.9e-2 MeV on
+  mu_Lambda = 1419 MeV, 4.8e-5 relative — below the 0.05-0.20 MeV at which the
+  engine is validated against the author's tables, which is why it never
+  showed up there. `verify/run_full_check.py` gates the smooth states at
+  1e-3 MeV and the capped ones at 1e-1 MeV rather than absorbing the
+  difference into one loose bound. Closing it means changing how Eq. (6) is
+  regularized — a smooth cutoff, or carrying the cap as an explicit
+  constraint in the stationarity condition — which is a physics decision.
+- `eos_response` is not implemented and raises naming both reasons. Half the
+  CompOSE list (C_V, C_P, the thermal index, the isothermal/adiabatic
+  distinction) needs T > 0. The other half (c_s^2, chi_ab = dn_a/dmu_b) needs
+  the branch the derivative is taken along to be settled, and above the
+  model's first first-order transition more than one branch satisfies the
+  equilibrium conditions at the same density — differentiating along whichever
+  one a continuation reached would return a number whose meaning depends on
+  the direction the table was swept in. It unblocks with the Maxwell rule,
+  not before.
+- `SpeciesFlags` here is fixed rather than chosen: the model's species set is
+  (p, n, Lambda, u, d, s, e, mu), so `hyperons` and `muons` are True and the
+  rest False, and moving any of them raises. Two of those are worth
+  distinguishing. `deltas`, `thermal_mesons`, `photons` and
+  `thermal_neutrinos` are genuinely absent from the model — in particular
+  sigma, omega and rho are auxiliary fields eliminated in favour of g^2/m^2,
+  so there is no meson mass to put in a thermal gas. But `hyperons=False` is
+  merely unimplemented: switching the Lambda off is dropping it from the
+  species sums and the residual, a few lines, and no caller has wanted it.
+  Note also that `hyperons=True` here means the Lambda alone; Sigma and Xi are
+  not in the model, since the paper does not carry them.
+- **The notebook and the figure script do not run from a fresh clone.**
+  `notebooks/ENJL_usage.py` (and its jupytext-paired .ipynb) and
+  `plot/enjl_paper_figures.py` both `sys.path.insert` into `test/enjl` and
+  import `PARAMETER_SETS`, `load_reference`, `solved_rows`, `bad_rows` and
+  `baryon_potential` from `test/enjl/reference`. `test/` is gitignored, so a
+  fresh clone has neither the loader nor the five `.dat` files, and both
+  scripts fail at import. Fixing it means deciding where the author's Maple
+  output lives when it is not in `test/`: the loader is ~200 lines and the
+  tables are 770 kB, so tracking them is cheap by the 5 MB rule, but whether
+  a third party's data ships in this repository at all is not a decision the
+  code can make. It is a Phase 5 item (public API, fresh clone), not a model
+  one, and it is the only thing standing between `eos/enjl` and being usable
+  by someone who is not the author.
+- `plot/enjl_paper_figures.py` sits in a top-level `plot/` that CLAUDE.md
+  section 11 does not list at all. Its styling is already correct — it imports
+  `eos.general.figure_style` — so this is a location question and nothing
+  else. The natural home is `notebooks/`, since section 11 says notebooks
+  carry their own plotting code and this script is a notebook that never
+  became one; but `plot/` also holds `plot/data/samples/`, the observational
+  data the constraint overlays read, so the directory cannot simply be
+  deleted and the move belongs with whatever decides that data's home.
+- `docs/enjl/verify_reference_tables.py` stays in `docs/enjl/`, beside the
+  document it produced. It is NOT a candidate for `eos/enjl/verify/`: it
+  checks the author's TABLES rather than the model, and its whole value is
+  that it depends on nothing in `eos/` — folding it into `run_full_check.py`
+  would make it agree with the engine by construction and destroy the only
+  independent oracle there is. It shares the fresh-clone problem above, since
+  it reads the same `.dat` files.
+- `notebooks/ENJL_usage.py` still sets `figure.dpi` and `figure.figsize`
+  directly (see the cross-cutting entry above); it is a per-notebook display
+  preference and is left for the notebook rework.
 
 ### general
 - Most of the thermal meson gas is missing from `general/particles.py`, so it

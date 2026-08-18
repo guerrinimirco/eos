@@ -44,9 +44,9 @@ import matplotlib.pyplot as plt
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "test", "enjl"))
 
-from eos.enjl import ENJLParams, solve_point                       # noqa: E402
-from eos.enjl.eos_beta import beta_eos_table                       # noqa: E402
-from eos.enjl.uniform import vacuum_solution, _baryon_masses       # noqa: E402
+from eos.enjl import (Parameters, TableSpec, build_table,          # noqa: E402
+                      thermo_from_n, vacuum_solution)
+from eos.enjl.thermodynamics import baryon_masses                  # noqa: E402
 from eos.general.physics_constants import hc3                      # noqa: E402
 from eos.general.figure_style import OKAB_CAT, apply_style         # noqa: E402
 
@@ -87,10 +87,11 @@ def branches(f_q, B, grid):
     converge. `up` starts chirally broken at the bottom of the grid; `down`
     starts deconfined at the top.
     """
-    par = ENJLParams(f_q=f_q, B_GeV_fm3=B)
+    par = Parameters(f_q=f_q, B_GeV_fm3=B)
     out = []
     for direction in ("up", "down"):
-        pts, _, _ = beta_eos_table(grid, par=par, direction=direction)
+        pts = build_table(TableSpec(nB=grid, par=par,
+                                    direction=direction)).points
         out.append({p.n_b_fm: p for p in pts})
     return out
 
@@ -117,13 +118,13 @@ def save(fig, outdir, name):
 # ------------------------------------------------------- Figs. 1-3, fixed x
 def figure_1(outdir):
     """Masses of p, n, Lambda and u, d, s in symmetric nuclear matter."""
-    par = ENJLParams()
+    par = Parameters()
     grid = np.linspace(0.01, 1.2, 140)
     Mb = {b: [] for b in ("p", "n", "Lambda")}
     Mq = {q: [] for q in "uds"}
     seed = None
     for x in grid:
-        pt = solve_point(dens(p=x / 2.0, n=x / 2.0), par=par, x0=seed)
+        pt = thermo_from_n(dens(p=x / 2.0, n=x / 2.0), par=par, x0=seed)
         seed = [pt.M_q["u"], pt.M_q["d"], pt.M_q["s"]]
         for b in Mb:
             Mb[b].append(pt.M_b[b])
@@ -140,7 +141,7 @@ def figure_1(outdir):
     for q in "uds":
         ax.plot(grid, Mq[q], color=COLOR[q], ls="--", label=LABEL[q])
     M0 = vacuum_solution(par)
-    Mb0 = _baryon_masses(par, M0, par.alpha_S(0.0), 0.0)
+    Mb0 = baryon_masses(par, M0, par.alpha_S(0.0), 0.0)
     for y in (Mb0["Lambda"], Mb0["p"]):
         ax.axhline(y, color="0.75", lw=0.7, ls=":")
     ax.annotate(f"{Mb0['Lambda']:.1f}", (0.02, Mb0["Lambda"] + 15), fontsize=8,
@@ -159,12 +160,12 @@ def figure_2(outdir):
     """E/A of symmetric nuclear matter and pure neutron matter."""
     grid = np.linspace(0.01, 0.6, 120)
     fig, ax = plt.subplots(figsize=(6.2, 4.4))
-    par = ENJLParams()
+    par = Parameters()
     for label, comp, ls in (("SNM", lambda x: dens(p=x / 2, n=x / 2), "-"),
                             ("PNM", lambda x: dens(n=x), "--")):
         vals, seed = [], None
         for x in grid:
-            pt = solve_point(comp(x), par=par, x0=seed)
+            pt = thermo_from_n(comp(x), par=par, x0=seed)
             seed = [pt.M_q["u"], pt.M_q["d"], pt.M_q["s"]]
             vals.append(pt.EperB)
         ax.plot(grid, vals, ls, color=OKAB_CAT[0 if label == "SNM" else 1],
@@ -181,7 +182,7 @@ def figure_2(outdir):
 
 def figure_3(outdir):
     """Lambda potential depth in symmetric nuclear matter, U_L(n_b)."""
-    par = ENJLParams()
+    par = Parameters()
     M0 = vacuum_solution(par)
     m0 = {"u": par.m_u0, "d": par.m_d0, "s": par.m_s0}
     a0 = par.alpha_S(0.0)
@@ -190,7 +191,7 @@ def figure_3(outdir):
     grid = np.linspace(0.02, 0.5, 90)
     U, seed = [], None
     for x in grid:
-        pt = solve_point(dens(p=x / 2.0, n=x / 2.0, Lambda=1.0e-9),
+        pt = thermo_from_n(dens(p=x / 2.0, n=x / 2.0, Lambda=1.0e-9),
                          par=par, x0=seed)
         seed = [pt.M_q["u"], pt.M_q["d"], pt.M_q["s"]]
         U.append(pt.mu["Lambda"] - M_L_vac)

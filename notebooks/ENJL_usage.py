@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.4
+#       jupytext_version: 1.19.5
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -38,12 +38,12 @@
 # | | status |
 # |---|---|
 # | vacuum gap solution, $E_0$ | reproduces the published values |
-# | fixed-composition mean field (`solve_point`) | $\mu_i$ to 0.05 MeV against four of the five reference tables |
-# | beta equilibrium (`beta_eos_table`) | reproduces every table to 0.1 MeV in $\mu_b$ up to that table's first transition; solves at every density from 0.05 to 10 fm⁻³ |
+# | fixed-composition mean field (`thermo_from_n`) | $\mu_i$ to 0.05 MeV against four of the five reference tables |
+# | beta equilibrium (`build_table`) | reproduces every table to 0.1 MeV in $\mu_b$ up to that table's first transition; solves at every density from 0.05 to 10 fm⁻³ |
 # | choosing between branches above a transition | **open** — see §6 |
 # | TOV, finite $T$ | not implemented yet |
 #
-# So: use `solve_point` and `beta_eos_table` freely. Above a first-order
+# So: use `thermo_from_n` and `build_table` freely. Above a first-order
 # transition, be aware that a sweep returns *one* branch and that which branch
 # is the physical one is not yet settled — §6 shows what that looks like.
 #
@@ -61,9 +61,10 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.abspath(os.path.join("..", "test", "enjl")))
 
-from eos.enjl import ENJLParams, get_enjl_default, solve_point
-from eos.enjl.uniform import vacuum_solution, vacuum_energy_density, _baryon_masses
-from eos.enjl.eos_beta import beta_eos_table, solve_beta_point
+from eos.enjl import (Parameters, TableSpec, build_table, thermo_from_n,
+                      solve_beta_eq_neutrinoless, vacuum_solution,
+                      vacuum_energy_density)
+from eos.enjl.thermodynamics import baryon_masses
 from eos.general.physics_constants import hc3
 from eos.general.figure_style import OKAB_CAT, apply_style
 
@@ -79,7 +80,7 @@ for name, (f_q, B) in PARAMETER_SETS.items():
 # %% [markdown]
 # ## 1. Parameters
 #
-# `ENJLParams` is a frozen dataclass carrying the RKH NJL set ($\Lambda$,
+# `Parameters` is a frozen dataclass carrying the RKH NJL set ($\Lambda$,
 # $m_{q0}$, $G_S$, $K$) and the density-dependent couplings of the paper's
 # Table I. The two knobs that vary between the published parameter sets are:
 #
@@ -101,7 +102,7 @@ for name, (f_q, B) in PARAMETER_SETS.items():
 #   never be used as a physical $\omega$ mass.
 
 # %%
-par = get_enjl_default()
+par = Parameters.default()
 print(f"Lambda = {par.Lambda} MeV,  m_q0 = ({par.m_u0}, {par.m_d0}, {par.m_s0}) MeV")
 print(f"G_S = {par.GS:.6e} MeV^-2,  K = {par.K:.6e} MeV^-5")
 print(f"f_Lambda = {par.f_Lambda},  f_q = {par.f_q},  B = {par.B_GeV_fm3} GeV/fm^3")
@@ -122,7 +123,7 @@ print(f"  Gamma_r  = {par.Gamma_r(n0 * hc3):.6e} MeV^-2   (carries the factor 9)
 
 # %%
 M_vac = vacuum_solution(par)
-Mb_vac = _baryon_masses(par, M_vac, par.alpha_S(0.0), 0.0)
+Mb_vac = baryon_masses(par, M_vac, par.alpha_S(0.0), 0.0)
 E0 = vacuum_energy_density(par) / hc3
 
 print(f"M_u = M_d = {M_vac['u']:.4f} MeV   (published 367.6)")
@@ -141,11 +142,11 @@ print("   E_0 depends only on (Lambda, m_q0, G_S, K), never on f_q or B.")
 # %% [markdown]
 # ## 3. Fixed composition — the main entry point
 #
-# `solve_point(n, par)` takes a dict of **number densities in MeV³** (natural
-# units) and returns an `ENJLEoSPoint`. The public quantities are exposed in
+# `thermo_from_n(n, par)` takes a dict of **number densities in MeV³** (natural
+# units) and returns an `EoSPoint`. The public quantities are exposed in
 # fm-based units through properties (`n_b_fm`, `eps_fm`, `P_fm`, `EperB`).
 #
-# > **Units.** `eos.enjl.uniform` and `eos.enjl.thermodynamics` work in natural
+# > **Units.** `eos.enjl.thermodynamics` and `eos.enjl.solver` work in natural
 # > units throughout: MeV, MeV³ for densities, MeV⁴ for $\varepsilon$ and $P$.
 # > Multiply an fm⁻³ density by `hc3` to get MeV³. Do not mix the two.
 #
@@ -195,7 +196,7 @@ def sweep(nb_grid, composition, par=None):
     out = {k: [] for k in ("n_b", "eps", "P", "EperB", "M_u", "M_d", "M_s")}
     seed = None
     for x in nb_grid:
-        pt = solve_point(composition(x), par=par, x0=seed)
+        pt = thermo_from_n(composition(x), par=par, x0=seed)
         seed = [pt.M_q["u"], pt.M_q["d"], pt.M_q["s"]]
         out["n_b"].append(pt.n_b_fm)
         out["eps"].append(pt.eps_fm)
@@ -220,10 +221,10 @@ E_sat = b - 0.125 * (a - c) ** 2 / (a - 2.0 * b + c)
 print(f"saturation: n_0 = {n_sat:.3f} fm^-3, E/A = {E_sat:.2f} MeV"
       f"   (published 0.158, -16.0)")
 print(f"symmetry energy S(0.158) = "
-      f"{solve_point(pnm(0.158), par=par).EperB - solve_point(snm(0.158), par=par).EperB:.2f} MeV"
+      f"{thermo_from_n(pnm(0.158), par=par).EperB - thermo_from_n(snm(0.158), par=par).EperB:.2f} MeV"
       f"   (published 31.5)")
 print(f"                S(0.100) = "
-      f"{solve_point(pnm(0.100), par=par).EperB - solve_point(snm(0.100), par=par).EperB:.2f} MeV"
+      f"{thermo_from_n(pnm(0.100), par=par).EperB - thermo_from_n(snm(0.100), par=par).EperB:.2f} MeV"
       f"   (published 25.5)")
 
 fig, ax = plt.subplots()
@@ -275,13 +276,13 @@ def load_case(filename):
     f_q, B_GeV = PARAMETER_SETS[filename]
     col = load_reference(filename)
     return (col, solved_rows(col) & ~bad_rows(col, filename),
-            ENJLParams(f_q=f_q, B_GeV_fm3=B_GeV))
+            Parameters(f_q=f_q, B_GeV_fm3=B_GeV))
 
 
 def solve_reference_rows(filename):
     """Re-solve every usable row of a reference file at its own composition.
 
-    Returns (columns, params, [(row index, ENJLEoSPoint), ...]). Each gap solve
+    Returns (columns, params, [(row index, EoSPoint), ...]). Each gap solve
     is seeded from that row's printed quark masses, which selects the branch
     without fixing the answer — the converged root is set by the equation.
     """
@@ -290,7 +291,7 @@ def solve_reference_rows(filename):
     for i in np.flatnonzero(ok):
         n_i = {name: col["n" + suf][i] * hc3 for name, suf in REF_COL.items()}
         seed = [col["Mu"][i], col["Md"][i], col["Ms"][i]]
-        out.append((i, solve_point(n_i, par=par_file, x0=seed)))
+        out.append((i, thermo_from_n(n_i, par=par_file, x0=seed)))
     return col, par_file, out
 
 
@@ -321,7 +322,7 @@ plt.show()
 # %% [markdown]
 # ## 5. Against the reference tables
 #
-# The check that matters: hand `solve_point` each table row's **own** species
+# The check that matters: hand `thermo_from_n` each table row's **own** species
 # densities and compare what comes back. This exercises the gap equation, the
 # baryon masses of Eq. (4), the vector sources, both rearrangement terms and
 # the $E_0$ subtraction, with no root finding on the composition.
@@ -373,7 +374,7 @@ ax.semilogy(nb, P_err, color=OKAB_CAT[3], lw=1.2, label=r"$|\Delta P| / P$")
 ax.set_xscale("log")
 ax.set_xlabel(r"$n_b$ [fm$^{-3}$]")
 ax.set_ylabel("residual against the reference table")
-ax.set_title("solve_point vs. the author's own output")
+ax.set_title("thermo_from_n vs. the author's own output")
 apply_style(ax, minor_ticks=False)
 plt.show()
 
@@ -387,7 +388,7 @@ plt.show()
 #
 # ## 6. Beta equilibrium, and the one thing that is still open
 #
-# `beta_eos_table(nb_grid, par, direction)` solves Eqs. (23)-(24) simultaneously
+# `build_table(TableSpec(nB=..., par=..., direction=...))` solves Eqs. (23)-(24) simultaneously
 # with the mean field along a density grid, so it *produces* the composition
 # rather than consuming it — the onset density of every species is a prediction.
 # It reaches every density from 0.05 to 10 fm⁻³, and below each table's first
@@ -417,7 +418,7 @@ print(f"{'n_b':>6s} {'P ours':>10s} {'P table':>10s} {'mu_b ours':>11s} "
       f"{'mu_b table':>11s} {'n_p ours':>9s} {'n_p table':>10s}")
 for x in (0.10, 0.20, 0.30, 0.40):
     j = int(np.argmin(abs(col["nB"] - x)))
-    bp = solve_beta_point(x, par=par_ref)
+    bp = solve_beta_eq_neutrinoless(x, par=par_ref)
     print(f"{x:6.2f} {bp.P:10.3f} {col['P'][j]:10.3f} {bp.mu_b:11.2f} "
           f"{mu_b_table[j]:11.2f} {bp.densities['p']:9.4f} {col['np'][j]:10.4f}")
 
@@ -444,7 +445,8 @@ def branch(par, nb_grid, direction="up"):
     sweep could not reach are simply absent, so the arrays can be shorter than
     `nb_grid` — a branch is allowed to end.
     """
-    points, _, _ = beta_eos_table(nb_grid, par=par, direction=direction)
+    points = build_table(TableSpec(nB=nb_grid, par=par,
+                                  direction=direction)).points
     out = {"n_b": np.array([p.n_b_fm for p in points]),
            "P": np.array([p.P for p in points]),
            "eps": np.array([p.eps for p in points]),
@@ -577,8 +579,8 @@ plt.show()
 # %% [markdown]
 # ## 9. Things that will cost you an afternoon
 #
-# **Units.** Natural units inside `eos.enjl.uniform` and
-# `eos.enjl.thermodynamics` (MeV, MeV³, MeV⁴); fm-based on the public
+# **Units.** Natural units inside `eos.enjl.thermodynamics` and
+# `eos.enjl.solver` (MeV, MeV³, MeV⁴); fm-based on the public
 # properties. `hc3` converts. Never let natural units cross a module boundary.
 #
 # **The reference tables have four misleading columns.** All handled by the
