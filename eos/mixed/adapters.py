@@ -229,3 +229,177 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
         mu_i=dict(state.mu_i), mu_dot_n=state.mu_dot_n,
         condensation=state.condensation)
     return (th, internal) if return_state else th
+
+
+# =============================================================================
+# ENJL PHASES  (one functional, three branches)
+# =============================================================================
+# ENJL is not a second model to pair with a first: it is ONE thermodynamic
+# potential whose local equations admit three self-consistent solutions at the
+# same potentials -- chirally broken hadronic, chirally restored but still
+# confined (baryons AND quarks), and fully deconfined. A first-order transition
+# in this model is therefore a construction between two BRANCHES of one
+# functional, and the pairing is two adapters over one model rather than one
+# adapter over each of two.
+#
+# `eos.enjl` knows nothing about any of this. It exposes `thermo_from_mu`, the
+# block at given potentials; the branch vocabulary lives here, on the composite
+# engine's side of the layering, exactly as the DD2 and vMIT adapters above do.
+
+#: The three branches, as declared values. A construction pairs any two; which
+#: pairs are realized is a property of the parameter set, not of this list.
+#: Recorded in docs/enjl/PHASE_TRANSITION_DESIGN.md section 1b: the author's own
+#: worksheet never reaches the deconfined branch, because it is a continuation
+#: started on the hadronic side -- the branch is unvisited, not excluded.
+ENJL_BRANCHES = ("broken", "restored", "deconfined")
+
+#: Constituent mass above which a light flavour counts as chirally broken. The
+#: gap equation returns M_q = m_q0 exactly once nbar^s_q is capped, and the
+#: broken branch sits at 100-370 MeV, so anything in between separates them.
+_CHIRAL_SPLIT = 50.0
+
+#: Baryon fraction below which a state counts as fully deconfined. The author's
+#: tables reach ~1e-5 fm^-3 of residual baryons past deconfinement, so an
+#: absolute floor would be parameter-dependent; this is relative to n_B.
+_DECONFINED_BARYON_FRACTION = 1.0e-4
+
+
+def enjl_branch_of(point):
+    """Which branch a converged `eos.enjl` point is on: the post-solve check.
+
+    Reads the state, not the seed. `enjl_phase` calls this on what came back
+    and raises if it is not the branch that was asked for, so a solve that
+    slid to a neighbouring root says so instead of returning it quietly.
+    """
+    light = min(point.M_q["u"], point.M_q["d"])
+    if light > _CHIRAL_SPLIT:
+        return "broken"
+    n_b = point.n_b
+    baryons = point.n["p"] + point.n["n"] + point.n["Lambda"]
+    if n_b > 0.0 and baryons <= _DECONFINED_BARYON_FRACTION * n_b:
+        return "deconfined"
+    return "restored"
+
+
+def enjl_branch_seed(par, branch, mu_B, mu_C=0.0, mu_S=0.0, T=0.0):
+    """Starting points for `branch`, as a PURE function of the arguments.
+
+    Returns a list of nine-vectors (M_u, M_d, M_s, n_B, n_B^Q, g_omega omega,
+    g_rho rho, Sigma^R_b, Sigma^R_q) in natural units, to be tried in order.
+
+    Nothing here may depend on a previously solved point. That is a stronger
+    requirement for ENJL than for DD2: a mixed residual is differentiated by
+    finite differences, and here the seed does not merely set how fast the
+    solve converges, IT CHOOSES WHICH ROOT IT CONVERGES TO. An adapter that
+    warm-started from the previous trial point would change branch partway
+    through a Jacobian column and return a matrix that is the derivative of
+    nothing. Measured, at the f_q = 0.7, B = 1 coexistence potentials: a broken
+    seed gives n_B = 0.517 fm^-3 and a restored one 0.555 fm^-3 from the same
+    arguments.
+
+    What varies between branches is the pair (quark masses, quark baryon
+    density): the broken branch starts from the vacuum constituent masses with
+    no quarks, the restored branch from the current masses with a fifth of the
+    baryon density already in quarks, and the deconfined branch from the
+    current masses with ALL of it in quarks, which is what puts the baryon
+    Fermi momenta below threshold and keeps them there.
+
+    The density ladder is a spread rather than a single value because the map
+    mu_B -> n_B is not one-to-one -- that is the whole reason this function
+    exists -- so no closed-form estimate can be right on every branch at once.
+    Trying several is still a pure function of the arguments; remembering one
+    would not be.
+    """
+    if T != 0.0:
+        raise NotImplementedError(
+            f"eos.enjl is a T = 0 model; got T = {T} MeV")
+    if branch not in ENJL_BRANCHES:
+        raise ValueError(
+            f"unknown ENJL branch {branch!r}; expected one of {ENJL_BRANCHES}")
+
+    from eos.enjl.thermodynamics import VACUUM_GUESS
+
+    if branch == "broken":
+        masses, quark_fraction = VACUUM_GUESS, 0.0
+    else:
+        masses = (par.m_u0, par.m_d0, par.m_s0 + 100.0)
+        quark_fraction = 1.0 if branch == "deconfined" else 0.2
+
+    # A spread of densities either side of a linear-in-mu_B estimate, which is
+    # roughly right above 1 GeV and only has to land in the right basin below.
+    scale = max(0.05, abs(mu_B) / 1900.0)
+    seeds = []
+    for factor in (1.0, 0.35, 2.5):
+        n_B0 = scale * factor * hc3
+        seeds.append([masses[0], masses[1], masses[2], n_B0,
+                      quark_fraction * n_B0,
+                      par.Gamma_w(n_B0) * 3.0 * n_B0, 0.0, 0.0, 0.0])
+    return seeds
+
+
+def enjl_phase(par, branch, mu_B, mu_C=0.0, mu_S=0.0, T=0.0):
+    """One ENJL branch at fixed conserved-charge potentials -> `PhaseThermo`.
+
+    The phase-adapter contract of CLAUDE.md section 5, with `branch` promoted
+    to a declared argument. Everything the mixed-phase solve knows about ENJL
+    enters here.
+
+    Takes the PHYSICAL mu_B, unlike `hadronic_phase` above, which takes DD2's
+    kinetic mu_B - Sigma^R. ENJL can, because it carries Sigma^R_b and
+    Sigma^R_q as unknowns with their defining equations as residual rows, so
+    the circularity that makes dd2 prefer the kinetic potential is inside its
+    residual rather than around it. Nothing is subtracted or restored on this
+    boundary; validated by round-tripping solved beta-equilibrium states
+    through (mu_B, mu_C) and back, which returns n_B to 1e-15 relative, and
+    against the author's own tables, which it reproduces in n_B and in
+    P (matter + leptons) to 3e-7 relative over 0.1-8 fm^-3.
+
+    Quark matter and hadronic matter are the same functional here, so this one
+    function serves both sides of a construction; the two adapters of a pair
+    differ only in the branch they declare. The density-dependent couplings
+    alpha_S, Gamma_omega and Gamma_rho, and the rearrangement terms built from
+    them, are evaluated at THIS phase's own n_B, which is the convention
+    `hadronic_phase` already follows for DD2, itself a density-dependent RMF.
+
+    No leptons, no neutrality, no held fraction: those are conditions on a
+    system and this describes matter.
+
+    Raises RuntimeError if no seed converges, or if the converged state is not
+    on `branch` -- a silent hop is the one failure this contract cannot absorb.
+    """
+    from eos.enjl.thermodynamics import thermo_from_mu
+
+    if T != 0.0:
+        raise NotImplementedError(
+            f"eos.enjl is a T = 0 model; got T = {T} MeV")
+
+    last = None
+    for x0 in enjl_branch_seed(par, branch, mu_B, mu_C, mu_S, T=T):
+        try:
+            point = thermo_from_mu(par, mu_B, mu_C, mu_S, T=T, x0=x0)
+        except RuntimeError as exc:                   # this seed missed
+            last = exc
+            continue
+        if enjl_branch_of(point) == branch:
+            return enjl_phase_thermo(point, mu_B, mu_C, mu_S)
+    if last is not None:
+        raise RuntimeError(
+            f"ENJL {branch} branch did not converge at mu_B={mu_B:.3f}, "
+            f"mu_C={mu_C:.3f}, mu_S={mu_S:.3f} MeV: {last}")
+    raise RuntimeError(
+        f"ENJL solve at mu_B={mu_B:.3f}, mu_C={mu_C:.3f}, mu_S={mu_S:.3f} MeV "
+        f"converged but never onto the {branch!r} branch")
+
+
+def enjl_phase_thermo(point, mu_B, mu_C, mu_S):
+    """An `eos.enjl` point, in natural units, as an fm-based `PhaseThermo`."""
+    n = {sp: value / hc3 for sp, value in point.n.items()}
+    mu_i = {sp: point.mu[sp] for sp in point.n}
+    return PhaseThermo(
+        densities=n,
+        n_B=point.n_b / hc3, n_C=point.n_C / hc3, n_S=point.n_S / hc3,
+        P=point.P / hc3, eps=point.eps / hc3, s=point.s / hc3,
+        mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
+        mu_i=mu_i,
+        mu_dot_n=sum(mu_i[sp] * n[sp] for sp in n),
+        condensation=0.0)
