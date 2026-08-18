@@ -99,7 +99,8 @@ from eos.general.table_io import save_table, load_table, export_csv
 
 # --- the uniform model API, the same three entry points every model has -----
 from eos.mixed.api import (
-    PointResult, eos_point, eos_table, eos_response, RESPONSE_FREEZES,
+    PointResult, HybridResult, eos_point, eos_table, eos_response,
+    hybrid_table, RESPONSE_FREEZES,
 )
 
 # --- thermodynamic responses --------------------------------------------
@@ -138,7 +139,7 @@ __all__ = [
     "save_table", "load_table", "export_csv",
     # the uniform model API
     "eos_point", "eos_table", "eos_response", "PointResult",
-    "RESPONSE_FREEZES",
+    "hybrid_table", "HybridResult", "RESPONSE_FREEZES",
     # responses
     "sound_speed_eq", "sound_speed_frozen", "sound_speed_frozen_hadronic",
     "sound_speed_frozen_quark", "adiabatic_index", "frozen_along",

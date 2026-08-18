@@ -49,6 +49,7 @@ from eos.dd2.species import SpeciesFlags
 from eos.mixed.responses import sound_speed_frozen
 from eos.mixed.solver import mixed_slots
 from eos.mixed.solver import MixedResult, solve_mixed
+from eos.mixed.hybrid import MixedEoSTable, build_mixed_eos_table
 from eos.mixed.table import (
     MODE_FRACTIONS, MixedTableSpec, build_mixed_table, make_charge_spec,
 )
@@ -194,6 +195,63 @@ def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
                           leptons=leptons, window_only=window_only,
                           analytic_jac=analytic_jac)
     return build_mixed_table(spec, progress=progress, verbose=verbose)
+
+
+@dataclass(frozen=True)
+class HybridResult:
+    """One hybrid_table outcome: a convergence status the caller can test.
+
+    When `ok` is False, `table` is None and `message` says what went wrong —
+    a boundary that could not be located, or a pressure inversion too large to
+    be round-off (an unresolved mechanical instability, CLAUDE.md section 8).
+    """
+    ok: bool
+    message: str
+    table: MixedEoSTable = None
+
+
+def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
+                 vmit_params=None, leptons=True, window=None,
+                 analytic_jac=False, **conditions):
+    """The stitched hadronic + mixed + quark core EoS at ONE equilibrium.
+
+    The mode holds in all three segments: the wings are the pure models' own
+    per-mode solves and the window is the eta-mixed phase, so a fixed-Y_C
+    hybrid is fixed-Y_C everywhere, not a fixed-Y_C window between
+    beta-equilibrium wings. Only eta is specific to the mixed region.
+
+    Parameters are those of `eos_point`, with `n_B_grid` in place of `n_B`;
+    `window` optionally reuses an already-located `MixedWindow`. If there is
+    no transition on the grid the table is pure hadronic.
+
+    Returns a `HybridResult` — test `.ok` before using `.table`, whose
+    `.to_tov()` is the contract into `eos.tov` (§6: non-convergence is a
+    return value). A malformed call — an unknown mode, a fraction the mode
+    does not take, a species flag the mode needs — raises before any solve.
+    """
+    if species is None:
+        species = SpeciesFlags()
+    if n_B_grid is None:
+        raise ValueError("n_B_grid is required")
+    if not 0.0 <= eta <= 1.0:
+        raise ValueError(f"eta must lie in [0, 1], got {eta}")
+    fracs = _engine_fractions(mode, conditions)      # caller errors raise here
+    spec = make_charge_spec(mode, fracs, leptons=leptons)
+    if mode == "beta_eq_neutrino_trapped" and not species.neutrinos:
+        raise ValueError(
+            "beta_eq_neutrino_trapped needs SpeciesFlags(neutrinos=True): "
+            "the hadronic wing solves at fixed Y_Le and must carry the "
+            "neutrino population")
+    try:
+        table = build_mixed_eos_table(par, species, n_B_grid, eta, spec,
+                                      vmit_params=vmit_params, T=T,
+                                      analytic_jac=analytic_jac,
+                                      window=window)
+    except NotImplementedError:
+        raise                       # an unwired request must never be a status
+    except (RuntimeError, ValueError) as err:
+        return HybridResult(False, str(err))
+    return HybridResult(True, "ok", table)
 
 
 #: The freezes eos_response implements. Each answers "what is held fixed while

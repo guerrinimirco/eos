@@ -180,6 +180,16 @@ hadronic phase can be far more positively charged than the average while the
 quark phase carries the compensating negative charge, and how far that goes is
 what `eta` controls.
 
+**The complete hybrid.** `build_mixed_eos_table` (and the mode-facing
+`hybrid_table`) stitches pure hadronic, eta-mixed and pure quark segments,
+cut on `chi`, into one monotone core EoS — and the WHOLE hybrid is at one
+equilibrium: the mode the spec declares holds in the wings and the window
+alike. The wings are the pure models' own per-mode solves (`eos.dd2`'s octet
+solver, `eos.vmit`'s mode solvers), dispatched from the same regime
+assignment that shapes the mixed system. Only eta is specific to the mixed
+region — a pure phase has one phase to neutralize, so there is nothing local
+or global left to interpolate.
+
 **Numerics.** Every residual row is made dimensionless before it is judged —
 density rows by `n_B`, potential equalities by a potential scale, the
 mechanical row by the larger phase pressure — and gated on the largest scaled

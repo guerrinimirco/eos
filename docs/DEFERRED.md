@@ -355,8 +355,11 @@ notebook drives vMIT through it, and it now sits beside `table.py` as a shim
 over the shared driver rather than being renamed to it.
 
 `eos/mixed` is a composite engine and takes the shorter list of CLAUDE.md §5 —
-`adapters.py`, `api.py`, `responses.py`, `verify/`, `mixed.tex` — all of which
-it now has.
+`adapters.py`, `api.py`, `responses.py`, `verify/`, `mixed.tex` — plus the
+subpackage-free model-shaped modules its solve needs: `charges.py`,
+`thermodynamics.py` (mode-blind, per the §5 grep test), `solver.py`,
+`boundaries.py`, `hybrid.py`, `table.py`, and `backends/` for the analytic
+Jacobian.
 
 #### The alphabag map Phase 6 applies to `nucleation`, verbatim
 

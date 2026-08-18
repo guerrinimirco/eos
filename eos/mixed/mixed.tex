@@ -435,6 +435,36 @@ positively charged than the average while the quark phase carries the
 compensating negative charge, and how far that separation goes is exactly what
 $\eta$ controls.
 
+\subsection*{The complete hybrid equation of state}
+
+The stitched table (\texttt{build\_mixed\_eos\_table}, and the mode-facing
+entry \texttt{hybrid\_table}) covers the whole density range with three
+segments cut on $\chi$,
+%
+\begin{equation}
+\nB < \nB^{\mathrm{onset}} : \ \text{pure hadronic}, \qquad
+\nB^{\mathrm{onset}} \le \nB \le \nB^{\mathrm{offset}} : \ \text{$\eta$-mixed},
+\qquad
+\nB > \nB^{\mathrm{offset}} : \ \text{pure quark},
+\end{equation}
+%
+and the \emph{whole} hybrid is at one equilibrium: the mode the charge
+declaration fixes holds in the wings and in the window alike. If $Y_C$ is
+fixed, every segment is solved at that $Y_C$; if neutrinos are trapped at
+$Y_{L_e}$, both wings trap them too. The wings are the pure models' own
+per-mode solves --- \texttt{eos.dd2}'s octet solver in the declared mode
+below the onset, \texttt{eos.vmit}'s mode solvers above the offset ---
+dispatched from the same regime assignment that shapes the mixed system, so a
+regime combination the window can solve gets a consistent wing without new
+code. Only the neutrality locality $\eta$ is specific to the mixed region: a
+pure phase has a single phase to neutralize, so there is no local/global
+distinction left for $\eta$ to interpolate, and the leptonless fixed-$Y_C$
+hybrid is a charged slice whose window is $\eta$-independent. Because the
+segments are cut on $\chi$ rather than matched on pressure, they meet by
+construction; before the table reaches a structure solver, round-off pressure
+inversions on a Maxwell plateau are clamped and any larger inversion ---
+mechanical instability no construction has resolved --- is refused.
+
 \section{Numerics}
 
 \paragraph{Scaling and the gate.} Every residual row is made dimensionless
