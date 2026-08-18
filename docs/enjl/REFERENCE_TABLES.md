@@ -162,7 +162,8 @@ model rather than a misread column.
    threshold value the solver last held. A cut at n_i > 10⁻⁴ n_b works across
    all five files; a cut at absolute 10⁻¹⁰ fm⁻³ does not (it admits rows with
    n_p ~ 10⁻¹⁰ where the residual is 2700 MeV).
-2. **Use `munr`, not `mun`, as µ_b** (§2).
+2. **Use `munr` as µ_b, falling back to `mun` where `munr` is blank** (§2,
+   and §5 for the four rows where the fallback is what carries the value).
 3. **Do not read µ_e off the `mue` column when no electrons are present.**
    Exactly like `mumu`, `mue` is written as the electron *mass* (0.511) on those
    rows — but µ_e is still nonzero and still fixes the isospin splitting.
@@ -340,20 +341,44 @@ A few densities in each file are not on the round grid. They come in pairs at
 equal pressure and equal µ_b, and they are the two edges of a first-order
 transition located by Maxwell construction:
 
-| file | n_b low | n_b high | µ_b = `munr` [MeV] | P [MeV/fm³] | transition |
+| file | n_b low | n_b high | µ_b [MeV] | P [MeV/fm³] | transition |
 |---|---|---|---|---|---|
 | `Beta_fq1.0_B0.dat` | 0.643752 | 0.665923 | 1381.2899 / 1381.2898 | 186.5964 | chiral (u, d) |
 | `Beta_fq1.0_B1.dat` | 0.637711 | 0.676728 | 1411.0842 / 1411.0842 | 202.1530 | chiral / quark onset |
 | `Beta_fq0.7_B1.dat` | 0.448564 | 0.534224 | 1168.4748 / 1168.4747 | 69.6419 | chiral |
 | `Beta_fq0.7_B0.dat` | 5.575706 | 5.600980 | 6348.7561 / 6348.7562 | 14262.3172 | deconfinement |
 
-Both P and µ_b match across each pair to the printed digits — **provided you
-read µ_b from `munr`.** The deconfinement pair in `fq0.7_B0` is exactly where
-this matters: its `mun` values are 6348.76 and 5852.31, apparently a 500 MeV
-mismatch, because on the high-density row the baryons have dissolved to
-~10⁻⁵ fm⁻³ and `mun` is that vanishing neutron's own potential. `munr` reports
-6348.7562 there and the pair matches. This is the practical demonstration that
-`munr` is the quantity a Maxwell construction should equate.
+**Read µ_b as `munr` where it is finite, and `mun` where it is not.** Neither
+column alone carries all eight endpoints, and an earlier version of this
+section said "`munr`, not `mun`" without qualification, which is wrong on
+`fq1.0_B1`. Measured on all four pairs:
+
+| file | n_b | `mun` | `munr` | µ_u + 2µ_d | P |
+|---|---|---|---|---|---|
+| fq1.0_B0 | 0.643752 | 1381.2899 | 1381.2899 | 1475.9902 | 186.5964 |
+| fq1.0_B0 | 0.665923 | 1381.2898 | 1381.2898 | 1381.2898 | 186.5964 |
+| fq1.0_B1 | 0.637711 | 1411.0842 | *blank* | 1760.0857 | 202.1530 |
+| fq1.0_B1 | 0.676728 | 1411.0842 | *blank* | 1440.0995 | 202.1530 |
+| fq0.7_B1 | 0.448564 | 1168.4748 | 1168.4748 | 1352.3300 | 69.6419 |
+| fq0.7_B1 | 0.534224 | 1168.4747 | 1168.4747 | 1168.4747 | 69.6419 |
+| fq0.7_B0 | 5.575706 | 6348.7561 | 6348.7561 | 6333.0111 | 14262.3172 |
+| fq0.7_B0 | 5.600980 | **5852.3091** | 6348.7562 | 6348.7562 | 14262.3172 |
+
+The two failure modes are different and each column covers the other's.
+
+* **`munr` blank** on both `fq1.0_B1` endpoints, because those two rows are
+  *inserted* rather than solved and blank `munr` is this file's own marker for
+  exactly that (§6). `mun` carries the correct 1411.0842.
+* **`mun` wrong** on the `fq0.7_B0` high endpoint, by 496 MeV, because there
+  the baryons have dissolved to ~10⁻⁵ fm⁻³ and `mun` is that vanishing
+  neutron's own potential while µ_b continues as µ_u + 2µ_d. `munr` reports
+  6348.7562 and the pair matches.
+
+So `munr` remains the quantity a Maxwell construction equates, and §2's
+statement that it is "the baryon chemical potential to use throughout" stands
+for **solved** rows. It is on the inserted rows — which is to say on precisely
+the coexistence endpoints a construction is gated against — that it is absent
+and `mun` must be read instead.
 
 `Beta_fq0.5_B1.dat` has two transitions in it, at P = 20.1226 and
 1106.8075 MeV/fm³, spanning n_b = 0.322–0.459 and 1.248–1.852 fm⁻³ — but those
@@ -364,6 +389,29 @@ Two tables also contain one step with dP/dn_b < 0 (`fq1.0_B1` at
 n_b ≈ 0.677, `fq0.7_B0` at n_b ≈ 0.59–0.60): the unstable branch is *retained*
 in the file rather than replaced by the plateau. A monotonicity check on the raw
 file will fail; that is the file's structure, not an error.
+
+### 5b. `fq0.7_B0`'s chiral transition was never constructed — do not gate on it
+
+The four rows above are the *only* constructed objects in the five files, and
+`Beta_fq0.7_B0.dat` is where that bites. Its **deconfinement** transition at
+5.5757/5.6010 has a proper pair. Its **chiral** transition does not: the file
+runs
+
+| n_b | M_u | µ_b (`munr`) | P |
+|---|---|---|---|
+| 0.59 | 93.269 | 1217.6382 | 109.2399 |
+| 0.60 | 15.743 | **1214.4063** | **107.3017** |
+
+straight from the chirally broken branch to the restored one, with **both µ_b
+and P stepping backwards**. That is a continuation that changed branch
+mid-sweep and was left in the file, not a located transition — see
+`docs/enjl/PHASE_TRANSITION_DESIGN.md` §1, which reads the author's own
+worksheet and finds no construction anywhere in it.
+
+**Consequence for gates.** A construction must not be gated against the
+0.59 → 0.60 step of `fq0.7_B0`, or against anything in that file below
+n_b = 1 fm⁻³: there is no reference answer there, only a solver artefact.
+Gate that file on its deconfinement pair alone.
 
 ## 6. The f_q = 0.5 file contains interpolated rows — do not fit to them
 
