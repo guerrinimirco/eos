@@ -1,0 +1,628 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nC}{n_C}
+\newcommand{\nS}{n_S}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\munue}{\mu_{\nu_e}}
+\newcommand{\hc}{(\hbar c)^3}
+\newcommand{\as}{\alpha_s}
+
+\begin{document}
+
+\title{$\alpha$Bag: the perturbatively corrected bag model, unpaired and
+       colour--flavour locked \\
+       --- as implemented in \texttt{eos/alphabag}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/alphabag} subpackage implements deconfined quark matter as a
+gas of $u$, $d$ and $s$ quarks inside a bag, with the leading perturbative QCD
+correction carried as a single coupling $\as$ multiplying the free-gas
+pressure, in the form used by Fischer \textit{et al.}~\cite{Fischer2011}. The
+strange quark is massive and its kinetic thermodynamics is the exact Fermi
+gas; the light flavours are massless and close in elementary functions.
+Thermal gluons are an optional sector with their own $\as$ correction. On top
+of the unpaired phase the package carries a second phase, colour--flavour
+locked (CFL) quark matter~\cite{AlfordRajagopalWilczek1999}, obtained by
+adding the pairing term of Alford, Braby, Paris and
+Reddy~\cite{AlfordBrabyParisReddy2005} to the same potential and closing the
+system with flavour locking $n_u = n_d = n_s$ instead of with an equilibrium
+condition. This note states the thermodynamic potential of both phases, the
+parameters, the conserved-charge bookkeeping, the residual of every mode the
+package closes, and every quantity a solved point returns. It is written from
+the code, as its specification: every equation here is asserted by
+\texttt{eos/alphabag/verify/run\_full\_check.py} or by \texttt{test/baseline}.
+\end{abstract}
+
+\maketitle
+
+\section{The thermodynamic potential}
+\label{sec:potential}
+
+Uniform deconfined matter at flavour potentials $\mu_u, \mu_d, \mu_s$ and
+temperature $T$ is a gas of quarks and antiquarks confined by a constant
+vacuum pressure $B$. The pressure of the strongly-interacting sector is
+%
+\begin{equation}
+P \;=\; \sum_{q = u,d,s} P_q(\mu_q, T, m_q, \as)
+        \;+\; P_g(T, \as) \;-\; \frac{B}{\hc} ,
+\label{eq:P}
+\end{equation}
+%
+and, since the bag constant is a constant shifted out of the vacuum energy,
+%
+\begin{equation}
+\varepsilon \;=\; \sum_q \varepsilon_q \;+\; \varepsilon_g
+                  \;+\; \frac{B}{\hc} , \qquad
+s \;=\; \sum_q s_q + s_g , \qquad
+n_q \;=\; n_q(\mu_q, T, m_q, \as) .
+\label{eq:eps}
+\end{equation}
+%
+The bag enters $\varepsilon$ and $P$ with opposite signs and enters neither
+$s$ nor any $n_q$, so it cancels out of $\varepsilon + P$ and the Euler
+relation holds with no bag term in it,
+%
+\begin{equation}
+\varepsilon + P \;=\; T s + \sum_q \mu_q n_q ,
+\label{eq:euler}
+\end{equation}
+%
+which is checked in \texttt{verify/} and holds to $4\times 10^{-16}$
+relative. The free energy density is $f = \varepsilon - Ts = -P + \sum_q \mu_q
+n_q$.
+
+Two remarks on what Eq.~\eqref{eq:P} is not. It carries no vector field: the
+repulsion that in \texttt{eos/vmit} comes from a $\omega$-like mean field is
+here replaced by the perturbative correction, which is a multiplicative
+softening rather than a stiffening, so the two quark models of this repository
+stiffen the equation of state by different mechanisms and are not
+reparametrisations of one another. And it carries no scalar field and no gap
+equation: the quark masses $m_u, m_d, m_s$ are parameters, not solutions, so
+the potential is explicit in $\mu$ and the only solving to be done is that of
+the equilibrium conditions themselves.
+
+\subsection{The perturbative correction}
+\label{sec:alpha}
+
+The correction is the $\mathcal{O}(\as)$ term of the free energy of a
+relativistic quark--gluon gas~\cite{FreedmanMcLerran1977}, kept as two
+multiplicative factors --- one on the quark thermal term, one on everything
+carrying a chemical potential ---
+%
+\begin{equation}
+c_q(\as) \;=\; 1 - \frac{2\as}{\pi} , \qquad
+c_T(\as) \;=\; 1 - \frac{50\,\as}{21 \pi} , \qquad
+c_g(\as) \;=\; 1 - \frac{15\,\as}{4 \pi} ,
+\label{eq:cfactors}
+\end{equation}
+%
+in the arrangement of Fischer \textit{et al.}~\cite{Fischer2011}. At the
+shipped $\as = 0.3$ these are $c_q = 0.8090$, $c_T = 0.7726$ and
+$c_g = 0.6419$. There is no running: $\as$ is a constant of the parameter set,
+which is what makes it a parameter an inference run can vary.
+
+\subsection{Parameters}
+
+\begin{center}
+\begin{tabular}{llrl}
+\toprule
+symbol & code & value & meaning \\
+\midrule
+$m_u$      & \texttt{m\_u}   & $0$ MeV      & up-quark mass, treated as massless \\
+$m_d$      & \texttt{m\_d}   & $0$ MeV      & down-quark mass, treated as massless \\
+$m_s$      & \texttt{m\_s}   & $150$ MeV    & strange-quark mass \\
+$\as$      & \texttt{alpha}  & $0.3$        & QCD coupling, constant \\
+$B^{1/4}$  & \texttt{B4}     & $165$ MeV    & bag constant, quoted as its fourth root \\
+$B$        & \texttt{B}      & $7.412\times 10^{8}\ \mathrm{MeV}^4$
+                                            & $= (B^{1/4})^4 = 96.466\ \mathrm{MeV/fm}^3$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+$B$ is a derived property of the parameter record, never stored, so a set
+cannot carry a $B$ and a $B^{1/4}$ that disagree. The defaults are a central
+choice within the ranges used for compact-star quark matter in
+Refs.~\cite{AlfordReddy2003,Fischer2011}
+($B^{1/4} \sim 145$--$180$~MeV, $\as \sim 0.2$--$0.5$,
+$m_s \sim 90$--$150$~MeV); they are named defaults and not hardcoded values,
+and every entry point takes the parameter record as its first argument.
+
+The pairing gap $\Delta_0$ of the CFL phase (Sec.~\ref{sec:cfl}) is
+deliberately \emph{not} a field of the parameter record. It selects a phase
+rather than tuning one, in the same way the species flags do, and it is passed
+per call.
+
+For orientation, the shipped set at $T = 0$ in charge-neutral beta equilibrium
+reaches $P = 0$ --- the surface of a self-bound star --- at
+$\nB = 0.40309\ \mathrm{fm}^{-3}$ with $\varepsilon/\nB = 1046.17$~MeV, so
+this set is not absolutely stable strange quark matter. Pairing lowers it:
+the CFL phase at $\Delta_0 = 100$~MeV has its surface at
+$\nB = 0.36286\ \mathrm{fm}^{-3}$ with $\varepsilon/\nB = 936.56$~MeV.
+
+\section{Single-flavour thermodynamics}
+\label{sec:kinetic}
+
+Each flavour is a gas of quarks and antiquarks of degeneracy
+$g = 2 \times 3 = 6$ (spin $\times$ colour). Two cases are implemented and the
+choice is made on the mass, $m < 10^{-5}$~MeV selecting the massless branch.
+
+\subsection{Massless flavours}
+
+For $m = 0$ the Fermi integrals close in elementary functions, and with the
+factors of Eq.~\eqref{eq:cfactors} folded in the flavour carries
+%
+\begin{align}
+P_0(\mu, T, \as) &= \frac{1}{\hc} \left[
+    \frac{7}{60}\pi^2 T^4\, c_T(\as)
+    + \left( \frac{T^2 \mu^2}{2} + \frac{\mu^4}{4\pi^2} \right) c_q(\as)
+    \right] ,
+\label{eq:P0} \\
+n_0(\mu, T, \as) &= \frac{1}{\hc}
+    \left( \mu T^2 + \frac{\mu^3}{\pi^2} \right) c_q(\as) ,
+\label{eq:n0} \\
+s_0(\mu, T, \as) &= \frac{1}{\hc} \left[
+    \frac{7}{15}\pi^2 T^3\, c_T(\as) + T \mu^2\, c_q(\as) \right] ,
+\label{eq:s0} \\
+\varepsilon_0(\mu, T, \as) &= 3\, P_0(\mu, T, \as) .
+\label{eq:e0}
+\end{align}
+%
+At $\as = 0$ these are the textbook massless Fermi gas at degeneracy $6$ with
+antiparticles. They are a consistent set: $n_0 = \partial P_0/\partial\mu$ and
+$s_0 = \partial P_0 / \partial T$ hold identically (verified against numerical
+derivatives to $10^{-10}$ relative), and $\varepsilon_0 + P_0 = 4P_0 = T s_0 +
+\mu n_0$ term by term, so Eq.~\eqref{eq:euler} holds for a massless flavour at
+any $\as$. This is why the correction is applied to $P$, $n$, $\varepsilon$
+and $s$ separately rather than to $P$ alone: applying it to $P$ and taking the
+others as derivatives would give the same answer, and the code writes all four
+out for readability.
+
+At $T = 0$ Eqs.~\eqref{eq:P0}--\eqref{eq:e0} reduce to
+$P_0 = \mu^4 c_q / (4\pi^2\hc)$, $n_0 = \mu^3 c_q/(\pi^2 \hc)$, $s_0 = 0$.
+
+\subsection{Massive flavours}
+
+For $m > 0$ the kinetic thermodynamics is the exact Fermi gas,
+%
+\begin{align}
+n_F &= \frac{g}{2\pi^2 \hc} \int_0^\infty \! dk\, k^2
+       \left[ f(E_k - \mu) - f(E_k + \mu) \right] ,
+       & E_k &= \sqrt{k^2 + m^2} ,
+\label{eq:nF} \\
+P_F &= \frac{g}{6\pi^2 \hc} \int_0^\infty \! dk\, \frac{k^4}{E_k}
+       \left[ f(E_k - \mu) + f(E_k + \mu) \right] ,
+\label{eq:PF} \\
+\varepsilon_F &= \frac{g}{2\pi^2 \hc} \int_0^\infty \! dk\, k^2 E_k
+       \left[ f(E_k - \mu) + f(E_k + \mu) \right] ,
+\label{eq:eF} \\
+s_F &= \frac{\varepsilon_F + P_F - \mu\, n_F}{T} ,
+\label{eq:sF}
+\end{align}
+%
+with $f(x) = [1 + e^{x/T}]^{-1}$ and $g = 6$. At $T = 0$ the antiparticle
+terms vanish, the occupations become step functions at
+$k_F = \sqrt{\mu^2 - m^2}$ (with $n_F = 0$ when $\mu \le m$), and
+%
+\begin{align}
+n_F &= \frac{g\, k_F^3}{6\pi^2 \hc} , \\
+\varepsilon_F &= \frac{g}{16 \pi^2 \hc}
+   \left[ k_F \big( 2 k_F^2 + m^2 \big) E_F
+        - m^4 \ln \frac{k_F + E_F}{m} \right] , \\
+P_F &= \frac{g}{48 \pi^2 \hc}
+   \left[ k_F \big( 2 k_F^2 - 3 m^2 \big) E_F
+        + 3 m^4 \ln \frac{k_F + E_F}{m} \right] ,
+\qquad s_F = 0 ,
+\end{align}
+%
+with $E_F = \sqrt{k_F^2 + m^2} = \mu$. These integrals are not implemented in
+this subpackage: they come from \texttt{eos.general.fermi\_integrals}, which
+evaluates them through the Johns--Ellis--Lattimer analytic
+approximation~\cite{JohnsEllisLattimer1996}, uniformly valid from the
+degenerate to the non-degenerate limit and exact at $T = 0$.
+
+The perturbative correction to a massive flavour is taken to be the same
+function of $\mu$ and $T$ as for a massless one:
+%
+\begin{equation}
+X(\mu, T, m, \as) \;=\; X_F(\mu, T, m)
+   \;+\; \big[ X_0(\mu, T, \as) - X_0(\mu, T, 0) \big] ,
+\qquad X \in \{ n, P, \varepsilon, s \} ,
+\label{eq:massive}
+\end{equation}
+%
+where the bracket is $-(2\as/\pi)$ times the $\mu$-dependent part of $X_0$ and
+$-(50\as/21\pi)$ times its thermal part. This is a prescription, not an
+expansion of the massive result: the true $\mathcal{O}(\as)$ correction to a
+gas of mass $m$ differs from Eq.~\eqref{eq:massive} at relative order
+$m^2/\mu^2$, which for $m_s = 150$~MeV at $\mu_s \simeq 440$~MeV is a
+$\sim 12\%$ correction of a $\sim 19\%$ correction. What the prescription does
+guarantee is that (i) it reduces exactly to
+Eqs.~\eqref{eq:P0}--\eqref{eq:e0} as $m \to 0$, and (ii) the correction is
+itself a consistent set --- $\Delta n = \partial \Delta P/\partial\mu$,
+$\Delta s = \partial \Delta P/\partial T$, $\Delta\varepsilon = 3 \Delta P$ ---
+so adding it to a free Fermi gas that satisfies Eq.~\eqref{eq:euler} leaves a
+sector that still does.
+
+\subsection{Gluons}
+
+Thermal gluons are $g_g = 2 \times 8 = 16$ massless bosons at $\mu = 0$, with
+their own correction factor:
+%
+\begin{equation}
+P_g = \frac{8\pi^2}{45}\, \frac{T^4 c_g(\as)}{\hc} , \qquad
+\varepsilon_g = 3 P_g , \qquad
+s_g = \frac{32\pi^2}{45}\, \frac{T^3 c_g(\as)}{\hc} , \qquad
+n_g = 0 .
+\label{eq:gluons}
+\end{equation}
+%
+They satisfy $\varepsilon_g + P_g = 4 P_g = T s_g$ and carry no conserved
+charge, so switching them on shifts $P$, $\varepsilon$ and $s$ and nothing
+else. They vanish identically at $T = 0$. \texttt{gluons} is this model's own
+sector flag: no other model in the repository has one.
+
+\section{The colour--flavour locked phase}
+\label{sec:cfl}
+
+At high density the favoured ground state of three-flavour quark matter is the
+CFL condensate~\cite{AlfordRajagopalWilczek1999}, in which every quark pairs
+and the common gap $\Delta$ enters the pressure at order $\Delta^2 \mu^2$. The
+package implements this as a second phase, not as a further correction to the
+first: it has its own potential, its own solver, and its own closure.
+
+\subsection{The gap}
+
+The gap is not solved for. It is imposed as a BCS-shaped function of
+temperature with a single parameter, the zero-temperature gap $\Delta_0$:
+%
+\begin{equation}
+\Delta(T) = \begin{cases}
+   \Delta_0 \sqrt{1 - T^2/T_c^2} , & T < T_c , \\[2pt]
+   0 , & T \ge T_c ,
+\end{cases}
+\qquad
+T_c = 0.57 \cdot 2^{1/3}\, \Delta_0 = 0.71815\, \Delta_0 ,
+\label{eq:gap}
+\end{equation}
+%
+so that $\Delta_0 = 100$~MeV gives $T_c = 71.815$~MeV. The entropy needs the
+derivative, which follows by differentiating Eq.~\eqref{eq:gap}:
+%
+\begin{equation}
+\frac{d\Delta}{dT} \;=\; -\,\frac{\Delta_0\, T}{T_c^2 \sqrt{1 - T^2/T_c^2}} ,
+\qquad T < T_c ,
+\label{eq:dgap}
+\end{equation}
+%
+and zero at $T = 0$ and $T \ge T_c$. Equation~\eqref{eq:dgap} diverges as
+$T \to T_c^-$; the code returns zero once the square root falls below
+$10^{-10}$, which bounds the entropy correction rather than letting it blow
+up at the last grid point before $T_c$.
+
+\subsection{The paired potential}
+
+The pairing term is that of Alford, Braby, Paris and
+Reddy~\cite{AlfordBrabyParisReddy2005}, written per flavour so that the three
+potentials need not be equal:
+%
+\begin{equation}
+P^{\rm CFL} \;=\; \sum_q P_q(\mu_q, T, m_q, \as)
+   \;+\; \frac{\Delta(T)^2}{\pi^2 \hc} \sum_q \mu_q^2
+   \;-\; \frac{B}{\hc} .
+\label{eq:Pcfl}
+\end{equation}
+%
+When the three potentials coincide at $\bar\mu$ the pairing term is
+$3\bar\mu^2\Delta^2/(\pi^2\hc)$, which is the $3\Delta^2\mu^2/\pi^2$ of
+Ref.~\cite{AlfordBrabyParisReddy2005} and of \texttt{eos/abpr}. The
+$-3 m_s^2 \mu^2/(4\pi^2)$ term those references carry alongside it is
+\emph{not} added here: it is the leading expansion of the massive strange
+Fermi gas, which Eq.~\eqref{eq:Pcfl} already contains exactly through
+$P_s(\mu_s, T, m_s, \as)$, and adding both would count it twice.
+
+Everything else follows from Eq.~\eqref{eq:Pcfl} as derivatives, which is what
+makes the paired sector thermodynamically consistent:
+%
+\begin{align}
+n_q &= \frac{\partial P^{\rm CFL}}{\partial \mu_q}
+     = n_q(\mu_q, T, m_q, \as)
+       + \frac{2 \mu_q \Delta(T)^2}{\pi^2 \hc} ,
+\label{eq:ncfl} \\
+s &= \frac{\partial P^{\rm CFL}}{\partial T}
+   = \sum_q s_q(\mu_q, T, m_q, \as)
+     + \frac{2\,\Delta(T)}{\pi^2 \hc} \frac{d\Delta}{dT} \sum_q \mu_q^2 ,
+\label{eq:scfl} \\
+f &= -P^{\rm CFL} + \sum_q \mu_q n_q , \qquad
+\varepsilon = f + T s .
+\label{eq:ecfl}
+\end{align}
+%
+The energy density is \emph{defined} by Eq.~\eqref{eq:ecfl} rather than summed
+from the flavours, so Eq.~\eqref{eq:euler} holds in the paired phase by
+construction; it is checked all the same, and holds to $2\times10^{-16}$
+relative. Note that the entropy correction \eqref{eq:scfl} is negative
+wherever the gap is falling ($d\Delta/dT < 0$): pairing removes states from
+the Fermi surface and the condensate carries less entropy than the gas it
+replaces.
+
+The gluon term is not part of Eq.~\eqref{eq:Pcfl}. In the CFL phase the gluons
+are all massive through the Meissner effect and their thermal population is
+suppressed; the sector remains available as a flag at the solver level and is
+added to the totals there, as it is in the unpaired phase, but it is not
+inside the phase's own potential.
+
+\section{Conserved charges}
+\label{sec:charges}
+
+With $S = +1$ per $s$ quark --- this repository's convention, opposite to the
+PDG --- and $C$ the electric charge of the strongly-interacting matter alone,
+the quark quantum numbers $(B, C, S)$ are $(\tfrac13, +\tfrac23, 0)$ for $u$,
+$(\tfrac13, -\tfrac13, 0)$ for $d$ and $(\tfrac13, -\tfrac13, +1)$ for $s$, so
+%
+\begin{equation}
+\nB = \frac{n_u + n_d + n_s}{3} , \qquad
+\nC = \frac{2 n_u - n_d - n_s}{3} , \qquad
+\nS = n_s ,
+\label{eq:charges}
+\end{equation}
+%
+and the potentials map both ways,
+%
+\begin{equation}
+\muB = \mu_u + 2\mu_d , \qquad
+\muC = \mu_u - \mu_d , \qquad
+\muS = \mu_s - \mu_d ,
+\label{eq:basis}
+\end{equation}
+%
+inverted by $\mu_u = \tfrac13\muB + \tfrac23\muC$,
+$\mu_d = \tfrac13\muB - \tfrac13\muC$,
+$\mu_s = \tfrac13\muB - \tfrac13\muC + \muS$. These maps are not written in
+this subpackage: they are \texttt{eos.general.basis}, shared with every model,
+and a test asserts bit-for-bit agreement between the two. The fractions are
+$Y_C = \nC/\nB$ and $Y_S = \nS/\nB$, always per baryon and always excluding
+the leptons; each flavour also reports $Y_q = n_q/\nB$, so that
+$Y_u + Y_d + Y_s = 3$ identically.
+
+The sign of $\muC$ is fixed by $\muC = \mu_u - \mu_d$, which is
+$\mu_p - \mu_n$ in the hadronic sector, so beta equilibrium reads
+$\muC + \mu_e = 0$ here exactly as it does there.
+
+\section{Leptons, photons and the totals}
+\label{sec:totals}
+
+The quantities above are those of the strongly-interacting sector. What a
+solved point reports adds, from
+\texttt{eos.general.thermodynamics\_leptons}, whichever of these the mode and
+the flags call for:
+%
+\begin{itemize}
+\item \textbf{electrons} (with positrons) at $\mu_e$, a Fermi gas of mass
+      $0.511$~MeV and degeneracy $2$, present wherever the mode has a lepton
+      condition;
+\item \textbf{electron neutrinos} (with antineutrinos) at $\munue$, massless
+      and of degeneracy $1$, present only in the trapped mode;
+\item \textbf{photons}, $P_\gamma = \tfrac13\varepsilon_\gamma =
+      \pi^2 T^4/(45\hc)$, $s_\gamma = 4\varepsilon_\gamma/(3T)$;
+\item \textbf{thermal neutrinos}: the flavours \emph{not} tracked in the
+      composition, carried as $\mu = 0$ gases. Three flavours where the
+      electron neutrino is free-streaming ($\munue = 0$), two where it is
+      trapped and therefore already counted at its own potential.
+\end{itemize}
+%
+None of these carries $B$, $C$ or $S$ in the sense of Eq.~\eqref{eq:charges} ---
+$\nC$ is non-leptonic by definition --- so they enter $P$, $\varepsilon$ and
+$s$ and the neutrality condition, and nothing else. The totals are
+%
+\begin{equation}
+P = P^{\rm matter} + P_e + P_{\nu_e} + P_\gamma + P_{\nu}^{\rm th} , \qquad
+\varepsilon = \varepsilon^{\rm matter} + \varepsilon_e + \varepsilon_{\nu_e}
+              + \varepsilon_\gamma + \varepsilon_{\nu}^{\rm th} , \qquad
+s = s^{\rm matter} + s_e + s_{\nu_e} + s_\gamma + s_{\nu}^{\rm th} ,
+\end{equation}
+%
+with $P^{\rm matter}$ from Eq.~\eqref{eq:P} or Eq.~\eqref{eq:Pcfl} and
+$f = \varepsilon - Ts$.
+
+\section{Equilibrium modes and their closures}
+\label{sec:modes}
+
+A mode fixes which quantities are imposed and which are unknown. In the
+unpaired phase the unknowns are chemical potentials only --- the potential of
+Sec.~\ref{sec:potential} is explicit in $\mu$, so unlike a mean-field model
+there is no field equation to carry along and no density in the unknown
+vector.
+
+\paragraph{\texttt{beta\_eq\_neutrinoless}} $(\nB, T)$; unknowns
+$x = [\mu_u, \mu_d, \mu_s, \mu_e]$, four rows:
+%
+\begin{equation}
+\begin{aligned}
+r_1 &= \frac{n_u + n_d + n_s}{3} - \nB ,
+&\qquad r_2 &= \nC - n_e(\mu_e, T) , \\
+r_3 &= \mu_d - \mu_u - \mu_e \;\; (= -\muC - \mu_e) ,
+&\qquad r_4 &= \mu_s - \mu_d \;\; (= \muS) .
+\end{aligned}
+\label{eq:res_beta}
+\end{equation}
+%
+Row $r_1$ is baryon number, $r_2$ total electric neutrality, $r_3$ beta
+equilibrium $d \leftrightarrow u + e^- + \bar\nu_e$ with free-streaming
+neutrinos, and $r_4$ strangeness equilibrium $s \leftrightarrow d$, which is
+the statement $\muS = 0$.
+
+\paragraph{\texttt{beta\_eq\_neutrino\_trapped}} $(\nB, Y_{L_e}, T)$; unknowns
+$x = [\mu_u, \mu_d, \mu_s, \mu_e, \munue]$, five rows: $r_1$, $r_2$ and $r_4$
+unchanged, with
+%
+\begin{equation}
+r_3 = \mu_d - \mu_u - \mu_e + \munue \;\; (= -\muC - \mu_e + \munue) ,
+\qquad
+r_5 = \frac{n_e + n_{\nu_e}}{\nB} - Y_{L_e} .
+\end{equation}
+%
+The neutrino gas carries its antiparticles, so $n_{\nu_e}$ is the net density
+and $Y_{L_e}$ is the conserved electron-family number per baryon. The muon
+family is not tracked, so $Y_{L_\mu}$ raises.
+
+\paragraph{\texttt{fixed\_YC}} $(\nB, Y_C, T)$; unknowns
+$x = [\mu_u, \mu_d, \mu_s]$, three rows: $r_1$ and $r_4$ unchanged, with the
+charge fraction imposed instead of neutrality,
+%
+\begin{equation}
+r_2' = \frac{\nC}{\nB^{\rm calc}} - Y_C , \qquad
+\nB^{\rm calc} = \frac{n_u + n_d + n_s}{3} .
+\end{equation}
+%
+With \texttt{leptons=False} the result is electrically charged quark matter,
+which is what a mixed-phase construction needs per pure phase before global
+neutrality is imposed. With \texttt{leptons=True} a neutralizing electron gas
+is added \emph{after} the solve, by inverting $n_e(\mu_e, T) = \nC$ for
+$\mu_e$ --- a one-dimensional inversion, not a further row, because the
+strongly-interacting sector of this model does not respond to $\mu_e$ at fixed
+$Y_C$. The two therefore share the same quark state and differ only in the
+lepton contribution to $P$, $\varepsilon$ and $s$.
+
+\paragraph{\texttt{fixed\_YC\_YS}} $(\nB, Y_C, Y_S, T)$; unknowns
+$x = [\mu_u, \mu_d, \mu_s]$, three rows: $r_1$ and $r_2'$ unchanged, with
+strangeness equilibrium replaced by the imposed strangeness fraction,
+%
+\begin{equation}
+r_3' = \frac{n_s}{\nB^{\rm calc}} - Y_S .
+\end{equation}
+%
+This is the mode that separates a bag model from a nucleonic one: it is
+meaningful here, where the $s$ quark is a degree of freedom, and it raises in
+\texttt{eos/zl}, which has none. Leptons are handled as in
+\texttt{fixed\_YC}.
+
+\paragraph{The CFL phase} is a phase selector, not one of the four modes. It
+is closed by flavour locking rather than by an equilibrium condition: the
+condensate pairs the three flavours in equal numbers, so
+%
+\begin{equation}
+r_q = n_q^{\rm CFL}(\mu_q, T, m_q, \as, \Delta_0) - \nB = 0 , \qquad q = u, d, s ,
+\label{eq:res_cfl}
+\end{equation}
+%
+with $n_q^{\rm CFL}$ from Eq.~\eqref{eq:ncfl}, is three rows for the three
+unknowns $x = [\mu_u, \mu_d, \mu_s]$ at given $(\nB, T, \Delta_0)$. Two
+consequences are worth stating because they are easy to expect wrongly:
+
+\begin{itemize}
+\item $\nC = (2 n_u - n_d - n_s)/3 = 0$ identically, so the phase is
+      \emph{electrically neutral by construction} with no electrons at all,
+      and $Y_C$ is returned as zero to round-off ($-1.7\times10^{-14}$ at
+      $\nB = 0.8\ \mathrm{fm}^{-3}$) rather than solved for. This is the
+      physical content of CFL neutrality~\cite{AlfordRajagopalWilczek1999}.
+\item The phase is \emph{not} in strangeness equilibrium. Equal densities at
+      unequal masses require unequal potentials --- at $\nB = 0.8\
+      \mathrm{fm}^{-3}$, $T = 0$, $\Delta_0 = 100$~MeV the solve gives
+      $\mu_u = \mu_d = 402.168$~MeV and $\mu_s = 434.121$~MeV --- so
+      $\muS = \mu_s - \mu_d \neq 0$, and $\varepsilon/\nB = \muB + \muS$ at
+      $P = 0$ rather than $\muB$. Reading $\muB$ as the energy per baryon of
+      the paired phase is the standard way to misread it.
+\end{itemize}
+
+\medskip
+Wherever a temperature is accepted, entropy per baryon may be given in its
+place, through an outer one-dimensional solve for $T$ at fixed $\nB$ and
+fractions.
+
+\section{What a solved point returns}
+\label{sec:returns}
+
+Every mode returns the same record, so a caller reads one shape whichever mode
+it asked for:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+field & symbol & note \\
+\midrule
+\texttt{converged}, \texttt{error} & --- & the status and the largest scaled
+                                            residual (Sec.~\ref{sec:numerics}) \\
+\texttt{n\_B}, \texttt{T} & $\nB$, $T$ & the conditions the point was solved at \\
+\texttt{Y\_C}, \texttt{Y\_S}, \texttt{Y\_L} & $Y_C, Y_S, Y_{L_e}$ & as
+                                            realised, Eq.~\eqref{eq:charges} \\
+\texttt{mu\_u}, \texttt{mu\_d}, \texttt{mu\_s} & $\mu_u, \mu_d, \mu_s$ & the unknowns \\
+\texttt{mu\_e}, \texttt{mu\_nu} & $\mu_e, \munue$ & zero where the mode has no
+                                            lepton condition \\
+\texttt{mu\_B}, \texttt{mu\_C}, \texttt{mu\_S} & $\muB, \muC, \muS$ & derived,
+                                            Eq.~\eqref{eq:basis} \\
+\texttt{n\_u}, \texttt{n\_d}, \texttt{n\_s} & $n_u, n_d, n_s$ & net densities,
+                                            antiquarks subtracted \\
+\texttt{n\_e}, \texttt{n\_nu} & $n_e, n_{\nu_e}$ & net, antiparticles subtracted \\
+\texttt{P\_total}, \texttt{e\_total} & $P$, $\varepsilon$ & MeV/fm$^3$,
+                                            Sec.~\ref{sec:totals} \\
+\texttt{s\_total}, \texttt{f\_total} & $s$, $f = \varepsilon - Ts$ & fm$^{-3}$,
+                                            MeV/fm$^3$ \\
+\texttt{Y\_u}, \texttt{Y\_d}, \texttt{Y\_s}, \texttt{Y\_e}, \texttt{Y\_nu}
+      & $n_i/\nB$ & per baryon \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+The CFL record carries the same fields and adds \texttt{Delta0} and
+\texttt{Delta} --- the parameter and its value at $T$, Eq.~\eqref{eq:gap} ---
+and reports no electrons, since the phase has none.
+
+The entropy density is worth a word because nothing in the residual derives
+from it and it is therefore easy to leave unstated. It is not integrated
+separately: for a massless flavour it is the closed form
+Eq.~\eqref{eq:s0}, for a massive one it is Eq.~\eqref{eq:sF} --- the Euler
+relation of the free gas, which is exact --- plus the correction of
+Eq.~\eqref{eq:massive}, and in the paired phase it carries the further term of
+Eq.~\eqref{eq:scfl}. The gluon, photon and lepton entropies are added on top.
+
+\section{Numerics}
+\label{sec:numerics}
+
+Each mode is a system of three to five equations, solved with Powell's hybrid
+method and, if that does not reach the gate, with Levenberg--Marquardt; when a
+warm start was supplied and both fail, one further hybrid attempt is made from
+the mode's own cold guess, since a warm start carried across the strange-quark
+onset can land outside the basin. Every attempt is bounded internally and at
+most three are made: a parameter scan must always get an answer back, and
+non-convergence is a value carried on the record, never an exception and never
+an unbounded loop.
+
+Convergence is judged on a dimensionless residual. The rows carry mixed units
+--- densities of order $10^{-1}\,\mathrm{fm}^{-3}$, fractions of order unity,
+equalities between chemical potentials of order $10^{3}$~MeV --- so each row
+is divided by the scale of the quantity it balances: $\nB$ for a density row
+($r_1$, $r_2$, and the three rows of the CFL system), $|\muB|$ for a potential
+equality ($r_3$, $r_4$), and unity for a row that is already dimensionless
+($r_2'$, $r_3'$, $r_5$). The state is accepted when the largest scaled
+component is below $10^{-10}$. A gate on the raw residual vector is dominated
+by whichever row happens to be largest and accepts states satisfying the
+others only loosely; a gate on the solver's own success flag reports whether
+the iteration terminated, which is a different question again.
+
+The cold guess estimates $\mu \simeq (\pi^2 \nB)^{1/3} \hbar c$ from the
+massless relation $n \simeq \mu^3/(\pi^2\hc)$ at one flavour per baryon, and
+adjusts it per mode. Tables are built line by line --- one line per
+temperature and per combination of the fractions the mode fixes --- and swept
+along the baryon density with a warm start, each solved point seeding the
+next, with the step bisected where a solve misses so that the sweep can walk
+through the strange-quark onset rather than stopping at it. That loop is
+\texttt{eos.general.tabulate}, shared with the other models; what this
+subpackage supplies is which solver a mode name means and what part of a
+solved point becomes the next guess.
+
+\begin{acknowledgments}
+Written as the specification of \texttt{eos/alphabag}.
+\end{acknowledgments}
+
+\bibliography{../../docs/eos}
+
+\end{document}
