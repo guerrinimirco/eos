@@ -67,8 +67,12 @@ the window.
 
 \section{The phase-adapter contract}
 
-Everything this engine knows about DD2 and about vMIT passes through one
-interface. An adapter is a map
+Everything this engine knows about any bulk model passes through one
+interface, and a \emph{pairing} is two declared phases handed to the solver:
+DD2$+$vMIT is the shipped default, SFHo, ZL and alphaBag adapters ship
+alongside it, and two \emph{branches} of one functional (ENJL) pair the same
+way --- the engine cannot tell a two-model pairing from a two-branch one,
+which is the point. An adapter is a map
 %
 \begin{equation}
 \big( \text{the phase's conserved-charge potentials},\, T \big)
@@ -122,13 +126,36 @@ why warm starts are passed in as explicit arguments and why the one thing
 that \emph{is} cached --- the hadronic phase's starting field configuration
 --- is a constant of the solve rather than a running state.
 
-\paragraph{The hadronic potential is the kinetic one.} The hadronic adapter
-takes $\mutB = \muB - \Sigma^R$, with $\Sigma^R$ the rearrangement
-self-energy of the density-dependent couplings. Since $\Sigma^R$ is itself a
-function of the phase density, which is an unknown of the phase-internal
-solve, carrying $\muB$ would put that circularity inside the outer iteration;
-carrying $\mutB$ leaves it inside the adapter, where it belongs. The physical
-$\muB$ is restored at assembly and is what the matching condition uses.
+\paragraph{The baryon-potential flavour is DECLARED, not assumed.} A phase's
+slot in the unknown vector carries either the kinetic potential
+$\mutB = \muB - \Sigma^R$ or the physical $\muB$, and which one is a declared
+property of the phase (\texttt{potential\_kind}), not a constant of the
+engine. DD2 declares kinetic: its rearrangement self-energy $\Sigma^R$ is a
+function of the phase density, itself an unknown of the phase-internal solve,
+so carrying $\muB$ would put that circularity inside the outer iteration ---
+carrying $\mutB$ leaves it inside the adapter, and the smooth variation of
+the effective potentials along a density sweep is what makes warm starts
+work. SFHo (constant couplings, $\Sigma^R = 0$), vMIT, alphaBag, ZL and ENJL
+(which carries both its rearrangement terms as unknowns with their defining
+rows) all declare physical. The matching row always compares the PHYSICAL
+potentials --- read off the slot for a physical-kind phase, restored at
+assembly for a kinetic one --- so the two kinds mix freely in one pair.
+
+\paragraph{The Phase declaration.} Concretely a pairing is two \texttt{Phase}
+records (\texttt{eos.mixed.adapters}), each closing over its own model's
+parameters --- for the composite engine the pair IS the parameter argument.
+Beyond the adapter map (\ref{eq:adapter}) and the potential kind, a phase
+declares how it may be seeded (a per-solve cache is FORBIDDEN for a
+branch-declared adapter, because there the seed chooses the root --- caching
+would change physics, not speed), an optional cold start from its own
+equilibrium, its validity limits (\texttt{supports\_S}; \texttt{max\_T}), and
+its optional capabilities: the pure per-mode wing sweep the stitched hybrid
+table uses, the frozen-composition block the adiabatic sound speed uses, and
+an analytic Jacobian block. Capabilities are optional by design --- a phase
+without one makes the feature that needs it raise, naming the phase, and the
+analytic Jacobian in particular is never generalized: each block
+differentiates one model's own field equations, and the numeric Jacobian
+remains the reference.
 
 \section{The $\eta$ family of constructions}
 

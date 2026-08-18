@@ -213,8 +213,15 @@ surface: an adapter maps (baryon potential, mu_C, mu_S, T) to a `PhaseThermo`
 block — densities, n_B/n_C/n_S, P, eps, s, and the conserved-charge
 potentials — solving the phase's own internal self-consistency (fields,
 densities) at those fixed potentials, with an optional opaque state for warm
-starts. DD2 (hadronic) and vMIT (quark) provide the shipped adapters; a new
-pairing is a new adapter, not a new engine.
+starts. A pairing is two declared `Phase` objects, each closing over its own
+model's parameters — for the composite engine the Phase pair IS the
+parameter argument (which is how §6's "parameters are arguments" reads
+there), with the plain (par, flags, vmit_params) signatures remaining the
+DD2+vMIT front door. Whether a phase's slot carries the kinetic or the
+physical baryon potential is a declared property of the phase, never an
+engine assumption. Shipped adapters: DD2, SFHo, ZL (hadronic), vMIT,
+alphaBag (quark), and the ENJL branch pair (two branches of one
+functional); a new pairing is a new adapter, not a new engine.
 
 **One internal shape.** Every model is laid out the same way, so a physicist
 who has read one can navigate all of them, and a new model is added by

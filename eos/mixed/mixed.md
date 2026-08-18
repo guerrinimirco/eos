@@ -51,10 +51,22 @@ deterministic function of its arguments — the residual is differentiated
 numerically, so an adapter that remembered the previous trial point would make
 the Jacobian differentiate that memory along with the physics.
 
-The hadronic adapter takes the KINETIC potential `mu_tilde_B = mu_B - Sigma_R`.
-`Sigma_R` depends on the phase density, which is itself an unknown of the
-phase-internal solve; carrying `mu_tilde_B` keeps that circularity inside the
-adapter instead of in the outer iteration.
+A pairing is two declared `Phase` records (`eos.mixed.adapters`), each
+closing over its own model's parameters — for the composite engine the pair
+IS the parameter argument, and DD2+vMIT remains the front door every plain
+`(par, flags, vmit_params)` signature builds. Which flavour of baryon
+potential a phase's slot carries is DECLARED (`potential_kind`), not assumed:
+DD2 declares the KINETIC `mu_tilde_B = mu_B - Sigma_R` (`Sigma_R` depends on
+the phase density, itself an unknown of the phase-internal solve, so this
+keeps that circularity inside the adapter); SFHo, vMIT, alphaBag, ZL and the
+ENJL branches declare physical. The matching row always compares the physical
+potentials, so the kinds mix freely. A phase also declares its seeding rules
+(no per-solve cache for a branch-declared adapter — there the seed CHOOSES
+THE ROOT), its limits (`supports_S`, `max_T`) and its optional capabilities
+(`wing_sweep`, `frozen_thermo`, `jacobian_block`); a missing capability makes
+the feature that needs it raise, naming the phase. Shipped pairings: DD2,
+vMIT, SFHo, ZL, alphaBag, and `enjl_branch_pair` — two branches of one
+functional, which the engine cannot tell from two models.
 
 **The eta split.** The lepton gas is written as a *local* population (one
 potential per phase, weight `eta`) plus a *global* one (a single potential,

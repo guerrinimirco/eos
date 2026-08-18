@@ -1022,6 +1022,24 @@ a reason that has nothing to do with seeding.
   belongs in `general/thermodynamics_leptons.py`.
 
 ### mixed
+- Capability gaps of the shipped pairings, each a loud NotImplementedError
+  naming the phase, never a silent skip: `alphabag_phase` has no
+  `frozen_thermo` (alphabag exposes no thermo-at-given-densities surface, so
+  the frozen-composition sound speed is undefined for any pairing that
+  includes it); `enjl_branch_pair` has neither `wing_sweep` nor
+  `frozen_thermo` (its from_n surface needs branch-consistent seeding, which
+  belongs with the coming construction driver); `sfho_phase`/`zl_phase`
+  wings cold-start per point (add their models' own warm_start if a wing
+  shows holes). abpr is structurally excluded as a mixed-phase quark
+  adapter: a single common potential, so its charge block is rank one and
+  (mu_C, mu_S) have no independent meaning.
+- The zl+vmit pairing's offset refinement can fail on coarse probe scans (a
+  mid-window continuation gap between n_B ~ 1.1 and 1.9 at the shipped
+  parameters): the mixed solve converges on either side but the probe steps
+  are too large in between, so `locate_window` reports the honest
+  `offset_unbracketed` instead of a wrong number. Needs pairing-specific
+  probe tuning (a denser scan or a smaller first-step) when zl+vmit tables
+  are actually wanted.
 - The analytic Jacobian (`backends/jacobian.py`) covers only the normal slot
   layout, where chi is the unknown. The fixed-chi layout of
   `mixed_slots(..., fixed_chi=True)` — chi imposed, n_B unknown, used by
