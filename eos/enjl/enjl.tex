@@ -1,0 +1,1039 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nC}{n_C}
+\newcommand{\nS}{n_S}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\hc}{(\hbar c)^3}
+\newcommand{\nbs}{\bar{n}^s}
+\newcommand{\SR}{\Sigma^{R}}
+\newcommand{\kF}{k_F}
+
+\begin{document}
+
+\title{ENJL: the extended Nambu--Jona-Lasinio model of baryonic and quark
+       matter at $T = 0$ \\
+       --- as implemented in \texttt{eos/enjl}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/enjl} subpackage implements the extended Nambu--Jona-Lasinio
+model of Xia~\cite{Xia2024}, in which baryons and quarks are described by
+\emph{one} functional: a baryon is a three-quark cluster whose mass is built
+from the same constituent quark masses that the NJL gap equation
+determines, so the chiral, quarkyonic and deconfinement transitions all come
+out of a single mean field rather than out of two models joined at a
+boundary. The independent unknowns of that mean field are the three
+constituent masses $M_u$, $M_d$, $M_s$; everything else --- the baryon masses,
+the vector fields, the rearrangement terms --- follows algebraically. The
+model carries density-dependent couplings $\alpha_S(\nB)$, $\Gamma_\omega(\nB)$
+and $\Gamma_\rho(\nB)$, and therefore rearrangement self-energies, and it
+carries the NJL three-momentum cut-off $\Lambda$, which enters as a
+temperature-independent vacuum subtraction on the quark sector alone.
+
+This note states the model as the code solves it: the single-species
+thermodynamics at $T = 0$ with the cut-off written out, the gap equation in
+the form the code uses rather than the form the paper prints, the vector and
+rearrangement sector, the assembly of $\varepsilon$, $P$, $s$ and $n^s$, the
+conserved-charge bookkeeping in this repository's conventions, the
+ten-unknown beta-equilibrium residual row by row, and what each of the
+repository's four modes means here --- one is closed, three raise, and the
+reasons are physics rather than unwritten features. Section~\ref{sec:validation}
+quotes what the implementation actually reproduces, measured against the
+paper and against the author's own tables. The model is $T = 0$ throughout;
+Sec.~\ref{sec:numerics} says where the seam for a finite-temperature
+extension is, and what is still open above the first first-order transition.
+\end{abstract}
+
+\maketitle
+
+\section{Degrees of freedom}
+\label{sec:dof}
+
+Eight species, in three families. The quantum numbers are those of
+\texttt{eos.enjl.species}, in this repository's conventions (CLAUDE.md
+\S2): $C$ is the electric charge of \emph{strongly interacting} matter only,
+and strangeness is $S = +1$ per $s$ quark --- so $\Lambda$ has $S = +1$, the
+opposite of the PDG sign.
+
+\begin{center}
+\begin{tabular}{lcccccl}
+\toprule
+species & $g$ & $B$ & $C$ & $S$ & $\tau_3$ & valence content
+                                              $(N^u_i, N^d_i, N^s_i)$ \\
+\midrule
+$p$       & 2 & $1$   & $+1$   & $0$  & $+1$ & $(2,1,0)$ \\
+$n$       & 2 & $1$   & $0$    & $0$  & $-1$ & $(1,2,0)$ \\
+$\Lambda$ & 2 & $1$   & $0$    & $+1$ & $0$  & $(1,1,1)$ \\
+\midrule
+$u$       & 6 & $1/3$ & $+2/3$ & $0$  & $+1$ & $(1,0,0)$ \\
+$d$       & 6 & $1/3$ & $-1/3$ & $0$  & $-1$ & $(0,1,0)$ \\
+$s$       & 6 & $1/3$ & $-1/3$ & $+1$ & $0$  & $(0,0,1)$ \\
+\midrule
+$e^-$     & 2 & $0$   & ---    & $0$  & $0$  & --- \\
+$\mu^-$   & 2 & $0$   & ---    & $0$  & $0$  & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The quark degeneracy $g = 6$ is three colours times two spins; the baryon and
+lepton degeneracy $g = 2$ is spin alone. The leptons carry electric charge
+$q_e = q_\mu = -1$ but are excluded from $C$ by the convention above; total
+electric neutrality is imposed separately where a mode calls for it
+(Sec.~\ref{sec:beta}). The last column, $N^q_i$, is the number of valence
+quarks of flavour $q$ in baryon $i$, and it is the object through which the
+whole model is built: it appears in the baryon mass
+Eq.~\eqref{eq:baryonmass}, in the effective scalar density
+Eq.~\eqref{eq:nbar}, in the $\omega$ source Eq.~\eqref{eq:Jomega}, and in the
+rearrangement term Eq.~\eqref{eq:SigmaRb}.
+
+A model-wide rescaling factor $f_i$ multiplies each species' coupling to the
+vector fields: $f_p = f_n = 1$ by construction, $f_\Lambda$ is fitted to the
+$\Lambda$ potential depth, and the three quarks share one value $f_q$ which is
+a parameter of the study (Sec.~\ref{sec:parameters}). Leptons do not couple,
+$f_e = f_\mu = 0$.
+
+\section{Single-species thermodynamics at $T = 0$, and the cut-off}
+\label{sec:kinetic}
+
+Each species is a free Fermi gas of degeneracy $g$ and effective mass $M$,
+filled to a Fermi momentum $\kF$, and it is the \emph{only} place temperature
+would enter. Writing $x = \kF/M$ and $\nu = \sqrt{\kF^2 + M^2}$ for the
+kinetic (effective) chemical potential, and $\hc = 7.6838\times10^{6}\;
+\mathrm{MeV^3\,fm^{-3}}$ for the conversion to the $\mathrm{fm^{-3}}$ and
+$\mathrm{MeV\,fm^{-3}}$ used at every public boundary,
+%
+\begin{align}
+n^{\rm med}(\kF, M, g) &= \frac{g\,\kF^3}{6\pi^2} ,
+\label{eq:nmed}\\[2pt]
+n^{s,{\rm med}}(\kF, M, g) &= \frac{g M^3}{4\pi^2}
+   \Big[\, x\sqrt{x^2+1} - \operatorname{arcsinh} x \,\Big] ,
+\label{eq:nsmed}\\[2pt]
+\varepsilon^{\rm med}(\kF, M, g) &= \frac{g M^4}{16\pi^2}
+   \Big[\, x(2x^2+1)\sqrt{x^2+1} - \operatorname{arcsinh} x \,\Big] ,
+\label{eq:epsmed}\\[2pt]
+P^{\rm med}(\kF, M, g) &= \nu\, n^{\rm med} - \varepsilon^{\rm med}
+ = \frac{g M^4}{48\pi^2}
+   \Big[\, x(2x^2-3)\sqrt{x^2+1} + 3\operatorname{arcsinh} x \,\Big] ,
+\label{eq:Pmed}\\[2pt]
+s &= 0 \qquad\text{(every species, at $T = 0$)} .
+\label{eq:s}
+\end{align}
+%
+Equation~\eqref{eq:epsmed} includes the rest mass, and $\varepsilon + P =
+\nu n$ holds identically for one species by Eq.~\eqref{eq:Pmed}. Below
+threshold, $\nu \le M$, all four vanish. These are the standard
+$T = 0$ Fermi integrals and are \emph{not} written a second time inside this
+model: the code calls
+\texttt{eos.general.fermi\_integrals.solve\_fermi\_jel} at $T = 0$, which
+routes to the exact closed forms above. They are restated here because a
+paper-style description must be self-contained.
+
+\subsection{The cut-off, and the one way it enters}
+\label{sec:cutoff}
+
+The NJL interaction is not renormalizable and is regularized by a
+three-momentum cut-off $\Lambda$ applied to the \emph{vacuum} (Dirac sea)
+integrals of the quark sector. Baryons and leptons carry no cut-off. Writing
+$y = \Lambda/M$, the quark scalar density and energy density are the medium
+terms above \emph{minus} a $\kF$-independent vacuum term,
+%
+\begin{align}
+n^s(\kF, M, g, \Lambda) &= n^{s,{\rm med}}(\kF, M, g)
+  \;-\; \underbrace{\frac{g M^3}{4\pi^2}
+        \Big[\, y\sqrt{y^2+1} - \operatorname{arcsinh} y \,\Big]}_{
+        \textstyle n^{s,{\rm vac}}(M, g, \Lambda)} ,
+\label{eq:nsvac}\\[2pt]
+\varepsilon(\kF, M, g, \Lambda) &= \varepsilon^{\rm med}(\kF, M, g)
+  \;-\; \underbrace{\frac{g M^4}{16\pi^2}
+        \Big[\, y(2y^2+1)\sqrt{y^2+1} - \operatorname{arcsinh} y \,\Big]}_{
+        \textstyle \varepsilon^{\rm vac}(M, g, \Lambda)} ,
+\label{eq:epsvac}
+\end{align}
+%
+and the number density Eq.~\eqref{eq:nmed} is untouched, the Dirac sea
+carrying no net baryon number. Two properties of this split matter and are
+easy to lose:
+
+\begin{itemize}
+\item \textbf{The medium integrals are not cut off.} Only the vacuum
+  subtraction carries $\Lambda$. This is not a detail: the quark kinetic
+  potential $\nu_q$ exceeds $\Lambda = 602.3$~MeV above
+  $\nB \approx 3\;\mathrm{fm^{-3}}$, so a cut applied to the medium integral
+  would truncate the physical Fermi sea and change the equation of state
+  exactly where it is being used.
+\item \textbf{The vacuum terms depend only on $(M, g, \Lambda)$.} They are
+  additive constants at fixed constituent mass, independent of $\kF$ and ---
+  this is what makes the finite-temperature extension a one-function change ---
+  independent of $T$. In the code, Eqs.~\eqref{eq:nsvac} and
+  \eqref{eq:epsvac} are the model's own analytic terms, added outside the
+  call into \texttt{eos.general}.
+\end{itemize}
+
+\noindent
+Because $n^{s,{\rm vac}} > 0$, the quark scalar density is \emph{negative} in
+vacuum: at the shipped parameters and the vacuum masses of
+Eq.~\eqref{eq:eps0value}, $n^s_u(\kF = 0) = n^s_d(\kF = 0) =
+-1.8433\;\mathrm{fm^{-3}}$ and $n^s_s(\kF = 0) = -2.2270\;\mathrm{fm^{-3}}$.
+That negative value
+\emph{is} the chiral condensate, up to a positive factor, and it is what makes
+the constituent masses large in vacuum through Eq.~\eqref{eq:gap}.
+
+\section{Parameters}
+\label{sec:parameters}
+
+Every number below is an argument (\texttt{eos.enjl.Parameters}, a frozen
+dataclass), never a module-level constant. Two groups: the NJL set proper,
+which is the RKH parametrization of Rehberg, Klevansky and
+H\"ufner~\cite{RehbergKlevanskyHufner1996}, and the density-dependent
+structural functions fitted by Xia~\cite{Xia2024} (his Table~I).
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+symbol & code & shipped value & meaning \\
+\midrule
+$\Lambda$   & \texttt{Lambda} & $602.3$~MeV & three-momentum cut-off \\
+$m_{u0}, m_{d0}$ & \texttt{m\_u0, m\_d0} & $5.5$~MeV & current light-quark masses \\
+$m_{s0}$    & \texttt{m\_s0}  & $140.7$~MeV & current strange-quark mass \\
+$G_S$       & \texttt{GS}     & $1.835/\Lambda^2$~MeV$^{-2}$ & scalar coupling,
+                                $G_S = g_\sigma^2/4m_\sigma^2$ \\
+$K$         & \texttt{K}      & $12.36/\Lambda^5$~MeV$^{-5}$ &
+                                't~Hooft determinant coupling~\cite{tHooft1976} \\
+\midrule
+$a_S, b_S, n_S$ & \texttt{aS, bS, nS} & $0.4413715$, $0.4076285$, $0.16$~fm$^{-3}$
+                                & structural function $\alpha_S(\nB)$ \\
+$a_V, b_V, n_V$ & \texttt{aV, bV, nV} & $3.566049$, $1.062771$, $0.214$~fm$^{-3}$
+                                & $\omega$ coupling $\Gamma_\omega(\nB)$ \\
+$a_{TV}, b_{TV}, n_{TV}$ & \texttt{aTV, bTV, nTV}
+                                & $0.5014459$, $0.0117601$, $0.1$~fm$^{-3}$
+                                & $\rho$ coupling $\Gamma_\rho(\nB)$ \\
+\midrule
+$f_\Lambda$ & \texttt{f\_Lambda} & $1.0626$ & fixed by $U_\Lambda(n_{\rm sat}) = -30$~MeV \\
+$f_q$       & \texttt{f\_q}      & $0.5$ & quark vector rescaling; the study
+                                           uses $0.5$, $0.7$, $1.0$ \\
+$B$         & \texttt{B\_GeV\_fm3} & $1.0$~GeV\,fm$^{-3}$ & Pauli-blocking
+                                           strength, Eq.~\eqref{eq:baryonmass} \\
+\midrule
+$m_e$, $m_\mu$ & \texttt{m\_e, m\_mu} & $0.511$, $105.66$~MeV & lepton masses \\
+$m_\sigma, m_\omega, m_\rho$ & \texttt{m\_sigma, m\_omega, m\_rho}
+            & $630$, $10^5$, $769$~MeV & bare meson masses, inert here \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The three density-dependent functions, with $\nB$ the total baryon density,
+are
+%
+\begin{align}
+\alpha_S(\nB)      &= a_S\, e^{-\nB/n_S} + b_S ,
+\label{eq:alphaS}\\
+\Gamma_\omega(\nB) &= 4 G_S \big[\, a_V\, e^{-\nB/n_V} + b_V \,\big] ,
+\label{eq:Gomega}\\
+\Gamma_\rho(\nB)   &= 9 \times 4 G_S
+                      \big[\, a_{TV}\, e^{-\nB/n_{TV}} + b_{TV} \,\big] ,
+\label{eq:Grho}
+\end{align}
+%
+where $\Gamma_\omega \equiv g_\omega^2/m_\omega^2$ and
+$\Gamma_\rho \equiv g_\rho^2/m_\rho^2$: only the ratio $g^2/m^2$ is determined
+by the model, which is why the bare meson masses in the table are inert. They
+are carried because the Thomas--Fermi treatment of
+Ref.~\cite{XiaMaruyamaYasutakeTatsumi2024} needs them to fix the interaction
+ranges once gradient terms are switched on. Note that its
+$m_\omega = 10^5$~MeV is not a typo for $105$: that work deliberately adopts a
+very large $\omega$ mass to suppress density fluctuations in its Thomas--Fermi
+solve, and says so.
+
+\paragraph{The factor $9$ in $\Gamma_\rho$.} Equation~\eqref{eq:Grho} carries a
+factor $9$ that the printed Eq.~(22) of Ref.~\cite{Xia2024} does not. It is
+required by the isospin source used here, $J_\rho = \sum_i f_i \tau_i n_i$
+with $\tau_p = +1$, $\tau_n = -1$ (Eq.~\ref{eq:Jrho}), and it is confirmed
+twice, independently:
+%
+\begin{itemize}
+\item the published symmetry energies are reproduced with it and not without
+  it --- $E_{\rm sym}(0.1) = 25.50$ and $E_{\rm sym}(n_{\rm sat}) = 31.55$~MeV
+  measured, against $25.5$ and $31.5$ published, where the literal Eq.~(22)
+  gives $13.3$ and $20.2$;
+\item on the nucleonic rows of the author's own tables the isospin splitting
+  of the printed potentials gives
+  $g_\rho\rho = \tfrac12[(E_F^n - E_F^p) - (\mu_n - \mu_p)]$, and dividing by
+  $J_\rho = n_p - n_n$ returns exactly $9.0000\times$ Eq.~(22) at every one of
+  those densities, with no fit involved.
+\end{itemize}
+%
+The $\omega$ channel needs no such factor, because its source
+Eq.~\eqref{eq:Jomega} already carries $N_i = 3$ for the baryons. The
+constant lives in the code as \texttt{eos.enjl.parameters.RHO\_FACTOR}.
+
+\section{The mean field}
+\label{sec:meanfield}
+
+\subsection{Effective scalar densities and the gap equation}
+
+The scalar source of the gap equation is not the quark scalar density alone.
+A baryon is a cluster of three quarks, so its scalar density contributes to
+the condensate of each of its valence flavours, weighted by the structural
+function $\alpha_S$:
+%
+\begin{equation}
+\nbs_q \;=\; \min\!\left(\,
+   n^s_q(\kF^q, M_q, 6, \Lambda)
+   \;+\; \alpha_S(\nB) \sum_{i = p, n, \Lambda} N^q_i\, n^s_i
+   \,,\; 0 \,\right) ,
+\label{eq:nbar}
+\end{equation}
+%
+with $n^s_q$ from Eq.~\eqref{eq:nsvac} (cut-off included) and $n^s_i$ from
+Eq.~\eqref{eq:nsmed} at $\Lambda = 0$. The constituent masses then satisfy the
+three-flavour NJL gap
+equation~\cite{NambuJonaLasinio1961,RehbergKlevanskyHufner1996} with the
+'t~Hooft determinant term,
+%
+\begin{equation}
+\boxed{\;
+M_u = m_{u0} - 4 G_S \nbs_u + 2 K\, \nbs_d\, \nbs_s \;}
+\label{eq:gap}
+\end{equation}
+%
+and cyclically for $d$ and $s$. Two statements about
+Eqs.~\eqref{eq:nbar}--\eqref{eq:gap} are properties of \emph{this
+implementation} and not of the printed equations, and both change numbers:
+
+\begin{itemize}
+\item \textbf{The determinant term is written over the other two flavours.}
+  Reference~\cite{Xia2024} writes it as
+  $2 K\, \nbs_u \nbs_d \nbs_s / \nbs_q$, which is the same number wherever
+  $\nbs_q \ne 0$ but is $0/0$ at chiral restoration, exactly where a solver
+  needs it. Equation~\eqref{eq:gap} is that expression with the removable
+  singularity removed.
+\item \textbf{$\nbs_q$ is capped at zero from above.} $\nbs_q$ is the
+  condensate up to a positive factor ($g_\sigma\sigma_q = 4 G_S \nbs_q$), so
+  it is negative in vacuum and rises towards zero as chiral symmetry is
+  restored. A positive value would be a condensate of the wrong sign and
+  would drive $M_q$ \emph{below} its current mass. The cap binds because the
+  cluster term of Eq.~\eqref{eq:nbar} is positive and grows with baryon
+  density: in symmetric nucleonic matter at $\nB = 10\;\mathrm{fm^{-3}}$ the
+  uncapped expression returns $+0.105\;\mathrm{fm^{-3}}$ for the $u$ and $d$
+  flavours, long after the light condensates have vanished, while the $s$
+  flavour --- which the nucleons do not feed --- is still at
+  $-2.072\;\mathrm{fm^{-3}}$ and is not capped. Once $\nbs_q = 0$,
+  Eq.~\eqref{eq:gap} returns $M_q = m_{q0}$
+  exactly and that flavour decouples from the determinant term of the other
+  two.
+\end{itemize}
+
+\noindent
+The gap equation is the model's only genuine self-consistency: the three
+$M_q$ are the unknowns, and everything in the rest of this section is
+algebraic once they are known.
+
+\subsection{Baryon masses}
+
+A baryon's mass is the sum of its valence constituent masses, interpolated by
+$\alpha_S$ between the current and constituent values, plus a Pauli-blocking
+term proportional to the baryon density carried by \emph{deconfined} quarks,
+%
+\begin{equation}
+M_i \;=\; \sum_q N^q_i \big[\, m_{q0} + \alpha_S(\nB)\,(M_q - m_{q0}) \,\big]
+      \;+\; B\, \nB^{Q} ,
+\qquad
+\nB^{Q} \equiv \frac{n_u + n_d + n_s}{3} .
+\label{eq:baryonmass}
+\end{equation}
+%
+The second term is what makes baryons unbind: as quarks are liberated,
+$\nB^Q$ grows, every baryon mass is pushed up, and past some density the
+baryons dissolve --- the Mott (deconfinement) transition. $B = 0$ switches
+that mechanism off, and the two shipped values $B = 0$ and
+$1\;\mathrm{GeV\,fm^{-3}}$ bracket the study. In vacuum
+($\alpha_S(0) = 0.849$, $\nB^Q = 0$) Eq.~\eqref{eq:baryonmass} gives
+$M_N = 938.89$ and $M_\Lambda = 1113.68$~MeV, against the published $938.9$
+and $1113.7$.
+
+\subsection{Vector fields}
+
+Only the products $g_\omega\omega_0$ and $g_\rho\rho_0$ enter, and each is its
+coupling times its source,
+%
+\begin{align}
+J_\omega &= \sum_i f_i\, N_i\, n_i
+          = 3\,(n_p + n_n + f_\Lambda n_\Lambda)
+            + f_q\,(n_u + n_d + n_s) ,
+\qquad N_i \equiv \sum_q N^q_i ,
+\label{eq:Jomega}\\
+J_\rho   &= \sum_i f_i\, \tau_i\, n_i
+          = (n_p - n_n) + f_q\,(n_u - n_d) ,
+\label{eq:Jrho}\\
+g_\omega\omega &= \Gamma_\omega(\nB)\, J_\omega ,
+\qquad
+g_\rho\rho     = \Gamma_\rho(\nB)\, J_\rho .
+\label{eq:fields}
+\end{align}
+%
+$N_i = 3$ for every baryon and $N_q = 1$ for every quark: the $\omega$ couples
+to quark number, and a baryon couples three times as strongly because it
+contains three quarks. Leptons do not appear, $f_e = f_\mu = 0$.
+
+\subsection{Rearrangement}
+
+Because $\alpha_S$, $\Gamma_\omega$ and $\Gamma_\rho$ depend on $\nB$, the
+variation of the energy density with respect to a density picks up terms from
+the couplings themselves. These are the rearrangement self-energies, and they
+enter the chemical potentials and hence the pressure, \emph{never} the energy
+density:
+%
+\begin{align}
+\SR_b &= \tfrac12\,\Gamma_\omega'(\nB)\, J_\omega^2
+       + \tfrac12\,\Gamma_\rho'(\nB)\, J_\rho^2
+       + \alpha_S'(\nB) \sum_{i = p,n,\Lambda}
+         \Big[\sum_q N^q_i\,(M_q - m_{q0})\Big] n^s_i ,
+\label{eq:SigmaRb}\\
+\SR_q &= \tfrac13\, B \sum_{i = p,n,\Lambda} n^s_i
+       \;+\; \tfrac13\, \SR_b ,
+\label{eq:SigmaRq}
+\end{align}
+%
+with $\Gamma' \equiv \mathrm{d}\Gamma/\mathrm{d}\nB$ and
+$\alpha_S' \equiv \mathrm{d}\alpha_S/\mathrm{d}\nB$, all three read off
+Eqs.~\eqref{eq:alphaS}--\eqref{eq:Grho} analytically. The asymmetry of
+Eq.~\eqref{eq:SigmaRq} is worth reading twice: the Pauli-blocking term
+$B\,\nB^Q$ of Eq.~\eqref{eq:baryonmass} raises \emph{baryon} masses, but
+$\nB^Q$ is a \emph{quark} density, so differentiating with respect to a quark
+density acts back on the quark potential --- and the factor $\tfrac13$ is
+$\partial \nB^Q/\partial n_q$. The second term of Eq.~\eqref{eq:SigmaRq} is
+$\tfrac13\SR_b$ for the same reason: a quark carries one third of a baryon's
+worth of $\nB$, which is what the density-dependent couplings respond to.
+
+That $\SR$ is placed correctly is not asserted --- it is measured. The
+statement that fixes it is the thermodynamic definition of the chemical
+potential,
+%
+\begin{equation}
+\mu_i \;=\; \frac{\partial \varepsilon}{\partial n_i}
+   \bigg|_{n_{j \ne i}} ,
+\label{eq:HVH}
+\end{equation}
+%
+which holds to $1.8\times10^{-6}$~MeV --- the floor of the central difference
+--- over baryonic, hyperonic, mixed and quark-dominated compositions at
+$\nB = 0.16$--$3\;\mathrm{fm^{-3}}$ and three parameter sets, on potentials of
+order $10^3$~MeV. Drop either rearrangement term and Eq.~\eqref{eq:HVH} fails
+by tens of MeV.
+
+\paragraph{The one exception, and it is the cap.} Equation~\eqref{eq:HVH}
+holds because the gap equation makes $\varepsilon$ stationary with respect to
+each $M_q$. Where the cap of Eq.~\eqref{eq:nbar} binds, $\nbs_q$ stops
+responding to the densities and that stationarity is lost in the capped
+channel. It costs nothing in either of the two symmetric situations --- with
+no light flavour capped nothing is clamped, and with \emph{both} $u$ and $d$
+capped the determinant term vanishes in both light channels, $M_u = M_d =
+m_{q0}$ exactly, and the state sits in a flat region --- so the only states
+affected are those with exactly one light flavour at the cap. One such state
+is reached in the checks: $f_q = 0.5$, $B = 0$ at
+$\nB = 0.8\;\mathrm{fm^{-3}}$, where Eq.~\eqref{eq:HVH} misses by
+$6.9\times10^{-2}$~MeV on $\mu_\Lambda = 1419$~MeV, i.e. $4.8\times10^{-5}$
+relative. That is below the $0.05$--$0.20$~MeV at which the engine is
+validated against the author's own tables
+(Sec.~\ref{sec:validation}), so it does not show up there; it is recorded
+because it is a property of the cap rather than of the arithmetic, and
+removing it means changing how Eq.~\eqref{eq:nbar} is regularized, which is a
+physics decision and not a refactor.
+
+\subsection{Chemical potentials}
+
+With $\nu_i = \sqrt{\kF_i^2 + M_i^2}$ the kinetic (effective) potential of
+Sec.~\ref{sec:kinetic},
+%
+\begin{align}
+\mu_i &= \nu_i + f_i\,\big(3\, g_\omega\omega + \tau_i\, g_\rho\rho\big)
+         + \SR_b , &&i = p, n, \Lambda ,
+\label{eq:mub}\\
+\mu_q &= \nu_q + f_q\,\big(g_\omega\omega + \tau_q\, g_\rho\rho\big)
+         + \SR_q , &&q = u, d, s ,
+\label{eq:muq}\\
+\mu_\ell &= \nu_\ell = \sqrt{\kF_\ell^2 + m_\ell^2} ,
+         &&\ell = e, \mu .
+\label{eq:mul}
+\end{align}
+%
+The factor $3$ on $g_\omega\omega$ in Eq.~\eqref{eq:mub} and its absence in
+Eq.~\eqref{eq:muq} is the same three-valence-quark counting as in
+Eq.~\eqref{eq:Jomega}; the $\rho$ term carries no such factor because
+$\tau_i$ already distinguishes the two nucleons.
+
+\section{Energy density, pressure, entropy}
+\label{sec:assembly}
+
+The energy density sums the single-species kinetic terms of
+Sec.~\ref{sec:kinetic} --- with the cut-off subtraction on the quarks and
+without it on baryons and leptons --- and adds the condensate and vector
+terms of the interaction:
+%
+\begin{equation}
+\boxed{\;
+\varepsilon \;=\; \sum_i \varepsilon(\kF_i, M_i, g_i, \Lambda_i)
+  \;+\; 2 G_S \sum_q \big(\nbs_q\big)^2
+  \;-\; 4 K\, \nbs_u \nbs_d \nbs_s
+  \;+\; \tfrac12\,\Gamma_\omega J_\omega^2
+  \;+\; \tfrac12\,\Gamma_\rho   J_\rho^2
+  \;-\; \varepsilon_0 \;}
+\label{eq:eps}
+\end{equation}
+%
+with $\Lambda_i = \Lambda$ for $i \in \{u,d,s\}$ and $\Lambda_i = 0$
+otherwise. \textbf{No rearrangement term appears in
+Eq.~\eqref{eq:eps}}, and that is the invariant a density-dependent mean field
+lives or dies by: $\SR$ is the derivative of the couplings, so it belongs to
+$\mu$ and to $P$ and putting it in $\varepsilon$ would count it twice
+(CLAUDE.md \S8; checked by \texttt{eos/enjl/verify}).
+
+The pressure is the Euler relation at $T = 0$,
+%
+\begin{equation}
+P \;=\; T s + \sum_i \mu_i n_i - \varepsilon
+  \;=\; \sum_i \mu_i n_i - \varepsilon ,
+\label{eq:P}
+\end{equation}
+%
+and it is how the code computes $P$ --- not by summing Eq.~\eqref{eq:Pmed}
+over species. The two agree, but only once the interaction and rearrangement
+contributions to the pressure are added by hand, and Eq.~\eqref{eq:P} adds
+them automatically through the $\SR$ inside every $\mu_i$. The entropy density
+is $s = 0$ identically, Eq.~\eqref{eq:s}, and hence the free energy density is
+$f = \varepsilon - Ts = \varepsilon = -P + \sum_i \mu_i n_i$.
+
+\paragraph{The vacuum constant $\varepsilon_0$.} Equation~\eqref{eq:eps}
+without $\varepsilon_0$ does not vanish in vacuum: the cut-off quark sea
+carries a large negative energy. $\varepsilon_0$ is Eq.~\eqref{eq:eps}
+evaluated at zero density, so that $\varepsilon(\text{vacuum}) = 0$,
+%
+\begin{equation}
+\varepsilon_0 \;=\; \sum_q \varepsilon\big(0, M_q^{\rm vac}, 6, \Lambda\big)
+  \;+\; 2 G_S \sum_q \big(n^{s,{\rm vac}}_q\big)^2
+  \;-\; 4 K \prod_q n^{s,{\rm vac}}_q ,
+\label{eq:eps0}
+\end{equation}
+%
+with $M_q^{\rm vac}$ the solution of Eqs.~\eqref{eq:nbar}--\eqref{eq:gap} at
+zero density (no baryons, so no cluster term). It is a property of the vacuum
+and depends only on $(\Lambda, m_{q0}, G_S, K)$ --- not on $f_q$, not on $B$,
+not on density, and not on temperature. Measured:
+$M_u^{\rm vac} = M_d^{\rm vac} = 367.6483$~MeV,
+$M_s^{\rm vac} = 549.4792$~MeV, and
+%
+\begin{equation}
+\varepsilon_0 = -4263.8455\;\mathrm{MeV\,fm^{-3}} .
+\label{eq:eps0value}
+\end{equation}
+%
+That all five of the author's tables, spanning three values of $f_q$ and two
+of $B$, return the same constant to $8\times10^{-7}$ relative is itself a
+check on Eq.~\eqref{eq:eps0}.
+
+\section{Conserved charges}
+\label{sec:charges}
+
+The conserved-charge densities are the species sums of the quantum numbers of
+Sec.~\ref{sec:dof}, with leptons excluded from all three
+(\texttt{eos.general.basis}):
+%
+\begin{align}
+\nB &= n_p + n_n + n_\Lambda + \tfrac13\,(n_u + n_d + n_s) ,
+\label{eq:nB}\\
+\nC &= n_p + \tfrac23 n_u - \tfrac13\,(n_d + n_s) ,
+\label{eq:nCdef}\\
+\nS &= n_\Lambda + n_s ,
+\label{eq:nSdef}
+\end{align}
+%
+and $Y_C = \nC/\nB$, $Y_S = \nS/\nB$. Equation~\eqref{eq:nSdef} carries the
+repository's sign, $S = +1$ per $s$ quark, so $Y_S \ge 0$ in strange matter
+here where the PDG convention would give $Y_S \le 0$.
+
+Reference~\cite{Xia2024} does not introduce $\muC$ and $\muS$: it writes the
+equilibrium condition directly in the physical charge $q_i$ and the electron
+potential, Eq.~\eqref{eq:beta} below. The translation is exact and worth
+stating, because it is what an adapter into a composite engine would use.
+Applying $\mu_i = B_i\muB + C_i\muC + S_i\muS$ to $p$ and $n$ gives
+$\muC = \mu_p - \mu_n$, and comparing with Eq.~\eqref{eq:beta} gives
+%
+\begin{equation}
+\muB = \mu_b , \qquad \muC = -\mu_e , \qquad \muS = 0 .
+\label{eq:basis}
+\end{equation}
+%
+So this repository's beta-equilibrium condition $\muC + \mu_e = 0$ is
+Eq.~\eqref{eq:beta} read in the conserved-charge basis, and $\muS = 0$ is the
+statement that strangeness is not conserved on the timescale of weak
+equilibrium --- $\mu_\Lambda = \mu_n$ and $\mu_s = \mu_d$ are both consequences
+of it, not extra assumptions. Equivalently, in the deconfined regime the
+inverse map $\muB = \mu_u + 2\mu_d$ holds; that identity is what the author's
+tables print in their \texttt{munr} column, and it is the quantity a phase
+construction must equate across a boundary (Sec.~\ref{sec:numerics}).
+
+\section{The closure, and the four modes}
+\label{sec:modes}
+
+\subsection{Fixed composition: not a mode}
+
+The lowest-level entry point, \texttt{thermodynamics.thermo\_from\_n}, is
+given \emph{all eight} species densities and returns the state. It solves
+Eqs.~\eqref{eq:nbar}--\eqref{eq:gap} for $(M_u, M_d, M_s)$ --- the model's
+internal self-consistency --- and evaluates
+Secs.~\ref{sec:meanfield}--\ref{sec:assembly}. Nothing about the composition
+is determined by it, so it is not one of the repository's modes and is not
+named like one: it is the ``block at given densities'' of the repository's
+shared vocabulary, the counterpart of \texttt{thermo\_from\_mu} in the models
+that solve at fixed potentials. Figures~1--3 of Ref.~\cite{Xia2024} ---
+constituent masses in symmetric matter, $E/A$ of symmetric and pure neutron
+matter, the $\Lambda$ potential depth --- are all evaluated this way, and they
+carry no branch ambiguity because the composition is imposed.
+
+\subsection{The mode this model closes}
+\label{sec:beta}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+mode & independent variables & what closes the system \\
+\midrule
+\texttt{beta\_eq\_neutrinoless} & $(\nB,\ T = 0)$
+  & Eqs.~\eqref{eq:beta}--\eqref{eq:neutral} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Weak equilibrium with free-streaming neutrinos ($\mu_{\nu} = 0$) makes every
+species potential a projection of two numbers, the baryon potential $\mu_b$
+and the electron potential $\mu_e$,
+%
+\begin{equation}
+\mu_i \;=\; B_i\,\mu_b \;-\; q_i\,\mu_e ,
+\label{eq:beta}
+\end{equation}
+%
+for all eight species of Sec.~\ref{sec:dof} --- $q_i$ being the physical
+electric charge, leptons included. Total electric neutrality closes the
+system,
+%
+\begin{equation}
+\sum_i q_i\, n_i \;=\; 0 ,
+\label{eq:neutral}
+\end{equation}
+%
+where the sum \emph{does} run over leptons. Equations~\eqref{eq:beta} and
+\eqref{eq:neutral} are the conditions to keep apart: the first is
+equilibrium, the second is neutrality, and Sec.~\ref{sec:charges}'s $\nC$ is
+the non-leptonic charge that neither of them fixes directly. The muon family
+is carried, not merely declared: $\mu^-$ populates from
+$\mu_e = m_\mu = 105.66$~MeV upward, which at the shipped parameters is
+between $\nB = 0.1$ and $0.2\;\mathrm{fm^{-3}}$, and by
+$\nB = 1.2\;\mathrm{fm^{-3}}$ carries $n_\mu = 0.0204\;\mathrm{fm^{-3}}$
+against $n_e = 0.0338\;\mathrm{fm^{-3}}$.
+
+\subsection{The residual, row by row}
+\label{sec:residual}
+
+The unknown vector has ten components,
+%
+\begin{equation}
+\mathbf{x} \;=\; \big(\,
+  M_u,\; M_d,\; M_s,\;
+  \mu_b,\; \mu_e,\;
+  \nB^{Q},\;
+  g_\omega\omega,\; g_\rho\rho,\;
+  \SR_b,\; \SR_q \,\big) ,
+\label{eq:unknowns}
+\end{equation}
+%
+and it is longer than the three-unknown gap solve of the fixed-composition
+entry point for one reason: at fixed composition the fields and the
+rearrangement terms are \emph{known} from the densities, whereas here the
+densities are what is being solved for. Carrying $g_\omega\omega$,
+$g_\rho\rho$, $\SR_b$ and $\SR_q$ as unknowns with their defining equations as
+residual rows replaces a nested fixed-point iteration by four more rows of one
+outer solve, and --- the reason it is done this way --- guarantees that every
+quantity entering any residual comes from one and the same state.
+$\nB^Q$ is carried as an unknown for the same reason: it enters the baryon
+masses through Eq.~\eqref{eq:baryonmass} \emph{before} the quark densities
+that define it are known.
+
+Given $\mathbf{x}$ and the target density $\nB^{\rm target}$, the state is
+built forwards: the couplings $\alpha_S$, $\Gamma_\omega$, $\Gamma_\rho$ and
+their derivatives are evaluated at $\nB^{\rm target}$; the baryon masses from
+Eq.~\eqref{eq:baryonmass}; then for every species, in turn,
+%
+\begin{equation}
+\nu_i = \mu_i - \Delta_i , \qquad
+\Delta_i =
+\begin{cases}
+ f_i\,(3 g_\omega\omega + \tau_i\, g_\rho\rho) + \SR_b , & i = p,n,\Lambda \\
+ f_q\,(  g_\omega\omega + \tau_i\, g_\rho\rho) + \SR_q , & i = u,d,s \\
+ 0 , & i = e,\mu
+\end{cases}
+\qquad
+\kF_i = \sqrt{\nu_i^2 - M_i^2}\;\;(\nu_i > M_i),\;\; 0 \text{ otherwise},
+\label{eq:forward}
+\end{equation}
+%
+with $\mu_i$ from Eq.~\eqref{eq:beta}, and then $n_i$, $n^s_i$, $J_\omega$,
+$J_\rho$ and the two $\SR$ expressions from Secs.~\ref{sec:kinetic}
+and~\ref{sec:meanfield}. The ten residuals, in the order the code assembles
+them, are
+
+\begin{center}
+\begin{tabular}{clll}
+\toprule
+row & residual & scale it is divided by & what it imposes \\
+\midrule
+1--3 & $M_q - \big[m_{q0} - 4G_S\nbs_q + 2K\nbs_{q'}\nbs_{q''}\big]$
+     & $100$~MeV
+     & the gap equation, Eq.~\eqref{eq:gap} \\
+4 & $\sum_i B_i n_i - \nB^{\rm target}$
+     & $\nB^{\rm target}$
+     & baryon number, Eq.~\eqref{eq:nB} \\
+5 & $\sum_i q_i n_i$
+     & $\nB^{\rm target}$
+     & electric neutrality, Eq.~\eqref{eq:neutral} \\
+6 & $\nB^{Q} - \tfrac13(n_u + n_d + n_s)$
+     & $\nB^{\rm target}$
+     & the quark baryon density, Eq.~\eqref{eq:baryonmass} \\
+7 & $g_\omega\omega - \Gamma_\omega(\nB^{\rm target})\, J_\omega$
+     & $3\,\Gamma_\omega \nB^{\rm target}$
+     & the $\omega$ field, Eq.~\eqref{eq:fields} \\
+8 & $g_\rho\rho - \Gamma_\rho(\nB^{\rm target})\, J_\rho$
+     & $\Gamma_\rho \nB^{\rm target}$
+     & the $\rho$ field, Eq.~\eqref{eq:fields} \\
+9 & $\SR_b - \SR_b[\mathbf{x}]$
+     & $3000$~MeV
+     & baryon rearrangement, Eq.~\eqref{eq:SigmaRb} \\
+10 & $\SR_q - \SR_q[\mathbf{x}]$
+     & $1000$~MeV
+     & quark rearrangement, Eq.~\eqref{eq:SigmaRq} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Row~4 is what licenses evaluating the density-dependent couplings at
+$\nB^{\rm target}$ rather than at the state's own baryon density: at the
+solution the two are equal, and using the target makes
+$\alpha_S$, $\Gamma_\omega$, $\Gamma_\rho$ constants of the residual rather
+than functions of the unknowns, which removes their derivatives from the
+Jacobian. The third column is the scale each row is divided by before the
+convergence gate is applied: the rows carry mixed units --- MeV, MeV$^3$ ---
+and a norm of the raw vector would be dominated by whichever row happens to be
+largest (\texttt{eos.general.solve}). Once solved, the composition is handed
+back to \texttt{thermo\_from\_n}, seeded with the constituent masses just
+found, so the reported state is produced by exactly one code path whichever
+entry point was called.
+
+\subsection{The three modes that raise, and why}
+
+Each of the following raises \texttt{NotImplementedError} naming its own
+reason rather than returning a state the model does not have:
+
+\begin{center}
+\begin{tabular}{p{0.26\textwidth}p{0.66\textwidth}}
+\toprule
+mode & why it is not reachable \\
+\midrule
+\texttt{beta\_eq\_neutrino\_trapped}
+  & Neutrinos are not among the degrees of freedom of Sec.~\ref{sec:dof}, and
+    Eq.~\eqref{eq:beta} carries no lepton-family potential: it is
+    $\mu_i = B_i\mu_b - q_i\mu_e$ with $\mu_{\nu_e} = 0$ built in. A trapped
+    mode would fix $Y_{L_e}$, and there is no $\mu_{\nu_e}$ for it to fix.
+    The mode is meaningful physics for this model and simply not implemented;
+    it needs an eleventh unknown and one more row. \\[4pt]
+\texttt{fixed\_YC}
+  & $Y_C$ is the \emph{non-leptonic} charge fraction of
+    Eq.~\eqref{eq:nCdef}, and imposing it replaces the neutrality row~5 by
+    $\nC - Y_C \nB = 0$. With \texttt{leptons=False} that is a one-row change
+    and $\mu_e$ becomes $-\muC$; with \texttt{leptons=True} the lepton
+    potential separates from $\muC$, since neutrality
+    $n_e + n_\mu = \nC$ is then an additional condition, and the system gains
+    an unknown. Because the repository's flag requires both, the mode raises
+    rather than shipping the half of it that is cheap. \\[4pt]
+\texttt{fixed\_YC\_YS}
+  & The same for $Y_C$, and in addition $\muS = 0$ identically here,
+    Eq.~\eqref{eq:basis}: weak equilibrium does not conserve strangeness, so
+    the model as closed has no potential conjugate to $\nS$ and $Y_S$ is an
+    output. Imposing $Y_S$ requires promoting $\muS$ to an unknown, which
+    changes Eq.~\eqref{eq:beta} into the full three-charge projection
+    $\mu_i = B_i\muB + C_i\muC + S_i\muS$ for all six strongly interacting
+    species. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\textbf{Temperature.} Every expression in Secs.~\ref{sec:kinetic}
+and~\ref{sec:assembly} is a $T = 0$ expression, $s = 0$ identically by
+Eq.~\eqref{eq:s}, and any $T > 0$ raises. Wherever this repository accepts an
+entropy axis in place of a temperature, $s/\nB = 0$ is the only value the
+model reaches. \textbf{Species.} The composition of Sec.~\ref{sec:dof} is
+fixed by the model: the octet beyond $\Lambda$, the $\Delta$ quartet, a
+thermal meson gas, thermal neutrinos and photons are all absent, and
+switching one on raises rather than being silently ignored. The muon family
+is present and on. A thermal meson gas is not merely unimplemented but
+inapplicable: $\sigma$, $\omega$ and $\rho$ here are auxiliary fields
+eliminated in favour of $g^2/m^2$, and Eqs.~\eqref{eq:Gomega}--\eqref{eq:Grho}
+leave the bare masses undetermined for exactly that reason.
+
+\section{What a solved point returns}
+\label{sec:returns}
+
+\texttt{thermo\_from\_n} returns an \texttt{EoSPoint}, in natural units
+(densities in MeV$^3$, masses and potentials in MeV, $\varepsilon$ and $P$ in
+MeV$^4$) with fm-based properties for the public boundary. Every field, and
+where it comes from:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+field & symbol & from \\
+\midrule
+\texttt{n}          & $n_i$, all eight species & the request \\
+\texttt{kF}         & $\kF_i$ & Eq.~\eqref{eq:nmed} inverted \\
+\texttt{M\_q}       & $M_u, M_d, M_s$ & the gap equation, Eq.~\eqref{eq:gap} \\
+\texttt{M\_b}       & $M_p, M_n, M_\Lambda$ & Eq.~\eqref{eq:baryonmass} \\
+\texttt{n\_s}       & $n^s_i$, all six strongly interacting species
+                    & Eqs.~\eqref{eq:nsmed}, \eqref{eq:nsvac} \\
+\texttt{nbar\_s}    & $\nbs_q$ & Eq.~\eqref{eq:nbar} \\
+\texttt{alpha\_S}, \texttt{Gw}, \texttt{Gr}
+                    & $\alpha_S, \Gamma_\omega, \Gamma_\rho$
+                    & Eqs.~\eqref{eq:alphaS}--\eqref{eq:Grho} at $\nB$ \\
+\texttt{J\_omega}, \texttt{J\_rho}
+                    & $J_\omega, J_\rho$ & Eqs.~\eqref{eq:Jomega}--\eqref{eq:Jrho} \\
+\texttt{gomega\_omega}, \texttt{grho\_rho}
+                    & $g_\omega\omega, g_\rho\rho$ & Eq.~\eqref{eq:fields} \\
+\texttt{SigmaR\_b}, \texttt{SigmaR\_q}
+                    & $\SR_b, \SR_q$ & Eqs.~\eqref{eq:SigmaRb}--\eqref{eq:SigmaRq} \\
+\texttt{mu}         & $\mu_i$, all eight & Eqs.~\eqref{eq:mub}--\eqref{eq:mul} \\
+\texttt{eps}, \texttt{P} & $\varepsilon$, $P$ & Eqs.~\eqref{eq:eps}, \eqref{eq:P} \\
+\texttt{s}          & $s = 0$ & Eq.~\eqref{eq:s} \\
+\texttt{n\_b}, \texttt{n\_bQ} & $\nB$, $\nB^Q$
+                    & Eqs.~\eqref{eq:nB}, \eqref{eq:baryonmass} \\
+\texttt{n\_C}, \texttt{n\_S}  & $\nC$, $\nS$
+                    & Eqs.~\eqref{eq:nCdef}--\eqref{eq:nSdef} \\
+\texttt{EperB}      & $\varepsilon/\nB - 938.9$~MeV & the paper's Fig.~2 ordinate \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The beta-equilibrium entry point returns the same record plus the two
+potentials it solved for, $\mu_b$ and $\mu_e$, and the density $\nB$ it was
+asked at. \texttt{eos\_response} is not implemented for this model: the
+second-derivative quantities of the CompOSE list divide into those that need
+$T > 0$ (the heat capacities, the thermal index) and those that need a
+conditioning statement the $T = 0$ branch structure of
+Sec.~\ref{sec:numerics} has not yet settled.
+
+\section{Numerics}
+\label{sec:numerics}
+
+\paragraph{The gap solve.} Three unknowns $(M_u, M_d, M_s)$, Powell's hybrid
+method, accepted on the residual of Eq.~\eqref{eq:gap} at
+$10^{-12}$~MeV, which on masses of $5$--$550$~MeV is $10^{-14}$ relative or
+better. The solver's own success flag is \emph{not} the gate: at this
+tolerance it routinely reports ``not making good progress'' on a converged
+root, because it is being asked for more precision than the residual can
+supply. The residual decides. The cold start is the vacuum solution
+$(367.6, 367.6, 549.5)$~MeV, which is a poor guess once the light condensates
+have collapsed --- a fixed-composition request in the chirally restored region
+can fail from it and must be seeded from a neighbouring point.
+
+\paragraph{The beta-equilibrium solve.} Ten unknowns
+(Eq.~\ref{eq:unknowns}), bounded least squares
+(\texttt{scipy.optimize.least\_squares}) on the scaled residuals of
+Sec.~\ref{sec:residual}, accepted at the repository's common gate
+$10^{-10}$. The bounds are not decoration: at the shipped parameters
+$\mu_b = 6.24$~GeV and $g_\omega\omega = 1.68$~GeV already at
+$\nB = 3.8\;\mathrm{fm^{-3}}$, and both keep growing roughly linearly, so a
+box calibrated at saturation would exclude the solution entirely above a few
+times $n_{\rm sat}$; it widens with density instead, while the constituent
+masses have a genuine
+density-independent ceiling (their vacuum values) and $\nB^Q$ a genuine one
+($\nB$ itself). Starting points are tried in order of decreasing
+plausibility: the previous point of a sweep first, then the same state with
+the light condensates switched off --- which is where the chirally restored
+branch sits, and is what carries a sweep \emph{across} a chiral transition,
+since a first-order transition puts the next root several hundred MeV away in
+the quark masses. Two parameter-free cold starts, one nucleonic and one
+deconfined, are available only when there is no previous point. On the shipped
+grid the achieved scaled residual is at most $8.8\times10^{-13}$, median
+$4.0\times10^{-15}$.
+
+\paragraph{Continuation, and the open branch question.} A table is a
+continuation, not a phase diagram. Each point is warm-started from its
+neighbour, so the sequence follows one branch of the model and keeps
+following it past a first-order transition into the metastable region beyond.
+Cold starts are allowed only until the branch is established; permitting them
+mid-sweep lets the sequence hop between branches from one density to the
+next, which shows up as an equation of state that oscillates rather than one
+that has a transition in it. The direction of the sweep therefore selects the
+branch: upward from the low-density chirally broken side, or downward from a
+deconfined guess at the top of the grid. Where only one branch exists the two
+agree; where several do, they differ, and \emph{that difference is the branch
+structure}.
+
+Choosing between branches is a Maxwell construction --- at fixed $\mu_b$,
+take the branch of larger $P$ --- and it cannot be done from a single sweep,
+because it needs both branches at once. It is not implemented here. Three
+transitions can each be first order or continuous depending on $(f_q, B)$:
+the \emph{quarkyonic} onset~\cite{McLerranPisarski2007}, where quasi-free
+quarks appear alongside baryons; the \emph{chiral} transition, where
+$\nbs_q \to 0$ and $M_q \to m_{q0}$; and \emph{deconfinement}, where
+Eq.~\eqref{eq:baryonmass}'s Pauli-blocking term unbinds the baryons. Two of
+the author's own tables retain a step with $\mathrm{d}P/\mathrm{d}\nB < 0$
+rather than the coexistence plateau that would replace it, which is the same
+statement seen from the other side: a raw branch may violate mechanical
+stability, and a construction --- not the branch map --- is what resolves it
+before a table reaches a structure solver (CLAUDE.md \S8). The baryon
+potential to equate across such a boundary is $\muB$ of Eq.~\eqref{eq:basis},
+which in the deconfined phase is $\mu_u + 2\mu_d$ and \emph{not} the vanishing
+neutron's own $\mu_n$.
+
+\paragraph{Where finite temperature would enter.} Nowhere except
+Sec.~\ref{sec:kinetic}. The couplings are functions of $\nB$, the gap equation
+is the same equation with $T$-dependent scalar densities, the rearrangement
+terms have the same expressions, and $\varepsilon_0$ is the same number. Only
+Eqs.~\eqref{eq:nmed}--\eqref{eq:s} change --- and the vacuum terms
+\eqref{eq:nsvac}--\eqref{eq:epsvac} do not change even there, being
+$T$-independent by construction. The pressure would revert to the full Euler
+form $P = Ts + \sum_i \mu_i n_i - \varepsilon$ of Eq.~\eqref{eq:P}.
+
+\section{What the implementation reproduces, measured}
+\label{sec:validation}
+
+\subsection{Against the published numbers}
+
+Symmetric nuclear matter is solved at fixed composition and the saturation
+properties read off by central differences; the $\Lambda$ potential is
+$U_\Lambda = \mu_\Lambda - M_\Lambda^{\rm vac}$ at vanishing $\Lambda$
+density.
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+quantity & this implementation & Ref.~\cite{Xia2024} & \\
+\midrule
+$n_{\rm sat}$              & $0.158297$~fm$^{-3}$ & $0.158$ & Table~II \\
+$E/A$ at $n_{\rm sat}$     & $-16.010$~MeV        & $-16.0$ & Table~II \\
+$K_{\rm sat}$              & $234.20$~MeV         & $234.5$ & Table~II \\
+$E_{\rm sym}(n_{\rm sat})$ & $31.549$~MeV         & $31.5$  & Table~II \\
+$L_{\rm sym}$              & $42.35$~MeV          & $42.4$  & Table~II \\
+$E_{\rm sym}(0.1)$         & $25.500$~MeV         & $25.5$  & Sec.~II \\
+$E/\nB$ at $0.1$           & $924.79$~MeV         & $924.8$ & Sec.~II \\
+$E/\nB$ at $0.158$         & $922.89$~MeV         & $922.9$ & Sec.~II \\
+$M_N$ at $0.16$            & $519.23$~MeV         & $519.2$ & Sec.~II \\
+$M_N$, $M_\Lambda$ in vacuum & $938.89$, $1113.68$~MeV & $938.9$, $1113.7$ & Sec.~II \\
+$M_u = M_d$, $M_s$ in vacuum & $367.648$, $549.479$~MeV & $367.6$, $549.5$ & Sec.~II \\
+$\alpha_S(0)$, $\alpha_S(n_S)$ & $0.849000$, $0.570000$ & $0.849$, $0.57000$ & Table~I \\
+$U_\Lambda(n_{\rm sat})$   & $-30.020$~MeV        & $-30$ (fitted) & Sec.~II \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Against the author's own tables}
+
+Five beta-equilibrium tables produced by the author's Maple worksheet, at
+$(f_q, B) \in \{(1.0, 0), (1.0, 1), (0.7, 0), (0.7, 1), (0.5, 1)\}$ and
+$\nB = 0.01$--$10\;\mathrm{fm^{-3}}$, are the tightest available constraint:
+they come from the code that made the paper's figures and so pin the model far
+beyond the two or three significant figures the paper prints. Reading them
+correctly requires three things that are not in their column headers, and each
+of them costs hundreds of MeV if missed. The scalar-density column named
+\texttt{nsq} is the \emph{medium} part of Eq.~\eqref{eq:nsvac}, while the
+column named \texttt{Sigmaq} is the full $\nbs_q$ of Eq.~\eqref{eq:nbar} ---
+so the gap equation must be fed \texttt{Sigmaq}. The baryon potential is the
+column \texttt{munr}, not \texttt{mun}: once baryons dissolve the two part
+company, \texttt{munr} continuing as $\mu_u + 2\mu_d$
+(Eq.~\ref{eq:basis}). And Eq.~\eqref{eq:beta} holds only for species that are
+\emph{present}; a species below threshold has a stale printed potential, and
+$\mu_e$ must be recovered as $\mu_d - \mu_u$ where no electrons remain.
+Read that way, and with the interpolated mixed-phase rows of the $f_q = 0.5$
+file and nine non-converged rows of the $f_q = 0.7$, $B = 0$ file excluded,
+the engine reproduces the tables' own identities --- the gap equation to
+$2\times10^{-5}$ relative, Eq.~\eqref{eq:P} to $10^{-8}$--$10^{-4}$ relative
+depending on the file, and the mean-field rebuild of every printed $\mu_i$ to
+between $0.005$ and $0.20$~MeV on potentials of $1000$--$2500$~MeV. These
+comparisons and the per-file tolerances they need live in \texttt{test/enjl}.
+
+\subsection{Against \texttt{eos/general}}
+
+The free-gas parts of Eqs.~\eqref{eq:nmed}--\eqref{eq:Pmed} are the shared
+$T = 0$ Fermi integrals of \texttt{eos.general.fermi\_integrals}, and the model
+calls them rather than carrying a second copy. Before that routing was made,
+the local closed forms and the shared ones were compared over
+$g \in \{2, 6\}$, $M \in \{5.5, 140.7, 200, 300, 367.6, 500, 549.5, 938.9,
+939, 1115.7\}$~MeV and $\kF \in \{1, 10, 50, 200, 500, 1200, 2200, 5000\}$~MeV,
+at $\Lambda = 0$. Worst relative deviation by $\kF$:
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+$\kF$ [MeV] & $n$ & $\varepsilon$ & $n^s$ & $P$ \\
+\midrule
+$1$    & $3.5\times10^{-10}$ & $6.5\times10^{-8}$  & $2.6\times10^{-7}$  & $4.1\times10^{-1}$ \\
+$10$   & $1.8\times10^{-12}$ & $2.5\times10^{-11}$ & $9.3\times10^{-11}$ & $1.3\times10^{-6}$ \\
+$50$   & $1.4\times10^{-13}$ & $3.3\times10^{-13}$ & $1.2\times10^{-12}$ & $5.7\times10^{-10}$ \\
+$200$  & $8.5\times10^{-15}$ & $1.8\times10^{-14}$ & $3.1\times10^{-14}$ & $9.7\times10^{-13}$ \\
+$\ge 500$ & $1.4\times10^{-15}$ & $1.4\times10^{-15}$ & $3.3\times10^{-15}$ & $1.4\times10^{-14}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The two are the same analytic expression, so the table is a floating-point
+statement and not a physics one. It is quoted rather than asserted because the
+$\kF = 1$~MeV entry looks alarming and is not: there $x = \kF/M \sim 10^{-3}$
+and the pressure is a cancellation of two nearly equal terms in both forms.
+At that point the asymptotic $P \to g\kF^5/(30\pi^2 M)$ gives
+$7.880\times10^{-13}\;\mathrm{MeV\,fm^{-3}}$, this model's
+$\nu n - \varepsilon$ gives $7.875\times10^{-13}$ and the shared closed form
+gives $4.671\times10^{-13}$; the shared form is the one losing digits, and the
+species carrying it has a density of $4\times10^{-9}\;\mathrm{fm^{-3}}$.
+Everywhere a species is populated enough to matter, the agreement is
+$10^{-12}$ or better, and routing the model through the shared integrals moved
+no frozen quantity of \texttt{test/baseline} by more than
+$1.5\times10^{-12}$ relative, against a gate of $10^{-10}$.
+
+\subsection{Internal invariants}
+
+\texttt{eos/enjl/verify/run\_full\_check.py} asserts, over a grid of
+compositions, densities and parameter sets: the Euler relation and
+$f = \varepsilon - Ts = -P + \sum_i \mu_i n_i$;
+$\mu_i = \partial\varepsilon/\partial n_i$, Eq.~\eqref{eq:HVH}, which is the
+statement that $\SR$ is in $\mu$ and $P$ and not in $\varepsilon$, gated at
+$10^{-3}$~MeV where the functional is smooth and at $10^{-1}$~MeV at the cap,
+whose exception is named rather than absorbed; the gap equation satisfied at
+the returned state, cap included; the charge densities of
+Eqs.~\eqref{eq:nB}--\eqref{eq:nSdef} against \texttt{eos.general.basis};
+Eq.~\eqref{eq:beta} for every species that is present and
+Eq.~\eqref{eq:neutral} to $9\times10^{-13}$~MeV, together with the
+conserved-charge reading $\muB = \mu_u + 2\mu_d$, $\muC = -\mu_e$, $\muS = 0$
+of Eq.~\eqref{eq:basis}; $0 \le c_s^2 \le 1$ on the stable stretch of a
+continuation, which is LOCATED by walking the sweep rather than assumed, since
+a raw branch may legitimately violate $\mathrm{d}P/\mathrm{d}\nB \ge 0$; the
+vacuum masses and $\varepsilon_0$, including that $\varepsilon_0$ is identical
+across parameter sets; that each mode, temperature, species flag and response
+function of Sec.~\ref{sec:modes} that is said to raise, does; and that a
+request the solver cannot reach comes back as a status rather than an
+exception.
+
+\bibliography{../../docs/eos}
+
+\end{document}
