@@ -1,0 +1,656 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nC}{n_C}
+\newcommand{\nS}{n_S}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\hc}{(\hbar c)^3}
+\newcommand{\as}{\alpha_s}
+\newcommand{\ms}{m_s}
+
+\begin{document}
+
+\title{ABPR: the analytic colour--flavour locked parametrization at $T = 0$ \\
+       --- as implemented in \texttt{eos/abpr}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/abpr} subpackage implements colour--flavour locked (CFL) quark
+matter at zero temperature as the closed-form pressure of Alford, Braby, Paris
+and Reddy~\cite{AlfordBrabyParisReddy2005}: a free three-flavour quark gas
+carrying the leading perturbative QCD correction in a single factor $a_4$, the
+leading cost of the strange quark mass as an expansion in $\ms^2/\mu^2$, the
+CFL condensation energy $3\Delta^2\mu^2/\pi^2$, and a bag constant. There is
+nothing to iterate: $P$, $\nB$ and $\varepsilon$ are polynomials in the common
+quark chemical potential $\mu$, and the three inverse maps
+$\mu(\nB)$, $\mu(P)$ and $\mu(\varepsilon)$ are closed forms as well. The
+model is the $T = 0$ analytic limit of the CFL phase of
+\texttt{eos/alphabag}, and Sec.~\ref{sec:xcheck} states the difference between
+the two --- the $\ms^4$ term this expansion drops --- with the measured
+number. This note states the potential, the parameters, the closure, the
+inverse maps, every quantity a solved point returns, and what each of the
+four repository modes means in a phase whose composition is fixed by flavour
+locking. It is written from the code, as its specification: every equation
+here is asserted by \texttt{eos/abpr/verify/run\_full\_check.py} or by
+\texttt{test/baseline}.
+\end{abstract}
+
+\maketitle
+
+\section{The thermodynamic potential}
+\label{sec:potential}
+
+In the CFL phase every quark pairs with a quark of a different colour and
+flavour, and the condensate locks the three flavour densities together,
+%
+\begin{equation}
+n_u = n_d = n_s ,
+\label{eq:locking}
+\end{equation}
+%
+whatever the quark masses are~\cite{AlfordRajagopalWilczek1999}. Because
+Eq.~\eqref{eq:locking} fixes the composition, the phase has a single
+independent potential: the common quark chemical potential $\mu$, related to
+the baryon chemical potential by
+%
+\begin{equation}
+\muB = 3\mu .
+\label{eq:muB}
+\end{equation}
+%
+Reference~\cite{AlfordBrabyParisReddy2005} writes the free energy of this
+phase, to the order at which each effect first appears, as four terms. The
+pressure is
+%
+\begin{equation}
+\boxed{\;
+P(\mu) \;=\; \underbrace{\frac{3 a_4\, \mu^4}{4\pi^2 \hc}}_{\text{(i) free gas
+              + pQCD}}
+        \;\underbrace{-\, \frac{3 \ms^2 \mu^2}{4\pi^2 \hc}}_{\text{(ii) strange
+              mass}}
+        \;+\; \underbrace{\frac{3 \Delta^2 \mu^2}{\pi^2 \hc}}_{\text{(iii)
+              pairing}}
+        \;-\; \underbrace{\frac{B}{\hc}}_{\text{(iv) bag}} \; }
+\label{eq:P}
+\end{equation}
+%
+with $\hc = (\hbar c)^3 = 7.6838\times 10^{6}\;\mathrm{MeV^3\,fm^{-3}}$
+converting the natural-unit expressions to the $\mathrm{MeV\,fm^{-3}}$ used at
+every boundary of this repository. The four terms are, in order:
+
+\begin{enumerate}
+\item[(i)] \textbf{The free quark gas with its perturbative correction.}
+  Three massless flavours at a common $\mu$, each a gas of $g = 6$ (three
+  colours $\times$ two spins) fermions, contribute $3 \mu^4/(4\pi^2\hc)$; see
+  Eq.~\eqref{eq:massless} below. The leading QCD correction to that
+  pressure~\cite{FreedmanMcLerran1977} multiplies it by $1 - 2\as/\pi$, and
+  the parametrization carries the whole factor as one number,
+  %
+  \begin{equation}
+  a_4 \;=\; 1 - \frac{2\as}{\pi} , \qquad\text{equivalently}\qquad
+  \as \;=\; \frac{\pi}{2}\,(1 - a_4) ,
+  \label{eq:a4}
+  \end{equation}
+  %
+  so that $a_4 = 1$ is the free gas and $a_4 < 1$ softens it. Equation
+  \eqref{eq:a4} is the \emph{same knob} as the $\as$ of
+  \texttt{eos/alphabag}, and it is the identity that lets the two models be
+  driven as a matched pair; the code exposes it as the property
+  \texttt{Parameters.alpha}.
+
+\item[(ii)] \textbf{The strange quark mass}, to leading order. A free gas of
+  mass $m$ at $T = 0$ has less pressure than a massless one, and expanding the
+  closed form \eqref{eq:massive} in $m/\mu$ gives
+  %
+  \begin{equation}
+  P_m(\mu) \;=\; \frac{\mu^4}{4\pi^2\hc} \;-\; \frac{3 m^2 \mu^2}{4\pi^2\hc}
+                 \;+\; \frac{m^4}{8\pi^2\hc}
+                       \Big[\frac{9}{4} + 3\ln\frac{2\mu}{m}\Big]
+                 \;+\; \mathcal{O}\!\left(\frac{m^6}{\mu^2}\right) .
+  \label{eq:expansion}
+  \end{equation}
+  %
+  Term (ii) of Eq.~\eqref{eq:P} is the $-3m^2\mu^2/(4\pi^2\hc)$ of
+  Eq.~\eqref{eq:expansion} applied to the strange flavour alone, the light
+  flavours being treated as massless. The $\ms^4$ term is \emph{not} carried:
+  it is what separates this model from \texttt{eos/alphabag}, and
+  Sec.~\ref{sec:xcheck} measures it.
+
+\item[(iii)] \textbf{The condensation energy.} Pairing at a common gap
+  $\Delta$ lowers the free energy by $\Delta^2\mu^2/\pi^2$ per
+  flavour~\cite{AlfordRajagopalWilczek1999,AlfordBrabyParisReddy2005}, hence
+  $3\Delta^2\mu^2/\pi^2$ at three locked flavours. This is the term that makes
+  the phase competitive: it is positive, it grows like the mass term it
+  offsets, and $\Delta > \ms/2$ is exactly the condition under which the
+  combined $\mu^2$ coefficient of Eq.~\eqref{eq:P} turns positive.
+
+\item[(iv)] \textbf{The bag constant} $B$, the constant vacuum pressure that
+  confines~\cite{Chodos1974}. It enters $P$ with a minus and $\varepsilon$
+  with a plus, and neither $s$ nor any $n_q$, so it cancels out of
+  $\varepsilon + P$ and the Euler relation carries no bag term. It is carried
+  as its fourth root $B^{1/4}$ in MeV, the form it is quoted in, so that a
+  parameter set cannot hold a $B$ and a $B^{1/4}$ that disagree.
+\end{enumerate}
+
+Terms (ii) and (iii) share the same power of $\mu$, and the code groups them,
+%
+\begin{equation}
+P(\mu) \;=\; A\,\mu^4 \;+\; C\,\mu^2 \;-\; \frac{B}{\hc} ,
+\qquad
+A \equiv \frac{3 a_4}{4\pi^2\hc} ,
+\qquad
+C \equiv \frac{3\left(\Delta^2 - \ms^2/4\right)}{\pi^2\hc} .
+\label{eq:PAC}
+\end{equation}
+
+\subsection{The single-flavour thermodynamics the expansion comes from}
+
+Equation~\eqref{eq:expansion} is quoted above rather than cited, because a
+paper-style description must be self-contained. At $T = 0$ a gas of $g = 6$
+fermions of mass $m$ at chemical potential $\mu > m$ has Fermi momentum
+$k_F = \sqrt{\mu^2 - m^2}$ and
+%
+\begin{align}
+n(\mu) &= \frac{k_F^3}{\pi^2 \hc} ,
+\label{eq:massive} \\
+P(\mu) &= \frac{1}{8\pi^2 \hc}
+          \left[ \mu k_F \left(2\mu^2 - 5 m^2\right)
+                 + 3 m^4 \ln\frac{\mu + k_F}{m} \right] ,
+\nonumber \\
+\varepsilon(\mu) &= \frac{3}{8\pi^2 \hc}
+          \left[ \mu k_F \left(2\mu^2 - m^2\right)
+                 - m^4 \ln\frac{\mu + k_F}{m} \right] ,
+\qquad s = 0 ,
+\nonumber
+\end{align}
+%
+which satisfy $\varepsilon + P = \mu n$ identically. At $m = 0$ these reduce
+to
+%
+\begin{equation}
+n = \frac{\mu^3}{\pi^2\hc} , \qquad
+P = \frac{\mu^4}{4\pi^2\hc} , \qquad
+\varepsilon = 3P = \frac{3\mu^4}{4\pi^2\hc} ,
+\label{eq:massless}
+\end{equation}
+%
+and expanding Eq.~\eqref{eq:massive} in $m/\mu$ gives
+Eq.~\eqref{eq:expansion}. These expressions live in
+\texttt{eos.general.fermi\_integrals} and are used by \texttt{eos/alphabag};
+\texttt{eos/abpr} does not call them, because Eq.~\eqref{eq:P} \emph{is} their
+expansion --- that is what the model is.
+
+\section{Parameters}
+\label{sec:parameters}
+
+Four numbers, all of them arguments (\texttt{eos.abpr.Parameters}, a frozen
+dataclass), never module-level constants:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+symbol & code & shipped value & meaning \\
+\midrule
+$\ms$      & \texttt{ms}    & $150$~MeV & strange current quark mass \\
+$\Delta$   & \texttt{Delta} & $80$~MeV  & CFL pairing gap, temperature independent here \\
+$a_4$      & \texttt{a4}    & $0.7$     & pQCD factor, Eq.~\eqref{eq:a4}; $\as = 0.4712$ \\
+$B^{1/4}$  & \texttt{B4}    & $135$~MeV & bag constant; $B/\hc = 43.23$~MeV\,fm$^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The derived quantities $\as$ and $B = (B^{1/4})^4$ are properties of the
+dataclass, so they cannot drift from the numbers they are computed from.
+\texttt{Parameters.B} returns $B$ in $\mathrm{MeV^4}$ --- the same unit, for
+the same attribute, as \texttt{eos.alphabag.Parameters.B} and
+\texttt{eos.vmit.Parameters.B} --- and the one division by $\hc$ happens where
+the pressure is assembled.
+
+There is no published single ABPR parameter set: the four numbers span a range
+($a_4 \in [0.6, 1]$, $\Delta \lesssim 200$~MeV, $B^{1/4} \sim 130$--$180$~MeV,
+$\ms \sim 90$--$250$~MeV) that a hybrid-star study scans, and which point in
+it is right depends on the hadronic model the quark phase is paired with. The
+values above are \texttt{Parameters.default()}, the set this repository's
+numerical baseline is frozen at, and a set with some of them changed is
+\texttt{Parameters(a4=..., B4=...)} or \texttt{dataclasses.replace} of one
+already in hand.
+
+\subsection{Where the parametrization is valid}
+
+The expansion behind term (ii) needs $\ms \ll \mu$, and the pairing term needs
+$\Delta \ll \mu$; both are corrections of relative order $10^{-1}$ at the
+densities of a compact-star core and neither is a controlled expansion at the
+surface. The gap is taken constant --- there is no $\Delta(T)$ here, because
+there is no $T$ --- and it is imposed, never solved for.
+
+\section{Everything else, as derivatives of $P$}
+\label{sec:derived}
+
+Since the composition is fixed by Eq.~\eqref{eq:locking}, $P(\mu)$ is the
+whole model and every other quantity is a derivative of it. With
+$\muB = 3\mu$,
+%
+\begin{align}
+\nB(\mu) &= \frac{\partial P}{\partial \muB}
+          = \frac{1}{3}\frac{dP}{d\mu}
+          = \frac{a_4 \mu^3}{\pi^2\hc}
+            + \frac{2\left(\Delta^2 - \ms^2/4\right)\mu}{\pi^2\hc}
+          \;\equiv\; a\,\mu^3 + c\,\mu ,
+\label{eq:nB} \\[4pt]
+s(\mu) &= \frac{\partial P}{\partial T} \;=\; 0 ,
+\label{eq:s} \\[4pt]
+\varepsilon(\mu) &= -P + \muB \nB \;=\; -P + 3\mu\, \nB
+                  \;=\; 3A\,\mu^4 + C\,\mu^2 + \frac{B}{\hc} ,
+\label{eq:eps} \\[4pt]
+f(\mu) &= \varepsilon - T s \;=\; \varepsilon
+        \;=\; -P + \muB \nB ,
+\label{eq:f}
+\end{align}
+%
+with $a = 4A/3$ and $c = 2C/3$ in the notation of Eq.~\eqref{eq:PAC}. Two of
+these are worth reading twice. Equation~\eqref{eq:s} is not an omission: the
+model is defined at $T = 0$, where the entropy of any of its sectors vanishes,
+and $s = 0$ is a value the code returns, not a quantity it declines to
+compute. Equation~\eqref{eq:eps} is the Euler relation itself, so
+%
+\begin{equation}
+\varepsilon + P = T s + \sum_q \mu_q n_q = 3\mu\,\nB = \muB \nB
+\label{eq:euler}
+\end{equation}
+%
+holds by construction; \texttt{verify/} checks it all the same, and it holds to
+$3\times10^{-16}$ relative. Note the middle equality: the three flavour
+potentials are equal here, so $\sum_q \mu_q n_q = 3\mu\,\nB$ with no $\muS$
+term. The bag has cancelled out of Eq.~\eqref{eq:euler} --- its $+B/\hc$ in
+$\varepsilon$ against its $-B/\hc$ in $P$ --- which is the arithmetic
+statement of the fact that a constant vacuum pressure carries no charge and no
+entropy.
+
+The speed of sound follows from Eqs.~\eqref{eq:PAC} and \eqref{eq:eps} without
+any numerical differentiation,
+%
+\begin{equation}
+c_s^2 \;=\; \frac{dP/d\mu}{d\varepsilon/d\mu}
+       \;=\; \frac{4A\mu^2 + 2C}{12A\mu^2 + 2C}
+       \;=\; \frac{2A\mu^2 + C}{6A\mu^2 + C}
+       \;\xrightarrow[\ \mu \to \infty\ ]{}\; \frac{1}{3} ,
+\label{eq:cs2}
+\end{equation}
+%
+the conformal limit being reached from above when $C > 0$ (a gap large enough
+that $\Delta > \ms/2$) and from below when $C < 0$. At the shipped set
+$c_s^2$ falls monotonically from $0.3397$ at the surface to $0.3339$ at
+$\mu = 900$~MeV: this parametrization is always close to conformal, which is
+the property that makes it soft.
+
+\section{Conserved charges}
+\label{sec:charges}
+
+With $n_u = n_d = n_s = \nB$ and the quantum numbers of
+\texttt{eos.general.basis} --- and in this repository's convention
+$S = +1$ per $s$ quark, which is the opposite of the PDG sign --- the
+conserved-charge densities are
+%
+\begin{equation}
+\nB = \frac{n_u + n_d + n_s}{3} , \qquad
+\nC = \frac{2 n_u - n_d - n_s}{3} = 0 , \qquad
+\nS = n_s = \nB ,
+\label{eq:charges}
+\end{equation}
+%
+so
+%
+\begin{equation}
+Y_C \equiv \frac{\nC}{\nB} = 0 , \qquad
+Y_S \equiv \frac{\nS}{\nB} = +1 ,
+\label{eq:fractions}
+\end{equation}
+%
+identically, at every density and for every parameter set. This is the single
+most consequential fact about the model and Sec.~\ref{sec:modes} is a
+consequence of it: \emph{the CFL phase is electrically neutral by
+construction}, with no leptons of any kind, and its strangeness is maximal.
+$Y_C$ here is the non-leptonic charge fraction of this repository's
+convention, and since it vanishes, total electric neutrality --- the separate
+condition $\nC = n_e + n_\mu$ --- is satisfied with $n_e = n_\mu = 0$. The two
+coincide only because both are zero.
+
+The conserved-charge potentials follow from
+$\mu_u = \mu_d = \mu_s = \mu$ through the inverse of the map in
+\texttt{eos.general.basis}:
+%
+\begin{equation}
+\muB = \mu_u + \mu_d + \mu_s - \muS = 3\mu , \qquad
+\muC = \mu_u - \mu_d = 0 , \qquad
+\muS = \mu_s - \mu_d = 0 .
+\label{eq:potentials}
+\end{equation}
+%
+That $\muS = 0$ is a \emph{choice of this parametrization}, not a property of
+the CFL phase: locking equal densities at unequal masses would need unequal
+potentials, and \texttt{eos/alphabag} solves for exactly that, finding
+$\muS \approx 23$--$48$~MeV over $\nB = 0.3$--$3$~fm$^{-3}$ at the matched
+parameters of Sec.~\ref{sec:xcheck}. Here that difference has instead been
+absorbed into term (ii) of Eq.~\eqref{eq:P}, which is why the energy per
+baryon of Sec.~\ref{sec:surface} is $\muB$ and not $\muB + \muS$. Both
+bookkeepings are internally consistent --- each satisfies
+Eq.~\eqref{eq:euler} in its own variables --- and they differ by the amount
+Sec.~\ref{sec:xcheck} measures.
+
+\section{The closure, and the four modes}
+\label{sec:modes}
+
+\subsection{The mode this model has}
+
+The composition is not solved for; it is locked by Eq.~\eqref{eq:locking}.
+There is therefore exactly one request the model answers, and following
+\texttt{eos/alphabag} it carries the phase's own name rather than an
+equilibrium's:
+%
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+mode & independent variables & what closes the system \\
+\midrule
+\texttt{cfl} & $(\nB,\ T = 0)$ & flavour locking $n_u = n_d = n_s$,
+                                 Eq.~\eqref{eq:locking} \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+The gap does not appear as a per-call condition, as it does in
+\texttt{eos/alphabag}, because in the ABPR parametrization $\Delta$ is fitted
+alongside $a_4$, $\ms$ and $B$ and belongs with them in the parameter set;
+carrying it in both places would be two homes for one number.
+
+The ``solve'' behind \texttt{solve\_cfl}$(\nB)$ is the inversion of
+Eq.~\eqref{eq:nB}, and Sec.~\ref{sec:inverse} gives it in closed form.
+
+\subsection{What the other four modes mean here, and why each raises}
+
+The repository's four modes fix the independent variables of an equilibrium.
+None of them is reachable in this phase, and the reason is the physics of
+Eq.~\eqref{eq:locking} rather than an unwritten feature. In each case the code
+raises \texttt{NotImplementedError} naming the reason:
+
+\begin{center}
+\begin{tabular}{p{0.24\textwidth}p{0.68\textwidth}}
+\toprule
+mode & why it has no state here \\
+\midrule
+\texttt{beta\_eq\_neutrinoless}
+  & Beta equilibrium fixes the charge potential through $\muC + \mu_e = 0$.
+    Locking has already fixed the composition and left $\muC = 0$
+    (Eq.~\ref{eq:potentials}) with no electrons to equilibrate against, so
+    the condition has no free variable to determine. Unpaired quark matter in
+    beta equilibrium is \texttt{eos.alphabag} or \texttt{eos.vmit}. \\[4pt]
+\texttt{beta\_eq\_neutrino\_trapped}
+  & The same, plus: a trapped-neutrino mode fixes the lepton fraction
+    $Y_{L_e}$, and the phase carries no leptons at all, so $Y_{L_e}$ has
+    nothing to fix. \\[4pt]
+\texttt{fixed\_YC}
+  & $Y_C = 0$ identically, Eq.~\eqref{eq:fractions}. A request for any other
+    $Y_C$ asks for a state the phase does not have, and a request for
+    $Y_C = 0$ is the \texttt{cfl} mode itself. \\[4pt]
+\texttt{fixed\_YC\_YS}
+  & The same for $Y_C$, and $Y_S = +1$ identically as well. Both fractions
+    are outputs of the closure, not inputs to it. In particular the
+    symmetric-nuclear-matter slice $Y_C = 0.5$, $Y_S = 0$ that this mode
+    exists for is not a state of deconfined locked matter. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Two further restrictions are stated the same way. \textbf{Temperature:}
+Eq.~\eqref{eq:P} is a $T = 0$ expression and $T > 0$ raises; the finite-$T$
+CFL phase, with its BCS gap $\Delta(T)$ and its thermal sectors, is the
+\texttt{cfl} mode of \texttt{eos/alphabag}. Wherever this repository accepts
+an entropy axis in place of a temperature, $s/\nB = 0$ is the only value this
+model reaches, by Eq.~\eqref{eq:s}. \textbf{Species:} every optional sector of
+the repository's uniform flag list --- hyperons, deltas and thermal mesons
+(hadronic sectors, meaningless in a deconfined phase), muons (no leptons
+here), photons, gluons and thermal neutrinos (thermal sectors, identically
+zero at $T = 0$) --- is off, and switching one on raises rather than being
+silently ignored.
+
+\section{The inverse maps}
+\label{sec:inverse}
+
+A table is asked for at a given $\nB$, a stellar-structure integration at a
+given $P$, and a strange-star surface at $P = 0$. All three inversions of
+Sec.~\ref{sec:derived} are closed forms, so this model iterates nowhere and
+has no convergence question to report: the status a solved point carries
+(Sec.~\ref{sec:returns}) is the residual of the closed form, which is at
+round-off.
+
+\paragraph{$\mu$ from $\nB$.} Equation~\eqref{eq:nB} is a cubic in $\mu$ with
+no quadratic and no constant term,
+%
+\begin{equation}
+a\,\mu^3 + c\,\mu - \nB = 0 ,
+\label{eq:cubic}
+\end{equation}
+%
+already in depressed form, so Cardano applies directly. With
+$p = c/a$, $q = -\nB/a$ and discriminant $D = (q/2)^2 + (p/3)^3$,
+%
+\begin{equation}
+\mu = u - \frac{p}{3u} , \quad u = \sqrt[3]{-\frac{q}{2} + \sqrt{D}}
+\qquad (D \ge 0) ,
+\label{eq:cardano}
+\end{equation}
+%
+and for $D < 0$ the three real roots are
+$\mu_k = 2\sqrt{-p/3}\,\cos\!\left(\frac{1}{3}\arccos\frac{3q}{pm}
+- \frac{2\pi k}{3}\right)$, $m = 2\sqrt{-p/3}$, of which the largest is taken.
+The second form of Eq.~\eqref{eq:cardano} --- $-p/(3u)$ rather than the
+textbook $\sqrt[3]{-q/2 - \sqrt{D}}$ --- avoids the cancellation that costs
+digits when $|p|$ is small, and takes the residual of
+Eq.~\eqref{eq:cubic} at $\nB = 3$~fm$^{-3}$ from $1.4\times10^{-11}$ to
+$8.9\times10^{-16}$~fm$^{-3}$.
+
+The root taken is always the physical one: for $\nB > 0$ the sign sequence of
+Eq.~\eqref{eq:cubic} has exactly one change whatever the sign of $c$, so by
+Descartes' rule there is exactly one positive root. When $\Delta < \ms/2$ the
+coefficient $c$ is negative and $\nB(\mu)$ is negative below
+$\mu = \sqrt{-c/a}$; the positive root is the one above that crossing, and it
+is the one Eq.~\eqref{eq:cardano} returns.
+
+\paragraph{$\mu$ from $P$ and from $\varepsilon$.} Both are quadratics in
+$\mu^2$, by Eqs.~\eqref{eq:PAC} and \eqref{eq:eps}:
+%
+\begin{equation}
+\mu(P) = \sqrt{\frac{-C + \sqrt{C^2 + 4A\left(P + B/\hc\right)}}{2A}} ,
+\qquad
+\mu(\varepsilon) = \sqrt{\frac{-C + \sqrt{C^2 + 12A\left(\varepsilon -
+B/\hc\right)}}{6A}} .
+\label{eq:quadratics}
+\end{equation}
+%
+The $+$ branch is the physical one in both: it is the larger root in $\mu^2$,
+and when $C < 0$ --- the only case in which the smaller root is also positive
+--- it is the branch on which $\nB$ and $dP/d\mu$ are positive.
+
+\paragraph{Measured against iteration.} These closed forms replaced three
+\texttt{scipy.optimize.root} calls. Over the parameter sets and targets of
+\texttt{test/baseline} they agree with the iterative answers to
+$2.5\times10^{-13}$ relative at worst, which is inside the $10^{-10}$ the
+baseline is frozen at; the largest disagreement anywhere tested, at
+$\nB = 3$~fm$^{-3}$, is $1.6\times10^{-12}$.
+
+\section{The $P = 0$ surface}
+\label{sec:surface}
+
+A self-bound phase has a surface: the density at which its pressure vanishes,
+where a bare strange star ends with no crust~\cite{Witten1984}. It is
+Eq.~\eqref{eq:quadratics} at $P = 0$, and by Eq.~\eqref{eq:euler} the energy
+per baryon there is
+%
+\begin{equation}
+\left.\frac{\varepsilon}{\nB}\right|_{P=0} \;=\; \muB \;=\; 3\mu_0 ,
+\qquad P(\mu_0) = 0 .
+\label{eq:EA}
+\end{equation}
+%
+At the shipped set $\mu_0 = 277.195$~MeV, so the surface sits at
+$\nB = 0.2023$~fm$^{-3}$ with $\varepsilon = 168.21$~MeV\,fm$^{-3}$ and
+%
+\begin{equation}
+\frac{E}{A} = 831.58\ \mathrm{MeV} ,
+\nonumber
+\end{equation}
+%
+below the $930$~MeV of $^{56}$Fe: the shipped set describes \emph{absolutely
+stable} strange quark matter in the sense of the Bodmer--Witten
+hypothesis~\cite{Witten1984}. The pairing term is what buys that. Switching it
+off ($\Delta = 0$) with everything else unchanged moves the surface to
+$\mu_0 = 310.98$~MeV, $\nB = 0.2315$~fm$^{-3}$ and $E/A = 932.94$~MeV, which
+is above iron and therefore not absolutely stable.
+
+\section{Relation to \texttt{eos/alphabag}, measured}
+\label{sec:xcheck}
+
+\texttt{eos/abpr} is the $T = 0$ analytic limit of the CFL phase of
+\texttt{eos/alphabag}, and studies in this repository drive the two as a
+matched pair. The parameters map exactly:
+%
+\begin{equation}
+\ms \to m_s , \qquad
+\Delta \to \Delta_0 , \qquad
+B^{1/4} \to B^{1/4} , \qquad
+\as = \frac{\pi}{2}\,(1 - a_4) , \qquad
+m_u = m_d = 0 .
+\label{eq:matching}
+\end{equation}
+%
+They are nonetheless \emph{not the same expression}, and the difference is
+exactly one term. \texttt{eos/alphabag} carries the strange quark mass exactly,
+through the Fermi integrals of Eq.~\eqref{eq:massive}; \texttt{eos/abpr}
+carries it as the $\mathcal{O}(\ms^2)$ term (ii) of Eq.~\eqref{eq:P}. So the
+$\ms^4$ term of Eq.~\eqref{eq:expansion}, which \texttt{eos/alphabag} has and
+this model does not, is the whole of the gap between them:
+%
+\begin{equation}
+\Delta P \;\equiv\; P^{\rm ABPR}(\mu) - P^{\rm \alpha Bag}_{\rm CFL}(\mu)
+       \;\simeq\; -\,\frac{\ms^4}{8\pi^2\hc}
+                    \left[\frac{9}{4} + 3\ln\frac{2\mu}{\ms}\right]
+       \;+\; \mathcal{O}\!\left(\frac{\ms^6}{\mu^2}\right) .
+\label{eq:gap}
+\end{equation}
+%
+(Adding term (ii) to \texttt{eos/alphabag} as well would count the strange
+mass twice, which is why its \texttt{cfl} phase deliberately omits it.)
+
+Equation~\eqref{eq:gap} is measured, not asserted. At the shipped set, with
+\texttt{eos/alphabag} evaluated at three equal potentials $\mu_u = \mu_d =
+\mu_s = \mu$ so that the two closures are compared on the same variable:
+
+\begin{center}
+\begin{tabular}{rrrrrr}
+\toprule
+$\mu$ [MeV] & $\nB$ [fm$^{-3}$] & $\Delta P$ [MeV\,fm$^{-3}$]
+            & $\Delta P/P$ & Eq.~\eqref{eq:gap} & ratio \\
+\midrule
+350 & 0.403 & $-5.694$ & $-8.1\times10^{-2}$ & $-5.734$ & 0.9931 \\
+400 & 0.599 & $-6.038$ & $-4.2\times10^{-2}$ & $-6.068$ & 0.9950 \\
+500 & 1.164 & $-6.608$ & $-1.6\times10^{-2}$ & $-6.627$ & 0.9971 \\
+600 & 2.006 & $-7.070$ & $-8.1\times10^{-3}$ & $-7.083$ & 0.9981 \\
+700 & 3.181 & $-7.460$ & $-4.5\times10^{-3}$ & $-7.469$ & 0.9987 \\
+800 & 4.743 & $-7.796$ & $-2.8\times10^{-3}$ & $-7.804$ & 0.9991 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The last column is the check: the measured difference is the analytic
+$\ms^4$ term to within $0.7\%$ at $\mu = 350$~MeV and $0.1\%$ at
+$\mu = 800$~MeV, and the shortfall itself falls like the
+$\mathcal{O}(\ms^6/\mu^2)$ Eq.~\eqref{eq:gap} predicts. The two models agree
+to exactly the order at which they are supposed to differ.
+\texttt{verify/run\_full\_check.py} asserts this, requiring
+$|\Delta P/\Delta P_{\rm Eq.\eqref{eq:gap}} - 1| < 10^{-2}$ over
+$\mu \in [350, 800]$~MeV at the shipped set.
+
+Compared instead at matched $\nB$ --- the way a table pairs them --- the
+same difference reads, at the shipped set,
+%
+\begin{equation}
+\frac{\Delta P}{P} : \ -7.9\times10^{-2} \to -2.8\times10^{-3} , \qquad
+\frac{\Delta \varepsilon}{\varepsilon} : \
+1.3\times10^{-2} \to 1.1\times10^{-3} ,
+\qquad \nB = 0.3 \to 3\ \mathrm{fm^{-3}} ,
+\nonumber
+\end{equation}
+%
+the abpr pressure being the lower of the two throughout and its energy density
+the higher. A study that needs the strange mass better than a percent at the
+lowest densities should use \texttt{eos/alphabag}; one that needs a closed
+form should use this.
+
+\section{What a solved point returns}
+\label{sec:returns}
+
+\texttt{solve\_cfl} returns a \texttt{CFLPoint} --- the same record name and
+the same fields as the paired point of \texttt{eos/alphabag}, so a caller
+comparing the two reads one layout. Every quantity in it is listed here, with
+the equation it comes from:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+field & symbol & from \\
+\midrule
+\texttt{converged}, \texttt{error} & --- & the residual of the closed-form
+                                           inverse, Sec.~\ref{sec:inverse} \\
+\texttt{n\_B}, \texttt{T}          & $\nB$, $T = 0$ & the request \\
+\texttt{Delta0}, \texttt{Delta}    & $\Delta$ & the parameter; equal, there
+                                                being no $\Delta(T)$ \\
+\texttt{mu\_u}, \texttt{mu\_d}, \texttt{mu\_s} & $\mu$ & Eq.~\eqref{eq:cardano},
+                                                all three equal \\
+\texttt{mu\_B}, \texttt{mu\_C}, \texttt{mu\_S} & $3\mu$, $0$, $0$
+                                               & Eq.~\eqref{eq:potentials} \\
+\texttt{mu\_e}, \texttt{mu\_nu}    & $0$ & no leptons, Sec.~\ref{sec:charges} \\
+\texttt{n\_u}, \texttt{n\_d}, \texttt{n\_s} & $\nB$ & Eq.~\eqref{eq:locking} \\
+\texttt{P\_total}                  & $P$ & Eq.~\eqref{eq:P} \\
+\texttt{e\_total}                  & $\varepsilon$ & Eq.~\eqref{eq:eps} \\
+\texttt{s\_total}                  & $s = 0$ & Eq.~\eqref{eq:s} \\
+\texttt{f\_total}                  & $f = \varepsilon$ & Eq.~\eqref{eq:f} \\
+\texttt{Y\_u}, \texttt{Y\_d}, \texttt{Y\_s} & $1$ each & Eq.~\eqref{eq:locking} \\
+\texttt{Y\_C}, \texttt{Y\_S}       & $0$, $+1$ & Eq.~\eqref{eq:fractions} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+$\texttt{eos\_response}$ adds $c_s^2$ from Eq.~\eqref{eq:cs2} in closed form.
+The heat capacities and the thermal indices of the CompOSE list are not
+defined at $T = 0$ and are not returned; the susceptibilities
+$\chi_{ab} = \partial n_a/\partial \mu_b$ are singular here, since
+Eq.~\eqref{eq:locking} leaves $n_C$ and $n_S$ with no potential to respond to.
+
+\section{Numerics}
+\label{sec:numerics}
+
+There are none to speak of, and that is the point of this model: no root
+find, no integral, no warm start, no iteration count and no tolerance. Every
+public function is a polynomial or a root of one, so a table is evaluated by
+array arithmetic rather than by a loop over solved points, and a parameter
+scan costs microseconds per point. The convergence status every public entry
+point carries is nonetheless real: it reports the residual of the closed-form
+inverse against the equation it inverts, judged on the same scaled gate
+(\texttt{eos.general.solve.RESIDUAL\_TOL} $= 10^{-10}$) as every other model
+in this repository, so ``converged'' means the same thing here as it does in a
+model that iterates.
+
+\bibliography{../../docs/eos}
+
+\end{document}
