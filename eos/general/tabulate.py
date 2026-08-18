@@ -126,8 +126,46 @@ def print_progress(info):
           f"in {info['elapsed_s']:.1f}s")
 
 
+def _step(solve, conditions, previous, target, x0, warm_start, max_bisect,
+          depth):
+    """One point of a sweep, bisecting the step back towards the last success.
+
+    A warm start is only good while the state moves smoothly, and along a
+    density sweep it stops being good exactly where something turns on: a
+    threshold crossed inside one grid interval leaves the previous point's
+    answer outside the new basin. Halving the interval and solving the
+    midpoint first gives the continuation a seed on the far side of the
+    threshold, and the recursion repeats until the step is small enough or
+    `max_bisect` halvings have been spent.
+
+    The midpoints are seeds only -- they are not grid values and never reach
+    the returned line. Returns the solved point, or None if the step could not
+    be walked.
+    """
+    exhausted = depth >= max_bisect or previous is None
+    try:
+        point = solve(target, conditions, x0)
+    except (RuntimeError, ValueError):
+        if exhausted:
+            raise           # nothing left to try: the caller's error, intact
+        point = None
+    if accepted(point):
+        return point
+    if exhausted:
+        return None
+
+    middle = 0.5 * (previous + target)
+    at_middle = _step(solve, conditions, previous, middle, x0, warm_start,
+                      max_bisect, depth + 1)
+    if not accepted(at_middle):
+        return None
+    seed = warm_start(at_middle) if warm_start is not None else None
+    return _step(solve, conditions, middle, target, seed, warm_start,
+                 max_bisect, depth + 1)
+
+
 def sweep_lines(lines, axis_values, solve, warm_start=None, skip_errors=True,
-                progress=None, verbose=False, mode=""):
+                progress=None, verbose=False, mode="", max_bisect=0):
     """Solve every line, sweeping `axis_values` with a warm start within each.
 
     Returns a list of lines, each a list of solved points in the order of
@@ -137,8 +175,15 @@ def sweep_lines(lines, axis_values, solve, warm_start=None, skip_errors=True,
     from its line and carries on, resetting the warm start so the next point
     starts fresh; the line is then shorter than `axis_values`. This is the
     behaviour a parameter scan needs, since a grid always has corners where
-    uniform matter has no solution. skip_errors=False re-raises instead, which
-    is what one wants while developing a solver.
+    uniform matter has no solution. skip_errors=False raises instead, which is
+    what one wants while developing a solver.
+
+    max_bisect is how many times a missed step may be halved back towards the
+    last solved point before it is given up on (see `_step`). It is 0 by
+    default -- a model with no threshold along its density sweep has nothing
+    for a bisected step to walk through, and paying for the recursion would
+    buy it nothing -- and a model that crosses onsets sets it, as `eos.dd2`
+    and `eos.alphabag` do.
 
     progress: called once per completed line with
     {mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,
@@ -151,10 +196,11 @@ def sweep_lines(lines, axis_values, solve, warm_start=None, skip_errors=True,
     solved_lines = []
     for conditions in lines:
         started = time.time()
-        line, x0 = [], None
+        line, x0, previous = [], None, None
         for value in values:
             try:
-                point = solve(float(value), conditions, x0)
+                point = _step(solve, conditions, previous, float(value), x0,
+                              warm_start, max_bisect, 0)
             except (RuntimeError, ValueError):
                 if not skip_errors:
                     raise
@@ -162,11 +208,12 @@ def sweep_lines(lines, axis_values, solve, warm_start=None, skip_errors=True,
             if not accepted(point):
                 if not skip_errors:
                     raise RuntimeError(
-                        f"no solution at {values.dtype.name} value {value} "
+                        f"no solution at value {value} "
                         f"for line {conditions}")
                 x0 = None            # start the next point fresh
                 continue
             line.append(point)
+            previous = float(value)
             x0 = warm_start(point) if warm_start is not None else None
         solved_lines.append(line)
 
