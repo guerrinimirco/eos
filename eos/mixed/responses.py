@@ -67,11 +67,11 @@ import numpy as np
 
 from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon
-from eos.dd2.solver import solve_octet, octet_warm_start
+from eos.dd2.solver import octet_warm_start
 from eos.dd2.thermodynamics import neutralizing_leptons
-from eos.vmit.thermodynamics import compute_quark_matter_thermo_from_n
-from eos.mixed.charges import quark_charges
-from eos.mixed.adapters import hadronic_phase
+from eos.mixed.adapters import (
+    _dd2_frozen_block, _vmit_frozen_block, default_pair,
+)
 
 
 def sound_speed_eq(P, eps):
@@ -102,113 +102,54 @@ def adiabatic_index(P, eps):
         return np.where(P > 0.0, (eps + P) / P * sound_speed_eq(P, eps), np.nan)
 
 
-def _hadronic_block(par, flags, n_B, Y_C, Y_S, T, x0=None):
-    """(P, eps, n_C) of hadronic matter at `n_B` with Y_C and Y_S held.
-
-    Matter only: no leptons, no photons. `x0` is the octet unknown vector to
-    start from and is what keeps this solvable — see `_octet_seed`.
-    """
-    # strange_mode='fixed' only when strangeness can actually vary; for
-    # nucleonic matter it would add an inert unknown to the solve.
-    strange = "fixed" if flags.has_strange_baryons else "eq"
-    p = solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="fixed", Y_C=Y_C,
-                    strange_mode=strange, Y_S=Y_S, yc_leptons=False,
-                    include_photons=False, check_consistency=False)
-    return p.P, p.eps, Y_C * n_B
-
-
-def _quark_block(n_u, n_d, n_s, T, vmit_params):
-    """(P, eps, n_C) of quark matter at the given flavour densities.
-
-    Rescaling the flavour densities freezes the quark composition exactly — no
-    re-solve, and no chance of the solve drifting to another root.
-    """
-    _mu_u, _mu_d, _mu_s, P, eps, _s, _n_B = \
-        compute_quark_matter_thermo_from_n(n_u, n_d, n_s, T, vmit_params)
-    return P, eps, quark_charges(n_u, n_d, n_s)[1]
-
-
-def _lepton_block(n_C, flags, T):
+def _lepton_block(n_C, muons, T):
     """(P, eps) of the leptons neutralising a charge density `n_C` [fm^-3].
 
     `neutralizing_leptons` works in natural units and returns
-    (mu_e, (n,P,eps,s)_e, (n,P,eps,s)_mu) there.
+    (mu_e, (n,P,eps,s)_e, (n,P,eps,s)_mu) there. Generic lepton physics; it
+    still lives in `eos.dd2.thermodynamics` and docs/DEFERRED.md records the
+    move to `eos.general` it is owed.
     """
     _mu_e, e_blk, mu_blk = neutralizing_leptons(
-        n_C * hc3, Electron.mass, Muon.mass, flags.muons, T)
+        n_C * hc3, Electron.mass, Muon.mass, muons, T)
     return (e_blk[1] + mu_blk[1]) / hc3, (e_blk[2] + mu_blk[2]) / hc3
 
 
-def _octet_seed(par, flags, result):
-    """Octet unknown vector at the mixture's own hadronic state, or None.
-
-    Both perturbed solves start from here. Without it `solve_octet` falls back
-    to `default_octet_guess`, which seeds from *nucleonic beta equilibrium* —
-    and the hadronic component of a mixed phase is nowhere near that: at a
-    DD2 + vMIT onset with hyperons and Deltas active it carries Y_S ~ 0.5 and a
-    slightly negative Y_C, so the solve stalls at a residual of order 1 and the
-    point comes back nan. That hit roughly one point in six of a beta-
-    equilibrium sweep and left visible holes in c_ad.
-
-    The mixed solve stores its converged potentials but not the meson fields,
-    so the fields are recovered by re-solving the hadronic phase at those
-    potentials — four or five unknowns with a deterministic seed of its own,
-    far cheaper and far more robust than the octet solve it is seeding.
-    """
-    th = result.th_H
-    mu_tB = result.potentials.get("mu_tilde_B_H")
-    if mu_tB is None or th.n_B <= 0.0:
-        return None
-    try:
-        _th, state = hadronic_phase(par, flags, mu_tB, th.mu_C, th.mu_S,
-                                    T=result.T, n_B_guess=th.n_B,
-                                    return_state=True)
-    except RuntimeError:
-        return None
-    # x_phase is [sigma, omega0, rho0, (phi0), n_B]; the octet unknown vector
-    # wants the fields, then the potentials.
-    x = list(state["x_phase"][:-1]) + [mu_tB, th.mu_C]
-    if flags.has_strange_baryons:            # matches strange_mode='fixed'
-        x.append(th.mu_S)
-    return x
-
-
-def _frozen_mixture(par, flags, result, vmit_params, scale, leptons=True,
-                    x0=None):
+def _frozen_mixture(pair, result, scale, muons, leptons=True):
     """(P, eps) of the mixture compressed by `scale` at frozen composition.
 
     Both phases are rescaled by the same factor at fixed chi; see the module
-    docstring for exactly what is held fixed.
+    docstring for exactly what is held fixed. Each phase's part is its own
+    `frozen_thermo` capability; a phase without one raises naming itself
+    rather than silently dropping its contribution.
     """
     chi, T = result.chi, result.T
-    th_H, th_Q = result.th_H, result.th_Q
     P_tot = eps_tot = n_C_tot = 0.0
 
-    if chi < 1.0 and th_H.n_B > 0.0:
-        P, eps, n_C = _hadronic_block(par, flags, th_H.n_B * scale,
-                                      th_H.n_C / th_H.n_B,
-                                      th_H.n_S / th_H.n_B, T, x0=x0)
-        P_tot += (1.0 - chi) * P
-        eps_tot += (1.0 - chi) * eps
-        n_C_tot += (1.0 - chi) * n_C
-
-    if chi > 0.0 and th_Q.n_B > 0.0:
-        P, eps, n_C = _quark_block(th_Q.densities["u"] * scale,
-                                   th_Q.densities["d"] * scale,
-                                   th_Q.densities["s"] * scale, T, vmit_params)
-        P_tot += chi * P
-        eps_tot += chi * eps
-        n_C_tot += chi * n_C
+    for phase, th, w, pos in ((pair[0], result.th_H, 1.0 - chi, "H"),
+                              (pair[1], result.th_Q, chi, "Q")):
+        if w <= 0.0 or th.n_B <= 0.0:
+            continue
+        if phase.frozen_thermo is None:
+            raise NotImplementedError(
+                f"the {phase.name} phase has no frozen_thermo capability, "
+                f"so the frozen-composition sound speed is not defined for "
+                f"this pairing (see docs/DEFERRED.md)")
+        mu_slot = result.potentials.get(phase.slot(pos))
+        P, eps, n_C = phase.frozen_thermo(th, scale, T, mu_slot=mu_slot)
+        P_tot += w * P
+        eps_tot += w * eps
+        n_C_tot += w * n_C
 
     if leptons:
-        P_l, eps_l = _lepton_block(n_C_tot, flags, T)
+        P_l, eps_l = _lepton_block(n_C_tot, muons, T)
         P_tot += P_l
         eps_tot += eps_l
     return P_tot, eps_tot
 
 
 def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
-                       leptons=True):
+                       leptons=True, phases=None, muons=None):
     """Frozen-composition c_ad^2 = dP/deps at the state `result`.
 
     par, flags   : the DD2 `Parametrization` and `SpeciesFlags` the state was
@@ -227,18 +168,19 @@ def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
     "frozen" is a convention, and this one freezes chi and each phase's Y_C and
     Y_S. Returns nan if the perturbed states do not bracket a positive deps.
     """
-    if vmit_params is None:
-        from eos.vmit.parameters import get_vmit_default
-        vmit_params = get_vmit_default()
+    if phases is None:
+        phases = default_pair(par, flags, vmit_params)
+        if muons is None and flags is not None:
+            muons = bool(flags.muons)
+    muons = bool(muons)
     chi = float(np.clip(result.chi, 0.0, 1.0))
     if chi != result.chi:                       # a drifted point: use the wing
         result = _clipped(result, chi)
 
-    kw = dict(leptons=leptons, x0=_octet_seed(par, flags, result))
-    P_lo, e_lo = _frozen_mixture(par, flags, result, vmit_params,
-                                 1.0 - rel_dn, **kw)
-    P_hi, e_hi = _frozen_mixture(par, flags, result, vmit_params,
-                                 1.0 + rel_dn, **kw)
+    P_lo, e_lo = _frozen_mixture(phases, result, 1.0 - rel_dn, muons,
+                                 leptons=leptons)
+    P_hi, e_hi = _frozen_mixture(phases, result, 1.0 + rel_dn, muons,
+                                 leptons=leptons)
     if not (e_hi > e_lo):
         return float("nan")
     return (P_hi - P_lo) / (e_hi - e_lo)
@@ -289,10 +231,10 @@ def sound_speed_frozen_hadronic(par, flags, point, rel_dn=1e-3, leptons=True):
                           has_muS=flags.has_strange_baryons)
 
     def at(scale):
-        P, eps, n_C_s = _hadronic_block(par, flags, n_B * scale, Y_C, Y_S, T,
-                                        x0=x0)
+        P, eps, n_C_s = _dd2_frozen_block(par, flags, n_B * scale, Y_C, Y_S,
+                                          T, x0=x0)
         if leptons:
-            P_l, eps_l = _lepton_block(n_C_s, flags, T)
+            P_l, eps_l = _lepton_block(n_C_s, flags.muons, T)
             P, eps = P + P_l, eps + eps_l
         return P, eps
 
@@ -318,13 +260,12 @@ def sound_speed_frozen_quark(n_u, n_d, n_s, T=0.0, vmit_params=None,
     if vmit_params is None:
         from eos.vmit.parameters import get_vmit_default
         vmit_params = get_vmit_default()
-    flags = _LeptonFlags(muons)
 
     def at(scale):
-        P, eps, n_C = _quark_block(n_u * scale, n_d * scale, n_s * scale, T,
-                                   vmit_params)
+        P, eps, n_C = _vmit_frozen_block(vmit_params, n_u * scale,
+                                         n_d * scale, n_s * scale, T)
         if leptons:
-            P_l, eps_l = _lepton_block(n_C, flags, T)
+            P_l, eps_l = _lepton_block(n_C, muons, T)
             P, eps = P + P_l, eps + eps_l
         return P, eps
 
@@ -335,20 +276,8 @@ def sound_speed_frozen_quark(n_u, n_d, n_s, T=0.0, vmit_params=None,
     return (P_hi - P_lo) / (e_hi - e_lo)
 
 
-class _LeptonFlags:
-    """The one field `_lepton_block` reads, for the quark-only entry point.
-
-    The quark sector has no `SpeciesFlags` of its own — it is not a DD2 model —
-    but the neutralising lepton gas is shared with the hadronic side and is
-    built by the same helper.
-    """
-
-    def __init__(self, muons):
-        self.muons = bool(muons)
-
-
 def frozen_along(par, flags, results, vmit_params=None, rel_dn=1e-3,
-                 leptons=True):
+                 leptons=True, phases=None, muons=None):
     """`sound_speed_frozen` at every state in a sequence, as an array.
 
     Non-convergent points come back nan rather than aborting the sequence: a
@@ -359,7 +288,8 @@ def frozen_along(par, flags, results, vmit_params=None, rel_dn=1e-3,
         try:
             out.append(sound_speed_frozen(par, flags, r,
                                           vmit_params=vmit_params,
-                                          rel_dn=rel_dn, leptons=leptons))
+                                          rel_dn=rel_dn, leptons=leptons,
+                                          phases=phases, muons=muons))
         except (RuntimeError, ValueError):
             out.append(np.nan)
     return np.asarray(out, dtype=float)

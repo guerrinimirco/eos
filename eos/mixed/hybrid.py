@@ -17,12 +17,13 @@ segments:
 The whole hybrid is at ONE equilibrium: the mode the `ChargeSpec` declares
 holds in the wings and the window alike — if Y_C is fixed, it is fixed in all
 three segments; if neutrinos are trapped at Y_Le, both wings trap them too.
-The wings are the pure models' own per-mode solves (`eos.dd2.sweep_octet`,
-the `eos.vmit` mode solvers), dispatched from the spec's regimes by
-`_hadronic_kwargs` and `_quark_wing_solve` below. Only the neutrality locality
-— eta, local against global — is specific to the mixed region: a pure phase
-has one phase to neutralize, so eta has nothing to distribute. A leptonless
-fixed-Y_C hybrid is a charged slice whose window is eta-independent.
+Each wing is that phase's own per-mode pure solve, carried as the
+`wing_sweep` capability of its `Phase` (`eos.mixed.adapters`): the DD2 phase
+sweeps `eos.dd2.sweep_octet` in the spec's mode, the vMIT phase its four mode
+solvers. Only the neutrality locality — eta, local against global — is
+specific to the mixed region: a pure phase has one phase to neutralize, so
+eta has nothing to distribute. A leptonless fixed-Y_C hybrid is a charged
+slice whose window is eta-independent.
 
 The boundaries come from `locate_window`, which reads them off chi — chi = 0 is
 where the quark phase first appears, chi = 1 is where the hadronic phase
@@ -41,12 +42,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from eos.dd2.solver import sweep_octet
-from eos.vmit.eos import (
-    solve_vmit_beta_eq, solve_vmit_fixed_yc,
-    solve_vmit_fixed_yc_ys, solve_vmit_trapped_neutrinos,
-)
-from eos.mixed.charges import Regime
+from eos.mixed.adapters import default_pair
 from eos.mixed.boundaries import locate_window
 from eos.mixed.solver import sweep_mixed
 
@@ -119,89 +115,58 @@ def _enforce_monotone_pressure(P, n_B):
     return np.maximum.accumulate(P)
 
 
-def _hadronic_kwargs(spec, flags):
-    """`sweep_octet` mode arguments for the hadronic wing, from the spec.
-
-    The dispatch reads the spec's regimes, not a mode name, so any regime
-    combination the window can solve gets a consistent wing. Beta equilibrium
-    reduces to exactly the call `sweep_beta_eq_octet` makes.
-    """
-    if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
-        kw = dict(charge_mode="neutral")
-        if spec.L_e is Regime.GLOBAL:                   # trapped neutrinos
-            if not flags.neutrinos:
-                raise ValueError(
-                    "a trapped-neutrino hybrid needs "
-                    "SpeciesFlags(neutrinos=True): the hadronic wing solves "
-                    "at fixed Y_Le and must carry the neutrino population")
-            kw.update(lepton_mode="trapped", Y_Le=spec.targets["Y_Le"])
-        return kw
-    kw = dict(charge_mode="fixed", Y_C=spec.targets["Y_C"],
-              yc_leptons=spec.yc_leptons)
-    if spec.S is Regime.GLOBAL:
-        kw.update(strange_mode="fixed", Y_S=spec.targets["Y_S"])
-    return kw
-
-
-def _quark_wing_solve(spec, n_B, T, vmit_params):
-    """One pure-quark point at the spec's equilibrium.
-
-    The vmit naming differences are absorbed here and go no further: the
-    engine's Y_Le is vmit's Y_L, the engine's `leptons` is vmit's
-    `include_electrons`. Each point cold-starts from vmit's own default guess
-    — those solves are cheap and robust, and a cold start keeps every wing
-    row exactly reproducible by the pure model's own call at the same
-    conditions, which is what test/mixed/test_hybrid_modes.py asserts.
-    """
-    if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
-        if spec.L_e is Regime.GLOBAL:
-            return solve_vmit_trapped_neutrinos(n_B, spec.targets["Y_Le"], T,
-                                                params=vmit_params)
-        return solve_vmit_beta_eq(n_B, T, params=vmit_params)
-    if spec.S is Regime.GLOBAL:
-        return solve_vmit_fixed_yc_ys(n_B, spec.targets["Y_C"],
-                                      spec.targets["Y_S"], T,
-                                      params=vmit_params,
-                                      include_electrons=spec.yc_leptons)
-    return solve_vmit_fixed_yc(n_B, spec.targets["Y_C"], T,
-                               params=vmit_params,
-                               include_electrons=spec.yc_leptons)
-
-
 def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
-                          T=0.0, analytic_jac=False, window=None):
+                          T=0.0, analytic_jac=False, window=None, phases=None,
+                          muons=None):
     """Stitch pure hadronic, eta-mixed and pure quark segments into one core
     EoS — every segment at the equilibrium the `spec` declares.
 
-    Locates the transition first (or reuses a `MixedWindow` passed as `window`),
-    then solves each segment only where it applies. If there is no transition on
-    this grid the whole table is pure hadronic.
+    The wings are each phase's OWN per-mode pure solve, the `wing_sweep`
+    capability of its `Phase`; a pairing in which a phase carries none raises
+    naming the phase, before any solve. Locates the transition first (or
+    reuses a `MixedWindow` passed as `window`), then solves each segment only
+    where it applies. If there is no transition on this grid the whole table
+    is pure hadronic.
 
     Returns a `MixedEoSTable` sorted ascending in n_B.
     """
     grid = np.asarray(n_B_grid, dtype=float)
-    if vmit_params is None:
-        from eos.vmit.parameters import get_vmit_default
-        vmit_params = get_vmit_default()
-    had_kwargs = _hadronic_kwargs(spec, flags)   # validates before any solve
+    if phases is None:
+        if vmit_params is None:
+            from eos.vmit.parameters import get_vmit_default
+            vmit_params = get_vmit_default()
+        phases = default_pair(par, flags, vmit_params)
+        if muons is None and flags is not None:
+            muons = bool(flags.muons)
+    for phase in phases:
+        if phase.wing_sweep is None:
+            raise NotImplementedError(
+                f"the {phase.name} phase has no wing_sweep capability: the "
+                f"stitched hybrid needs each phase's pure per-mode solve "
+                f"(see docs/DEFERRED.md)")
+    p_H, p_Q = phases
+    # Validate the wing dispatch before locating anything (a malformed call
+    # raises here, e.g. a trapped spec without the neutrino population).
+    p_H.wing_sweep(spec, grid[:0], T)
+    p_Q.wing_sweep(spec, grid[:0], T)
 
     if window is None:
         window = locate_window(par, flags, grid, eta, spec,
                                vmit_params=vmit_params, T=T,
-                               analytic_jac=analytic_jac)
+                               analytic_jac=analytic_jac, phases=None if par
+                               is not None else phases, muons=muons)
 
     rows = []                       # (n_B, P, eps, chi, phase)
     n_lo = window.n_onset if window.exists else np.inf
     n_hi = window.n_offset if window.exists else np.inf
 
-    # 1. pure hadronic wing, at the spec's equilibrium. Above the onset the
-    #    hadronic branch is metastable — the mixed phase has taken over — so
-    #    it is cut there.
+    # 1. the first phase's pure wing, at the spec's equilibrium. Above the
+    #    onset that branch is metastable — the mixed phase has taken over —
+    #    so it is cut there.
     had_grid = grid[grid < n_lo]
     if had_grid.size:
-        for p in sweep_octet(par, had_grid, flags, T=T,
-                             stop_at_boundary=True, **had_kwargs):
-            rows.append((p.n_B, p.P, p.eps, 0.0, "H"))
+        for n, P, eps in p_H.wing_sweep(spec, had_grid, T):
+            rows.append((n, P, eps, 0.0, "H"))
 
     # 2. the mixed window, warm-started from the onset.
     if window.exists:
@@ -209,23 +174,17 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
         if win_grid.size:
             for r in sweep_mixed(par, flags, win_grid, eta, spec,
                                  vmit_params=vmit_params, T=T,
-                                 analytic_jac=analytic_jac):
+                                 analytic_jac=analytic_jac,
+                                 phases=None if par is not None else phases,
+                                 muons=muons):
                 # A point that drifted outside (0,1) belongs to a pure wing;
                 # the wings below already cover it.
                 if r.in_mixed_phase:
                     rows.append((r.n_B, r.P, r.eps, r.chi, "mix"))
 
-    # 3. pure quark wing, above the offset, at the spec's equilibrium. A point
-    #    that fails or does not converge is a hole, the same semantics as the
-    #    window sweep.
-    for n in grid[grid > n_hi]:
-        try:
-            q = _quark_wing_solve(spec, float(n), T, vmit_params)
-        except Exception:
-            continue
-        if not q.converged:
-            continue
-        rows.append((q.n_B, q.P_total, q.e_total, 1.0, "Q"))
+    # 3. the second phase's pure wing, above the offset.
+    for n, P, eps in p_Q.wing_sweep(spec, grid[grid > n_hi], T):
+        rows.append((n, P, eps, 1.0, "Q"))
 
     rows.sort(key=lambda row: row[0])
     n_B = np.array([r[0] for r in rows])
@@ -246,6 +205,7 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
 
 
 def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
+                      phases=None, muons=None,
                       crust="BPS", n_transition=0.08, n_ec=160,
                       e_c_min=150.0, e_c_max=3000.0, compute_tidal=True,
                       backend="fast", table=None, tov_parallel=True):
@@ -278,7 +238,8 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
 )
     if table is None:
         table = build_mixed_eos_table(par, flags, n_B_grid, eta, spec,
-                                      vmit_params=vmit_params, T=T)
+                                      vmit_params=vmit_params, T=T,
+                                      phases=phases, muons=muons)
     if crust == "BPS" and not os.path.isfile(CRUST_PATHS.get("BPS", "")):
         crust = "No"
     e_c_vec = generate_ec_logspace(e_c_min, e_c_max, n_ec)

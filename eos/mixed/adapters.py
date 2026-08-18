@@ -47,13 +47,15 @@ import numpy as np
 from scipy.optimize import root
 
 from eos.general.physics_constants import hc, hc3
-from eos.general.basis import quark_potentials
+from eos.general.basis import quark_charges, quark_potentials
 from eos.general.state import PhaseThermo
 from eos.dd2.thermodynamics import thermo_at_potentials
-from eos.dd2.solver import solve_beta_eq_octet
+from eos.dd2.solver import solve_beta_eq_octet, solve_octet, sweep_octet
+from eos.mixed.charges import Regime
 from eos.vmit.parameters import get_vmit_default
 from eos.vmit.thermodynamics import (
-    compute_quark_matter_thermo_from_mu, compute_vmit_thermo_from_mu_n,
+    compute_quark_matter_thermo_from_mu, compute_quark_matter_thermo_from_n,
+    compute_vmit_thermo_from_mu_n,
 )
 
 #: Post-solve residual gate for a phase-internal solve. Matches the tolerance
@@ -465,6 +467,86 @@ def enjl_phase_thermo(point, mu_B, mu_C, mu_S):
         condensation=0.0)
 
 
+def _dd2_wing_kwargs(spec, flags):
+    """`sweep_octet` mode arguments for the DD2 wing, from the spec.
+
+    The dispatch reads the spec's regimes, not a mode name, so any regime
+    combination the window can solve gets a consistent wing. Beta equilibrium
+    reduces to exactly the call `sweep_beta_eq_octet` makes.
+    """
+    if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
+        kw = dict(charge_mode="neutral")
+        if spec.L_e is Regime.GLOBAL:                   # trapped neutrinos
+            if not flags.neutrinos:
+                raise ValueError(
+                    "a trapped-neutrino hybrid needs "
+                    "SpeciesFlags(neutrinos=True): the hadronic wing solves "
+                    "at fixed Y_Le and must carry the neutrino population")
+            kw.update(lepton_mode="trapped", Y_Le=spec.targets["Y_Le"])
+        return kw
+    kw = dict(charge_mode="fixed", Y_C=spec.targets["Y_C"],
+              yc_leptons=spec.yc_leptons)
+    if spec.S is Regime.GLOBAL:
+        kw.update(strange_mode="fixed", Y_S=spec.targets["Y_S"])
+    return kw
+
+
+def _vmit_wing_solve(spec, n_B, T, params):
+    """One pure vMIT point at the spec's equilibrium.
+
+    The vmit naming differences are absorbed here and go no further: the
+    engine's Y_Le is vmit's Y_L, the engine's `leptons` is vmit's
+    `include_electrons`. Each point cold-starts from vmit's own default guess
+    — those solves are cheap and robust, and a cold start keeps every wing
+    row exactly reproducible by the pure model's own call at the same
+    conditions, which is what test/mixed/test_hybrid_modes.py asserts.
+    """
+    from eos.vmit.eos import (
+        solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
+        solve_vmit_trapped_neutrinos,
+    )
+    if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
+        if spec.L_e is Regime.GLOBAL:
+            return solve_vmit_trapped_neutrinos(n_B, spec.targets["Y_Le"], T,
+                                                params=params)
+        return solve_vmit_beta_eq(n_B, T, params=params)
+    if spec.S is Regime.GLOBAL:
+        return solve_vmit_fixed_yc_ys(n_B, spec.targets["Y_C"],
+                                      spec.targets["Y_S"], T,
+                                      params=params,
+                                      include_electrons=spec.yc_leptons)
+    return solve_vmit_fixed_yc(n_B, spec.targets["Y_C"], T,
+                               params=params,
+                               include_electrons=spec.yc_leptons)
+
+
+
+def _dd2_frozen_block(par, flags, n_B, Y_C, Y_S, T, x0=None):
+    """(P, eps, n_C) of DD2 matter at `n_B` with Y_C and Y_S held.
+
+    Matter only: no leptons, no photons. `x0` is the octet unknown vector to
+    start from and is what keeps this solvable deep in a mixed phase.
+    """
+    # strange_mode='fixed' only when strangeness can actually vary; for
+    # nucleonic matter it would add an inert unknown to the solve.
+    strange = "fixed" if flags.has_strange_baryons else "eq"
+    p = solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="fixed", Y_C=Y_C,
+                    strange_mode=strange, Y_S=Y_S, yc_leptons=False,
+                    include_photons=False, check_consistency=False)
+    return p.P, p.eps, Y_C * n_B
+
+
+def _vmit_frozen_block(params, n_u, n_d, n_s, T):
+    """(P, eps, n_C) of vMIT matter at the given flavour densities.
+
+    Rescaling the flavour densities freezes the quark composition exactly — no
+    re-solve, and no chance of the solve drifting to another root.
+    """
+    _mu_u, _mu_d, _mu_s, P, eps, _s, _n_B = \
+        compute_quark_matter_thermo_from_n(n_u, n_d, n_s, T, params)
+    return P, eps, quark_charges(n_u, n_d, n_s)[1]
+
+
 # =============================================================================
 # THE SHIPPED PAIRINGS
 # =============================================================================
@@ -500,6 +582,37 @@ def dd2_phase(par, flags):
                                    check_consistency=False)
         return base.mu_B - base.Sigma_R, base.mu_e, base.mu_B
 
+    def wing_sweep(spec, n_B_grid, T):
+        # The pure DD2 wing at the spec's own equilibrium, warm-started with
+        # dd2's own continuation; a point past the scalar-collapse boundary
+        # ends the sweep rather than raising.
+        kw = _dd2_wing_kwargs(spec, flags)
+        return [(p.n_B, p.P, p.eps)
+                for p in sweep_octet(par, n_B_grid, flags, T=T,
+                                     stop_at_boundary=True, **kw)]
+
+    def frozen_thermo(th, scale, T, mu_slot=None):
+        # This phase compressed by `scale` with its own Y_C and Y_S held (the
+        # frozen convention of eos.mixed.responses). The octet solve is
+        # seeded from the phase's state at its own slot potential; without
+        # that the fallback seeds from nucleonic beta equilibrium, which a
+        # mixed phase's hadronic component is nowhere near, and roughly one
+        # point in six comes back nan. The seed is deterministic, so both
+        # stencil points of a derivative receive the same vector.
+        x0 = None
+        if mu_slot is not None and th.n_B > 0.0:
+            try:
+                _th, state = hadronic_phase(par, flags, mu_slot, th.mu_C,
+                                            th.mu_S, T=T, n_B_guess=th.n_B,
+                                            return_state=True)
+                x0 = list(state["x_phase"][:-1]) + [mu_slot, th.mu_C]
+                if flags.has_strange_baryons:
+                    x0.append(th.mu_S)
+            except RuntimeError:
+                x0 = None
+        return _dd2_frozen_block(par, flags, th.n_B * scale,
+                                 th.n_C / th.n_B, th.n_S / th.n_B, T, x0=x0)
+
     try:                       # backends/ is deletable; absent means numeric
         from eos.mixed.backends.jacobian import _hadronic_block
         jac = (lambda mu, mu_C, mu_S, T, state, th:
@@ -508,7 +621,8 @@ def dd2_phase(par, flags):
         jac = None
 
     return Phase(name="DD2", thermo=thermo, potential_kind="kinetic",
-                 seed=seed, cold_start=cold_start, jacobian_block=jac)
+                 seed=seed, cold_start=cold_start, wing_sweep=wing_sweep,
+                 frozen_thermo=frozen_thermo, jacobian_block=jac)
 
 
 def vmit_phase(params=None):
@@ -532,6 +646,26 @@ def vmit_phase(params=None):
         q = solve_vmit_beta_eq(n_B, T, params=params)
         return q.mu_B, q.mu_e, q.mu_B
 
+    def wing_sweep(spec, n_B_grid, T):
+        # The pure vMIT wing at the spec's own equilibrium. A point that
+        # fails or does not converge is a hole, matching the window sweep.
+        out = []
+        for n in n_B_grid:
+            try:
+                q = _vmit_wing_solve(spec, float(n), T, params)
+            except Exception:
+                continue
+            if not q.converged:
+                continue
+            out.append((q.n_B, q.P_total, q.e_total))
+        return out
+
+    def frozen_thermo(th, scale, T, mu_slot=None):
+        # Rescaling the flavour densities freezes the composition exactly.
+        return _vmit_frozen_block(params, th.densities["u"] * scale,
+                                  th.densities["d"] * scale,
+                                  th.densities["s"] * scale, T)
+
     try:
         from eos.mixed.backends.jacobian import _quark_block
         jac = (lambda mu, mu_C, mu_S, T, state, th:
@@ -540,7 +674,8 @@ def vmit_phase(params=None):
         jac = None
 
     return Phase(name="vMIT", thermo=thermo, potential_kind="physical",
-                 cold_start=cold_start, jacobian_block=jac)
+                 cold_start=cold_start, wing_sweep=wing_sweep,
+                 frozen_thermo=frozen_thermo, jacobian_block=jac)
 
 
 def default_pair(par, flags, vmit_params=None):

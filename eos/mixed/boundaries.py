@@ -106,7 +106,8 @@ class MixedWindow:
 
 def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                   n_probe=12, tol=None, analytic_jac=False, x0=None,
-                  hint=None, max_refine=2, refine="exact"):
+                  hint=None, max_refine=2, refine="exact", phases=None,
+                  muons=None):
     """Find the mixed window on `n_B_grid` by bracketing the chi crossings.
 
     Probes the grid coarsely, reading chi as the regime indicator (chi <= 0
@@ -136,7 +137,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         return MixedWindow(np.nan, np.nan, [])
     if tol is None:
         tol = 0.5 * float(np.min(np.diff(np.sort(grid))))
-    slots = mixed_slots(spec, eta, flags)
+    slots = mixed_slots(spec, eta, flags, pair=phases)
 
     def scan(lo, hi, count):
         """Solve at `count` densities across [lo, hi], warm-started along the way.
@@ -156,7 +157,8 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         """
         return sweep_mixed(par, flags, np.unique(np.linspace(lo, hi, count)),
                            eta, spec, vmit_params=vmit_params, T=T, x0=x0,
-                           analytic_jac=analytic_jac)
+                           analytic_jac=analytic_jac, phases=phases,
+                           muons=muons)
 
     lo, hi = (float(grid[0]), float(grid[-1])) if hint is None else (
         max(float(grid[0]), float(hint[0])), min(float(grid[-1]), float(hint[1])))
@@ -204,7 +206,8 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                                   vmit_params=vmit_params, T=T,
                                   x0=warm_start(r_lo, slots),
                                   nH0=r_lo.th_H.n_B,
-                                  analytic_jac=analytic_jac)
+                                  analytic_jac=analytic_jac, phases=phases,
+                                  muons=muons)
             if not stepped or abs(stepped[-1].n_B - n_mid) > 1e-12:
                 return np.nan
             r = stepped[-1]
@@ -268,7 +271,8 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
             stepped = sweep_mixed(par, flags, [r.n_B, n_next], eta, spec,
                                   vmit_params=vmit_params, T=T,
                                   x0=warm_start(r, slots), nH0=r.th_H.n_B,
-                                  analytic_jac=analytic_jac)
+                                  analytic_jac=analytic_jac, phases=phases,
+                                  muons=muons)
             if not stepped or abs(stepped[-1].n_B - n_next) > 1e-12:
                 return 0.5 * (n_next + r.n_B) if direction < 0 else np.nan
             r = stepped[-1]
@@ -311,14 +315,16 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     window = MixedWindow(float(n_onset), float(n_offset), probes)
     if refine == "exact":
         window = refine_window(window, par, flags, eta, spec,
-                               vmit_params=vmit_params, T=T)
+                               vmit_params=vmit_params, T=T, phases=phases,
+                               muons=muons)
     elif refine != "bisect":
         raise ValueError(f"refine must be 'bisect' or 'exact', got {refine!r}")
     return window
 
 
 def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
-                    n_B0=None, x0=None, check_consistency=False):
+                    n_B0=None, x0=None, check_consistency=False, phases=None,
+                    muons=None):
     """The density at which the mixed system has volume fraction `chi`:
     chi is IMPOSED and the total density n_B is solved for.
 
@@ -343,11 +349,12 @@ def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
     if n_B0 is None:
         raise ValueError("n_B0 is required: the density is the unknown and "
                          "its solve must start somewhere")
-    if vmit_params is None:
+    if phases is None and vmit_params is None:
         from eos.vmit.parameters import get_vmit_default
         vmit_params = get_vmit_default()
     ctx = build_mixed_ctx(spec, eta, None, par, flags, vmit_params, T=T,
-                          n_B_guess=float(n_B0), chi=float(chi))
+                          n_B_guess=float(n_B0), chi=float(chi),
+                          phases=phases, muons=muons)
 
     def guesses():
         if x0 is not None:
@@ -370,7 +377,8 @@ def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
                             check_consistency=check_consistency)
 
 
-def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0):
+def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0,
+                  phases=None, muons=None):
     """Sharpen a scan-located window with one exact fixed-chi solve per
     boundary.
 
@@ -393,7 +401,7 @@ def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0):
     mixed = [p for p in window.probes if p.in_mixed_phase]
     if not mixed:
         return window
-    slots = mixed_slots(spec, eta, flags, fixed_chi=True)
+    slots = mixed_slots(spec, eta, flags, fixed_chi=True, pair=phases)
 
     def seed(point, n_scan):
         # The probe's potentials, with the scan estimate in the n_B slot.
@@ -416,7 +424,7 @@ def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0):
         try:
             r = solve_fixed_chi(par, flags, chi_target, eta, spec,
                                 vmit_params=vmit_params, T=T,
-                                n_B0=n_B0, x0=x0)
+                                n_B0=n_B0, x0=x0, phases=phases, muons=muons)
         except (RuntimeError, ValueError):
             return None
         return r if accepted(r.n_B, n_scan) else None

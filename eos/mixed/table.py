@@ -132,7 +132,7 @@ def composition_row(r):
 
 def solve_mixed_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
                            x0=None, T_lo=0.5, T_hi=50.0, T_cap=250.0,
-                           xtol=1e-4):
+                           xtol=1e-4, phases=None, muons=None):
     """Mixed solve at fixed entropy per baryon S = s/n_B.
 
     An outer one-dimensional root on T, mirroring
@@ -144,7 +144,8 @@ def solve_mixed_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
 
     def point(T):
         return solve_mixed(par, flags, n_B, eta, spec, vmit_params=vmit_params,
-                           T=T, x0=x0, check_consistency=False)
+                           T=T, x0=x0, check_consistency=False, phases=phases,
+                           muons=muons)
 
     def f(T):
         return point(T).s / n_B - SnB
@@ -159,14 +160,16 @@ def solve_mixed_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
     return point(brentq(f, T_lo, T_hi, xtol=xtol))
 
 
-def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params):
+def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
+                      phases=None, muons=None):
     """Warm-started n_B sweep at fixed S = s/n_B (one T solve per point)."""
-    slots = mixed_slots(spec, eta, flags)
+    slots = mixed_slots(spec, eta, flags, pair=phases)
     out, x0 = [], None
     for n in n_B_grid:
         try:
             r = solve_mixed_at_entropy(par, flags, float(n), SnB, eta, spec,
-                                       vmit_params=vmit_params, x0=x0)
+                                       vmit_params=vmit_params, x0=x0,
+                                       phases=phases, muons=muons)
         except (RuntimeError, ValueError):
             x0 = None                     # reset the warm start past the gap
             continue
@@ -208,6 +211,9 @@ class MixedTableSpec:
     window_only: bool = True
     analytic_jac: bool = False
     refine: str = "exact"
+    phases: object = None      # a Phase pair for a non-default pairing
+    muons: bool = None         # engine-level; defaults from flags on the
+                               # front-door path
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -245,7 +251,8 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
     if T2 == T1:
         return None
     w = (T - T2) / (T2 - T1)
-    slots = mixed_slots(cs, spec.eta, spec.flags, fixed_chi=True)
+    slots = mixed_slots(cs, spec.eta, spec.flags, fixed_chi=True,
+                        pair=spec.phases)
     i_n = slots.index("n_B")
 
     def extrap(a, b):
@@ -257,12 +264,13 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
     lo, hi = float(np.min(nB)), float(np.max(nB))
     try:
         on = solve_fixed_chi(spec.par, spec.flags, 0.0, spec.eta, cs,
-                             vmit_params=vp, T=T, n_B0=x_on[i_n], x0=x_on)
+                             vmit_params=vp, T=T, n_B0=x_on[i_n], x0=x_on,
+                             phases=spec.phases, muons=spec.muons)
         # The offset's hadronic phase no longer tracks n_B; its internal
         # solve is seeded from the previous isotherm's own hadronic density.
         off = solve_fixed_chi(spec.par, spec.flags, 1.0, spec.eta, cs,
                               vmit_params=vp, T=T, n_B0=off2.th_H.n_B,
-                              x0=x_off)
+                              x0=x_off, phases=spec.phases, muons=spec.muons)
     except (RuntimeError, ValueError):
         return None
     if not (lo <= on.n_B < off.n_B <= hi):
@@ -299,7 +307,7 @@ def _locate_chained(spec, nB, cs, vp, T, hint, history=()):
         if window is not None:
             return window
     kw = dict(vmit_params=vp, T=T, analytic_jac=spec.analytic_jac,
-              refine=spec.refine)
+              refine=spec.refine, phases=spec.phases, muons=spec.muons)
     if hint is not None:
         lo, hi = hint
         pad = max(0.15, hi - lo)          # generous: the docstring's advice
@@ -353,7 +361,7 @@ def build_mixed_table(spec, progress=None, verbose=False):
     axes.update((k, spec.axes[k]) for k in frac_keys)
     lines = lines_from_axes(axes, fixed=spec.fixed)
     vp = spec.vmit_params
-    if vp is None:
+    if spec.phases is None and vp is None:
         from eos.vmit.parameters import get_vmit_default
         vp = get_vmit_default()
 
@@ -373,7 +381,8 @@ def build_mixed_table(spec, progress=None, verbose=False):
 
         if temp_key == "SnB":
             results = _sweep_at_entropy(spec.par, spec.flags, nB,
-                                        float(tv), spec.eta, cs, vp)
+                                        float(tv), spec.eta, cs, vp,
+                                        phases=spec.phases, muons=spec.muons)
             window, n_requested = None, len(nB)
         elif spec.window_only:
             window = _locate_chained(spec, nB, cs, vp, float(tv),
@@ -393,7 +402,8 @@ def build_mixed_table(spec, progress=None, verbose=False):
                                                  window.onset_state,
                                                  window.offset_state)])[-2:]
                     x_on = dict(window.onset_state.potentials, chi=0.0)
-                    slots_n = mixed_slots(cs, spec.eta, spec.flags)
+                    slots_n = mixed_slots(cs, spec.eta, spec.flags,
+                                          pair=spec.phases)
                     sweep_kw = dict(
                         x0=[x_on[name] for name in slots_n],
                         nH0=window.onset_state.th_H.n_B)
@@ -402,6 +412,7 @@ def build_mixed_table(spec, progress=None, verbose=False):
                                       spec.eta, cs, vmit_params=vp,
                                       T=float(tv),
                                       analytic_jac=spec.analytic_jac,
+                                      phases=spec.phases, muons=spec.muons,
                                       **sweep_kw)
                 n_requested = len(inside)
             else:
@@ -410,7 +421,8 @@ def build_mixed_table(spec, progress=None, verbose=False):
         else:
             results = sweep_mixed(spec.par, spec.flags, nB, spec.eta, cs,
                                   vmit_params=vp, T=float(tv),
-                                  analytic_jac=spec.analytic_jac)
+                                  analytic_jac=spec.analytic_jac,
+                                  phases=spec.phases, muons=spec.muons)
             window, n_requested = None, len(nB)
 
         for r in results:
