@@ -150,7 +150,11 @@ eos/
 │   │   └── api.py                  # eos_point / eos_table / eos_response
 │   │
 │   ├── abpr/               # ABPR analytical CFL model (T=0)
-│   │   └── eos.py                  # Analytical P(μ), ε(μ), n_B(μ)
+│   │   ├── parameters.py           # Parameters (m_s, Delta0, a4, B4)
+│   │   ├── species.py              # SpeciesFlags -- every sector off
+│   │   ├── thermodynamics.py       # P(μ), n_B(μ), ε(μ), s, c_s²
+│   │   ├── solver.py               # closed-form inverses, solve_cfl
+│   │   └── api.py                  # eos_point / eos_table / eos_response
 │   │
 │   ├── zlvmit/             # ZL+vMIT hybrid model
 │   │   ├── mixed_phase_eos.py      # Phase transition solvers
@@ -341,47 +345,51 @@ see notebooks/ZLvMIT_hybrid.ipynb for details and implementation
 
 ### 6. ABPR CFL Quark EOS
 
-Analytical CFL quark matter EOS at T=0 (Alford-Braby-Paris-Reddy).
+Colour-flavour locked quark matter at T=0, in closed form
+(Alford-Braby-Paris-Reddy). Pairing locks the three flavour densities
+together, so the composition is fixed: the phase is electrically neutral with
+no leptons, `Y_C = 0` and `Y_S = +1` identically, and the whole model is a
+polynomial in the common quark chemical potential `μ = μ_B/3`. Its one mode is
+`cfl`; the four equilibrium modes have no state here and each raises naming
+the physics.
 
 ```python
-from eos.abpr.eos import (
-    ABPRParams,
-    pressure_abpr,
-    baryon_density_abpr,
-    energy_density_abpr,
-    mu_from_nB_abpr,
-    generate_abpr_tables
-)
 import numpy as np
-
-# Single point calculation
-params = ABPRParams(
-    ms=150.0,      # Strange quark mass (MeV)
-    Delta=100.0,   # Pairing gap (MeV)
-    a4=0.7,        # QCD factor (dimensionless), α = π/2 × (1 - a4)
-    B4=145.0       # Bag constant B^(1/4) (MeV)
+from eos.abpr import (
+    Parameters, pressure, baryon_density, energy_density,
+    mu_from_nB, mu_from_P, eos_point, eos_table,
 )
 
-mu = 400.0  # Quark chemical potential (MeV)
-P = pressure_abpr(mu, params)           # MeV/fm³
-n_B = baryon_density_abpr(mu, params)   # fm⁻³
-epsilon = energy_density_abpr(mu, params)  # MeV/fm³
-
-# Inverse: find μ from n_B
-mu_solved, converged = mu_from_nB_abpr(n_B=0.5, params=params)
-
-# Generate tables for parameter scan
-results = generate_abpr_tables(
-    input_type='nB',                        # 'mu', 'nB', 'P', 'epsilon'
-    input_values=np.linspace(0.16, 1.6, 300),
-    a4_list=[0.6, 0.7, 0.8, 0.9, 1.0],
-    B4_list=[135, 165],
-    Delta_list=[80, 100, 150, 200],
-    ms_list=[150],
-    output_dir="./output",
-    single_table=False  # Separate file for each parameter set
+params = Parameters(
+    m_s=150.0,     # Strange quark mass (MeV)
+    Delta0=100.0,  # CFL pairing gap (MeV)
+    a4=0.7,        # pQCD factor; alpha_s = pi/2 * (1 - a4)
+    B4=145.0,      # Bag constant B^(1/4) (MeV)
 )
+
+mu = 400.0                              # quark chemical potential (MeV)
+P = pressure(mu, params)                # MeV/fm³
+n_B = baryon_density(mu, params)        # fm⁻³
+epsilon = energy_density(mu, params)    # MeV/fm³
+
+# The inverses are closed forms, so nothing iterates.
+mu_solved, converged = mu_from_nB(0.5, params)
+mu_surface, _ = mu_from_P(0.0, params)  # the P = 0 surface of a strange star
+
+# The uniform API
+result = eos_point(params, "cfl", n_B=0.5)
+print(result.ok, result.point.P_total, result.point.mu_B)
+
+rows = eos_table(params, "cfl", axes={"nB": np.linspace(0.2, 1.6, 300)},
+                 rows=True)
 ```
+
+`params.alpha` gives the coupling `alpha_s = pi/2 (1 - a4)` and `params.B` the
+bag constant in MeV⁴ (divide by `(ħc)³` for MeV/fm³), matching
+`eos.alphabag.Parameters` and `eos.vmit.VMITParams`. This model is the T=0
+analytic limit of the CFL phase of `eos.alphabag`, which carries `m_s` exactly
+where this one expands it to `O(m_s²)`; `eos/abpr/abpr.tex` states and
+measures the difference between the two.
 
 ### 7. TOV (Neutron Star Structure)
 

@@ -265,7 +265,31 @@ own session where the baseline and `test_imports.py` are already being run:
               NUCLEATION IS NOT UPDATED (Phase 6). Its suite is already red
               from the sfho renames, so nothing there would have caught a
               missed edit; the exact map it needs is below.
-    abpr      eos.py -> solver.py
+    abpr      DONE: the one file eos.py became parameters.py, species.py,
+              thermodynamics.py, solver.py and api.py, plus verify/, and every
+              name lost its package: `ABPRParams` is `Parameters` (with
+              `ms` -> `m_s` and `Delta` -> `Delta0`, the names its two sibling
+              quark models already use), `pressure_abpr` /
+              `baryon_density_abpr` / `energy_density_abpr` are `pressure` /
+              `baryon_density` / `energy_density`, and `mu_from_nB_abpr` /
+              `mu_from_P_abpr` / `mu_from_epsilon_abpr` are `mu_from_nB` /
+              `mu_from_P` / `mu_from_eps`. `ABPREOSResult` is `CFLPoint`, the
+              name eos/alphabag gives the same record. `Parameters.B` now
+              returns MeV^4 rather than MeV/fm^3, matching alphabag and vmit;
+              the single division by (hbar c)^3 moved to
+              `thermodynamics.pressure`, so no number changed.
+              `get_abpr_default()` is `Parameters.default()` and
+              `get_abpr_custom()` is gone -- the frozen dataclass IS that
+              constructor, and its signature defaults were a SECOND set of
+              defaults (Delta = 100, B4 = 145) disagreeing with the
+              dataclass's own (80, 135) in the same file.
+              Deleted with no caller anywhere: `generate_abpr_tables`,
+              `_write_table`, `_write_combined_table` and the `__main__`
+              parameter-scan block -- a .dat writer with prints in it, which
+              `eos.general.table_io` and `api.eos_table(rows=True)` replace.
+              Every call site is inside eos (nucleation does not import abpr)
+              and moved in the same commit: README section 6 and
+              `notebooks/mass distribution.ipynb`.
     enjl      eos_beta.py + uniform.py -> solver.py (a merge, not a rename)
 
 Function names go with them, per the §13 vocabulary: no name repeats its
@@ -783,6 +807,41 @@ a reason that has nothing to do with seeding.
   has, from the same cause: at exotic fixed fractions the equations have
   solutions with net anti-down and anti-strange densities and the solver
   returns them as converged.
+
+### abpr
+- The three inverse maps are closed forms rather than root finds, so this
+  model reports a residual it can always compute exactly; what it cannot
+  report is a failure mode that does not exist. The one status it does return
+  is `converged = False` for a target outside the phase (a pressure below -B,
+  an energy density below the bag), and that is a property of the request, not
+  of a solve that might have gone better from another start.
+- `eos_response` returns `cs2_isothermal` and nothing else. The heat
+  capacities C_V and C_P and the thermal and adiabatic indices are not defined
+  at T = 0; the susceptibilities chi_ab = dn_a/dmu_b are singular, flavour
+  locking leaving n_C and n_S with no potential to respond to. Closing this
+  would mean giving the model a temperature, which is `eos/alphabag`.
+- Finite temperature is absent by construction, not deferred: the four terms
+  of the ABPR pressure are a T = 0 expression, and the finite-T CFL phase --
+  with its BCS gap Delta(T), its thermal quarks and its entropy correction --
+  is the `cfl` mode of `eos/alphabag`. `T > 0` raises pointing there.
+- The strange quark mass is carried to O(m_s^2) only, so this model and the
+  CFL phase of `eos/alphabag` differ by the m_s^4 term of that expansion.
+  Measured at the shipped set, at three equal potentials, the pressure gap
+  runs from -5.694 MeV/fm^3 at mu = 350 MeV to -7.796 at mu = 800, which is
+  the analytic term to within 0.7% and 0.1% respectively; at matched n_B the
+  disagreement is 7.9e-2 in P and 1.3e-2 in eps at n_B = 0.3 fm^-3, falling to
+  2.8e-3 and 1.1e-3 by 3 fm^-3. This is not a gap to close -- adding the term
+  to abpr would make it eos/alphabag, and adding abpr's O(m_s^2) term to
+  eos/alphabag would count the strange mass twice -- but a study needing the
+  strange mass better than a percent at the lowest densities should use the
+  other model. `verify/run_full_check.py` asserts the relation.
+- There is no published single ABPR parameter set, so `Parameters.default()`
+  is a choice within the range a hybrid study scans rather than a fit to
+  anything. It is the set `test/baseline` is frozen at, and at it the P = 0
+  surface has E/A = 831.58 MeV -- absolutely stable strange quark matter.
+- `eos_table` takes only `axes={'nB': ..., 'T': [0.0]}`: there is one
+  temperature and no fraction to sweep, so a table has exactly one line. The
+  entropy axis is accepted only at SnB = 0, since s = 0 identically.
 
 ### zlvmit
 - `get_default_guess` calls the ZL fixed-fraction and trapped solvers
