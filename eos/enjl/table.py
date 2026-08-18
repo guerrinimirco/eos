@@ -25,7 +25,7 @@ import numpy as np
 
 from eos.enjl.parameters import Parameters
 from eos.enjl.solver import (
-    BetaPoint, check_mode, check_temperature, solve_beta_eq_neutrinoless,
+    BetaPoint, check_mode, check_temperature, solve,
     warm_start,
 )
 from eos.general.tabulate import lines_from_axes, sweep_lines
@@ -35,10 +35,12 @@ DIRECTIONS = ("up", "down")
 
 @dataclass
 class TableSpec:
-    """What to solve: the mode, the density axis, and which branch to follow.
+    """What to solve: the mode, its fractions, the density axis, the branch.
 
     The temperature axis is accepted for the shape every model's table spec
-    has, and must be [0.0]: this is a T = 0 model.
+    has, and must be 0.0: this is a T = 0 model. `fractions` carries the
+    mode's own conditions under CLAUDE.md section 5's names -- Y_C, Y_S, Y_Le
+    -- and is empty for beta_eq_neutrinoless.
     """
     nB: np.ndarray
     mode: str = "beta_eq_neutrinoless"
@@ -46,6 +48,8 @@ class TableSpec:
     direction: str = "up"
     T: float = 0.0
     x0: list = None
+    leptons: bool = True
+    fractions: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -62,6 +66,7 @@ class TableResult:
     nB: np.ndarray
     lines: list
     points: list
+    fractions: dict = field(default_factory=dict)
 
     @property
     def P(self):
@@ -108,20 +113,22 @@ def build_table(spec, progress=None, verbose=False):
     grid = np.atleast_1d(np.asarray(spec.nB, dtype=float))
     order = grid if spec.direction == "up" else grid[::-1]
 
-    def solve(n_B, conditions, x0):
+    def solve_one(n_B, conditions, x0):
         seed = spec.x0 if x0 is None and spec.x0 is not None else x0
-        return solve_beta_eq_neutrinoless(n_B, par=spec.par, x0=seed,
-                                          cold_start=seed is None)
+        return solve(spec.mode, n_B, par=spec.par, x0=seed,
+                     cold_start=seed is None, leptons=spec.leptons,
+                     T=spec.T, **spec.fractions)
 
-    lines = lines_from_axes({"T": [spec.T]})
-    solved = sweep_lines(lines, order, solve, warm_start=warm_start,
+    lines = lines_from_axes({"T": [spec.T]}, fixed=spec.fractions)
+    solved = sweep_lines(lines, order, solve_one, warm_start=warm_start,
                          progress=progress, verbose=verbose, mode=spec.mode,
                          reset_on_failure=False)
     points = solved[0]
     if spec.direction == "down":
         points = points[::-1]
     return TableResult(par=spec.par, mode=spec.mode, direction=spec.direction,
-                       nB=grid, lines=lines, points=points)
+                       nB=grid, lines=lines, points=points,
+                       fractions=dict(spec.fractions))
 
 
 def beta_row(point):
@@ -139,7 +146,8 @@ def beta_row(point):
     return dict(n_B=point.n_b_fm, T=0.0,
                 P=point.P, eps=point.eps, s=0.0, S_per_B=0.0,
                 chi=state.n_bQ / state.n_b if state.n_b > 0 else 0.0,
-                mu_B=point.mu_b, mu_C=-point.mu_e, mu_S=0.0, mu_e=point.mu_e,
+                mu_B=point.mu_b, mu_C=point.mu_C, mu_S=point.mu_S,
+                mu_e=point.mu_e,
                 Y_C=state.n_C / state.n_b if state.n_b > 0 else 0.0,
                 Y_S=state.n_S / state.n_b if state.n_b > 0 else 0.0,
                 n_p=n["p"], n_n=n["n"], n_Lambda=n["Lambda"],

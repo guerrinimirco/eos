@@ -897,21 +897,32 @@ a reason that has nothing to do with seeding.
   structure, and choosing between branches needs a Maxwell construction that
   a single sweep cannot do. `test/baseline` freezes BOTH sweeps for exactly
   that reason.
-- **Three of the four modes raise, and each is a different size.**
-  `beta_eq_neutrino_trapped` needs an eleventh unknown, mu_nue, and one more
-  row, Y_Le n_B = n_e + n_nue: neutrinos are not among the model's degrees of
-  freedom and Eq. (23), mu_i = B_i mu_b - q_i mu_e, has mu_nu = 0 built into
-  it. `fixed_YC` is a one-row swap with `leptons=False` — replace the
-  neutrality row by n_C = Y_C n_B and read mu_e as -mu_C — but with
-  `leptons=True` the lepton potential parts company with mu_C, because total
-  neutrality n_e + n_mu = n_C becomes a separate condition, and the system
-  gains an unknown; CLAUDE.md section 3 requires both, so shipping the cheap
-  half would be a mode that is only half a mode. `fixed_YC_YS` needs mu_S
-  promoted to an unknown, which replaces the two-potential Eq. (23) by the
-  full mu_i = B_i mu_B + C_i mu_C + S_i mu_S over the six strongly
-  interacting species: as closed today mu_S = 0 identically, weak equilibrium
-  not conserving strangeness, so Y_S is an output. Call it half a day for
-  `fixed_YC` including tests, and a day each for the other two.
+- (The entry saying three of the four modes raise is REMOVED: all four are
+  closed. A mode is now a declaration -- `eos.general.modes.ModeSpec`, the
+  mechanism dd2 and sfho already use -- read by one residual assembly, so
+  `beta_eq_neutrinoless` keeps exactly its ten slots and its rows while
+  `fixed_YC`, `fixed_YC_YS` and `beta_eq_neutrino_trapped` add a potential and
+  a row each. `thermo_from_mu(mu_B, mu_C, mu_S, T)` was added with them: it is
+  the phase-adapter surface, nine unknowns including the phase's own n_B, no
+  leptons and no neutrality.)
+- `beta_eq_neutrino_trapped` carries the electron neutrinos as a massless
+  left-handed gas, g = 1, in the lepton-number row and in eps, P and s. It
+  does NOT carry a muon-neutrino family: `Y_Lmu` is not accepted, so the muon
+  family stays transparent (mu_mu = mu_e - mu_nue). Adding it is one more
+  unknown and one more row, and nothing has asked for it.
+- The neutralizing leptons of a held-Y_C mode are found by a local bracketed
+  1-D solve, `solver.neutralizing_leptons`. That is the THIRD copy of this
+  idea in the repository -- `dd2/physics/octet.py::_yc_neutralizing_leptons`
+  is the first and `eos/mixed` imports it out of dd2's kernels -- and the
+  cross-cutting entry above already says it belongs in
+  `general/thermodynamics_leptons.py`. Whoever moves it should absorb all
+  three; this one is written against the shared Fermi integrals, so the move
+  is a deletion here rather than a rewrite.
+- Cold starts stop converging around 0.5 fm^-3 in EVERY mode, not just beta
+  equilibrium; a table warm-starts, which is how the model is used. Measured
+  on a 0.2-0.8 fm^-3 grid: all four modes converge cold at 0.2 and 0.4 and
+  none at 0.6 or 0.8, while a warm-started sweep from 0.10 reaches 1.20 in all
+  four.
 - **The cap in Eq. (6) costs a little thermodynamic consistency, measured.**
   `effective_scalar_densities` caps nbar^s_q at zero from above, which is
   right — a positive value is a condensate of the wrong sign — but where the

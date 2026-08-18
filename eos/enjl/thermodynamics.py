@@ -28,8 +28,9 @@ from scipy.optimize import root
 
 from eos.enjl.parameters import Parameters
 from eos.enjl.species import (
-    BARYONS, DEGENERACY, ISOSPIN, LEPTONS, QUARKS, SPECIES, VALENCE,
-    VALENCE_TOTAL, coupling_rescalings, current_masses,
+    BARYON_NUMBER, BARYONS, CHARGE, DEGENERACY, ISOSPIN, LEPTONS, QUARKS,
+    SPECIES, STRANGENESS, VALENCE, VALENCE_TOTAL, coupling_rescalings,
+    current_masses,
 )
 from eos.general.fermi_integrals import solve_fermi_jel
 from eos.general.physics_constants import hc3
@@ -139,6 +140,25 @@ def kinetic_thermo(nu, m, g, Lambda=0.0):
                                         include_antiparticles=False)
     return (n * hc3, P * hc3, eps * hc3 - vacuum_energy(m, g, Lambda),
             s * hc3, n_s * hc3 - vacuum_scalar_density(m, g, Lambda))
+
+
+def fermi_momentum(nu, m):
+    """Fermi momentum with the clamps a root finder's excursions need.
+
+    Physically kF is at most a few thousand MeV even at the highest densities
+    used here (n_B ~ 10 fm^-3 gives kF ~ 2200 MeV), so clamping avoids float
+    overflow on an off-track iterate while never binding at a real solution.
+    """
+    if not (math.isfinite(nu) and math.isfinite(m)) or m <= 0.0:
+        return 0.0
+    if nu > 5000.0:
+        return 5000.0
+    if nu <= m:
+        return 0.0
+    k2 = (nu - m) * (nu + m)
+    if not math.isfinite(k2) or k2 <= 0.0:
+        return 0.0
+    return min(math.sqrt(k2), 5000.0)
 
 
 # --------------------------------------------------------------------------
@@ -560,3 +580,156 @@ def _baryon_scalar_densities(kF, M_b):
         nu = math.sqrt(kF[b] ** 2 + M_b[b] ** 2)
         out[b] = kinetic_thermo(nu, M_b[b], DEGENERACY[b], 0.0)[4]
     return out
+
+
+# --------------------------------------------------------------------------
+# The block at given chemical potentials: the phase-adapter surface
+# --------------------------------------------------------------------------
+
+def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, x0=None):
+    """The state at given conserved-charge potentials: matter, not a system.
+
+    The counterpart of `thermo_from_n`, and the surface CLAUDE.md section 5's
+    phase-adapter contract is written in: given (mu_B, mu_C, mu_S, T) it
+    solves the model's own self-consistency -- the gap equation, the vector
+    fields, the rearrangement terms AND the phase's own baryon density -- and
+    returns the block. No leptons, no neutrality, no held fraction: those are
+    conditions on a SYSTEM, and this describes matter. A mixed-phase
+    construction consumes exactly this, once per phase.
+
+    Species potentials are the conserved-charge projection of CLAUDE.md
+    section 2,
+
+        mu_i = B_i mu_B + C_i mu_C + S_i mu_S
+
+    over the six strongly interacting species. Nine unknowns -- M_u, M_d, M_s,
+    n_B, n_B^Q, g_omega omega, g_rho rho, Sigma^R_b, Sigma^R_q -- against nine
+    rows: the three gap equations, the definition of n_B^Q, the two
+    vector-field self-consistencies, the two rearrangement definitions, and
+    n_B = sum_i B_i n_i, which is what closes the density.
+
+    Unlike `eos.dd2.thermodynamics.thermo_at_potentials` this takes the
+    PHYSICAL mu_B rather than the kinetic mu_B - Sigma^R. It can, because the
+    rearrangement terms are already carried as unknowns with their defining
+    equations as rows, so the circularity that makes dd2 prefer the kinetic
+    potential is inside the residual here rather than around it.
+
+    WHICH BRANCH is returned is decided by `x0`. Above a first-order
+    transition the same potentials admit more than one solution -- chirally
+    broken, quarkyonic, deconfined -- so a caller that needs a particular
+    branch must seed it, and a caller differentiating this function
+    numerically must make that seed a DETERMINISTIC function of the
+    arguments: seeding from a previous trial point would make the output
+    depend on the path taken to reach it and corrupt the Jacobian.
+
+    Parameters:
+        par:   Parameters.
+        mu_B, mu_C, mu_S: the conserved-charge potentials [MeV].
+        T:     temperature [MeV]; only 0.0 is implemented.
+        x0:    starting guess (M_u, M_d, M_s, n_B, n_B^Q, g_omega omega,
+               g_rho rho, Sigma^R_b, Sigma^R_q), natural units.
+
+    Returns:
+        EoSPoint, in natural units, with the lepton densities zero.
+
+    Raises:
+        RuntimeError if the solve does not reach the repository's residual
+        gate. The public boundary that turns that into a status is
+        `eos.enjl.api`.
+    """
+    from scipy.optimize import least_squares
+
+    from eos.general.solve import RESIDUAL_TOL, scaled_residual_max
+
+    if T != 0.0:
+        raise NotImplementedError(
+            f"eos.enjl is a T = 0 model; got T = {T} MeV")
+    charges = {sp: (BARYON_NUMBER[sp] * mu_B + CHARGE[sp] * mu_C
+                    + STRANGENESS[sp] * mu_S)
+               for sp in BARYONS + QUARKS}
+
+    def state(x):
+        M_q = dict(zip(QUARKS, x[:3]))
+        n_B, n_bQ, g_w, g_r, SigmaR_b, SigmaR_q = x[3:]
+        f = coupling_rescalings(par)
+        alpha_S = par.alpha_S(n_B)
+        M_b = baryon_masses(par, M_q, alpha_S, n_bQ)
+        mass = {**M_b, **M_q}
+
+        kF, n = {}, {sp: 0.0 for sp in SPECIES}
+        for sp in BARYONS + QUARKS:
+            if sp in BARYONS:
+                shift = f[sp] * (3.0 * g_w + ISOSPIN[sp] * g_r) + SigmaR_b
+            else:
+                shift = f[sp] * (g_w + ISOSPIN[sp] * g_r) + SigmaR_q
+            kF[sp] = fermi_momentum(charges[sp] - shift, mass[sp])
+            n[sp] = n_from_kF(kF[sp], DEGENERACY[sp])
+        for sp in LEPTONS:
+            kF[sp] = 0.0
+
+        n_s_b = {b: kinetic_thermo(math.sqrt(kF[b] ** 2 + M_b[b] ** 2),
+                                   M_b[b], DEGENERACY[b], 0.0)[4]
+                 for b in BARYONS}
+        fields = mean_fields(n, n_s_b, M_q, par, n_B)
+        nbar = effective_scalar_densities(kF, M_q, n_s_b, alpha_S, par.Lambda)
+        gap = quark_masses_from_gap(nbar, par)
+
+        res = [M_q[q] - gap[q] for q in QUARKS]
+        res.append(sum(BARYON_NUMBER[sp] * n[sp] for sp in SPECIES) - n_B)
+        res.append(n_bQ - (n["u"] + n["d"] + n["s"]) / 3.0)
+        res.append(g_w - fields.gomega_omega)
+        res.append(g_r - fields.grho_rho)
+        res.append(SigmaR_b - fields.SigmaR_b)
+        res.append(SigmaR_q - fields.SigmaR_q)
+        return n, res
+
+    def scales(x):
+        n_B = max(abs(x[3]), 1.0e-6 * hc3)
+        return [100.0, 100.0, 100.0, n_B, n_B,
+                par.Gamma_w(n_B) * 3.0 * n_B, par.Gamma_r(n_B) * n_B,
+                3000.0, 1000.0]
+
+    # Bounded least squares, as in `eos.enjl.solver.solve` and for the same
+    # reason: an unbounded root find walks into unphysical regions at these
+    # scales, and here it also drifts onto a DIFFERENT root -- at mu_B = 3169
+    # MeV a plain hybr solve returns n_B = 1.29 fm^-3 where the state the
+    # potentials came from has 1.0, which is the coexistence structure showing
+    # up as a wrong answer rather than as a failure.
+    big = 10.0 * abs(mu_B) + 3.0e4
+    lo = [0.0, 0.0, 0.0, 0.0, 0.0, -big, -big, -big, -big]
+    hi = [1000.0, 1000.0, 1000.0, 20.0 * hc3, 20.0 * hc3, big, big, big, big]
+
+    # The seeds tried, in order. Every one is a PURE FUNCTION of the
+    # arguments -- no warm start leaks in -- so this function's output depends
+    # on (mu_B, mu_C, mu_S, x0) alone and stays differentiable by a caller
+    # that takes numerical derivatives of it.
+    seeds = [] if x0 is None else [list(x0)]
+    for n_B0_fm, masses in ((0.2, VACUUM_GUESS), (0.5, VACUUM_GUESS),
+                            (1.0, (par.m_u0, par.m_d0, par.m_s0 + 100.0)),
+                            (2.0, (par.m_u0, par.m_d0, par.m_s0 + 100.0))):
+        n_B0 = n_B0_fm * hc3
+        seeds.append([masses[0], masses[1], masses[2], n_B0, 0.0,
+                      par.Gamma_w(n_B0) * 3.0 * n_B0, 0.0, 0.0, 0.0])
+
+    def scaled(x):
+        return [r / s for r, s in zip(state(x)[1], scales(x))]
+
+    best, error = None, float("inf")
+    for seed in seeds:
+        seed = [min(max(v, l), h) for v, l, h in zip(seed, lo, hi)]
+        sol = least_squares(scaled, seed, bounds=(lo, hi),
+                            xtol=1e-13, ftol=1e-13, gtol=1e-13, max_nfev=1500)
+        this = scaled_residual_max(state(sol.x)[1], scales(sol.x))
+        if this < error:
+            best, error = sol, this
+        if error <= RESIDUAL_TOL:
+            break
+    if error > RESIDUAL_TOL:
+        raise RuntimeError(
+            f"ENJL thermo_from_mu did not converge at mu_B={mu_B:.3f}, "
+            f"mu_C={mu_C:.3f}, mu_S={mu_S:.3f} MeV after {len(seeds)} "
+            f"starting points: best scaled residual {error:.3e} against a "
+            f"{RESIDUAL_TOL:.0e} bound")
+    sol = best
+    n, _ = state(sol.x)
+    return thermo_from_n(n, par=par, x0=list(sol.x[:3]))

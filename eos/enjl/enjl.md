@@ -91,33 +91,68 @@ symmetry energies come out (25.50 and 31.55 MeV measured, against 25.5 and
 the tables' isospin splitting gives exactly 9.0000x Eq. (22) at every nucleonic
 density, with no fit. It is `parameters.RHO_FACTOR`. Do not "fix" it back.
 
-**Modes.** One is closed; three raise naming the physics, and so does any
-T > 0.
+**Modes.** All four are closed, at T = 0; what the model refuses is a
+temperature, not a mode. A mode is a DECLARATION (`eos.general.modes.ModeSpec`)
+that the residual assembly reads -- one binary choice per conserved charge --
+not a per-mode solver.
 
-| mode | status |
-|---|---|
-| `beta_eq_neutrinoless` | closed at T = 0: `mu_i = B_i mu_b - q_i mu_e` and `sum_i q_i n_i = 0`, ten unknowns |
-| `beta_eq_neutrino_trapped` | raises — no neutrinos in the species set, and Eq. (23) has mu_nu = 0 built in |
-| `fixed_YC` | raises — cheap with `leptons=False`, needs an extra unknown with `leptons=True`, and half a mode is not a mode |
-| `fixed_YC_YS` | raises — mu_S = 0 identically here, so Y_S is an output; imposing it means promoting mu_S to an unknown |
+| mode | independent variables | extra unknowns | the charge row |
+|---|---|---|---|
+| `beta_eq_neutrinoless` | (n_B, T=0) | — | `sum_i q_i n_i = 0` |
+| `beta_eq_neutrino_trapped` | (n_B, Y_Le, T=0) | mu_nue | `sum_i q_i n_i = 0` |
+| `fixed_YC` | (n_B, Y_C, T=0) | — | `n_C = Y_C n_B` |
+| `fixed_YC_YS` | (n_B, Y_C, Y_S, T=0) | mu_S | `n_C = Y_C n_B` |
+
+The trapped mode adds `(n_e + n_nue)/n_B = Y_Le`, and `fixed_YC_YS` adds
+`n_S = Y_S n_B`. Species potentials are the conserved-charge projection
+`mu_i = B_i mu_B + C_i mu_C + S_i mu_S`, which reduces to the paper's Eq. (23)
+in the neutrinoless mode, where mu_S = 0 and mu_C = -mu_e.
+
+In the fixed-fraction modes the `leptons` flag decides whether the
+neutralizing electrons and muons are added; either way they enter NO equation,
+n_C being already pinned by the charge row, so they follow afterwards from
+`n_e + n_mu = n_C` and contribute to eps, P and s alone. `leptons=False` gives
+electrically charged matter -- what a mixed-phase construction needs per pure
+phase.
+
+**`thermo_from_mu(mu_B, mu_C, mu_S, T)`** is neither a mode nor a fixed
+composition: it solves the model's own self-consistency INCLUDING the phase's
+own baryon density, with no leptons, no neutrality and no held fraction, and
+returns the block. It is the phase-adapter surface a mixed-phase construction
+consumes. Nine unknowns against the same nine rows, with baryon number read
+the other way round: the mode solve imposes n_B and finds mu_B, this imposes
+mu_B and finds n_B. Which BRANCH comes back is decided by the seed, so a
+caller differentiating it numerically must make that seed a deterministic
+function of the arguments.
 
 `thermodynamics.thermo_from_n` is NOT a fifth mode: it is handed all eight
 densities and determines nothing about the composition, solving only the gap
 equation. It is the "block at given densities" of the shared vocabulary, and
 it is how the paper's Figs. 1-3 are evaluated.
 
-**The beta-equilibrium residual**, ten rows in the order the code assembles
-them, on the unknowns
-`(M_u, M_d, M_s, mu_b, mu_e, n_B^Q, g_omega w, g_rho r, Sigma^R_b, Sigma^R_q)`:
+**The residual**, in the order the code assembles it, on the unknowns
+
+    always  (M_u, M_d, M_s, mu_B, mu_C, n_B^Q, g_omega w, g_rho r,
+             Sigma^R_b, Sigma^R_q)
+    plus     mu_S    iff Y_S is held
+    plus     mu_nue  iff Y_Le is held
 
     1-3   M_q - gap_q(nbar^s)                       scale 100 MeV
     4     sum_i B_i n_i - n_B_target                scale n_B
-    5     sum_i q_i n_i                             scale n_B   (leptons in)
-    6     n_B^Q - (n_u + n_d + n_s)/3               scale n_B
-    7     g_omega w - Gamma_omega J_omega           scale 3 Gamma_omega n_B
-    8     g_rho r   - Gamma_rho   J_rho             scale Gamma_rho n_B
-    9     Sigma^R_b - Sigma^R_b[x]                  scale 3000 MeV
-    10    Sigma^R_q - Sigma^R_q[x]                  scale 1000 MeV
+    5     n_B^Q - (n_u + n_d + n_s)/3               scale n_B
+    6     g_omega w - Gamma_omega J_omega           scale 3 Gamma_omega n_B
+    7     g_rho r   - Gamma_rho   J_rho             scale Gamma_rho n_B
+    8     Sigma^R_b - Sigma^R_b[x]                  scale 3000 MeV
+    9     Sigma^R_q - Sigma^R_q[x]                  scale 1000 MeV
+    ---- the declaration selects what follows ----
+    10    sum_i q_i n_i   OR   n_C - Y_C n_B        scale n_B  (leptons in
+                                                    the neutrality form)
+    11    n_S - Y_S n_B                             scale n_B  (Y_S held)
+    12    n_e + n_nue - Y_Le n_B                    scale n_B  (Y_Le held)
+
+Rows 1-9 are in every mode; 10-12 are what the mode declares, and the count of
+unknowns follows them exactly. Trapped neutrinos are massless and left-handed,
+g = 1, so n_nue = mu_nue^3/(6 pi^2).
 
 Accepted on the largest scaled residual at `general.solve.RESIDUAL_TOL` = 1e-10;
 the shipped grid reaches 8.8e-13 worst, 4.0e-15 median. Bounded least squares
@@ -153,5 +188,5 @@ of two nearly equal terms; there the shared closed form is the less accurate
 of the two, and the species carrying it has a density of 4e-9 fm^-3.
 
 **Not implemented.** Finite temperature; the Maxwell construction and the
-branch rule; `eos_response`; the three modes above. All are recorded in
-`docs/DEFERRED.md` with what closing each would take.
+branch rule; `eos_response`. Both are recorded in `docs/DEFERRED.md` with what
+closing each would take.

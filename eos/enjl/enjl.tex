@@ -43,9 +43,9 @@ thermodynamics at $T = 0$ with the cut-off written out, the gap equation in
 the form the code uses rather than the form the paper prints, the vector and
 rearrangement sector, the assembly of $\varepsilon$, $P$, $s$ and $n^s$, the
 conserved-charge bookkeeping in this repository's conventions, the
-ten-unknown beta-equilibrium residual row by row, and what each of the
-repository's four modes means here --- one is closed, three raise, and the
-reasons are physics rather than unwritten features. Section~\ref{sec:validation}
+equilibrium residual row by row, and how each of the repository's four modes
+--- all four of which are closed --- is assembled from one declaration rather
+than from four solvers. Section~\ref{sec:validation}
 quotes what the implementation actually reproduces, measured against the
 paper and against the author's own tables. The model is $T = 0$ throughout;
 Sec.~\ref{sec:numerics} says where the seam for a finite-temperature
@@ -599,20 +599,59 @@ constituent masses in symmetric matter, $E/A$ of symmetric and pure neutron
 matter, the $\Lambda$ potential depth --- are all evaluated this way, and they
 carry no branch ambiguity because the composition is imposed.
 
-\subsection{The mode this model closes}
+\subsection{The four modes, as one declaration}
 \label{sec:beta}
 
+All four modes of this repository are closed here, at $T = 0$; what the model
+refuses is a temperature, not a mode. And they are not four solvers: a mode is
+a \emph{declaration}, one binary choice per conserved charge, and the residual
+assembly reads it. For each charge, either its fraction is imposed and its
+conjugate potential is an unknown, or its potential is set by an equilibrium
+relation and the fraction comes out.
+
 \begin{center}
-\begin{tabular}{lll}
+\begin{tabular}{llll}
 \toprule
-mode & independent variables & what closes the system \\
+mode & independent variables & extra unknowns & the charge row \\
 \midrule
-\texttt{beta\_eq\_neutrinoless} & $(\nB,\ T = 0)$
-  & Eqs.~\eqref{eq:beta}--\eqref{eq:neutral} \\
+\texttt{beta\_eq\_neutrinoless} & $(\nB,\ T = 0)$ & --- &
+  $\sum_i q_i n_i = 0$ \\
+\texttt{beta\_eq\_neutrino\_trapped} & $(\nB,\ Y_{L_e},\ T = 0)$
+  & $\mu_{\nu_e}$ & $\sum_i q_i n_i = 0$ \\
+\texttt{fixed\_YC} & $(\nB,\ Y_C,\ T = 0)$ & --- & $\nC = Y_C \nB$ \\
+\texttt{fixed\_YC\_YS} & $(\nB,\ Y_C,\ Y_S,\ T = 0)$ & $\muS$
+  & $\nC = Y_C \nB$ \\
 \bottomrule
 \end{tabular}
 \end{center}
 
+\noindent
+The trapped mode adds the row $(n_e + n_{\nu_e})/\nB = Y_{L_e}$, and
+\texttt{fixed\_YC\_YS} the row $\nS = Y_S \nB$. In the two fixed-fraction
+modes the \texttt{leptons} flag decides whether the neutralizing electrons and
+muons are added; either way they enter \emph{no equation}, because $\nC$ is
+already pinned by the charge row, so they are computed afterwards from
+$n_e + n_\mu = \nC$ and contribute to $\varepsilon$, $P$ and $s$ alone. With
+\texttt{leptons=False} the result is electrically charged strongly interacting
+matter, which is what a mixed-phase construction needs for each pure phase
+before imposing global neutrality.
+
+Species potentials are the conserved-charge projection of
+Sec.~\ref{sec:charges},
+%
+\begin{equation}
+\mu_i \;=\; B_i\,\muB \;+\; C_i\,\muC \;+\; S_i\,\muS ,
+\label{eq:projection}
+\end{equation}
+%
+over the six strongly interacting species, with the lepton potentials given by
+the weak-equilibrium relations $\muC + \mu_e = \mu_{\nu_e}$ and
+$\mu_\mu = \mu_e - \mu_{\nu_e}$ wherever $C$ is equilibrated. In the
+neutrinoless mode $\mu_{\nu_e} = 0$ and $\muS = 0$, and
+Eq.~\eqref{eq:projection} reduces to the paper's Eq.~(23), which is the form
+the rest of this section is written in.
+
+\medskip
 \noindent
 Weak equilibrium with free-streaming neutrinos ($\mu_{\nu} = 0$) makes every
 species potential a projection of two numbers, the baryon potential $\mu_b$
@@ -653,11 +692,15 @@ The unknown vector has ten components,
   \mu_b,\; \mu_e,\;
   \nB^{Q},\;
   g_\omega\omega,\; g_\rho\rho,\;
-  \SR_b,\; \SR_q \,\big) ,
+  \SR_b,\; \SR_q \,\big)
+  \;\oplus\; \big(\muS\big)_{Y_S\ \rm held}
+  \;\oplus\; \big(\mu_{\nu_e}\big)_{Y_{L_e}\ \rm held} ,
 \label{eq:unknowns}
 \end{equation}
 %
-and it is longer than the three-unknown gap solve of the fixed-composition
+ten always, plus one potential per held fraction. $\muC$ is \emph{not} in that
+second group: it is a potential of the matter whichever mode is asked, and
+what the declaration changes is the row that closes it. It is longer than the three-unknown gap solve of the fixed-composition
 entry point for one reason: at fixed composition the fields and the
 rearrangement terms are \emph{known} from the densities, whereas here the
 densities are what is being solved for. Carrying $g_\omega\omega$,
@@ -687,10 +730,11 @@ Eq.~\eqref{eq:baryonmass}; then for every species, in turn,
 \label{eq:forward}
 \end{equation}
 %
-with $\mu_i$ from Eq.~\eqref{eq:beta}, and then $n_i$, $n^s_i$, $J_\omega$,
-$J_\rho$ and the two $\SR$ expressions from Secs.~\ref{sec:kinetic}
-and~\ref{sec:meanfield}. The ten residuals, in the order the code assembles
-them, are
+with $\mu_i$ from Eq.~\eqref{eq:projection}, and then $n_i$, $n^s_i$,
+$J_\omega$, $J_\rho$ and the two $\SR$ expressions from
+Secs.~\ref{sec:kinetic} and~\ref{sec:meanfield}. The residuals, in the order
+the code assembles them, are the nine that every mode carries followed by the
+charge row and one row per held fraction:
 
 \begin{center}
 \begin{tabular}{clll}
@@ -703,29 +747,41 @@ row & residual & scale it is divided by & what it imposes \\
 4 & $\sum_i B_i n_i - \nB^{\rm target}$
      & $\nB^{\rm target}$
      & baryon number, Eq.~\eqref{eq:nB} \\
-5 & $\sum_i q_i n_i$
-     & $\nB^{\rm target}$
-     & electric neutrality, Eq.~\eqref{eq:neutral} \\
-6 & $\nB^{Q} - \tfrac13(n_u + n_d + n_s)$
+5 & $\nB^{Q} - \tfrac13(n_u + n_d + n_s)$
      & $\nB^{\rm target}$
      & the quark baryon density, Eq.~\eqref{eq:baryonmass} \\
-7 & $g_\omega\omega - \Gamma_\omega(\nB^{\rm target})\, J_\omega$
+6 & $g_\omega\omega - \Gamma_\omega(\nB^{\rm target})\, J_\omega$
      & $3\,\Gamma_\omega \nB^{\rm target}$
      & the $\omega$ field, Eq.~\eqref{eq:fields} \\
-8 & $g_\rho\rho - \Gamma_\rho(\nB^{\rm target})\, J_\rho$
+7 & $g_\rho\rho - \Gamma_\rho(\nB^{\rm target})\, J_\rho$
      & $\Gamma_\rho \nB^{\rm target}$
      & the $\rho$ field, Eq.~\eqref{eq:fields} \\
-9 & $\SR_b - \SR_b[\mathbf{x}]$
+8 & $\SR_b - \SR_b[\mathbf{x}]$
      & $3000$~MeV
      & baryon rearrangement, Eq.~\eqref{eq:SigmaRb} \\
-10 & $\SR_q - \SR_q[\mathbf{x}]$
+9 & $\SR_q - \SR_q[\mathbf{x}]$
      & $1000$~MeV
      & quark rearrangement, Eq.~\eqref{eq:SigmaRq} \\
+\midrule
+10 & $\sum_i q_i n_i$ \quad\emph{or}\quad $\nC - Y_C\,\nB^{\rm target}$
+     & $\nB^{\rm target}$
+     & neutrality, Eq.~\eqref{eq:neutral}, \emph{or} the held $Y_C$ \\
+11 & $\nS - Y_S\,\nB^{\rm target}$
+     & $\nB^{\rm target}$
+     & the held $Y_S$ \hfill (\texttt{fixed\_YC\_YS} only) \\
+12 & $n_e + n_{\nu_e} - Y_{L_e}\,\nB^{\rm target}$
+     & $\nB^{\rm target}$
+     & the held $Y_{L_e}$ \hfill (trapped mode only) \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \noindent
+Rows 1--9 are present in every mode; rows 10--12 are what the declaration of
+Sec.~\ref{sec:beta} selects, and the count of unknowns follows them exactly.
+The trapped neutrinos are massless and left-handed, $g = 1$, so
+$n_{\nu_e} = \mu_{\nu_e}^3/6\pi^2$.
+
 Row~4 is what licenses evaluating the density-dependent couplings at
 $\nB^{\rm target}$ rather than at the state's own baryon density: at the
 solution the two are equal, and using the target makes
@@ -739,44 +795,29 @@ back to \texttt{thermo\_from\_n}, seeded with the constituent masses just
 found, so the reported state is produced by exactly one code path whichever
 entry point was called.
 
-\subsection{The three modes that raise, and why}
+\subsection{The block at given potentials}
+\label{sec:fromMu}
 
-Each of the following raises \texttt{NotImplementedError} naming its own
-reason rather than returning a state the model does not have:
+One further entry point is neither a mode nor a fixed composition:
+\texttt{thermo\_from\_mu}$(\muB, \muC, \muS, T)$, which solves the model's own
+self-consistency --- the gap equation, the vector fields, the rearrangement
+terms \emph{and the phase's own baryon density} --- and returns the block. No
+leptons, no neutrality, no held fraction: those are conditions on a
+\emph{system}, and this describes matter. It is the surface this
+repository's phase-adapter contract is written in, and a mixed-phase
+construction consumes exactly this, once per phase.
 
-\begin{center}
-\begin{tabular}{p{0.26\textwidth}p{0.66\textwidth}}
-\toprule
-mode & why it is not reachable \\
-\midrule
-\texttt{beta\_eq\_neutrino\_trapped}
-  & Neutrinos are not among the degrees of freedom of Sec.~\ref{sec:dof}, and
-    Eq.~\eqref{eq:beta} carries no lepton-family potential: it is
-    $\mu_i = B_i\mu_b - q_i\mu_e$ with $\mu_{\nu_e} = 0$ built in. A trapped
-    mode would fix $Y_{L_e}$, and there is no $\mu_{\nu_e}$ for it to fix.
-    The mode is meaningful physics for this model and simply not implemented;
-    it needs an eleventh unknown and one more row. \\[4pt]
-\texttt{fixed\_YC}
-  & $Y_C$ is the \emph{non-leptonic} charge fraction of
-    Eq.~\eqref{eq:nCdef}, and imposing it replaces the neutrality row~5 by
-    $\nC - Y_C \nB = 0$. With \texttt{leptons=False} that is a one-row change
-    and $\mu_e$ becomes $-\muC$; with \texttt{leptons=True} the lepton
-    potential separates from $\muC$, since neutrality
-    $n_e + n_\mu = \nC$ is then an additional condition, and the system gains
-    an unknown. Because the repository's flag requires both, the mode raises
-    rather than shipping the half of it that is cheap. \\[4pt]
-\texttt{fixed\_YC\_YS}
-  & The same for $Y_C$, and in addition $\muS = 0$ identically here,
-    Eq.~\eqref{eq:basis}: weak equilibrium does not conserve strangeness, so
-    the model as closed has no potential conjugate to $\nS$ and $Y_S$ is an
-    output. Imposing $Y_S$ requires promoting $\muS$ to an unknown, which
-    changes Eq.~\eqref{eq:beta} into the full three-charge projection
-    $\mu_i = B_i\muB + C_i\muC + S_i\muS$ for all six strongly interacting
-    species. \\
-\bottomrule
-\end{tabular}
-\end{center}
+Nine unknowns, $M_u$, $M_d$, $M_s$, $\nB$, $\nB^Q$, $g_\omega\omega$,
+$g_\rho\rho$, $\SR_b$ and $\SR_q$, against the nine rows of
+Sec.~\ref{sec:residual} with the baryon-number row read the other way round:
+the mode solve imposes $\nB$ and finds $\muB$; this imposes $\muB$ and finds
+$\nB$. Which \emph{branch} is returned is decided by the starting point, since
+above a first-order transition the same potentials admit more than one
+solution --- so a caller that differentiates this function numerically must
+make its seed a deterministic function of the arguments, or the returned
+Jacobian is not the derivative of anything.
 
+\medskip
 \noindent
 \textbf{Temperature.} Every expression in Secs.~\ref{sec:kinetic}
 and~\ref{sec:assembly} is a $T = 0$ expression, $s = 0$ identically by
@@ -833,9 +874,12 @@ field & symbol & from \\
 \end{center}
 
 \noindent
-The beta-equilibrium entry point returns the same record plus the two
-potentials it solved for, $\mu_b$ and $\mu_e$, and the density $\nB$ it was
-asked at. \texttt{eos\_response} is not implemented for this model: the
+A mode solve returns a \texttt{BetaPoint}, which carries the same record plus
+the density it was asked at, the mode declaration it was asked under, the
+conserved-charge potentials $\muB$, $\muC$ and $\muS$ it solved for, the
+lepton potential $\mu_e$, and the converged unknown vector $\mathbf{x}$ ---
+which is what warm-starts the next density of a sweep, and what makes the
+continuation follow one branch. \texttt{eos\_response} is not implemented for this model: the
 second-derivative quantities of the CompOSE list divide into those that need
 $T > 0$ (the heat capacities, the thermal index) and those that need a
 conditioning statement the $T = 0$ branch structure of
@@ -1014,7 +1058,7 @@ $1.5\times10^{-12}$ relative, against a gate of $10^{-10}$.
 \subsection{Internal invariants}
 
 \texttt{eos/enjl/verify/run\_full\_check.py} asserts, over a grid of
-compositions, densities and parameter sets: the Euler relation and
+compositions, densities, modes and parameter sets: the Euler relation and
 $f = \varepsilon - Ts = -P + \sum_i \mu_i n_i$;
 $\mu_i = \partial\varepsilon/\partial n_i$, Eq.~\eqref{eq:HVH}, which is the
 statement that $\SR$ is in $\mu$ and $P$ and not in $\varepsilon$, gated at
@@ -1023,7 +1067,14 @@ whose exception is named rather than absorbed; the gap equation satisfied at
 the returned state, cap included; the charge densities of
 Eqs.~\eqref{eq:nB}--\eqref{eq:nSdef} against \texttt{eos.general.basis};
 Eq.~\eqref{eq:beta} for every species that is present and
-Eq.~\eqref{eq:neutral} to $9\times10^{-13}$~MeV, together with the
+Eq.~\eqref{eq:neutral} to $9\times10^{-13}$~MeV; that each fixed-fraction
+mode returns the fraction it was asked for, to $7\times10^{-15}$; that
+\texttt{fixed\_YC\_YS} at $Y_C = 0.5$, $Y_S = 0$ with the leptons off IS
+nucleonic symmetric matter wherever its own solution is quark-free, to
+$9\times10^{-12}$; that the trapped mode hits $Y_{L_e}$ and satisfies
+$\muC + \mu_e = \mu_{\nu_e}$; that \texttt{thermo\_from\_mu} returns, cold,
+the state whose potentials it was given, to $2\times10^{-13}$; together with
+the
 conserved-charge reading $\muB = \mu_u + 2\mu_d$, $\muC = -\mu_e$, $\muS = 0$
 of Eq.~\eqref{eq:basis}; $0 \le c_s^2 \le 1$ on the stable stretch of a
 continuation, which is LOCATED by walking the sweep rather than assumed, since

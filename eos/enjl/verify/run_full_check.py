@@ -55,6 +55,10 @@ from eos.enjl import (
     solve_beta_eq_neutrinoless, thermo_from_n, vacuum_energy_density,
     vacuum_solution,
 )
+from eos.enjl.solver import (
+    solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
+)
+from eos.enjl.thermodynamics import thermo_from_mu
 from eos.enjl.species import BARYONS, CHARGE, QUARKS, SPECIES
 from eos.enjl.thermodynamics import (
     assemble, effective_scalar_densities, quark_masses_from_gap,
@@ -350,6 +354,52 @@ def check_beta_equilibrium():
                        f"at {detail}")
 
 
+def check_thermo_from_mu():
+    """The potentials of a solved state return that state, cold.
+
+    `thermo_from_mu` is the phase-adapter surface a mixed-phase construction
+    consumes: it takes (mu_B, mu_C, mu_S, T) and solves the model's own
+    self-consistency INCLUDING the phase's own baryon density, with no
+    leptons, no neutrality and no held fraction. So feeding it the potentials
+    of a beta-equilibrium point must return the same matter -- the same n_B,
+    the same constituent masses, the same P and eps once the leptons are taken
+    out of the comparison, which is what the matter-only reference below does.
+
+    Solved COLD at every density, with no warm start, because that is the
+    condition a numerically differentiated adapter has to meet: its output
+    must depend on its arguments and nothing else.
+    """
+    par = Parameters.default()
+    worst, detail, x0 = 0.0, "", None
+    for n_B in (0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.5):
+        try:
+            pt = solve_beta_eq_neutrinoless(n_B, par=par, x0=x0)
+        except RuntimeError:
+            x0 = None
+            continue
+        x0 = list(pt.x)
+        state = pt.point
+        try:
+            back = thermo_from_mu(par, pt.mu_b, pt.mu_C, pt.mu_S)
+        except RuntimeError as err:                        # noqa: BLE001
+            return CheckResult("thermo_from_mu", False, np.inf,
+                               f"n_B={n_B}: {err}")
+        matter = thermo_from_n(
+            {k: (0.0 if k in ("e", "mu") else v * hc3)
+             for k, v in pt.densities.items()},
+            par=par, x0=[state.M_q[q] for q in QUARKS])
+        for got, want, scale, name in (
+                (back.n_b, matter.n_b, matter.n_b, "n_B"),
+                (back.P, matter.P, abs(matter.P), "P"),
+                (back.eps, matter.eps, matter.eps, "eps"),
+                (back.M_q["u"], matter.M_q["u"], matter.M_q["u"], "M_u")):
+            err = abs(got - want) / scale
+            if err > worst:
+                worst, detail = err, f"n_B={n_B} ({name})"
+    return CheckResult("thermo_from_mu", worst < 1e-10, worst,
+                       detail or "cold round trip exact over 0.2-1.5 fm^-3")
+
+
 def check_causality():
     """0 <= c_s^2 <= 1 wherever the beta-equilibrium branch is stable.
 
@@ -421,25 +471,166 @@ def check_vacuum():
                        f"sets; {detail}")
 
 
+def check_fixed_fractions():
+    """The fixed-fraction modes hit the fractions they were asked for.
+
+    Y_C and Y_S are the NON-LEPTONIC fractions of CLAUDE.md section 2, so this
+    also checks that the leptons stayed out of them: with leptons=True the
+    neutralizing gas is added after the solve and must not move Y_C.
+    """
+    worst, detail = 0.0, ""
+    par = Parameters.default()
+    for n_B in (0.2, 0.4, 0.6):
+        for Y_C in (0.0, 0.1, 0.3, 0.5):
+            for leptons in (True, False):
+                try:
+                    pt = solve_fixed_yc(n_B, Y_C, par=par, leptons=leptons)
+                except RuntimeError:
+                    continue
+                got = pt.point.n_C / pt.point.n_b
+                err = abs(got - Y_C)
+                if err > worst:
+                    worst, detail = err, f"n_B={n_B} Y_C={Y_C} leptons={leptons}"
+        for Y_S in (0.0, 0.1):
+            try:
+                pt = solve_fixed_yc_ys(n_B, 0.3, Y_S, par=par, leptons=False)
+            except RuntimeError:
+                continue
+            for got, want, name in ((pt.point.n_C / pt.point.n_b, 0.3, "Y_C"),
+                                    (pt.point.n_S / pt.point.n_b, Y_S, "Y_S")):
+                err = abs(got - want)
+                if err > worst:
+                    worst, detail = err, f"n_B={n_B} Y_S={Y_S} ({name})"
+    return CheckResult("fixed_fractions", worst < 1e-9, worst, detail)
+
+
+def check_symmetric_matter_slice():
+    """fixed_YC_YS at Y_C = 0.5, Y_S = 0, leptons off IS symmetric matter --
+    up to the quarkyonic onset, which this check LOCATES.
+
+    The strongest external check the new modes get. The mode solves for the
+    composition from the two fractions; `thermo_from_n` is handed
+    n_p = n_n = n_B/2 directly. They are different code paths through the same
+    physics and must return the same state -- and that state is the one whose
+    saturation properties reproduce the paper (n_sat = 0.158297 fm^-3,
+    E/A = -16.010 MeV, K_sat = 234.20 MeV).
+
+    They must NOT agree above the quarkyonic onset, and that is the point.
+    Y_C = 0.5 with Y_S = 0 does not forbid u and d quarks -- it only forbids
+    strangeness and fixes the charge -- so once quasi-free quarks appear the
+    mode finds them while the hand-built nucleonic reference cannot. The
+    comparison therefore runs only where the mode's own solution has no
+    quarks, and reports where they appear.
+
+    WHICH densities carry quarks is deliberately not asserted, because it is
+    not a property of the density. Warm-started from 0.10 the sweep carries
+    the quark-bearing branch down to 0.20 fm^-3; solved cold on a 0.05 grid
+    the first quark-bearing point is 0.25; solved cold at {0.30, 0.40, 0.45}
+    there are none, and at 0.50 there are (n_u = n_d ~ 5e-8 fm^-3, and P then
+    parts company with the nucleonic reference by 1.9e-7 relative). All three
+    are roots of the same equations reached from different starting points.
+    Deciding which is realised means comparing free energies across branches
+    -- a construction, not a solve -- and this model does not perform one yet.
+
+    So the check asserts only what is a property of the physics: wherever the
+    mode returns a quark-free state, that state IS nucleonic symmetric matter,
+    to round-off. It reports how many densities that covered, so a change that
+    quietly stopped finding quark-free states could not pass unnoticed.
+    """
+    par = Parameters.default()
+    worst, detail, compared, attempted = 0.0, "", 0, 0
+    for n_B in np.arange(0.10, 0.86, 0.05):
+        n_B = float(n_B)
+        try:
+            pt = solve_fixed_yc_ys(n_B, 0.5, 0.0, par=par, leptons=False)
+        except RuntimeError:
+            continue
+        attempted += 1
+        if sum(pt.densities[q] for q in QUARKS) > 0.0:
+            continue
+        compared += 1
+        ref = thermo_from_n({"p": n_B * hc3 / 2.0, "n": n_B * hc3 / 2.0},
+                            par=par)
+        for got, want, scale, name in (
+                (pt.P, ref.P / hc3, abs(ref.P / hc3) + 1.0, "P"),
+                (pt.eps, ref.eps / hc3, abs(ref.eps / hc3), "eps"),
+                (pt.EperB, ref.EperB, abs(ref.EperB), "E/A")):
+            err = abs(got - want) / scale
+            if err > worst:
+                worst, detail = err, f"n_B={n_B:.2f} ({name})"
+    if compared < 3:
+        return CheckResult(
+            "symmetric_matter", False, np.inf,
+            f"only {compared} of {attempted} solved densities came back "
+            f"quark-free; there is nothing left to compare against nucleonic "
+            f"symmetric matter")
+    return CheckResult("symmetric_matter", worst < 1e-10, worst,
+                       f"{compared}/{attempted} densities quark-free and "
+                       f"identical to nucleonic matter; worst at {detail}")
+
+
+def check_trapped_lepton_number():
+    """The trapped mode hits Y_Le and satisfies mu_C + mu_e = mu_nue.
+
+    The neutrinos are massless and left-handed, g = 1, so
+    n_nue = mu_nue^3/(6 pi^2), and the lepton-family row is
+    (n_e + n_nue)/n_B = Y_Le. The beta relation is the one of
+    `eos.general.modes.electron_potential`, which reduces to mu_C + mu_e = 0
+    when the neutrinos escape.
+    """
+    from eos.enjl.solver import _massless_density, _unpack
+
+    par = Parameters.default()
+    worst_Y, worst_beta, detail = 0.0, 0.0, ""
+    for Y_Le in (0.1, 0.2, 0.3, 0.4):
+        for n_B in (0.2, 0.4):
+            try:
+                pt = solve_beta_eq_neutrino_trapped(n_B, Y_Le, par=par)
+            except RuntimeError:
+                continue
+            _, _, mu_C, _, mu_nue, _ = _unpack(pt.x, pt.spec)
+            n_nue = _massless_density(mu_nue, 1.0) / hc3
+            err_Y = abs((pt.densities["e"] + n_nue) / n_B - Y_Le)
+            err_b = abs(mu_C + pt.point.mu["e"] - mu_nue)
+            if err_Y > worst_Y:
+                worst_Y, detail = err_Y, f"Y_Le={Y_Le} n_B={n_B}"
+            worst_beta = max(worst_beta, err_b)
+    worst = max(worst_Y, worst_beta)
+    return CheckResult("trapped_leptons", worst < 1e-9, worst,
+                       f"Y_Le {worst_Y:.1e}, mu_C+mu_e-mu_nue "
+                       f"{worst_beta:.1e} MeV at {detail}")
+
+
 def check_refusals():
-    """Every mode, temperature, flag and response this model does not have."""
+    """What this model refuses: a temperature, a species flag, a response.
+
+    All four modes of CLAUDE.md section 3 are closed here, so none of them is
+    on this list. What is: any T > 0, since every kinetic expression is a
+    zero-temperature closed form; any species flag moved from the value the
+    model fixes it at; leptons=False in a beta-equilibrium mode, which is
+    defined by the leptons; and eos_response, which needs either T > 0 or a
+    settled branch.
+    """
     par = Parameters.default()
     failures = []
-    for mode in ("beta_eq_neutrino_trapped", "fixed_YC", "fixed_YC_YS"):
-        try:
-            eos_point(par, mode, n_B=0.3)
-        except NotImplementedError:
-            continue
-        except Exception as err:                     # noqa: BLE001
-            failures.append(f"{mode} raised {type(err).__name__}")
-            continue
-        failures.append(f"{mode} returned a state")
     try:
         eos_point(par, "beta_eq_neutrinoless", n_B=0.3, T=10.0)
     except NotImplementedError:
         pass
     else:
         failures.append("T = 10 MeV returned a state")
+    try:
+        eos_point(par, "beta_eq_neutrinoless", n_B=0.3, leptons=False)
+    except ValueError:
+        pass
+    else:
+        failures.append("leptons=False in beta equilibrium was accepted")
+    try:
+        eos_point(par, "fixed_YC", n_B=0.3)
+    except ValueError:
+        pass
+    else:
+        failures.append("fixed_YC without Y_C was accepted")
     for flag, value in (("hyperons", False), ("muons", False),
                         ("deltas", True), ("thermal_mesons", True),
                         ("photons", True), ("thermal_neutrinos", True)):
@@ -456,8 +647,8 @@ def check_refusals():
         failures.append("eos_response returned a response")
     return CheckResult("refusals", not failures, float(len(failures)),
                        "; ".join(failures)
-                       or "three modes, T > 0, six flags and eos_response "
-                          "all raise")
+                       or "T > 0, six flags, a malformed call and "
+                          "eos_response all raise")
 
 
 def check_non_convergence_is_returned():
@@ -483,8 +674,10 @@ def check_non_convergence_is_returned():
 
 CHECKS = (check_euler, check_free_energy, check_rearrangement,
           check_gap_equation, check_charge_basis, check_beta_equilibrium,
-          check_causality, check_vacuum, check_refusals,
-          check_non_convergence_is_returned)
+          check_fixed_fractions, check_symmetric_matter_slice,
+          check_trapped_lepton_number, check_thermo_from_mu,
+          check_causality, check_vacuum,
+          check_refusals, check_non_convergence_is_returned)
 
 
 def run_full_check():

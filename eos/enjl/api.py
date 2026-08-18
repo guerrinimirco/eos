@@ -8,11 +8,12 @@ drives any model the same way:
     eos_table(par, mode, species, axes)             a solved grid
     eos_response(par, mode, species, ...)           second derivatives
 
-The mode this model closes is `beta_eq_neutrinoless`, at T = 0. The other
-three of the repository's four raise naming the physics that is missing
-(`eos.enjl.solver.MODE_REFUSALS`), and so does any T > 0.
+All four modes of CLAUDE.md section 3 are closed here, at T = 0; what this
+model refuses is a temperature, not a mode. Any T > 0 raises, because every
+kinetic expression in the model is a zero-temperature closed form.
 
-Conditions are named exactly n_B and T. Units at this boundary are fm-based:
+Conditions are named exactly n_B, T, Y_C, Y_S and Y_Le. Units at this
+boundary are fm-based:
 n_B in fm^-3, potentials in MeV, eps and P in MeV/fm^3. Natural units stay
 inside `thermodynamics.py` and `solver.py`.
 
@@ -29,7 +30,7 @@ import numpy as np
 
 from eos.enjl.parameters import Parameters
 from eos.enjl.solver import (
-    MODE_FRACTIONS, check_mode, check_temperature, solve_beta_eq_neutrinoless,
+    MODE_FRACTIONS, check_mode, check_temperature, mode_spec, solve,
 )
 from eos.enjl.species import SpeciesFlags
 from eos.enjl.table import DIRECTIONS, TableSpec, beta_row, build_table
@@ -47,14 +48,14 @@ class PointResult:
     point: object = None
 
 
-def _check_call(mode, species, T, SnB, conditions):
-    """Raise unless the request is one this model can be asked at all."""
+def _check_call(mode, species, T, SnB, conditions, leptons=True):
+    """Raise unless the request is one this model can be asked at all.
+
+    `mode_spec` validates the fractions against the mode, so a missing or
+    surplus condition is refused before any work rather than defaulted.
+    """
     check_mode(mode)
-    if conditions:
-        raise ValueError(
-            f"mode {mode!r} takes no fractions; got {sorted(conditions)}. "
-            f"Beta equilibrium fixes the composition, so Y_C, Y_S and Y_Le "
-            f"are outputs here, not conditions")
+    mode_spec(mode, leptons=leptons, **conditions)
     if SnB is not None:
         if T is not None:
             raise ValueError("give exactly one of T / SnB")
@@ -70,7 +71,7 @@ def _check_call(mode, species, T, SnB, conditions):
 
 
 def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
-              T=0.0, SnB=None, x0=None, **conditions):
+              T=0.0, SnB=None, x0=None, leptons=True, **conditions):
     """One solved state; non-convergence is a return value.
 
     Parameters
@@ -78,7 +79,14 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
     par : Parameters
         The model parameters -- always an argument, never module state.
     mode : str
-        `beta_eq_neutrinoless`, the only mode this model closes.
+        Any of the four of CLAUDE.md section 3.
+    leptons : bool
+        For `fixed_YC` and `fixed_YC_YS`, whether the neutralizing electrons
+        and muons are added. With leptons=False the result is electrically
+        charged strongly-interacting matter, which is what a mixed-phase
+        construction needs for each pure phase before imposing global
+        neutrality. Meaningless in beta equilibrium, which is defined by the
+        leptons, and passing False there raises.
     species : SpeciesFlags
         The active degrees of freedom. They are fixed by the model (p, n,
         Lambda, u, d, s, e, mu) and moving a flag raises; see
@@ -100,23 +108,23 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
     -------
     PointResult -- test `.ok` before using `.point`.
     """
-    T = _check_call(mode, species, T, SnB, conditions)
+    T = _check_call(mode, species, T, SnB, conditions, leptons=leptons)
     if n_B is None:
         raise ValueError("n_B is required")
     if n_B <= 0.0:
         raise ValueError(f"n_B must be positive, got {n_B}")
 
     try:
-        point = solve_beta_eq_neutrinoless(n_B, par=par, x0=x0,
-                                           cold_start=x0 is None)
-    except (RuntimeError, ValueError) as err:
+        point = solve(mode, n_B, par=par, x0=x0, cold_start=x0 is None,
+                      leptons=leptons, T=T, **conditions)
+    except RuntimeError as err:
         return PointResult(False, str(err))
     return PointResult(True, "converged", point)
 
 
 def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
-              direction="up", x0=None, rows=False, progress=None,
-              verbose=False):
+              direction="up", x0=None, leptons=True, rows=False,
+              progress=None, verbose=False):
     """A solved grid along the density axis, following one branch.
 
     axes = {'nB': grid, 'T': [0.0]}; the temperature axis may be omitted, in
@@ -138,24 +146,37 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
         table builder in this repository reports. verbose=True installs the
         built-in printer.
     """
+    check_mode(mode)
     axes = dict(axes or {})
     nB = np.atleast_1d(np.asarray(axes.pop("nB"), dtype=float))
     temps = np.atleast_1d(np.asarray(axes.pop("T", [0.0]), dtype=float))
+    wanted = set(MODE_FRACTIONS[mode])
+    fractions = {k: axes.pop(k) for k in list(axes) if k in wanted}
     if axes:
-        raise ValueError(f"mode {mode!r} has no further axes; got "
-                         f"{sorted(axes)}. The fractions of the other modes "
-                         f"are outputs of beta equilibrium, not axes")
+        raise ValueError(f"mode {mode!r} takes axes nB, T and "
+                         f"{sorted(wanted)}; got {sorted(axes)} as well")
+    for key, value in list(fractions.items()):
+        grid = np.atleast_1d(np.asarray(value, dtype=float))
+        if len(grid) != 1:
+            raise NotImplementedError(
+                f"eos.enjl sweeps one fraction combination per table; the "
+                f"{key} axis has {len(grid)} values. Call eos_table once per "
+                f"value -- the density continuation is what carries a sweep "
+                f"here, and a fraction axis would restart it")
+        fractions[key] = float(grid[0])
     if len(temps) != 1:
         raise NotImplementedError(
             f"eos.enjl has one temperature, T = 0; got a temperature axis of "
             f"{len(temps)} values")
-    T = _check_call(mode, species, float(temps[0]), None, {})
+    T = _check_call(mode, species, float(temps[0]), None, fractions,
+                    leptons=leptons)
     if direction not in DIRECTIONS:
         raise ValueError(f"direction must be one of {DIRECTIONS}, "
                          f"got {direction!r}")
 
     result = build_table(
-        TableSpec(nB=nB, mode=mode, par=par, direction=direction, T=T, x0=x0),
+        TableSpec(nB=nB, mode=mode, par=par, direction=direction, T=T, x0=x0,
+                  leptons=leptons, fractions=fractions),
         progress=progress, verbose=verbose)
     if rows:
         return [beta_row(p) for p in result.points]
