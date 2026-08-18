@@ -32,9 +32,11 @@ Usage:
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional
-from scipy.optimize import root
 
 from eos.general.physics_constants import hc, PI2
+from eos.general.solve import (
+    MU_SCALE_FLOOR, RESIDUAL_TOL, scaled_residual_max, solve_system,
+)
 from eos.general.thermodynamics_leptons import (
     electron_thermo, electron_thermo_from_density, neutrino_thermo,
     photon_thermo,
@@ -60,6 +62,15 @@ MODE_FRACTIONS = {
 }
 
 
+def _mu_scale(mu_u, mu_d):
+    """The scale a potential equality is judged against: mu_B = mu_u + 2 mu_d.
+
+    Floored, so a pathological iterate passing through mu_B = 0 cannot divide
+    by zero; physical quark matter has mu_B ~ 10^3 MeV.
+    """
+    return max(abs(mu_u + 2.0 * mu_d), MU_SCALE_FLOOR)
+
+
 # =============================================================================
 # RESULT RECORDS
 # =============================================================================
@@ -67,8 +78,11 @@ MODE_FRACTIONS = {
 class EoSPoint:
     """One solved alphaBag state, with the status a caller must test first.
 
-    When `converged` is False every other field holds the best iterate
-    reached, which is not a physical state.
+    `converged` is judged on `error`, the largest equilibrium residual after
+    each has been divided by the scale of the quantity it balances (see
+    `eos.general.solve.scaled_residual_max`); it is dimensionless, and the
+    gate is `RESIDUAL_TOL`. When `converged` is False every other field holds
+    the best iterate reached, which is not a physical state.
     """
     # Convergence info
     converged: bool = False
@@ -116,9 +130,11 @@ class EoSPoint:
 class CFLPoint:
     """One solved colour-flavour locked state.
 
-    The same fields as `EoSPoint` plus the gap it was solved at. The phase
-    carries no electrons -- flavour locking makes it neutral by construction --
-    so n_e and Y_e are absent rather than zero-valued.
+    The same fields as `EoSPoint` plus the gap it was solved at, and the same
+    convergence contract: `error` is the largest scaled residual and
+    `converged` is that against `RESIDUAL_TOL`. The phase carries no electrons
+    -- flavour locking makes it neutral by construction -- so n_e and Y_e are
+    absent rather than zero-valued.
     """
     # Convergence info
     converged: bool = False
@@ -409,8 +425,9 @@ def solve_beta_eq_neutrinoless(
     alpha = params.alpha
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    if initial_guess is None:
-        initial_guess = default_guess("beta_eq_neutrinoless", n_B, T, params)
+    cold = default_guess("beta_eq_neutrinoless", n_B, T, params)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_u, mu_d, mu_s, mu_e = x
@@ -430,20 +447,21 @@ def solve_beta_eq_neutrinoless(
             mu_s - mu_d,
         ]
 
-    sol = root(residual, initial_guess, method='hybr')
+    def scales_at(x):
+        """Two densities against n_B, two potential equalities against mu_B."""
+        mu_B = _mu_scale(x[0], x[1])
+        return [n_B, n_B, mu_B, mu_B]
 
-    if not sol.success:
-        sol = root(residual, initial_guess, method='lm')
-
-    mu_u, mu_d, mu_s, mu_e = sol.x
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
+    mu_u, mu_d, mu_s, mu_e = x
 
     return point_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, params,
         include_photons=include_photons,
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
-        converged=sol.success,
-        error=np.max(np.abs(sol.fun))
+        converged=converged,
+        error=error
     )
 
 
@@ -486,9 +504,9 @@ def solve_beta_eq_neutrino_trapped(
     alpha = params.alpha
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    if initial_guess is None:
-        initial_guess = default_guess("beta_eq_neutrino_trapped", n_B, T,
-                                      params)
+    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, params)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_u, mu_d, mu_s, mu_e, mu_nu = x
@@ -510,12 +528,14 @@ def solve_beta_eq_neutrino_trapped(
             (n_e + n_nu) / n_B - Y_Le,
         ]
 
-    sol = root(residual, initial_guess, method='hybr')
+    def scales_at(x):
+        """Two densities against n_B, two potential equalities against mu_B;
+        the lepton-fraction row is already dimensionless."""
+        mu_B = _mu_scale(x[0], x[1])
+        return [n_B, n_B, mu_B, mu_B, 1.0]
 
-    if not sol.success:
-        sol = root(residual, initial_guess, method='lm')
-
-    mu_u, mu_d, mu_s, mu_e, mu_nu = sol.x
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
+    mu_u, mu_d, mu_s, mu_e, mu_nu = x
 
     point = point_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, params,
@@ -523,8 +543,8 @@ def solve_beta_eq_neutrino_trapped(
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
         mu_nu=mu_nu,
-        converged=sol.success,
-        error=np.max(np.abs(sol.fun))
+        converged=converged,
+        error=error
     )
     point.Y_L = Y_Le
     return point
@@ -578,8 +598,9 @@ def solve_fixed_yc(
     alpha = params.alpha
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    if initial_guess is None:
-        initial_guess = default_guess("fixed_YC", n_B, T, params, Y_C=Y_C)
+    cold = default_guess("fixed_YC", n_B, T, params, Y_C=Y_C)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_u, mu_d, mu_s = x
@@ -598,12 +619,13 @@ def solve_fixed_yc(
             mu_s - mu_d,
         ]
 
-    sol = root(residual, initial_guess, method='hybr')
+    def scales_at(x):
+        """One density against n_B, one potential equality against mu_B; the
+        charge-fraction row is already dimensionless."""
+        return [n_B, 1.0, _mu_scale(x[0], x[1])]
 
-    if not sol.success:
-        sol = root(residual, initial_guess, method='lm')
-
-    mu_u, mu_d, mu_s = sol.x
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
+    mu_u, mu_d, mu_s = x
     mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
                               initial_guess)
 
@@ -612,8 +634,8 @@ def solve_fixed_yc(
         include_photons=include_photons,
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
-        converged=sol.success,
-        error=np.max(np.abs(sol.fun))
+        converged=converged,
+        error=error
     )
 
 
@@ -663,8 +685,9 @@ def solve_fixed_yc_ys(
     alpha = params.alpha
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    if initial_guess is None:
-        initial_guess = default_guess("fixed_YC_YS", n_B, T, params, Y_C=Y_C)
+    cold = default_guess("fixed_YC_YS", n_B, T, params, Y_C=Y_C)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_u, mu_d, mu_s = x
@@ -684,12 +707,13 @@ def solve_fixed_yc_ys(
             Y_S_calc - Y_S,
         ]
 
-    sol = root(residual, initial_guess, method='hybr')
+    def scales_at(x):
+        """One density against n_B; both fraction rows are already
+        dimensionless."""
+        return [n_B, 1.0, 1.0]
 
-    if not sol.success:
-        sol = root(residual, initial_guess, method='lm')
-
-    mu_u, mu_d, mu_s = sol.x
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
+    mu_u, mu_d, mu_s = x
     mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
                               initial_guess)
 
@@ -698,8 +722,8 @@ def solve_fixed_yc_ys(
         include_photons=include_photons,
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
-        converged=sol.success,
-        error=np.max(np.abs(sol.fun))
+        converged=converged,
+        error=error
     )
 
 
@@ -775,8 +799,9 @@ def solve_cfl(
     alpha = params.alpha
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    if initial_guess is None:
-        initial_guess = default_guess("cfl", n_B, T, params)
+    cold = default_guess("cfl", n_B, T, params)
+    x0 = cold if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else cold
 
     def paired_density(mu, m):
         """One flavour's density in the condensate, Eq. (n_q) of alphabag.tex."""
@@ -791,12 +816,12 @@ def solve_cfl(
             paired_density(mu_s, m_s) - n_B,
         ])
 
-    sol = root(residual, initial_guess, method='hybr')
+    def scales_at(x):
+        """Every row of the locked phase balances a flavour density."""
+        return [n_B, n_B, n_B]
 
-    if not sol.success:
-        sol = root(residual, initial_guess, method='lm')
-
-    mu_u, mu_d, mu_s = sol.x
+    x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
+    mu_u, mu_d, mu_s = x
 
     cfl = cfl_thermo_from_mu(mu_u, mu_d, mu_s, T, Delta0, params)
 
@@ -819,8 +844,8 @@ def solve_cfl(
     f_total = e_total - T * s_total
 
     return CFLPoint(
-        converged=sol.success,
-        error=np.max(np.abs(sol.fun)),
+        converged=converged,
+        error=error,
         n_B=cfl.n_B, T=T, Delta0=Delta0, Delta=cfl.Delta,
         Y_C=cfl.Y_C, Y_S=cfl.Y_S,
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s,

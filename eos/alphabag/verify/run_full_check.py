@@ -25,6 +25,8 @@ the suite reports rather than prints.
                          T_c and its slope matches a numerical derivative.
   9. Causality           0 <= c_s^2 <= 1 along a cold beta-equilibrium
                          sequence.
+ 10. Residual gate       every state this suite solved is inside the
+                         tolerance the model claims to accept at.
 
 Run as `python -m eos.alphabag.verify.run_full_check`.
 """
@@ -37,6 +39,7 @@ from eos.general.physics_constants import hc3
 from eos.general.thermodynamics_leptons import (
     electron_thermo, neutrino_thermo, photon_thermo,
 )
+from eos.general.solve import RESIDUAL_TOL
 from eos.alphabag import (
     Parameters, T_critical, bag_energy, bag_pressure, cfl_dgap_dT, cfl_gap,
     cfl_thermo_from_mu, e_massless, eos_response, gluon_thermo,
@@ -374,6 +377,24 @@ def _check_cfl(par, grid, T):
                        f"gap: {worst_gap:.1e}")
 
 
+def _check_residual_gate(par, grid, T):
+    """Every state this suite solved is inside the gate it claims.
+
+    `converged` is a statement about the largest SCALED residual, not about
+    whether the root finder decided to stop, so this asserts the two agree:
+    nothing came back flagged converged while sitting outside the tolerance.
+    """
+    states = _states(par, grid, T)
+    for n_B in grid:
+        for Delta0 in (50.0, 100.0):
+            states.append(("cfl", solve_cfl(n_B, T, Delta0, params=par)))
+    worst = max(r.error for _, r in states if r.converged)
+    n_bad = sum(1 for _, r in states if not r.converged)
+    return CheckResult("residual gate", n_bad == 0 and worst <= RESIDUAL_TOL,
+                       worst, f"{len(states)} states, {n_bad} unconverged, "
+                              f"tol {RESIDUAL_TOL:.0e}")
+
+
 def _check_causality(par, grid):
     """0 <= c_s^2 <= 1 along the cold beta-equilibrium sequence."""
     worst = 0.0
@@ -407,6 +428,7 @@ def run_full_check(par=None, grid=None, T=10.0):
     report.results.append(_check_mode_closures(par, grid, T))
     report.results.append(_check_cfl(par, grid, T))
     report.results.append(_check_causality(par, grid))
+    report.results.append(_check_residual_gate(par, grid, T))
     return report
 
 

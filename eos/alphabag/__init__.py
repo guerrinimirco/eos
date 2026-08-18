@@ -32,7 +32,8 @@ from eos.alphabag.thermodynamics import (
     cfl_P_correction, cfl_n_correction, cfl_s_correction, cfl_thermo_from_mu,
 )
 from eos.alphabag.solver import (
-    EoSPoint, CFLPoint, MODE_FRACTIONS,
+    EoSPoint, CFLPoint, MODE_FRACTIONS, RESIDUAL_TOL, scaled_residual_max,
+    solve_system,
     default_guess, point_from_mu, cfl_point_from_mu,
     solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
     solve_fixed_yc, solve_fixed_yc_ys, solve_cfl, warm_start,
@@ -54,7 +55,8 @@ __all__ = [
     "T_critical", "cfl_gap", "cfl_dgap_dT",
     "cfl_P_correction", "cfl_n_correction", "cfl_s_correction",
     "cfl_thermo_from_mu",
-    "EoSPoint", "CFLPoint", "MODE_FRACTIONS",
+    "EoSPoint", "CFLPoint", "MODE_FRACTIONS", "RESIDUAL_TOL",
+    "scaled_residual_max", "solve_system",
     "default_guess", "point_from_mu", "cfl_point_from_mu",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys", "solve_cfl", "warm_start",
