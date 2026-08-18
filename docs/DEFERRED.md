@@ -997,6 +997,82 @@ a reason that has nothing to do with seeding.
 - `notebooks/ENJL_usage.py` still sets `figure.dpi` and `figure.figsize`
   directly (see the cross-cutting entry above); it is a per-notebook display
   preference and is left for the notebook rework.
+- **The `fq0.7_B0` deconfined branch is not a root of this residual, and the
+  window at n_b = 5.5757/5.6010 therefore cannot be constructed.** Measured,
+  not inferred. Two causes, the second fatal:
+
+  1. At B = 0 the deconfined *seed* cannot steer. `enjl_branch_seed`
+     distinguishes a deconfined start from a restored one by the n_B^Q slot
+     alone (quark fraction 1.0 against 0.2), and n_B^Q enters the residual in
+     exactly two places -- `baryon_masses` as `B n_B^Q` and `Sigma^R_q` as
+     (1/3) B sum n^s_i -- both multiplied by B, which is zero for this set. All
+     six seeds (three densities x two branches) at mu_B = 6348.7562,
+     mu_C = -100 MeV return the identical root: n_B = 5.5207 fm^-3, baryon
+     fraction 7.71e-2, M_u = 5.50 MeV, g_omega omega = 1978.84 MeV.
+  2. There is no deconfined root there to reach. Solving the quark-only
+     subsystem at the author's own potentials (mu_B = 6348.7562,
+     mu_C = -7.8747 MeV) converges to 3.4e-14 and reproduces her high
+     endpoint -- n_B = 5.6004 against her 5.60098 (1.0e-4 relative),
+     n_u/n_d/n_s = 5.6037/5.7339/5.4637 against 5.6009/5.7306/5.4713. But at
+     that state the baryon effective potentials are nu_p = 520.76,
+     nu_n = 517.76, nu_Lambda = 154.34 MeV against masses M_p = M_n = 16.50
+     and M_Lambda = 151.70 MeV (the author's own printed Mp/Mn/ML -- Eq. (4)
+     agrees). Every baryon is above threshold, so the full residual
+     repopulates them.
+
+  The author's table says the same from her side: at n_b = 5.60098 she reports
+  mu_n = 5852.3091 MeV while mu_b = `munr` = 6348.7562 MeV, a 496.4 MeV gap,
+  with n_n = 8.69e-6 fm^-3. Her baryons are not in chemical equilibrium with
+  her quarks at that row; mu_n floats free once the baryon density collapses.
+  This repository imposes mu_i = B_i mu_B + C_i mu_C + S_i mu_S on every
+  species (CLAUDE.md section 2), so mu_n = mu_B identically and the state is
+  not representable. Reproducing it needs either an explicit occupation
+  restriction excluding baryons from the deconfined phase -- which
+  `docs/enjl/PHASE_TRANSITION_DESIGN.md` section 1e establishes the author's
+  worksheet does NOT implement -- or breaking mu_n = mu_B, which section 2
+  forbids. Pinned by `test/enjl/test_enjl_construction.py`
+  `test_deconfined_branch_absent_at_B_zero`, which fails if a baryon-free root
+  ever appears.
+
+  Separately and independently: the neutralizing mu_C at both endpoints of
+  that window is -33.23 and -7.87 MeV (the rows carry `mue` = 0.511, the
+  electron mass, i.e. no leptons -- the matter self-neutralizes), and
+  `eos.mixed.boundaries.MU_C_SCAN` covers [-300, -20]. Even with a branch that
+  existed, `neutral_phase` could not neutralize it without a wider scan. The
+  three constructible windows all sit at mu_C in [-213, -169] and are
+  unaffected, which is why the constant is left alone.
+- The construction delivers eta = 1 only.
+  `eos.enjl.table.build_constructed_table` raises for any other eta. An
+  eta < 1 delivered table needs the mixed system solved at every density
+  inside the window rather than a lever rule across it, seeded from the
+  eta = 1 point; the solve itself works (measured at fq0.7_B1: chi = 0.4814 at
+  eta = 0.5, n_B = 0.49 fm^-3), so what is missing is the swept table around
+  it, not the physics. f(eta) is monotone decreasing in eta at every density
+  measured -- f(0) - f(1) = -0.029, -0.038 and -0.031 MeV/fm^3 at
+  n_B = 0.470, 0.490 and 0.510 fm^-3, about -6e-5 relative -- with no interior
+  extremum, as `docs/enjl/PHASE_TRANSITION_DESIGN.md` section 5 argues for the
+  endpoints. No minimizer is shipped and none should be: at interior eta both
+  lepton populations exist with weights eta and 1 - eta and enter eps
+  additively, so f there is not variational.
+- The located windows sit systematically ABOVE the author's, by +1.0e-4 to
+  +2.0e-4 in mu_B and +4.2e-4 to +8.7e-4 in P, on all three constructible
+  transitions. Traced, and not a bug in the locator: at the author's own
+  coexistence potentials our matter pressure is below hers on both branches
+  and by a DIFFERENT amount on each (3.3e-5, 2.9e-5 and 1.49e-4 relative for
+  fq1.0_B0, fq1.0_B1, fq0.7_B1), leaving P_lo - P_hi = +0.0061, +0.0060 and
+  +0.0104 MeV/fm^3 where the Maxwell condition needs zero. Dividing that by
+  n_lo - n_hi = -0.0222, -0.0390 and -0.0857 fm^-3 predicts mu_B shifts of
+  +1.99e-4, +1.09e-4 and +1.04e-4, against +1.981e-4, +1.077e-4 and +1.030e-4
+  located -- so the whole bias is that one gap amplified 11-45x by the narrow
+  window. The reference's own internal consistency is the same size: the
+  author's columns fail her own Euler relation P + E - sum_i mu_i n_i by
+  1.7e-4 to 2.3e-4 peak-to-peak relative to P over n_b = 0.3-0.9 fm^-3.
+  Ruled out by arithmetic rather than left open: `locate_maxwell`'s
+  xtol = 1e-8 MeV is seven orders below the 0.12-0.28 MeV shift, and
+  `thermo_from_mu`'s 1e-10 scaled residual gate is further still. The muon
+  treatment is not it either -- the author populates muons at mu_mu = mu_e
+  exactly, as `charged_leptons` does at mu_nue = 0, and switching them off
+  moves P by 1.1-3.3 MeV/fm^3, two to three orders ABOVE the gap.
 
 ### general
 - Most of the thermal meson gas is missing from `general/particles.py`, so it

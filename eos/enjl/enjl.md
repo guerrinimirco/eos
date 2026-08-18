@@ -187,6 +187,43 @@ loose entry is the pressure at kF ~ 1 MeV, where both forms are a cancellation
 of two nearly equal terms; there the shared closed form is the less accurate
 of the two, and the species carrying it has a density of 4e-9 fm^-3.
 
-**Not implemented.** Finite temperature; the Maxwell construction and the
-branch rule; `eos_response`. Both are recorded in `docs/DEFERRED.md` with what
-closing each would take.
+**The construction.** A `build_table` sweep is a continuation: it follows one
+branch past a first-order transition into the metastable region, so it may
+violate dP/dn_B >= 0. The delivered EoS is the other object, and
+`build_constructed_table` assembles it. Two branches coexist where they share
+a baryon potential and a pressure with each phase separately neutral carrying
+its own leptons (the eta = 1, Maxwell construction):
+
+    mu_B^alpha = mu_B^beta = mu_B^co
+    P^alpha + P_l^alpha = P^beta + P_l^beta = P^co
+    n_C^gamma = n_e^gamma + n_mu^gamma,  mu_C^gamma + mu_e^gamma = 0
+
+The lepton pressure belongs in the second line — at eta = 1 the leptons are
+inside the structures whose pressures are equated — and the two phases carry
+DIFFERENT mu_e, which is what eta = 1 means. Between the edge densities
+n_lo = n_B^alpha(mu_B^co) and n_hi = n_B^beta(mu_B^co) the lever rule gives
+the volume fraction f = (n_B - n_lo)/(n_hi - n_lo) of the high phase, and
+every density averages with weights (1-f, f) at constant P = P^co.
+
+The plateau needs no further solve, because on a neutral phase at T = 0 the
+Euler relation collapses: mu_C n_C + mu_e (n_e + n_mu) = 0 by neutrality and
+beta equilibrium, and mu_S = 0, so
+
+    eps = mu_B n_B - P
+
+which makes eps linear in n_B across the plateau automatically and c_s^2 = 0
+there exactly. The slope of the plateau in the (n_B, eps) plane IS mu_B^co.
+Outside every window the delivered point is whichever branch minimises eps at
+that n_B — the T = 0 stability criterion at fixed density, which needs no
+branch bookkeeping. Effective masses, mu_C and mu_e are returned as nan on
+plateau rows: each belongs to one phase and averaging them would invent a
+state that is nowhere in the mixture.
+
+Locating a transition needs both branches at once, so it lives in the
+composite engine (`eos.mixed.construction.enjl_coexistences`) and the located
+windows are handed to the model as an argument — a model does not import a
+composite engine.
+
+**Not implemented.** Finite temperature; the construction at eta < 1;
+`eos_response`. All are recorded in `docs/DEFERRED.md` with what closing each
+would take.

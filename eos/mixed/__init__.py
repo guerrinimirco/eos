@@ -81,6 +81,11 @@ from eos.mixed.adapters import (
     sfho_phase, zl_phase, alphabag_phase, enjl_branch_pair,
 )
 
+# --- where a multi-branch model's transitions are, as data ------------------
+from eos.mixed.construction import (
+    CONSTRUCTION_PAIRS, Coexistence, enjl_coexistences,
+)
+
 # --- solving one point, and sweeping density -------------------------------
 from eos.mixed.solver import (
     MixedResult, solve_mixed, sweep_mixed, find_mixed_window, seed_across_eta,
@@ -133,6 +138,7 @@ __all__ = [
     "Phase", "PhaseThermo", "hadronic_phase", "hadronic_seed", "quark_phase",
     "dd2_phase", "vmit_phase", "default_pair",
     "sfho_phase", "zl_phase", "alphabag_phase", "enjl_branch_pair",
+    "CONSTRUCTION_PAIRS", "Coexistence", "enjl_coexistences",
     # solving
     "solve_mixed", "MixedResult",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",

@@ -885,6 +885,134 @@ $T > 0$ (the heat capacities, the thermal index) and those that need a
 conditioning statement the $T = 0$ branch structure of
 Sec.~\ref{sec:numerics} has not yet settled.
 
+\section{The construction: from branches to a delivered EoS}
+\label{sec:construction}
+
+A table swept by \texttt{build\_table} is a \emph{continuation}: it follows one
+branch and keeps following it past a first-order transition, into the
+metastable region beyond, so it may violate $\dd P/\dd\nB \ge 0$. That is real
+physics --- mechanical instability inside a coexistence region --- and mapping
+it is what a branch sweep is for. What a structure solver must be handed is the
+other object, the stable equation of state, and this section states how it is
+built.
+
+\subsection{The coexistence conditions}
+
+Two branches $\alpha$ (low density) and $\beta$ (high density) of the same
+functional coexist where they share a baryon chemical potential and a pressure,
+each phase being separately charge-neutral with its own lepton population ---
+the $\eta = 1$, or Maxwell, construction:
+\begin{align}
+  \muB^{(\alpha)} &= \muB^{(\beta)} \equiv \muB^{\text{co}},
+  \label{eq:coexmu} \\
+  P^{(\alpha)} + P_\ell^{(\alpha)} &= P^{(\beta)} + P_\ell^{(\beta)}
+  \equiv P^{\text{co}},
+  \label{eq:coexP} \\
+  \nC^{(\gamma)} &= n_e^{(\gamma)} + n_\mu^{(\gamma)},
+  \qquad \muC^{(\gamma)} + \mu_e^{(\gamma)} = 0,
+  \qquad \gamma \in \{\alpha, \beta\}.
+  \label{eq:coexneutral}
+\end{align}
+The lepton pressure belongs in Eq.~\eqref{eq:coexP} because at $\eta = 1$ the
+leptons live inside the structures whose pressures are equated; dropping it
+moves $\muB^{\text{co}}$ by tens of MeV. The two phases carry
+\emph{different} $\mu_e$, and that difference is precisely what $\eta = 1$
+means: neither borrows charge from the other. Eq.~\eqref{eq:coexneutral} is one
+equation in the one unknown $\muC^{(\gamma)}$ per phase, solved first; then
+Eq.~\eqref{eq:coexP} is one equation in the one remaining unknown
+$\muB^{\text{co}}$.
+
+The two edge densities follow from the solved endpoints,
+\begin{equation}
+  n_{\text{lo}} = \nB^{(\alpha)}\!\left(\muB^{\text{co}}\right), \qquad
+  n_{\text{hi}} = \nB^{(\beta)}\!\left(\muB^{\text{co}}\right),
+  \label{eq:coexedges}
+\end{equation}
+and between them no single phase is stable.
+
+\subsection{The plateau}
+
+For $n_{\text{lo}} \le \nB \le n_{\text{hi}}$ the system separates into the two
+phases at fixed $\muB^{\text{co}}$ and $P^{\text{co}}$. With $f$ the volume
+fraction occupied by the high-density phase, baryon number gives the lever rule
+\begin{equation}
+  \nB = (1 - f)\, n_{\text{lo}} + f\, n_{\text{hi}}
+  \quad\Longrightarrow\quad
+  f = \frac{\nB - n_{\text{lo}}}{n_{\text{hi}} - n_{\text{lo}}},
+  \label{eq:lever}
+\end{equation}
+and every density averages with the same weights,
+\begin{equation}
+  n_i = (1 - f)\, n_i^{(\alpha)} + f\, n_i^{(\beta)},
+  \qquad
+  \varepsilon = (1 - f)\, \varepsilon^{(\alpha)} + f\, \varepsilon^{(\beta)},
+  \qquad
+  P = P^{\text{co}},
+  \label{eq:plateau}
+\end{equation}
+with $s = 0$ at $T = 0$. The conserved fractions are formed from the
+\emph{averaged} densities, $Y_C = \nC/\nB$ and $Y_S = \nS/\nB$, not by
+averaging the two phases' own fractions, which are relative to their own
+$\nB$. The effective masses $M_q$ and $M_i$ are properties of one phase and
+have no value in the mixture; the implementation returns them as
+\texttt{nan} across the plateau rather than averaging them into a state that
+exists nowhere. $\muC$ and $\mu_e$ are returned as \texttt{nan} for the same
+reason --- at $\eta = 1$ the two phases genuinely differ in them.
+
+\paragraph{The energy density needs no further solve.} On a neutral phase at
+$T = 0$ the Euler relation of Sec.~\ref{sec:returns} collapses. Writing
+$\sum_i \mu_i n_i$ over matter and leptons and using
+Eq.~\eqref{eq:coexneutral},
+\begin{equation}
+  \sum_i \mu_i n_i
+  = \muB \nB + \muC \nC + \muS \nS + \mu_e (n_e + n_\mu)
+  = \muB \nB + \muS \nS,
+  \label{eq:eulerneutral}
+\end{equation}
+because $\muC \nC + \mu_e (n_e + n_\mu) = -\mu_e \nC + \mu_e \nC = 0$. In
+$\beta$ equilibrium without strangeness conservation $\muS = 0$, so
+\begin{equation}
+  \varepsilon = \muB \nB - P .
+  \label{eq:epsneutral}
+\end{equation}
+Applied at $\muB^{\text{co}}$ and $P^{\text{co}}$ this makes $\varepsilon$
+\emph{linear} in $\nB$ across the plateau automatically, which is what
+Eq.~\eqref{eq:plateau} asserts --- the two statements agree identically, and
+the slope of the plateau in the $(\nB, \varepsilon)$ plane \emph{is}
+$\muB^{\text{co}}$. It also means $c_s^2 = \dd P/\dd\varepsilon = 0$ there
+exactly.
+
+\subsection{Which branch outside a window}
+
+Outside every window the delivered point is the branch that minimises the
+energy density at that $\nB$: at $T = 0$ and fixed $\nB$, in $\beta$
+equilibrium with neutrality, the stable state is the one of lowest
+$\varepsilon$. Both continuations of Sec.~\ref{sec:numerics} are swept, upward
+from the low-density chirally broken side and downward from the top of the
+grid, and the comparison is made point by point. No branch bookkeeping enters:
+where only one branch exists the comparison is trivial, and where both do it is
+the physical criterion.
+
+\subsection{Where this lives}
+
+Locating a transition needs both branches at once, which is a two-phase
+problem, so it lives in the composite engine
+(\texttt{eos.mixed.construction.enjl\_coexistences}, over
+\texttt{eos.mixed.boundaries.locate\_maxwell}) rather than in the model: a
+model does not import a composite engine. The located windows are handed to
+\texttt{eos.enjl.table.build\_constructed\_table} as an argument, and the
+assembly of Eqs.~\eqref{eq:lever}--\eqref{eq:epsneutral} is pure ENJL. A
+parameter set with three branches admits three pairings and the driver sweeps
+the declared list of them, merging what it finds; which pairings are realised
+is a property of the parameters, not of the engine.
+
+Only $\eta = 1$ is delivered. At $0 < \eta < 1$ both a local and a global
+lepton population exist, with weights $\eta$ and $1 - \eta$, and the plateau of
+Eq.~\eqref{eq:plateau} is replaced by a solved mixed system at every density;
+$f(\eta)$ is measured to fall monotonically from $\eta = 1$ to $\eta = 0$, by
+$3 \times 10^{-2}$~MeV/fm$^3$ at the $f_q = 0.7$, $B = 1$ chiral transition,
+with no interior extremum.
+
 \section{Numerics}
 \label{sec:numerics}
 

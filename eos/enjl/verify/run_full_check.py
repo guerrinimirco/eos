@@ -47,6 +47,7 @@ the suite reports rather than prints.
 Run as `python -m eos.enjl.verify.run_full_check`.
 """
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 import numpy as np
 
@@ -672,11 +673,124 @@ def check_non_convergence_is_returned():
                        "reported rather than raised")
 
 
+#: Where the construction checks are run: the parameter set whose chiral
+#: transition the author's tables pin most cheaply, and a mu_B grid that
+#: BRACKETS the crossing without pinpointing it -- a grid tight enough to
+#: contain the answer would be checking arithmetic rather than physics.
+CONSTRUCTION_SET = "fq0.7_B1"
+CONSTRUCTION_MU_B = (1120.0, 1220.0, 20.0)
+
+#: Density grid the delivered table is checked on. Coarse: this is an
+#: invariant check, not a production table, and every point is a full solve.
+CONSTRUCTION_NB = (0.20, 0.90, 0.05)
+
+
+@lru_cache(maxsize=4)
+def _coexistences(name):
+    """The located transitions of one parameter set, computed once per run.
+
+    A read-only cache keyed by an immutable value, which CLAUDE.md section 6
+    allows; two checks below need the same location and it costs a minute.
+
+    `eos.mixed` is imported HERE rather than at module scope on purpose. A
+    model may not import a composite engine (CLAUDE.md section 1), and this
+    file is a test entry point that nothing in `eos.enjl` imports -- so
+    `import eos.enjl` still pulls in no part of `eos.mixed`, and the layering
+    the import test enforces is untouched. The library-side rule is kept by
+    `eos.enjl.table.build_constructed_table`, which takes the located windows
+    as an argument and imports nothing from the engine.
+    """
+    from eos.mixed.construction import enjl_coexistences
+
+    par = Parameters.named(name)
+    lo, hi, step = CONSTRUCTION_MU_B
+    return par, enjl_coexistences(par, np.arange(lo, hi, step),
+                                  pairs=(("broken", "restored"),))
+
+
+def check_maxwell_crossing():
+    """P and mu_B are equal across the two phases at a located crossing.
+
+    The defining conditions of the eta = 1 construction: mechanical
+    equilibrium P_lo = P_hi and chemical equilibrium mu_B,lo = mu_B,hi, with
+    each phase separately neutral and carrying its OWN electron potential.
+    Recomputed from the phases at the located potential rather than read back
+    off the record that asserted them.
+    """
+    from eos.mixed.adapters import enjl_branch_pair
+    from eos.mixed.boundaries import total_pressure
+
+    par, found = _coexistences(CONSTRUCTION_SET)
+    if not found:
+        return CheckResult("maxwell_crossing", False, float("inf"),
+                           f"no transition located for {CONSTRUCTION_SET} on "
+                           f"mu_B in {CONSTRUCTION_MU_B}")
+    worst, detail = 0.0, []
+    for co in found:
+        lo_phase, hi_phase = enjl_branch_pair(par, co.branches)
+        pressures = []
+        for phase in (lo_phase, hi_phase):
+            got = total_pressure(lambda m, c: phase.thermo(m, c, 0.0, 0.0),
+                                 co.mu_B, muons=True)
+            if got is None:
+                return CheckResult("maxwell_crossing", False, float("inf"),
+                                   f"{phase.name} does not exist at the "
+                                   f"located mu_B = {co.mu_B:.4f} MeV")
+            pressures.append(got[0])
+        dP = abs(pressures[0] - pressures[1]) / abs(co.P)
+        # mu_B is one number handed to both phases, so its equality is exact
+        # by construction; what is checked is that each edge row reports it.
+        dmu = max(abs(co.row_lo["mu_B"] - co.mu_B),
+                  abs(co.row_hi["mu_B"] - co.mu_B)) / abs(co.mu_B)
+        worst = max(worst, dP, dmu)
+        detail.append(f"{'+'.join(co.branches)} dP/P={dP:.1e} "
+                      f"dmu_B/mu_B={dmu:.1e}")
+    return CheckResult("maxwell_crossing", worst < 1.0e-6, worst,
+                       "; ".join(detail))
+
+
+def check_delivered_table():
+    """The delivered table is deliverable: P non-decreasing, 0 <= c_s^2 <= 1.
+
+    CLAUDE.md section 8. A RAW ENJL branch may violate both inside a
+    first-order transition -- mechanical instability is real physics and the
+    continuation is allowed to map it -- and this is the check that the
+    construction resolves it before the table reaches a structure solver.
+
+    c_s^2 is a centred finite difference of a table with an exactly flat
+    segment in it, so on the plateau it is zero up to rounding and the lower
+    gate is -1e-9 rather than 0. That is the size of the differencing noise,
+    not a relaxed physical bound: the plateau's c_s^2 is exactly zero.
+    """
+    from eos.enjl.table import TableSpec, build_constructed_table
+
+    par, found = _coexistences(CONSTRUCTION_SET)
+    lo, hi, step = CONSTRUCTION_NB
+    table = build_constructed_table(
+        TableSpec(nB=np.arange(lo, hi, step), par=par), found)
+    if len(table.rows) < 3:
+        return CheckResult("delivered_table", False, float("inf"),
+                           f"only {len(table.rows)} rows delivered")
+
+    dP = np.diff(table.P)
+    cs2 = table.cs2
+    worst_P = abs(min(dP.min(), 0.0))
+    worst_cs = abs(max(-cs2.min(), cs2.max() - 1.0, 0.0))
+    passed = dP.min() >= -1.0e-9 and cs2.min() >= -1.0e-9 and cs2.max() <= 1.0
+    return CheckResult(
+        "delivered_table", passed, max(worst_P, worst_cs),
+        f"{len(table.rows)} rows, {len(found)} window(s); "
+        f"min dP={dP.min():+.2e} MeV/fm^3, "
+        f"c_s^2 in [{cs2.min():+.3e}, {cs2.max():.4f}]")
+
+
+
 CHECKS = (check_euler, check_free_energy, check_rearrangement,
           check_gap_equation, check_charge_basis, check_beta_equilibrium,
           check_fixed_fractions, check_symmetric_matter_slice,
           check_trapped_lepton_number, check_thermo_from_mu,
           check_causality, check_vacuum,
+          check_maxwell_crossing, check_delivered_table,
           check_refusals, check_non_convergence_is_returned)
 
 

@@ -33,7 +33,9 @@ from eos.enjl.solver import (
     MODE_FRACTIONS, check_mode, check_temperature, mode_spec, solve,
 )
 from eos.enjl.species import SpeciesFlags
-from eos.enjl.table import DIRECTIONS, TableSpec, beta_row, build_table
+from eos.enjl.table import (
+    DIRECTIONS, TableSpec, beta_row, build_constructed_table, build_table,
+)
 
 
 @dataclass(frozen=True)
@@ -124,7 +126,8 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
 
 def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
               direction="up", x0=None, leptons=True, rows=False,
-              progress=None, verbose=False):
+              progress=None, verbose=False, coexistences=None,
+              eta=1.0):
     """A solved grid along the density axis, following one branch.
 
     axes = {'nB': grid, 'T': [0.0]}; the temperature axis may be omitted, in
@@ -141,6 +144,16 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
     dP/dn_B >= 0. That is real physics -- a mechanically unstable branch -- and
     a table in that state must be resolved by a construction before it reaches
     a structure solver.
+
+    `coexistences` is what performs that resolution. Given the located
+    transitions -- from `eos.mixed.construction.enjl_coexistences`, which is a
+    composite engine and so cannot be reached from inside this model
+    (CLAUDE.md section 1) -- this returns the DELIVERED table instead: both
+    branches swept, the stable one kept at each density, and each window
+    replaced by its constant-pressure segment. `direction` is then unused,
+    because a construction needs both. Without it the raw continuation is
+    returned exactly as before, which is what `test/baseline` freezes.
+    `eta` selects the construction and only eta = 1 (Maxwell) is implemented.
 
     progress : callable, invoked once per completed line, with the dict every
         table builder in this repository reports. verbose=True installs the
@@ -174,10 +187,14 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
         raise ValueError(f"direction must be one of {DIRECTIONS}, "
                          f"got {direction!r}")
 
-    result = build_table(
-        TableSpec(nB=nB, mode=mode, par=par, direction=direction, T=T, x0=x0,
-                  leptons=leptons, fractions=fractions),
-        progress=progress, verbose=verbose)
+    table_spec = TableSpec(nB=nB, mode=mode, par=par, direction=direction,
+                           T=T, x0=x0, leptons=leptons, fractions=fractions)
+    if coexistences is not None:
+        built = build_constructed_table(table_spec, coexistences, eta=eta,
+                                        progress=progress, verbose=verbose)
+        return built.rows if rows else built
+
+    result = build_table(table_spec, progress=progress, verbose=verbose)
     if rows:
         return [beta_row(p) for p in result.points]
     return result
