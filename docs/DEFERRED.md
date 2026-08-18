@@ -121,7 +121,10 @@ Where this actually stands: `PhaseThermo` is adopted by dd2 and sfho, whose
 `EoSPoint` and `LeptonThermo` are adopted by NOBODY — dd2's solver returns a
 flat `EoSPoint` of its own, and sfho now returns the same flat record, field
 for field, because two models returning one shape is worth more than one model
-leading the way to a third. `eos/mixed` still carries a second `PhaseThermo`. zl is a third: its solver returns a flat
+leading the way to a third. (`eos/mixed`'s second `PhaseThermo` is gone: the
+engine and its adapters now consume `eos.general.state.PhaseThermo` directly,
+and dd2's block crosses the phase-adapter surface without re-packaging.)
+zl is a third: its solver returns a flat
 `EoSPoint` too, carrying (n_p, n_n) rather than a composition map, because a
 two-species model has nothing to iterate over. It is a smaller record than
 dd2's and sfho's, not a different convention, and it converges with them when

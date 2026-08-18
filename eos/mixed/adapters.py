@@ -43,16 +43,12 @@ starting field configuration — dominates the cost. Both adapters accept an
 `x0`, and `MixedCtx` caches the converged internal state between calls.
 """
 from dataclasses import dataclass, replace
-from typing import Mapping
-
 import numpy as np
 from scipy.optimize import root
 
-from eos.general.physics_constants import hc3
-from eos.dd2.thermodynamics import (
-    baryon_kinetics, self_consistency_residual, thermo_at_potentials,
-)
-from eos.dd2.thermodynamics import thermal_meson_thermo
+from eos.general.physics_constants import hc, hc3
+from eos.general.state import PhaseThermo
+from eos.dd2.thermodynamics import thermo_at_potentials
 from eos.dd2.solver import solve_beta_eq_octet
 from eos.vmit.parameters import get_vmit_default
 from eos.vmit.thermodynamics import (
@@ -62,39 +58,6 @@ from eos.vmit.thermodynamics import (
 #: Post-solve residual gate for a phase-internal solve. Matches the tolerance
 #: eos/dd2/solver.py accepts its own equilibrium solves at.
 RESIDUAL_TOL = 1.0e-10
-
-
-@dataclass(frozen=True)
-class PhaseThermo:
-    """One phase's thermodynamic block, fm-based.
-
-    densities : {species name -> n [fm^-3]}
-    n_B, n_C, n_S : baryon / non-leptonic-charge / strangeness density [fm^-3]
-    P, eps : pressure / energy density [MeV/fm^3]  (matter only, no leptons)
-    s : entropy density [fm^-3]
-    mu_B, mu_C, mu_S : conserved-charge potentials [MeV]
-    mu_i : {species name -> mu [MeV]}, mu_i = B_i mu_B + C_i mu_C + S_i mu_S
-    mu_dot_n : sum_i mu_i n_i [MeV/fm^3], including any thermal meson gas
-    condensation : max_j |mu*_j| / m_j over this phase's thermal meson gas,
-        0 without one. Part of the contract because a phase that has
-        Bose-condensed is OUTSIDE its model, and the mixed residual cannot see
-        that any other way: `solve_bose_jel` caps mu at m rather than
-        diverging, so a condensed phase reports a perfectly converged block.
-        A quark phase has no meson gas and leaves it at 0.
-    """
-    densities: Mapping[str, float]
-    n_B: float
-    n_C: float
-    n_S: float
-    P: float
-    eps: float
-    s: float
-    mu_B: float
-    mu_C: float
-    mu_S: float
-    mu_i: Mapping[str, float]
-    mu_dot_n: float = 0.0
-    condensation: float = 0.0
 
 
 # =============================================================================
@@ -121,12 +84,19 @@ def quark_phase(mu_u, mu_d, mu_s, T=0.0, params=None):
     n_u, n_d, n_s, _P, _e, _s, _nB = compute_quark_matter_thermo_from_mu(
         mu_u, mu_d, mu_s, T, params)
     th = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    # The single universal vector shift V = a hc (n_u + n_d + n_s); it is what
+    # separates the physical potentials from the effective ones.
+    V = params.a * hc * (th.n_u + th.n_d + th.n_s)
     return PhaseThermo(
+        T=T,
         densities={"u": th.n_u, "d": th.n_d, "s": th.n_s},
+        fields={"V": V},
         n_B=th.n_B, n_C=th.n_C, n_S=th.n_S,
         P=th.P, eps=th.e, s=th.s,
         mu_B=th.mu_B, mu_C=th.mu_C, mu_S=th.mu_S,
         mu_i={"u": mu_u, "d": mu_d, "s": mu_s},
+        mu_eff_i={"u": mu_u - V, "d": mu_d - V, "s": mu_s - V},
+        m_eff_i={"u": params.m_u, "d": params.m_d, "s": params.m_s},
         mu_dot_n=mu_u * th.n_u + mu_d * th.n_d + mu_s * th.n_s,
 )
 
@@ -222,13 +192,9 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
         x0=x0,
         x0_fallback=lambda: hadronic_seed(par, flags, T, n_B_guess),
         return_state=True)
-    th = PhaseThermo(
-        densities=dict(state.densities), n_B=state.n_B, n_C=state.n_C,
-        n_S=state.n_S, P=state.P, eps=state.eps, s=state.s,
-        mu_B=state.mu_B, mu_C=state.mu_C, mu_S=state.mu_S,
-        mu_i=dict(state.mu_i), mu_dot_n=state.mu_dot_n,
-        condensation=state.condensation)
-    return (th, internal) if return_state else th
+    # dd2's thermodynamics already returns the shared eos.general.state
+    # record, so present it as-is: same floats, no re-packaging.
+    return (state, internal) if return_state else state
 
 
 # =============================================================================
@@ -395,11 +361,19 @@ def enjl_phase_thermo(point, mu_B, mu_C, mu_S):
     """An `eos.enjl` point, in natural units, as an fm-based `PhaseThermo`."""
     n = {sp: value / hc3 for sp, value in point.n.items()}
     mu_i = {sp: point.mu[sp] for sp in point.n}
+    m_eff = dict(point.M_b, **point.M_q)
+    # T = 0, so the effective (kinetic) potential is the Fermi energy.
+    mu_eff = {sp: float(np.sqrt(point.kF[sp] ** 2 + m_eff[sp] ** 2))
+              for sp in point.kF if sp in m_eff}
     return PhaseThermo(
+        T=0.0,
         densities=n,
+        fields={"gomega_omega": point.gomega_omega,
+                "grho_rho": point.grho_rho,
+                "SigmaR_b": point.SigmaR_b, "SigmaR_q": point.SigmaR_q},
         n_B=point.n_b / hc3, n_C=point.n_C / hc3, n_S=point.n_S / hc3,
         P=point.P / hc3, eps=point.eps / hc3, s=point.s / hc3,
         mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
-        mu_i=mu_i,
+        mu_i=mu_i, mu_eff_i=mu_eff, m_eff_i=m_eff,
         mu_dot_n=sum(mu_i[sp] * n[sp] for sp in n),
         condensation=0.0)
