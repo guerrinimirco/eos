@@ -1,96 +1,82 @@
-"""
-alphabag_parameters.py
-======================
-Parameter dataclasses for the αBag (AlphaBag) quark EOS model.
+"""Parameters of the alphaBag quark model.
 
-The αBag model includes:
-- Current quark masses (u, d ~ massless, s ~ 150 MeV)
-- Bag constant B (confining pressure)
-- Perturbative QCD coupling constant α_s
+Two numbers and three masses: the bag constant B, the QCD coupling alpha_s
+that carries the leading perturbative correction, and the current quark
+masses. The coupling does not run -- it is a constant of the set, which is
+what makes it something an inference run can vary.
 
-This is different from vMIT which uses a vector field approach.
-Here perturbative corrections are parametrized by α_s.
+    B        confines: it costs energy density to make a bag, so it enters
+             eps with a plus and P with a minus, and it is what holds the
+             pressure negative until deconfinement pays for itself.
+    alpha_s  softens: it multiplies the free-gas pressure by factors below
+             one. Where vMIT stiffens the quark branch with a vector field,
+             this model has no repulsion at all -- the two are not
+             reparametrisations of one another.
 
-References:
-- M. G. Alford et al. Phys. Rev. D 67.7 (2003)
-- T. Fischer et al. Astrophys. J. Suppl. 194:39 (2011)
-- M. Guerrini PhD Thesis (2026)
+B is carried as its fourth root B^(1/4) in MeV, the form it is quoted in;
+`B` returns B itself in MeV^4, so a set cannot carry a B and a B4 that
+disagree. The masses are current masses: there is no chiral condensate here to
+dress them.
+
+The zero-temperature pairing gap of the colour-flavour locked phase is
+deliberately NOT here. It selects a phase rather than tuning one, the way a
+species flag does, and is passed per call.
+
+Parameters are ALWAYS arguments -- a `Parameters` instance passed to every
+call -- never module-level constants. The dataclass is frozen so two sets can
+coexist in one process without either being able to disturb the other.
+
+References: Chodos et al., Phys. Rev. D 9, 3471 (1974) for the bag;
+T. Fischer et al., Astrophys. J. Suppl. Ser. 194, 39 (2011) for the
+arrangement of the alpha_s correction; M. Alford and S. Reddy, Phys. Rev. D
+67, 074024 (2003) for the parameter ranges. See `alphabag.tex`.
 """
 from dataclasses import dataclass
 
 
-@dataclass
-class AlphaBagParams:
-    """
-    Parameters for the αBag quark EOS.
-    
+@dataclass(frozen=True)
+class Parameters:
+    """One alphaBag parameter set.
+
     Attributes:
-        name: Parameter set identifier
-        m_u: Up quark mass (MeV), typically ~0 (massless)
-        m_d: Down quark mass (MeV), typically ~0 (massless)  
-        m_s: Strange quark mass (MeV), typically ~150 MeV
-        alpha: QCD coupling constant α_s (dimensionless), typical 0.2-0.5
-        B4: Bag constant B^(1/4) (MeV), typical 145-180 MeV
-        B: Bag constant B (MeV⁴) = B4⁴
+        name: label carried into table headers and figure legends
+        m_u, m_d: up and down current masses (MeV). Zero in the shipped set;
+                  below 1e-5 MeV the thermodynamics takes its massless
+                  branch, which closes in elementary functions.
+        m_s: strange current mass (MeV), carried exactly through the Fermi
+             integrals of `eos.general.fermi_integrals`
+        alpha: the QCD coupling alpha_s, dimensionless and constant. It enters
+               as the three factors 1 - 2a/pi, 1 - 50a/(21 pi) and
+               1 - 15a/(4 pi) multiplying the quark chemical, quark thermal
+               and gluon terms.
+        B4: bag constant B^(1/4) (MeV)
     """
     name: str = "alphabag_default"
-    m_u: float = 0.0         # MeV (up quark mass, treated as massless)
-    m_d: float = 0.0         # MeV (down quark mass, treated as massless)
-    m_s: float = 150.0       # MeV (strange quark mass)
-    alpha: float = 0.3       # dimensionless (QCD coupling α_s)
-    B4: float = 165.0        # MeV (bag constant B^1/4)
-    
+    m_u: float = 0.0       # MeV (up quark mass, treated as massless)
+    m_d: float = 0.0       # MeV (down quark mass, treated as massless)
+    m_s: float = 150.0     # MeV (strange quark mass)
+    alpha: float = 0.3     # dimensionless (QCD coupling alpha_s)
+    B4: float = 165.0      # MeV (bag constant B^1/4)
+
     @property
     def B(self) -> float:
-        """Bag constant B = (B^1/4)^4 in MeV⁴."""
+        """The bag constant itself, B = (B^(1/4))^4, in MeV^4.
+
+        Divide by (hbar c)^3 to reach the MeV/fm^3 the rest of the code uses;
+        `eos.alphabag.bag_pressure` is the one place that does.
+        """
         return self.B4**4
 
+    @classmethod
+    def default(cls) -> "Parameters":
+        """The working set of this repository: B^(1/4) = 165 MeV,
+        alpha_s = 0.3, m_s = 150 MeV.
 
-def get_alphabag_default() -> AlphaBagParams:
-    """Get default αBag parameter set."""
-    return AlphaBagParams(name="alphabag_default")
-
-
-def get_alphabag_custom(
-    m_u: float = 0.0, m_d: float = 0.0, m_s: float = 150.0,
-    alpha: float = 0.3, B4: float = 165.0, name: str = "alphabag_custom"
-) -> AlphaBagParams:
-    """
-    Create custom αBag parameter set.
-    
-    Args:
-        m_u, m_d, m_s: Quark masses (MeV)
-        alpha: QCD coupling constant α_s (dimensionless)
-        B4: Bag constant B^(1/4) (MeV)
-        name: Parameter set name
-        
-    Returns:
-        AlphaBagParams with specified values
-    """
-    return AlphaBagParams(
-        name=name,
-        m_u=m_u, m_d=m_d, m_s=m_s,
-        alpha=alpha, B4=B4
-    )
-
-
-# =============================================================================
-# SELF-TEST
-# =============================================================================
-if __name__ == "__main__":
-    from eos.general.physics_constants import hc3
-    
-    print("αBag Parameters Test")
-    print("=" * 50)
-    
-    params = get_alphabag_default()
-    print(f"\nDefault parameters: {params.name}")
-    print(f"  m_u   = {params.m_u} MeV (massless)")
-    print(f"  m_d   = {params.m_d} MeV (massless)")
-    print(f"  m_s   = {params.m_s} MeV")
-    print(f"  α_s   = {params.alpha}")
-    print(f"  B^1/4 = {params.B4} MeV")
-    print(f"  B     = {params.B:.4e} MeV⁴")
-    print(f"  B     = {params.B/hc3:.4f} MeV/fm³")
-    
-    print("\n✓ All OK")
+        A central choice within the ranges used for compact-star quark matter
+        (B^(1/4) ~ 145-180 MeV, alpha_s ~ 0.2-0.5, m_s ~ 90-150 MeV), not a
+        published fit: these are the axes a hybrid study scans, and which
+        triple is right depends on the hadronic model it is paired with. A set
+        with some of them changed is `Parameters(alpha=..., B4=...)`, or
+        `dataclasses.replace` of one already in hand.
+        """
+        return cls()

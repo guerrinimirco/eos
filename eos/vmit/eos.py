@@ -16,7 +16,7 @@ the densities as unknowns rather than substituting V = a hbar c sum_q n_q is
 what makes the residual polynomial in the mean field instead of nesting the
 Fermi integrals inside it.
 
-The thermodynamic kernels are in `thermodynamics_quarks.py`; the table driver
+The thermodynamic kernels are in `thermodynamics.py`; the table driver
 is in `table.py`; the spec API (eos_point / eos_table) is in `api.py`. See
 `vmit.tex` for the physics.
 

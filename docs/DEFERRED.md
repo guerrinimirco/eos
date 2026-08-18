@@ -232,8 +232,39 @@ own session where the baseline and `test_imports.py` are already being run:
               ZLParams` and `thermo_from_mu_n as zl_thermo_from_mu_n`, which
               is disambiguation against the vMIT names in the same
               signatures, not a compatibility alias.
-    alphabag  eos.py -> solver.py, compute_tables.py -> table.py,
-              thermodynamics_quarks.py -> thermodynamics.py
+    alphabag  DONE: eos.py -> solver.py, compute_tables.py -> table.py,
+              thermodynamics_quarks.py -> thermodynamics.py, and species.py,
+              api.py and verify/ added. `AlphaBagParams` is `Parameters` and
+              `get_alphabag_default()` is `Parameters.default()`;
+              `get_alphabag_custom(...)` is gone, since the frozen dataclass
+              IS that constructor. The `_alpha` suffix came off the massless
+              closed forms (`n_massless_alpha` -> `n_massless`), which named
+              the package rather than the quantity, and `compute_` came off
+              everything: `compute_alphabag_thermo_from_mu` ->
+              `thermo_from_mu`, `compute_cfl_thermo_from_mu` ->
+              `cfl_thermo_from_mu`, `compute_quark_thermo` ->
+              `kinetic_thermo`, `n_quark_alpha` -> `quark_density`,
+              `compute_bag_pressure`/`_energy` -> `bag_pressure`/`bag_energy`,
+              `gap_cfl`/`dgap_dT_cfl` -> `cfl_gap`/`cfl_dgap_dT`,
+              `P_cfl_correction` and siblings -> `cfl_P_correction` and
+              siblings. `compute_alphabag_total_thermo_from_mu` is
+              `point_from_mu` and its CFL twin `cfl_point_from_mu`;
+              `AlphaBagEOSResult`/`CFLEOSResult` are `EoSPoint`/`CFLPoint`;
+              `solve_alphabag_*` are `solve_beta_eq_neutrinoless`,
+              `solve_fixed_yc` and `solve_fixed_yc_ys`, joined by the new
+              `solve_beta_eq_neutrino_trapped`; `AlphaBagTableSettings` /
+              `compute_alphabag_table` / `save_alphabag_results` are
+              `TableSettings` / `compute_table` / `save_results`. Deleted with
+              no caller anywhere: `B_eff_cfl`, the `compute_u/d/s_thermo`
+              aliases, the module-level `settings` block that ran on import,
+              and the whole `.dat` LOADER stack (`load_eos_table`,
+              `load_eos_tables_multi`, `build_interpolators`, `EOSTableData`,
+              `results_to_arrays`, `COLUMN_MAPS`, `GRID_AXES`) -- the study
+              that reads tables back reads the sfho ones.
+
+              NUCLEATION IS NOT UPDATED (Phase 6). Its suite is already red
+              from the sfho renames, so nothing there would have caught a
+              missed edit; the exact map it needs is below.
     abpr      eos.py -> solver.py
     enjl      eos_beta.py + uniform.py -> solver.py (a merge, not a rename)
 
@@ -274,6 +305,62 @@ over the shared driver rather than being renamed to it.
 `eos/mixed` is a composite engine and takes the shorter list of CLAUDE.md §5 —
 `adapters.py`, `api.py`, `responses.py`, `verify/`, `mixed.tex` — all of which
 it now has.
+
+#### The alphabag map Phase 6 applies to `nucleation`, verbatim
+
+Five files import `eos.alphabag` directly, plus the jupytext-paired notebook.
+Nothing else in either repository does. Old -> new, complete:
+
+    MODULES
+    eos.alphabag.eos                      -> eos.alphabag.solver
+    eos.alphabag.thermodynamics_quarks    -> eos.alphabag.thermodynamics
+    eos.alphabag.compute_tables           -> eos.alphabag.table
+
+    NAMES
+    AlphaBagParams                        -> Parameters
+    get_alphabag_default()                -> Parameters.default()
+    get_alphabag_custom(alpha=, B4=, m_s=)
+                                          -> Parameters(alpha=, B4=, m_s=)
+                                             keyword for keyword; the `name`
+                                             keyword survives too
+    compute_alphabag_thermo_from_mu       -> thermo_from_mu
+    compute_cfl_thermo_from_mu            -> cfl_thermo_from_mu
+    compute_alphabag_total_thermo_from_mu -> point_from_mu
+    compute_cfl_total_thermo_from_mu      -> cfl_point_from_mu
+    solve_alphabag_beta_eq                -> solve_beta_eq_neutrinoless
+    solve_alphabag_fixed_yc               -> solve_fixed_yc
+    solve_alphabag_fixed_yc_ys            -> solve_fixed_yc_ys
+    solve_cfl                             -> solve_cfl      (unchanged)
+    T_critical                            -> T_critical     (unchanged)
+    AlphaBagTableSettings                 -> TableSettings
+    compute_alphabag_table                -> compute_table
+
+    SIGNATURES: unchanged, every one of them, positional and keyword alike.
+    RESULT FIELDS: unchanged. `AlphaBagEOSResult` is `EoSPoint` and
+    `CFLEOSResult` is `CFLPoint`, but neither is constructed by name outside
+    `eos`, and every field keeps its name.
+
+The five files and what each one needs:
+
+    nucleation/composition.py       both module lines; four names
+                                    (compute_alphabag_total_thermo_from_mu,
+                                    compute_cfl_total_thermo_from_mu,
+                                    compute_alphabag_thermo_from_mu,
+                                    compute_cfl_thermo_from_mu)
+    nucleation/conditions.py        one module line (T_critical, name
+                                    unchanged)
+    nucleation/analysis/filters.py  two module lines; get_alphabag_custom and
+                                    two solve_alphabag_* names
+    nucleation/analysis/droplet.py  one module line; get_alphabag_custom
+    nucleation/analysis/scan.py     one module line; get_alphabag_custom
+    notebooks/2fam_PNS_nucleation.{py,ipynb}
+                                    three module lines; get_alphabag_custom,
+                                    AlphaBagTableSettings,
+                                    compute_alphabag_table, T_critical --
+                                    BOTH halves of the jupytext pair.
+
+`eos.alphabag` re-exports every new name, so each import line may equally
+become `from eos.alphabag import ...`.
 
 ---
 
@@ -643,13 +730,6 @@ a reason that has nothing to do with seeding.
   `fixed_YC_YS` raises rather than accepting a Y_S it would have to ignore.
   Whether the API should say "this charge does not exist here" differently
   from "this potential is undetermined" is the same open question.
-- `solve_system` -- Powell hybrid, then Levenberg-Marquardt, then one cold
-  restart, judged on a scaled residual -- is written a second time here,
-  identical to `eos/vmit/eos.py`'s except for the scale of a potential row.
-  Neither model may import the other (section 1), so the duplication is
-  deliberate until a third consumer justifies moving it to `general/`.
-  alphabag will be that third consumer and should make the move rather than
-  write it a fourth time.
 
 ### vmit
 - `eos_response` implements the freeze `equilibrium` only, and computes it by
@@ -676,20 +756,33 @@ a reason that has nothing to do with seeding.
   should either filter them or the result should carry a flag.
 
 ### alphabag
-- `eos/general/tabulate.py` is the shared line-grid driver (warm-started
-  density sweep, skipping, progress callback). vmit and zl use it; alphabag
-  still carries its own copy of the same loop in `compute_tables.py`, and
-  dd2's `table.py` has a richer version with bisected continuation through
-  onsets.
-
-  Moving that continuation into the shared driver was considered in the zl
-  session and deliberately NOT done there, because zl does not exercise it:
-  a nucleonic functional with no hyperon, no muon and no quark sector has no
-  threshold along a density sweep for a bisected step to walk through, so the
-  move would have landed with its second consumer unable to test it. alphabag
-  is the session for it -- the strange-quark onset and the CFL phase selector
-  are real thresholds -- and it is the third consumer, which is what section 9
-  asks for before a shared abstraction is written.
+- `eos_response` implements the freeze `equilibrium` only, and computes it by
+  central differences along the mode's own sequence (c_s^2 = dP/deps at fixed
+  T, C_V = (T/n_B) ds/dT at fixed n_B) because alphaBag has no analytic
+  Jacobian in this repository. Frozen composition, frozen conserved fractions
+  and the leptonic re-neutralization variants all raise naming this file. An
+  analytic Jacobian is straightforward here -- the potential is explicit in
+  mu, so dn_q/dmu_q is one derivative of a closed form plus one Fermi
+  integral -- and would give the susceptibility matrix chi_ab as well.
+- The muon lepton family is not wired: `SpeciesFlags(muons=True)` raises, and
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) only.
+- `eos_point` takes the entropy-per-baryon axis; `TableSpec` does not, and
+  raises for `axes={'SnB': ...}` -- the same gap vmit and zl have, and it
+  closes the same way.
+- The paired phase carries NO thermal neutrino gas, where every unpaired
+  solver adds three flavours (two when the electron neutrino is trapped). The
+  asymmetry is inherited: the first-generation CFL table builder never passed
+  its own `include_thermal_neutrinos` down to `solve_cfl`, so the CFL branch
+  of every table written for the 2fam PNS nucleation study is missing that
+  gas while the unpaired branch has it. It is preserved deliberately rather
+  than fixed here, because closing it changes the published CFL tables and
+  the two branches are compared against each other in that study. Closing it
+  means passing `species.thermal_neutrinos` through `table.solve_at`'s `cfl`
+  arm and regenerating those tables together.
+- The flavour densities are not constrained positive -- the same gap vmit
+  has, from the same cause: at exotic fixed fractions the equations have
+  solutions with net anti-down and anti-strange densities and the solver
+  returns them as converged.
 
 ### zlvmit
 - `get_default_guess` calls the ZL fixed-fraction and trapped solvers

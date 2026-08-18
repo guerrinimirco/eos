@@ -266,11 +266,11 @@ table = eos_table(
 MIT bag model with perturbative QCD corrections. Supports unpaired and CFL phases.
 
 ```python
-from eos.alphabag.compute_tables import AlphaBagTableSettings, compute_alphabag_table
+from eos.alphabag import TableSettings, compute_table
 import numpy as np
 
 # Unpaired quark matter
-settings = AlphaBagTableSettings(
+settings = TableSettings(
     phase='unpaired',                  # 'unpaired' or 'cfl'
     equilibrium='beta_eq',             # 'beta_eq', 'fixed_yc', 'fixed_yc_ys'
 
@@ -291,13 +291,13 @@ settings = AlphaBagTableSettings(
     save_to_file=True
 )
 
-results = compute_alphabag_table(settings)
+results = compute_table(settings)
 ```
 
 **CFL Phase:**
 
 ```python
-cfl_settings = AlphaBagTableSettings(
+cfl_settings = TableSettings(
     phase='cfl',
     Delta0_values=[80.0, 100.0, 150.0],  # Pairing gap in MeV
     B4=165.0,
@@ -307,7 +307,7 @@ cfl_settings = AlphaBagTableSettings(
     save_to_file=True
 )
 
-cfl_results = compute_alphabag_table(cfl_settings)
+cfl_results = compute_table(cfl_settings)
 ```
 
 ### 4. vMIT Quark EOS
