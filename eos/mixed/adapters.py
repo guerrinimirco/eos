@@ -682,3 +682,226 @@ def default_pair(par, flags, vmit_params=None):
     """The DD2 + vMIT pairing every plain (par, flags, vmit_params)
     signature builds — the engine's historical default."""
     return dd2_phase(par, flags), vmit_phase(vmit_params)
+
+
+def sfho_phase(par, flags):
+    """The SFHo hadronic phase as a `Phase` (physical potential slot).
+
+    SFHo's couplings are constants — no rearrangement term — so the slot
+    carries the physical mu_B and its adapter surface is
+    `eos.sfho.thermodynamics.thermo_at_potentials` (four meson fields solved,
+    the densities following outright from the potentials and fields).
+    """
+    from eos.sfho.solver import (
+        solve_beta_eq_neutrinoless as _sfho_beta,
+        solve_beta_eq_neutrino_trapped as _sfho_trapped,
+        solve_fixed_yc as _sfho_yc,
+        solve_fixed_yc_ys as _sfho_yc_ys,
+    )
+    from eos.sfho.thermodynamics import thermo_at_potentials as _sfho_at_mu
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        return _sfho_at_mu(par, flags, mu, mu_C, mu_S, T=T,
+                           n_B_guess=(0.2 if n_B_guess is None
+                                      else n_B_guess),
+                           x0=x0, return_state=return_state)
+
+    def cold_start(n_B, T):
+        p = _sfho_beta(par, n_B, flags, T=T)
+        if not p.converged:
+            raise RuntimeError(f"sfho cold start failed at n_B={n_B}")
+        return p.mu_B, p.mu_e, p.mu_B
+
+    def _wing_point(spec, n_B, T):
+        # ponytail: cold start per point; sfho's density-scaled default guess
+        # converges on wing-like states. Warm-start via sfho's own
+        # warm_start(point, spec) if a wing ever shows holes.
+        if spec.C is Regime.NOT_CONSERVED:
+            if spec.L_e is Regime.GLOBAL:
+                return _sfho_trapped(par, n_B, spec.targets["Y_Le"], flags,
+                                     T=T)
+            return _sfho_beta(par, n_B, flags, T=T)
+        if spec.S is Regime.GLOBAL:
+            return _sfho_yc_ys(par, n_B, spec.targets["Y_C"],
+                               spec.targets["Y_S"], flags, T=T,
+                               leptons=spec.yc_leptons)
+        return _sfho_yc(par, n_B, spec.targets["Y_C"], flags, T=T,
+                        leptons=spec.yc_leptons)
+
+    def wing_sweep(spec, n_B_grid, T):
+        out = []
+        for n in n_B_grid:
+            try:
+                p = _wing_point(spec, float(n), T)
+            except Exception:
+                continue
+            if not p.converged:
+                continue
+            out.append((p.n_B, p.P, p.eps))
+        return out
+
+    def frozen_thermo(th, scale, T, mu_slot=None):
+        # Y_C and Y_S held while the species re-equilibrate within them,
+        # matter only — the same convention as the DD2 block.
+        n = th.n_B * scale
+        if flags.hyperons:
+            p = _sfho_yc_ys(par, n, th.n_C / th.n_B, th.n_S / th.n_B, flags,
+                            T=T, leptons=False)
+        else:
+            p = _sfho_yc(par, n, th.n_C / th.n_B, flags, T=T, leptons=False)
+        if not p.converged:
+            raise RuntimeError(f"sfho frozen block failed at n_B={n}")
+        return p.P, p.eps, (th.n_C / th.n_B) * n
+
+    return Phase(name="SFHo", thermo=thermo, potential_kind="physical",
+                 cold_start=cold_start, wing_sweep=wing_sweep,
+                 frozen_thermo=frozen_thermo)
+
+
+def zl_phase(params=None):
+    """The ZL nucleonic phase as a `Phase` (physical potential slot).
+
+    The species-basis rotation happens here — mu_p = mu_B + mu_C,
+    mu_n = mu_B — and ZL carries no strangeness: `supports_S=False`, so any
+    mode that conserves S globally raises before a solve, and mu_S never
+    reaches the model.
+    """
+    from eos.zl.parameters import Parameters as ZLParameters
+    from eos.zl.thermodynamics import thermo_from_mu as _zl_from_mu
+    from eos.zl.thermodynamics import thermo_from_n as _zl_from_n
+    from eos.zl.solver import (
+        solve_beta_eq_neutrinoless as _zl_beta,
+        solve_beta_eq_neutrino_trapped as _zl_trapped,
+        solve_fixed_yc as _zl_yc,
+    )
+    if params is None:
+        params = ZLParameters.default()
+
+    def _as_record(m, mu_p, mu_n, T):
+        return PhaseThermo(
+            T=T, mu_B=m.mu_B, mu_C=m.mu_C, mu_S=0.0,
+            # ZL's interaction potentials are functions of (n_p, n_n) and are
+            # not carried on its MatterThermo; nothing downstream reads them.
+            fields={},
+            densities={"p": m.n_p, "n": m.n_n},
+            mu_i={"p": mu_p, "n": mu_n},
+            mu_eff_i={}, m_eff_i={},
+            n_B=m.n_B, n_C=m.n_C, n_S=0.0,
+            P=m.P, eps=m.e, s=m.s,
+            mu_dot_n=mu_p * m.n_p + mu_n * m.n_n)
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        mu_p, mu_n = mu + mu_C, mu
+        m = _zl_from_mu(mu_p, mu_n, T, params=params)
+        th = _as_record(m, mu_p, mu_n, T)
+        return (th, None) if return_state else th
+
+    def cold_start(n_B, T):
+        p = _zl_beta(n_B, T, params=params)
+        if not p.converged:
+            raise RuntimeError(f"zl cold start failed at n_B={n_B}")
+        return p.mu_B, p.mu_e, p.mu_B
+
+    def _wing_point(spec, n_B, T):
+        if spec.C is Regime.NOT_CONSERVED:
+            if spec.L_e is Regime.GLOBAL:
+                return _zl_trapped(n_B, spec.targets["Y_Le"], T,
+                                   params=params)
+            return _zl_beta(n_B, T, params=params)
+        return _zl_yc(n_B, spec.targets["Y_C"], T, params=params,
+                      include_electrons=spec.yc_leptons)
+
+    def wing_sweep(spec, n_B_grid, T):
+        out = []
+        for n in n_B_grid:
+            try:
+                p = _wing_point(spec, float(n), T)
+            except Exception:
+                continue
+            if not p.converged:
+                continue
+            out.append((p.n_B, p.P_total, p.e_total))
+        return out
+
+    def frozen_thermo(th, scale, T, mu_slot=None):
+        # Two species: holding Y_C freezes the composition exactly, and the
+        # inverse direction needs no fixed point at all.
+        m = _zl_from_n(th.n_B * scale, th.n_C / th.n_B, T, params=params)
+        return m.P, m.e, (th.n_C / th.n_B) * (th.n_B * scale)
+
+    return Phase(name="ZL", thermo=thermo, potential_kind="physical",
+                 cold_start=cold_start, supports_S=False,
+                 wing_sweep=wing_sweep, frozen_thermo=frozen_thermo)
+
+
+def alphabag_phase(params=None):
+    """The alphaBag quark phase as a `Phase` (physical potential slot).
+
+    `eos.alphabag.thermodynamics.thermo_from_mu` is a pure evaluation — the
+    perturbative-QCD-corrected couplings are explicit in mu, so there is no
+    internal solve at all. The flavour rotation happens here, as in
+    `vmit_phase`. No `frozen_thermo`: alphabag exposes no
+    thermo-at-given-densities surface, so the frozen-composition responses
+    raise for a pairing that includes it (docs/DEFERRED.md).
+    """
+    from eos.alphabag.parameters import Parameters as ABParameters
+    from eos.alphabag.thermodynamics import thermo_from_mu as _ab_from_mu
+    from eos.alphabag.solver import (
+        solve_beta_eq_neutrinoless as _ab_beta,
+        solve_beta_eq_neutrino_trapped as _ab_trapped,
+        solve_fixed_yc as _ab_yc,
+        solve_fixed_yc_ys as _ab_yc_ys,
+    )
+    if params is None:
+        params = ABParameters.default()
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        mu_u, mu_d, mu_s = quark_potentials(mu, mu_C, mu_S)
+        m = _ab_from_mu(mu_u, mu_d, mu_s, T, params)
+        th = PhaseThermo(
+            T=T, mu_B=m.mu_B, mu_C=m.mu_C, mu_S=m.mu_S,
+            fields={},                     # couplings explicit in mu: no field
+            densities={"u": m.n_u, "d": m.n_d, "s": m.n_s},
+            mu_i={"u": mu_u, "d": mu_d, "s": mu_s},
+            mu_eff_i={}, m_eff_i={},
+            n_B=m.n_B, n_C=m.n_C, n_S=m.n_S,
+            P=m.P, eps=m.e, s=m.s,
+            mu_dot_n=mu_u * m.n_u + mu_d * m.n_d + mu_s * m.n_s)
+        return (th, None) if return_state else th
+
+    def cold_start(n_B, T):
+        p = _ab_beta(n_B, T, params=params)
+        if not p.converged:
+            raise RuntimeError(f"alphabag cold start failed at n_B={n_B}")
+        return p.mu_B, p.mu_e, p.mu_B
+
+    def _wing_point(spec, n_B, T):
+        if spec.C is Regime.NOT_CONSERVED:
+            if spec.L_e is Regime.GLOBAL:
+                return _ab_trapped(n_B, spec.targets["Y_Le"], T,
+                                   params=params)
+            return _ab_beta(n_B, T, params=params)
+        if spec.S is Regime.GLOBAL:
+            return _ab_yc_ys(n_B, spec.targets["Y_C"], spec.targets["Y_S"],
+                             T, params=params,
+                             include_electrons=spec.yc_leptons)
+        return _ab_yc(n_B, spec.targets["Y_C"], T, params=params,
+                      include_electrons=spec.yc_leptons)
+
+    def wing_sweep(spec, n_B_grid, T):
+        out = []
+        for n in n_B_grid:
+            try:
+                p = _wing_point(spec, float(n), T)
+            except Exception:
+                continue
+            if not p.converged:
+                continue
+            out.append((p.n_B, p.P_total, p.e_total))
+        return out
+
+    return Phase(name="alphaBag", thermo=thermo, potential_kind="physical",
+                 cold_start=cold_start, wing_sweep=wing_sweep)

@@ -551,3 +551,73 @@ def get_residual_vector(
 # =============================================================================
 # SELF-TEST
 # =============================================================================
+
+
+def thermo_at_potentials(par, flags, mu_B, mu_C, mu_S=0.0, T=0.0,
+                         n_B_guess=0.2, x0=None, x0_fallback=None,
+                         return_state=False):
+    """SFHo's matter at fixed conserved-charge potentials, fields solved.
+
+    The self-consistent layer: given (mu_B, mu_C, mu_S, T) it solves the four
+    meson fields against `get_residual_vector` and assembles with
+    `thermo_from_mu`. No leptons, no neutrality, no held fraction — those are
+    conditions on a system, and this describes matter. It is the surface the
+    phase-adapter contract consumes, shaped like
+    `eos.dd2.thermodynamics.thermo_at_potentials` with one physical
+    difference: SFHo's couplings are constants, so there is no rearrangement
+    term and the PHYSICAL mu_B enters directly — no kinetic potential, and no
+    density unknown either, because n_i follows outright from (mu_i, fields).
+
+    `x0` is the starting field configuration [sigma, omega, rho, phi]. It
+    must be a DETERMINISTIC function of the caller's inputs: a mixed-phase
+    residual is differentiated numerically, so seeding from the previous
+    trial point would corrupt the Jacobian. `x0_fallback` is a callable tried
+    after `x0`; the last resort is the saturation-scaled default below.
+
+    Returns a `PhaseThermo`, or (PhaseThermo, {"x_phase": fields}) with
+    `return_state`. Raises RuntimeError when no guess meets the residual
+    gate (`eos.general.solve.RESIDUAL_TOL` on the per-row scaled residual).
+    """
+    from scipy.optimize import root
+    from eos.general.solve import RESIDUAL_TOL, scaled_residual_max
+    from eos.sfho.species import active_baryons
+
+    particles = active_baryons(flags)
+
+    def resid(fields):
+        return get_residual_vector(np.asarray(fields, dtype=float), T,
+                                   mu_B, mu_C, mu_S, particles, par)
+
+    def scales(fields):
+        # Each field equation balances m_X^2 X against its source [MeV^3];
+        # scaling by that makes one tolerance mean the same for all rows.
+        masses2 = (par.m_sigma ** 2, par.m_omega ** 2, par.m_rho ** 2,
+                   par.m_phi ** 2)
+        return [m2 * max(abs(f), 1.0) for m2, f in zip(masses2, fields)]
+
+    def guesses():
+        if x0 is not None:
+            yield list(x0)
+        if x0_fallback is not None:
+            yield list(x0_fallback())
+        # The saturation-scaled shape every sfho mode guess shares (fitted to
+        # converged solutions, mirroring eos/sfho/solver._bulk_guess).
+        ratio = n_B_guess / 0.158
+        yield [min(30.0 * ratio, 100.0), min(19.0 * ratio, 80.0), 0.0, 0.0]
+
+    err = None
+    for guess in guesses():
+        sol = root(resid, guess, method="hybr", tol=1e-12)
+        err = scaled_residual_max(resid(sol.x), scales(sol.x))
+        if err <= RESIDUAL_TOL:
+            break
+    else:
+        raise RuntimeError(
+            f"sfho field solve failed at mu_B={mu_B:.3f}, mu_C={mu_C:.3f}, "
+            f"mu_S={mu_S:.3f}, T={T} (scaled residual {err:.2e})")
+
+    sigma, omega, rho, phi = sol.x
+    th = thermo_from_mu(mu_B, mu_C, mu_S, sigma, omega, rho, phi, T,
+                        particles, par,
+                        include_pseudoscalar_mesons=flags.thermal_mesons)
+    return (th, {"x_phase": list(sol.x)}) if return_state else th
