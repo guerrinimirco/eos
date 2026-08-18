@@ -105,7 +105,7 @@ class MixedWindow:
 
 def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                   n_probe=12, tol=None, analytic_jac=False, x0=None,
-                  hint=None, max_refine=2, refine="bisect"):
+                  hint=None, max_refine=2, refine="exact"):
     """Find the mixed window on `n_B_grid` by bracketing the chi crossings.
 
     Probes the grid coarsely, reading chi as the regime indicator (chi <= 0
@@ -115,10 +115,10 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     window, which on a realistic density grid is most of it.
 
     `refine` chooses how far each located boundary is sharpened:
-    `"bisect"` stops at the scan's resolution (half a grid spacing);
-    `"exact"` finishes with one fixed-chi solve per boundary (`refine_window`),
-    so the reported density is the chi crossing itself, with no grid
-    resolution in the answer.
+    `"exact"` (the default) finishes with one fixed-chi solve per boundary
+    (`refine_window`), so the reported density is the chi crossing itself,
+    with no grid resolution in the answer; `"bisect"` stops at the scan's
+    resolution (half a grid spacing).
 
     `hint` is an optional (n_lo, n_hi) span to concentrate the probes in, for
     when a neighbouring temperature or eta has already shown roughly where the

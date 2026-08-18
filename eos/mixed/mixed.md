@@ -205,6 +205,15 @@ found its boundaries — with the hint discarded and the full search repeated if
 a boundary lands on the edge of the hinted range, so a window that genuinely
 disappears is still reported as gone.
 
+The boundaries themselves are EXACT by default: a boundary is a chi crossing,
+and imposing chi while moving n_B into the unknown vector (`solve_fixed_chi`,
+every residual row unchanged) lands on it in one solve — chi = 0 the onset,
+chi = 1 the offset, no grid resolution in the answer. The probe scan stays as
+the cold-start finder (it decides WHICH root; the exact solve decides WHERE),
+and along a temperature axis the scan runs only until two isotherms have
+converged boundary states, after which each isotherm's boundaries are two
+warm-started solves seeded by extrapolating the full boundary vector in T.
+
 The solver's numeric Jacobian is the reference and the correctness oracle; a
 hand-assembled analytic Jacobian is the fast path, validated against finite
 differences and required to reach the same root. A trial point that drives a

@@ -161,7 +161,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
 
 def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
               leptons=True, vmit_params=None, window_only=True,
-              analytic_jac=False, refine="bisect", progress=None,
+              analytic_jac=False, refine="exact", progress=None,
               verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes], with the phase
     boundaries found on each line.
@@ -180,10 +180,10 @@ def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
     far cheaper pure-phase solvers give the same state. Set it False to solve at
     every grid point, e.g. when studying chi outside [0, 1].
 
-    refine chooses the boundary resolution: "bisect" stops at half a grid
-    spacing, "exact" finishes each boundary with one fixed-chi solve and
-    marches those solves along the temperature axis, so the windows carry the
-    chi crossings themselves.
+    refine chooses the boundary resolution: "exact" (the default) finishes
+    each boundary with one fixed-chi solve and marches those solves along the
+    temperature axis, so the windows carry the chi crossings themselves;
+    "bisect" stops at half a grid spacing.
 
     progress : callable, invoked once per completed line with a dict
         {mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,

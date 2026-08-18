@@ -50,7 +50,8 @@ from eos.dd2.thermodynamics import (
     assemble as dd2_assemble, self_consistency_residual,
 )
 from eos.mixed.charges import Regime
-from eos.mixed.solver import has_leptons, _quark_mus_from_charges
+from eos.general.basis import quark_potentials
+from eos.mixed.solver import has_leptons
 from eos.mixed.thermodynamics import charged_leptons
 from eos.mixed.adapters import hadronic_phase, quark_phase
 from eos.vmit.thermodynamics import compute_quark_density
@@ -103,7 +104,7 @@ def _neutrino_kappa(mu_nue, T, h_min=1e-2, rel=1e-4):
 
 def _quark_block(mu_B_Q, mu_C_Q, mu_S, T, params, th_Q):
     """4x3 block: rows [n_B, n_C, n_S, P], columns [mu_B, mu_C, mu_S]."""
-    mu_u, mu_d, mu_s = _quark_mus_from_charges(mu_B_Q, mu_C_Q, mu_S)
+    mu_u, mu_d, mu_s = quark_potentials(mu_B_Q, mu_C_Q, mu_S)
     N = th_Q.densities["u"] + th_Q.densities["d"] + th_Q.densities["s"]
     g = params.a * hc
     V = g * N
@@ -209,7 +210,7 @@ def mixed_jacobian(x, ctx):
     th_H, state_H = hadronic_phase(ctx.par, ctx.flags, d["mu_tilde_B_H"], mu_C_H,
                                    mu_S, T=ctx.T, n_B_guess=ctx.n_B_guess,
                                    x0=ctx.hadronic_seed(), return_state=True)
-    mu_u, mu_d, mu_s = _quark_mus_from_charges(d["mu_B_Q"], mu_C_Q, mu_S)
+    mu_u, mu_d, mu_s = quark_potentials(d["mu_B_Q"], mu_C_Q, mu_S)
     th_Q = quark_phase(mu_u, mu_d, mu_s, T=ctx.T, params=ctx.vmit_params)
 
     bH = _hadronic_block(ctx.par, ctx.flags, d["mu_tilde_B_H"], mu_C_H, mu_S,

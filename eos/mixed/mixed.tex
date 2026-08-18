@@ -489,6 +489,31 @@ move smoothly with $T$. A hint that produces a boundary on the edge of the
 hinted range is discarded and the full search repeated, so a window that
 genuinely disappears is still reported as gone.
 
+\paragraph{Exact boundaries by the fixed-$\chi$ solve.} A phase boundary is a
+$\chi$ crossing, and the crossing can be solved for directly: impose $\chi$
+and move $\nB$ into the unknown vector in its place,
+%
+\begin{equation}
+x = (\tmuB^\phH,\ \muB^\phQ,\ \nB,\ \ldots) \quad \text{at given } \chi ,
+\end{equation}
+%
+with every residual row of the equilibrium system unchanged --- only which
+symbol is solved for moves. $\chi = 0$ then returns
+$\nB^{\mathrm{onset}}$ and $\chi = 1$ returns $\nB^{\mathrm{offset}}$, each in
+one solve, exactly, with no grid resolution in the answer (a normal solve at
+the reported onset gives $\chi$ at round-off). The scan stays as the
+cold-start finder --- the fixed-$\chi$ system can walk to the wrong root from
+far away --- so the scan decides \emph{which} root and the exact solve
+decides \emph{where}: the onset solve is seeded from the lowest mixed probe,
+the offset solve from the converged onset state, and a solve that fails or
+leaves the probes' bracket is rejected in favour of the bisected estimate.
+Along a temperature axis the scan is then needed only twice: once two
+isotherms carry converged boundary states, the next isotherm's boundaries are
+two warm-started fixed-$\chi$ solves seeded by linear extrapolation of the
+entire boundary vector in $T$, with the scan as fallback whenever that march
+declines. Only converged states enter the extrapolation history, so a failed
+isotherm cannot poison it.
+
 \paragraph{Jacobian.} The reference path uses the solver's own numeric
 Jacobian and is the correctness oracle. A hand-assembled analytic Jacobian is
 available as the fast path, validated against finite differences and required

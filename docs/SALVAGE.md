@@ -16,68 +16,27 @@ phase-adapter contract instead of importing two models' internals. 2895 lines
 in `mixed_phase_eos.py` (the solver) and `hybrid_table_generator.py` (the run
 orchestrator).
 
-### 1. Locate a phase boundary by imposing chi and solving for n_B
+### 1.-3. Boundary location by the fixed-chi solve — LANDED
 
-**The best idea in it.** The mixed system is normally solved at a given n_B,
-returning the quark volume fraction chi. To find where the mixed phase begins
-and ends, that has to be inverted, and there are two ways:
+The three boundary-search ideas this section carried are now the shipped
+implementation in `eos/mixed/boundaries.py` and `eos/mixed/table.py`:
 
-- **Scan and bisect** — what `eos/mixed/solvers/sweep.py:locate_window` does:
-  probe the density grid, read chi as a regime indicator, bisect the chi = 0
-  and chi = 1 crossings to half a grid spacing. Its own docstring prices this
-  at "a couple of dozen solves", and it can miss a window thinner than the
-  coarse probe spacing (hence `max_refine`).
+- **impose chi, solve for n_B** — `mixed_slots(..., fixed_chi=True)` swaps the
+  one slot and `solve_fixed_chi` lands on a boundary in one solve, exactly,
+  with no grid resolution in the answer. As predicted here, it went in as one
+  more slot choice on the derived unknown vector, not as a second solver
+  family. The scan of `locate_window` stayed as the cold-start finder that
+  seeds it (`refine_window`): the scan decides which root, the exact solve
+  decides where.
+- **seed the offset from the converged onset** — `refine_window` does exactly
+  that, with the scan's own offset estimate in the density slot instead of the
+  old fitted 2.5 factor.
+- **march the boundary search along temperature** — `table._march_boundaries`
+  extrapolates the last two converged boundary vectors linearly in T
+  (converged-only history, so a failed isotherm cannot poison it) and replaces
+  the per-isotherm scan with two warm-started solves.
 
-- **Swap the unknown** — what `solve_eta0_fixed_chi_beta` and its three
-  siblings did: put n_B IN the unknown vector and impose chi instead.
-
-      normal:      unknowns [sigma, omega, rho, phi, mu_B_H, mu_C_H,
-                             mu_u, mu_d, mu_s, mu_eG, chi]      given n_B
-      fixed-chi:   unknowns [sigma, omega, rho, phi, mu_B_H, mu_C_H,
-                             mu_u, mu_d, mu_s, mu_eG, n_B]      given chi
-
-  Every equation is unchanged — the four field equations, beta equilibrium in
-  each sector, mu_S_Q = 0, baryon conservation (1-chi) n_B_H + chi n_B_Q = n_B,
-  global neutrality, mu_B_H = mu_B_Q, and P_H = P_Q. Only which symbol is
-  solved for moves. chi = 0 then returns n_onset and chi = 1 returns n_offset,
-  each in ONE solve, exactly, with no grid resolution in the answer at all.
-
-  This is the same trick as CLAUDE.md section 3's modes — a mode is a choice of
-  which variable is imposed and which is unknown — applied to chi rather than
-  to a conserved charge. `eos/mixed` already assembles its residual from a
-  declaration (`ChargeSpec`), so the natural form there is to let the
-  declaration carry "chi imposed, n_B unknown" as one more slot choice, rather
-  than to write a second family of solvers as the old code did (four functions:
-  eta0/eta1 x beta/fixed_YC).
-
-  Worth doing when the window locator is next touched. Keep the scan as the
-  cold-start finder — the fixed-chi solve needs a starting n_B and can walk to
-  the wrong root without one — and use it to seed the exact solve.
-
-### 2. Seed the offset from the converged onset
-
-`find_phase_boundaries_single` took the converged chi = 0 solution, copied its
-unknown vector, and multiplied the n_B entry by 2.5 to seed the chi = 1 solve.
-Crude, and the 2.5 is fitted to nothing, but it is the right shape: the two
-boundaries of one transition are far more alike than either is to a cold start.
-The same relation holds in `eos/mixed`, where onset and offset are currently
-found independently along the probe sweep.
-
-### 3. Continuation along temperature, not only along density
-
-`extrapolate_guess(history, T_target, fallback)` kept a list of (T, unknowns)
-pairs and linearly extrapolated the next seed in T, falling back to a copy when
-fewer than two points were available. `find_all_boundaries` then marched the
-whole T grid this way, so each temperature's boundary search started from the
-previous temperature's answer.
-
-The repository warm-starts along density everywhere (CLAUDE.md section 5) and
-along temperature nowhere; `eos/mixed`'s window locator accepts a `hint` span
-from a neighbouring temperature but not a seed vector. For a boundary search,
-where the expensive part is the solve rather than the sweep, marching T with an
-extrapolated seed is the bigger win of the two.
-
-### 4. Caching pure-phase tables between runs
+### 4. Caching pure-phase tables between runs (still open)
 
 `save_pure_table` / `load_pure_table` pickled the pure hadronic and pure quark
 tables to disk, keyed by phase, equilibrium mode, quark parameters and the n_B

@@ -61,6 +61,7 @@ from dataclasses import dataclass, field, replace
 
 from scipy.optimize import root
 
+from eos.general.basis import quark_potentials
 from eos.general.thermodynamics_leptons import neutrino_thermo
 from eos.dd2.solver import solve_beta_eq_octet
 from eos.mixed.charges import (
@@ -208,21 +209,6 @@ def seed_across_eta(result, spec, eta, flags=None):
 # ---------------------------------------------------------------------------
 # the unknown vector and its context
 # ---------------------------------------------------------------------------
-
-def _quark_mus_from_charges(mu_B, mu_C, mu_S):
-    """(mu_B, mu_C, mu_S) -> (mu_u, mu_d, mu_s), inverting vMIT's convention
-    mu_B = mu_u + 2 mu_d, mu_C = mu_u - mu_d, mu_S = mu_s - mu_d.
-
-    Algebraically `eos.general.basis.quark_potentials`; kept in this exact
-    floating-point form until the step that regenerates the baselines, because
-    the two round differently in the last bits and the TOV integration
-    amplifies that above the baseline tolerance.
-    """
-    mu_u = (mu_B + 2.0 * mu_C) / 3.0
-    mu_d = (mu_B - mu_C) / 3.0
-    mu_s = mu_d + mu_S
-    return mu_u, mu_d, mu_s
-
 
 def has_leptons(spec: ChargeSpec):
     """Are neutralizing leptons present?
@@ -400,7 +386,7 @@ def evaluate_phases(x, ctx):
         n_B_guess=ctx.n_B_guess, x0=ctx.hadronic_seed(), return_state=True)
     ctx.cache["state_H"] = state_H
 
-    mu_u, mu_d, mu_s = _quark_mus_from_charges(d["mu_B_Q"], mu_C_Q, mu_S)
+    mu_u, mu_d, mu_s = quark_potentials(d["mu_B_Q"], mu_C_Q, mu_S)
     th_Q = quark_phase(mu_u, mu_d, mu_s, T=ctx.T, params=ctx.vmit_params)
 
     zero = LeptonDomain()

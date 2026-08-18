@@ -192,10 +192,10 @@ class MixedTableSpec:
     window_only: solve the mixed system only inside the located transition
                  window (the default and much faster). Set False to solve at
                  every grid point, e.g. when studying chi outside [0, 1].
-    refine     : how far each line's boundaries are sharpened — "bisect"
-                 stops at half a grid spacing, "exact" finishes with one
-                 fixed-chi solve per boundary and marches those solves along
-                 the temperature axis (see `_locate_chained`).
+    refine     : how far each line's boundaries are sharpened — "exact"
+                 (the default) finishes with one fixed-chi solve per boundary
+                 and marches those solves along the temperature axis (see
+                 `_locate_chained`); "bisect" stops at half a grid spacing.
     """
     par: object
     flags: object
@@ -207,7 +207,7 @@ class MixedTableSpec:
     leptons: bool = True
     window_only: bool = True
     analytic_jac: bool = False
-    refine: str = "bisect"
+    refine: str = "exact"
 
     def __post_init__(self):
         if "nB" not in self.axes:
