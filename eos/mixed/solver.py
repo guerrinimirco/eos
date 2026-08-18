@@ -63,7 +63,10 @@ from scipy.optimize import root
 
 from eos.general.thermodynamics_leptons import neutrino_thermo
 from eos.dd2.solver import solve_beta_eq_octet
-from eos.mixed.charges import ChargeSpec, Regime
+from eos.mixed.charges import (
+    ChargeSpec, Regime,
+    beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
+)
 from eos.mixed.adapters import (
     PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
 )
@@ -163,8 +166,9 @@ def default_guess(ctx):
     return [seed[name] for name in ctx.slots]
 
 
-def _as_x0(result, slots):
-    return [result.potentials[name] for name in slots]
+def warm_start(point, slots):
+    """The seed taken from a previously solved point, in slot order."""
+    return [point.potentials[name] for name in slots]
 
 
 def seed_across_eta(result, spec, eta, flags=None):
@@ -205,7 +209,13 @@ def seed_across_eta(result, spec, eta, flags=None):
 
 def _quark_mus_from_charges(mu_B, mu_C, mu_S):
     """(mu_B, mu_C, mu_S) -> (mu_u, mu_d, mu_s), inverting vMIT's convention
-    mu_B = mu_u + 2 mu_d, mu_C = mu_u - mu_d, mu_S = mu_s - mu_d."""
+    mu_B = mu_u + 2 mu_d, mu_C = mu_u - mu_d, mu_S = mu_s - mu_d.
+
+    Algebraically `eos.general.basis.quark_potentials`; kept in this exact
+    floating-point form until the step that regenerates the baselines, because
+    the two round differently in the last bits and the TOV integration
+    amplifies that above the baseline tolerance.
+    """
     mu_u = (mu_B + 2.0 * mu_C) / 3.0
     mu_d = (mu_B - mu_C) / 3.0
     mu_s = mu_d + mu_S
@@ -387,7 +397,7 @@ def evaluate_phases(x, ctx):
 # the residual
 # ---------------------------------------------------------------------------
 
-def mixed_residual(x, ctx):
+def residual(x, ctx):
     """Dimensionless residual vector, assembled by regime.
 
     Rows, in order:
@@ -482,14 +492,14 @@ def _jac_with_fallback(ctx):
             return mixed_jacobian(x, ctx_)
         except (RuntimeError, np.linalg.LinAlgError):
             n = len(ctx_.slots)
-            J = np.zeros((len(mixed_residual(x, ctx_)), n))
+            J = np.zeros((len(residual(x, ctx_)), n))
             for i in range(n):
                 h = max(1e-4, 1e-6 * abs(x[i]))
                 xp, xm = list(x), list(x)
                 xp[i] += h
                 xm[i] -= h
-                J[:, i] = (np.array(mixed_residual(xp, ctx_))
-                           - np.array(mixed_residual(xm, ctx_))) / (2.0 * h)
+                J[:, i] = (np.array(residual(xp, ctx_))
+                           - np.array(residual(xm, ctx_))) / (2.0 * h)
             return J
     return jac
 
@@ -530,9 +540,9 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
     sol = None
     for guess in guesses():
         ctx.cache.clear()          # a fresh guess invalidates the phase cache
-        sol = root(mixed_residual, guess, args=(ctx,), method="hybr",
+        sol = root(residual, guess, args=(ctx,), method="hybr",
                    tol=1e-12, jac=jac)
-        res_max = max(abs(r) for r in mixed_residual(sol.x, ctx))
+        res_max = max(abs(r) for r in residual(sol.x, ctx))
         if res_max <= RESIDUAL_TOL:
             break
     else:
@@ -588,6 +598,41 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
 
 
 # ---------------------------------------------------------------------------
+# the modes (CLAUDE.md section 3, named per section 13)
+# ---------------------------------------------------------------------------
+# Each is the general solve at the ChargeSpec its mode factory declares — the
+# residual is never duplicated per mode. `**kw` passes solve_mixed's tuning
+# (vmit_params, x0, n_B_guess, check_consistency, analytic_jac) through.
+
+def solve_beta_eq_neutrinoless(par, flags, n_B, eta, T=0.0, **kw):
+    """Beta equilibrium, free-streaming neutrinos, charge neutral: (n_B, T)."""
+    return solve_mixed(par, flags, n_B, eta, beta_eq_neutrinoless(), T=T, **kw)
+
+
+def solve_beta_eq_neutrino_trapped(par, flags, n_B, Y_Le, eta, T=0.0, **kw):
+    """Beta equilibrium with trapped neutrinos: (n_B, Y_Le, T)."""
+    return solve_mixed(par, flags, n_B, eta, beta_eq_neutrino_trapped(Y_Le),
+                       T=T, **kw)
+
+
+def solve_fixed_yc(par, flags, n_B, Y_C, eta, T=0.0, leptons=True, **kw):
+    """Fixed non-leptonic charge fraction: (n_B, Y_C, T).
+
+    leptons=True adds electrons (and muons if enabled) enforcing total
+    neutrality; leptons=False is a charged, eta-independent slice.
+    """
+    return solve_mixed(par, flags, n_B, eta, fixed_YC(Y_C, leptons=leptons),
+                       T=T, **kw)
+
+
+def solve_fixed_yc_ys(par, flags, n_B, Y_C, Y_S, eta, T=0.0, leptons=True,
+                      **kw):
+    """Fixed charge and strangeness fractions: (n_B, Y_C, Y_S, T)."""
+    return solve_mixed(par, flags, n_B, eta,
+                       fixed_YC_YS(Y_C, Y_S, leptons=leptons), T=T, **kw)
+
+
+# ---------------------------------------------------------------------------
 # the density sweep
 # ---------------------------------------------------------------------------
 
@@ -632,7 +677,7 @@ def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                 raise
             n_mid = 0.5 * (n_prev + n_target)
             p_mid = step(n_prev, n_mid, seed, nH, depth + 1)
-            return step(n_mid, n_target, _as_x0(p_mid, slots),
+            return step(n_mid, n_target, warm_start(p_mid, slots),
                         p_mid.th_H.n_B, depth + 1)
 
     out, seed, n_prev, nH = [], x0, None, nH0
@@ -642,7 +687,7 @@ def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         except RuntimeError:
             continue
         out.append(p)
-        seed, n_prev, nH = _as_x0(p, slots), float(n_B), p.th_H.n_B
+        seed, n_prev, nH = warm_start(p, slots), float(n_B), p.th_H.n_B
     return [r for r in out if r.in_mixed_phase] if mixed_only else out
 
 

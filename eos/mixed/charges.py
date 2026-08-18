@@ -20,7 +20,7 @@ quantity in {B, C, S, L_e} may be treated in one of three ways:
 
 `ChargeSpec` records that choice per charge, and *nothing else in the engine
 enumerates equilibrium modes*: the unknown vector (`mixed_slots`), the residual
-list (`mixed_residual`) and the Jacobian are all assembled by reading the
+list (`residual`) and the Jacobian are all assembled by reading the
 regimes off a ChargeSpec. The four named modes are therefore four
 configurations of one solver, and an unnamed combination is constructible by
 instantiating `ChargeSpec` directly.
@@ -94,7 +94,7 @@ class ChargeSpec:
     the baryon potential matches, mu_B^H = mu_B^Q.
 
     Nothing else in the engine enumerates equilibrium modes -- the unknown
-    vector (`mixed_slots`), the residual list (`mixed_residual`) and the
+    vector (`mixed_slots`), the residual list (`residual`) and the
     Jacobian are all assembled by reading the regimes off a ChargeSpec -- so
     the four named modes below are four configurations of one solver, and an
     unnamed combination is constructible by passing a `ModeSpec` directly.

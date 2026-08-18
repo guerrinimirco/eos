@@ -40,7 +40,7 @@ from eos.general.modes import Conservation, ModeSpec
 from eos.mixed.charges import ChargeSpec, Regime
 from eos.mixed.solver import solve_mixed
 from eos.mixed.solver import sweep_mixed
-from eos.mixed.solver import build_mixed_ctx, mixed_residual, mixed_slots
+from eos.mixed.solver import build_mixed_ctx, residual, mixed_slots
 from eos.mixed.backends.jacobian import mixed_jacobian
 from eos.mixed.hybrid import build_mixed_eos_table
 
@@ -163,8 +163,8 @@ def _check_jacobian(par, flags, vp, n_B=0.6):
             h = max(1e-4, 1e-6 * abs(x[j]))
             xp, xm = x.copy(), x.copy()
             xp[j] += h; xm[j] -= h
-            Jn[:, j] = (np.array(mixed_residual(xp, ctx))
-                        - np.array(mixed_residual(xm, ctx))) / (2.0 * h)
+            Jn[:, j] = (np.array(residual(xp, ctx))
+                        - np.array(residual(xm, ctx))) / (2.0 * h)
         worst = max(worst, np.abs(Ja - Jn).max())
     return CheckResult("analytic J ~ FD", worst < 1e-6, worst,
                        "mixed_jacobian vs FD (eta=0,0.5)")

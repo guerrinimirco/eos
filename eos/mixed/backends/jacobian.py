@@ -195,9 +195,9 @@ def _sens(slot, name, val=1.0):
 
 
 def mixed_jacobian(x, ctx):
-    """d(mixed_residual)/dx, shape (n_residuals x n_slots).
+    """d(residual)/dx, shape (n_residuals x n_slots).
 
-    Regime-driven and row-aligned with `mixed_residual`, so the two stay in
+    Regime-driven and row-aligned with `eos.mixed.solver.residual`, so the two stay in
     step by construction rather than by convention.
     """
     spec, eta, slots = ctx.spec, ctx.eta, ctx.slots

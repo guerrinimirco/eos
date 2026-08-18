@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from eos.mixed.solver import _as_x0, mixed_slots, sweep_mixed
+from eos.mixed.solver import mixed_slots, sweep_mixed, warm_start
 
 #: Most single-tolerance steps `locate_window` will take when it has to walk to
 #: boundary -- so this is a cost ceiling, not a working limit.
@@ -182,7 +182,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
             n_mid = 0.5 * (r_lo.n_B + r_hi.n_B)
             stepped = sweep_mixed(par, flags, [r_lo.n_B, n_mid], eta, spec,
                                   vmit_params=vmit_params, T=T,
-                                  x0=_as_x0(r_lo, slots),
+                                  x0=warm_start(r_lo, slots),
                                   nH0=r_lo.th_H.n_B,
                                   analytic_jac=analytic_jac)
             if not stepped or abs(stepped[-1].n_B - n_mid) > 1e-12:
@@ -247,7 +247,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                 return np.nan                  # ran off the grid, not a crossing
             stepped = sweep_mixed(par, flags, [r.n_B, n_next], eta, spec,
                                   vmit_params=vmit_params, T=T,
-                                  x0=_as_x0(r, slots), nH0=r.th_H.n_B,
+                                  x0=warm_start(r, slots), nH0=r.th_H.n_B,
                                   analytic_jac=analytic_jac)
             if not stepped or abs(stepped[-1].n_B - n_next) > 1e-12:
                 return 0.5 * (n_next + r.n_B) if direction < 0 else np.nan

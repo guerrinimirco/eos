@@ -82,6 +82,8 @@ from eos.mixed.adapters import (
 # --- solving one point, and sweeping density -------------------------------
 from eos.mixed.solver import (
     MixedResult, solve_mixed, sweep_mixed, find_mixed_window, seed_across_eta,
+    solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
+    solve_fixed_yc, solve_fixed_yc_ys,
 )
 from eos.mixed.boundaries import MixedWindow, locate_window
 
@@ -125,6 +127,8 @@ __all__ = [
     "PhaseThermo", "hadronic_phase", "hadronic_seed", "quark_phase",
     # solving
     "solve_mixed", "MixedResult",
+    "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
+    "solve_fixed_yc", "solve_fixed_yc_ys",
     "sweep_mixed", "locate_window", "find_mixed_window", "MixedWindow",
     "seed_across_eta",
     "solve_mixed_at_entropy",
