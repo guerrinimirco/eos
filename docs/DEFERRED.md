@@ -897,6 +897,33 @@ a reason that has nothing to do with seeding.
   at T > 0 the Fermi surface is not sharp, so `thermo_from_n`'s
   density -> k_F -> nu path becomes a density -> nu inversion and
   `solver.state_at`'s k_F clamp becomes a clamp on nu.
+
+  Three things measured 2026-08-19, before that work starts:
+
+  1. **The inversion is already written and is cheap.**
+     `general/fermi_integrals.invert_fermi_density(n, T, m, g,
+     include_antiparticles=False)` is the n -> nu map, so no model writes one
+     (CLAUDE.md section 7). Round trip 1e-13 or better; 25 us at T = 0 and
+     30-38 us at T = 20 MeV, i.e. temperature costs it nothing. Against the
+     algebraic `kF_from_n` it is ~300x slower, which is why T = 0 must keep
+     the closed form -- that is also what holds `test/baseline` bit-for-bit.
+  2. **The inversion moves INSIDE the gap solve, and that is the structural
+     part.** `kF` is currently computed once outside `gap_residual` because it
+     depends only on (n, g). Its T > 0 counterpart nu depends on the MASS, and
+     the masses are the gap unknowns, so all six strongly interacting species
+     must be re-inverted every gap iteration. Roughly 6 x 20 x 30 us = 4 ms per
+     `thermo_from_n` call at T > 0. Leptons keep fixed masses and stay outside.
+  3. **The JEL fit does not converge to the exact T = 0 closed form, so
+     "take T small" is not a validation route below ~1e-4.** `solve_fermi_jel`
+     switches from `_compute_exact_T0` to the fit as soon as T != 0, and the
+     answer steps discontinuously and then STAYS at that offset as T falls:
+     in n, +6.9e-6 (u at nu = 400, M = 5.5), -6.3e-5 (s at nu = 500,
+     M = 140.7), -3.0e-6 (neutron at nu = 1000); in eps, +6.6e-6, -6.3e-5,
+     -3.0e-6. Measured at T = 1e-3 MeV and flat down from there. So a
+     T -> 0 continuity check has a floor of about 1e-4 relative and must say
+     so; it is not a bug in the port. The T = 0 path stays exact and the
+     baseline stays bit-for-bit, which is the reason to keep the special case
+     rather than route everything through the fit for smoothness.
 - Cold starts stop converging around 0.5 fm^-3. The beta-equilibrium table is
   built by continuation (`table.build_table`), and the "up" and "down" sweeps
   differ where more than one branch exists — that difference is the branch
