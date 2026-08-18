@@ -28,8 +28,10 @@ mirroring the split between physics and continuation.
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.optimize import brentq
 
 from eos.mixed.solver import mixed_slots, sweep_mixed, warm_start
+from eos.mixed.thermodynamics import charged_leptons
 
 #: Most single-tolerance steps `locate_window` will take when it has to walk to
 #: boundary -- so this is a cost ceiling, not a working limit.
@@ -289,3 +291,193 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                 and not any(r.chi >= 1.0 for r in probes)):
             n_offset = mixed[-1]
     return MixedWindow(float(n_onset), float(n_offset), probes)
+
+
+# ---------------------------------------------------------------------------
+# the Maxwell branch crossing (eta = 1)
+# ---------------------------------------------------------------------------
+# At eta = 1 the two phases exchange no charge: each is separately neutral, they
+# coexist at one pressure, and the density jumps. That construction needs no
+# mixed system and no chi -- there is no mixture at the transition, only two
+# states of the same matter at one (mu_B, P). It is two one-dimensional solves:
+# neutralize each phase against its own leptons, then find the mu_B at which the
+# total pressures cross.
+#
+# `locate_window` above is the other construction: eta < 1 puts a genuine mixed
+# region on the density axis and chi is what locates its edges. Both are in this
+# module because both answer "where is the transition"; they do not share code
+# because they do not share a physical picture.
+#
+# Everything here takes a `phase` CALLABLE, (mu_B, mu_C) -> PhaseThermo, so it
+# is model-agnostic: a DD2/vMIT pairing supplies two different adapters, and an
+# ENJL pairing supplies `eos.mixed.adapters.enjl_phase` twice at two different
+# declared branches.
+
+#: Range of mu_C scanned for the neutralizing value, and how finely. Charge
+#: neutrality puts mu_e between roughly 20 and 300 MeV over the density range
+#: any of these models is used at; the scan exists rather than a bracket
+#: because a branch does not necessarily EXIST across the whole span, and a
+#: bracket built from its endpoints would fail on the endpoint that is missing.
+#: Kept coarse deliberately: the residual is smooth in mu_C and the bisection
+#: below refines it, while every extra scan point off the branch costs a full
+#: failed seed ladder, which is the dominant cost of this construction.
+MU_C_SCAN = (-300.0, -20.0, 11)
+
+
+@dataclass
+class MaxwellPoint:
+    """One first-order transition located at eta = 1.
+
+    mu_B     : the coexistence baryon potential [MeV]
+    P        : the coexistence pressure, matter + leptons [MeV/fm^3]
+    n_B_lo   : baryon density of the low-density branch [fm^-3]
+    n_B_hi   : baryon density of the high-density branch [fm^-3]
+    mu_e_lo, mu_e_hi : each branch's own neutralizing electron potential [MeV]
+    branches : the two branch labels, low then high
+
+    `n_B_lo` and `n_B_hi` are the window edges: between them no single phase is
+    stable and the delivered EoS is the constant-pressure plateau.
+    """
+    mu_B: float
+    P: float
+    n_B_lo: float
+    n_B_hi: float
+    mu_e_lo: float
+    mu_e_hi: float
+    branches: tuple
+
+    @property
+    def exists(self):
+        return np.isfinite(self.mu_B) and self.n_B_hi > self.n_B_lo
+
+
+
+def _bisect_where_defined(f, a, fa, b, fb, xtol=1.0e-11, max_steps=60):
+    """Bisect f between a and b, tolerating arguments where f does not exist.
+
+    A branch has a domain, and its edge can fall inside a bracket that the
+    coarse scan reported as a clean sign change: the two scanned points exist
+    and the states between them need not. `brentq` cannot express that -- it
+    propagates the RuntimeError and loses an otherwise good bracket.
+
+    So: ordinary bisection, and where the midpoint does not exist, try a few
+    offset points before giving up on the bracket. Returning None says the root
+    was bracketed but not located, which is what actually happened; the caller
+    moves to the next bracket rather than reporting a boundary it did not find.
+    """
+    for _ in range(max_steps):
+        if abs(b - a) <= xtol:
+            return 0.5 * (a + b)
+        mid = fmid = None
+        for fraction in (0.5, 0.4, 0.6, 0.3, 0.7):
+            trial = a + fraction * (b - a)
+            try:
+                fmid, mid = f(trial), trial
+            except RuntimeError:
+                continue
+            break
+        if mid is None:
+            return None
+        if fa * fmid <= 0.0:
+            b, fb = mid, fmid
+        else:
+            a, fa = mid, fmid
+    return 0.5 * (a + b)
+
+
+def neutral_phase(phase, mu_B, T=0.0, muons=True):
+    """The phase at `mu_B`, with mu_C set so it neutralizes its OWN leptons.
+
+    This is what eta = 1 means for one phase: n_C = n_e + n_mu inside it, with
+    no charge borrowed from anywhere else. Returns
+    `(PhaseThermo, LeptonDomain, mu_C)`, or None where the branch does not
+    exist across the scan or the residual does not change sign on it.
+
+    Beta equilibrium fixes mu_e = -mu_C (CLAUDE.md section 2: mu_C + mu_e = 0),
+    so the single unknown is mu_C and the single condition is neutrality.
+    """
+    if T != 0.0:
+        raise NotImplementedError(
+            f"the eta = 1 construction is written at T = 0; got T = {T} MeV")
+
+    def residual(mu_C):
+        return phase(mu_B, mu_C).n_C - charged_leptons(-mu_C, T, muons).n
+
+    lo, hi, count = MU_C_SCAN
+    scanned = []
+    for mu_C in np.linspace(lo, hi, count):
+        try:
+            scanned.append((float(mu_C), residual(mu_C)))
+        except RuntimeError:            # this branch does not exist here
+            continue
+    for (c0, r0), (c1, r1) in zip(scanned, scanned[1:]):
+        if r0 * r1 <= 0.0:
+            mu_C = _bisect_where_defined(residual, c0, r0, c1, r1)
+            if mu_C is None:              # branch stops existing inside here
+                continue
+            return (phase(mu_B, mu_C), charged_leptons(-mu_C, T, muons),
+                    float(mu_C))
+    return None
+
+
+def total_pressure(phase, mu_B, T=0.0, muons=True):
+    """(P_matter + P_leptons, n_B, mu_C) for the neutralized phase, or None.
+
+    The leptons belong in the balance because at eta = 1 they live inside the
+    structures whose pressures must equal -- `mixed.tex`'s Eq. for mechanical
+    equilibrium with eta = 1, where the local lepton pressure carries weight 1.
+    Dropping them moves the located mu_B by tens of MeV.
+    """
+    found = neutral_phase(phase, mu_B, T=T, muons=muons)
+    if found is None:
+        return None
+    th, leptons, mu_C = found
+    return th.P + leptons.P, th.n_B, mu_C
+
+
+def locate_maxwell(phase_lo, phase_hi, mu_B_grid, T=0.0, muons=True,
+                   labels=("lo", "hi"), xtol=1.0e-8):
+    """Where two branches coexist: the eta = 1 construction.
+
+    `phase_lo` and `phase_hi` are callables (mu_B, mu_C) -> PhaseThermo, the
+    low- and high-density branch. Scans `mu_B_grid` for a sign change in
+    P_lo - P_hi with both branches neutralized, then brackets it to `xtol`.
+
+    Returns a `MaxwellPoint`; `.exists` is False when the two branches never
+    both exist on the grid, or when their pressures do not cross on it. That is
+    a physics outcome -- these parameters have no first-order transition in this
+    range -- and not a failure, so it is a value rather than an exception.
+
+    The grid is scanned rather than bracketed from its ends for the same reason
+    `neutral_phase` scans: neither branch need exist across the whole span, and
+    above a transition the low-density branch typically stops existing
+    altogether.
+    """
+    if T != 0.0:
+        raise NotImplementedError(
+            f"the eta = 1 construction is written at T = 0; got T = {T} MeV")
+
+    def gap(mu_B):
+        a = total_pressure(phase_lo, mu_B, T=T, muons=muons)
+        b = total_pressure(phase_hi, mu_B, T=T, muons=muons)
+        return None if (a is None or b is None) else a[0] - b[0]
+
+    none = MaxwellPoint(np.nan, np.nan, np.nan, np.nan, np.nan, np.nan,
+                        tuple(labels))
+    scanned = [(float(m), gap(m)) for m in np.asarray(mu_B_grid, dtype=float)]
+    scanned = [(m, g) for m, g in scanned if g is not None]
+    bracket = next((((m0, g0), (m1, g1))
+                    for (m0, g0), (m1, g1) in zip(scanned, scanned[1:])
+                    if g0 * g1 <= 0.0), None)
+    if bracket is None:
+        return none
+
+    (m0, _), (m1, _) = bracket
+    mu_B = brentq(lambda m: gap(m), m0, m1, xtol=xtol, rtol=1e-14)
+    lo = total_pressure(phase_lo, mu_B, T=T, muons=muons)
+    hi = total_pressure(phase_hi, mu_B, T=T, muons=muons)
+    if lo is None or hi is None:
+        return none
+    return MaxwellPoint(mu_B=mu_B, P=0.5 * (lo[0] + hi[0]),
+                        n_B_lo=lo[1], n_B_hi=hi[1],
+                        mu_e_lo=-lo[2], mu_e_hi=-hi[2], branches=tuple(labels))
