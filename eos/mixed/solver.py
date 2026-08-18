@@ -1,21 +1,24 @@
 """
-mixed/equilibrium/residual.py
-=============================
-The mixed-phase equilibrium conditions, assembled from a `ChargeSpec` and eta.
+mixed/solver.py
+===============
+The mixed-phase equilibrium conditions and the solves that close them.
 
-*Internal module.* Driven by `eos.mixed.solve_mixed`.
+*Public API* (re-exported from `eos.mixed`): `MixedResult`, `solve_mixed`,
+`sweep_mixed`, `seed_across_eta`, `find_mixed_window`.
 
 At fixed (n_B, T, eta) plus whatever fractions the mode fixes, hadron-quark
 coexistence is one nonlinear system. Its unknown vector and its residual list
-are both *derived* from the per-charge regime assignment — they are not
-enumerated per named mode. Adding an unnamed combination of regimes therefore
-needs no new code.
+are both *derived* from the per-charge regime assignment (`ChargeSpec`) — they
+are not enumerated per named mode. Adding an unnamed combination of regimes
+therefore needs no new code.
 
 Because the phase adapters already absorb each phase's internal
 self-consistency (fields and densities at given potentials), the unknowns here
 are only conserved-charge potentials, chi, and the eta-split lepton potentials
 — four to nine numbers, rather than the full per-species (mu_i, n_i) vector a
-direct formulation would carry.
+direct formulation would carry. The quantities computed FROM a solved state —
+the lepton domains, the volume-averaged totals, the Euler identity — live in
+`eos.mixed.thermodynamics`, which never knows which mode it is in.
 
 The eta parameter
 -----------------
@@ -39,27 +42,166 @@ Concretely, when leptons are present the electron gas splits into a local part
 (one potential per phase, mu_eL^H and mu_eL^Q, each neutralizing its own phase)
 and a global part (a single mu_eG neutralizing the average). Only the local
 part enters mechanical equilibrium, since only it lives inside the structures
-whose pressures must balance.
+whose pressures must balance. Electrons and, when enabled, muons share each
+domain in weak equilibrium, mu_mu = mu_e - mu_nue — muons add no unknowns.
 
-Charged leptons
----------------
-Electrons and, when enabled, muons share each neutrality domain. They are in
-weak equilibrium with each other, mu_mu = mu_e - mu_nue (with mu_nue the trapped
-neutrino potential, zero for transparent matter), which is the same relation
-eos/dd2 uses. Muons therefore add no unknowns: they add their density to each
-neutrality condition and their pressure to mechanical equilibrium.
+chi is the quark volume fraction and is deliberately *not* clamped to [0, 1]:
+it is the continuation variable that tells the caller which regime a density is
+in. chi <= 0 means the point is still pure hadronic, chi >= 1 that it is
+already pure quark, and 0 < chi < 1 that it lies in the mixed window.
+`eos.mixed.boundaries` locates the phase boundaries from exactly that.
 
 Units are fm-based throughout. n_C is the NON-leptonic charge density; the
 leptons neutralize it.
+
+This file reads guesses -> the unknown vector and its context -> the phases at
+trial potentials -> the residual -> the solve -> the density sweep.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from eos.general.thermodynamics_leptons import (
-    electron_thermo, muon_thermo, neutrino_thermo,
+from scipy.optimize import root
+
+from eos.general.thermodynamics_leptons import neutrino_thermo
+from eos.dd2.solver import solve_beta_eq_octet
+from eos.mixed.charges import ChargeSpec, Regime
+from eos.mixed.adapters import (
+    PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
 )
-from eos.mixed.equilibrium.charges import ChargeSpec, Regime
-from eos.mixed.adapters import hadronic_phase, hadronic_seed, quark_phase
+from eos.mixed.thermodynamics import (
+    LeptonDomain, charged_leptons, assemble, euler_residual,
+)
 
+#: Post-solve residual gate, matching the tolerance eos/dd2 accepts.
+RESIDUAL_TOL = 1.0e-10
+
+#: Relative tolerance on the Euler / Hugenholtz-Van Hove identity.
+HVH_RTOL = 1.0e-8
+
+
+@dataclass
+class MixedResult:
+    """One solved mixed-phase state.
+
+    P, eps, s are the TOTALS: both matter phases volume-averaged, plus the
+    eta-split leptons, plus photons and any trapped neutrinos.
+    """
+    converged: bool
+    error: float
+    n_B: float                  # fm^-3
+    T: float                    # MeV
+    eta: float
+    chi: float                  # quark volume fraction (see module docstring)
+    th_H: PhaseThermo
+    th_Q: PhaseThermo
+    potentials: dict            # solved unknown-vector slots
+    mu_B: float                 # matched physical baryon potential [MeV]
+    P: float                    # MeV/fm^3
+    eps: float                  # MeV/fm^3
+    s: float                    # fm^-3
+    extras: dict = field(default_factory=dict)
+
+    @property
+    def in_mixed_phase(self):
+        return 0.0 < self.chi < 1.0
+
+    @property
+    def phase(self):
+        """'H' | 'mix' | 'Q' — which regime this density is in."""
+        if self.chi <= 0.0:
+            return "H"
+        return "mix" if self.chi < 1.0 else "Q"
+
+
+# ---------------------------------------------------------------------------
+# guesses
+# ---------------------------------------------------------------------------
+
+def default_guess(ctx):
+    """Physical cold start: each phase at its OWN pure beta-equilibrium point.
+
+    The hadronic side supplies mu_tilde_B and its electron potential, the quark
+    side (solved separately at the same density) supplies mu_B_Q and its own.
+    That matches the eta=1 structure — where each phase is separately neutral —
+    far better than a single shared mu_e would, and is a sound seed at eta=0
+    too. chi starts mid-window. If vMIT does not converge at this density the
+    quark seed falls back to the hadronic potentials.
+
+    The thermal meson gas is switched OFF for the seed, for the same reason
+    `eos.mixed.adapters.hadronic_seed` switches it off: the gas adds no unknown
+    to the vector being seeded, so it can only change whether this function
+    returns at all. `eos.dd2` refuses a Bose-condensed gas by raising, and in
+    beta equilibrium the gas is condensed above n_B ~ 0.3 fm^-3 at the
+    temperatures the transition lives at -- so with the flags passed through,
+    the cold start raised and the condensation check below never ran.
+    """
+    from eos.vmit.eos import solve_vmit_beta_eq
+    seed_flags = replace(ctx.flags, include_pseudoscalars=False,
+                         include_thermal_vectors=False)
+    base = solve_beta_eq_octet(ctx.par, ctx.n_B, seed_flags, T=ctx.T,
+                               include_photons=False, check_consistency=False)
+    mu_tilde_B = base.mu_B - base.Sigma_R
+    try:
+        q = solve_vmit_beta_eq(ctx.n_B, ctx.T, params=ctx.vmit_params)
+        mu_B_Q, mu_eL_Q = q.mu_B, q.mu_e
+    except Exception:
+        mu_B_Q, mu_eL_Q = base.mu_B, base.mu_e
+    seed = {
+        "mu_tilde_B_H": mu_tilde_B,
+        "mu_B_Q": mu_B_Q,
+        "chi": 0.5,
+        "mu_eL_H": base.mu_e,
+        "mu_eL_Q": mu_eL_Q,
+        "mu_eG": base.mu_e,
+        # Fixed-Y_C charge potentials: the beta-equilibrium value mu_C = -mu_e.
+        "mu_C_H": -base.mu_e,
+        "mu_C_Q": -mu_eL_Q,
+        "mu_C": -base.mu_e,
+        # Strangeness self-equilibrating, neutrinos transparent.
+        "mu_S": 0.0,
+        "mu_nue": 0.0,
+    }
+    return [seed[name] for name in ctx.slots]
+
+
+def _as_x0(result, slots):
+    return [result.potentials[name] for name in slots]
+
+
+def seed_across_eta(result, spec, eta, flags=None):
+    """Re-express a solved point as a starting vector for a different eta.
+
+    eta changes the *shape* of the unknown vector — at eta = 0 only a global
+    lepton potential exists, at eta = 1 only the two local ones, in between all
+    three — so a solution at one eta cannot be handed to another directly.
+    This maps it across, using the physical correspondence between the
+    populations that appear and disappear:
+
+      going towards eta = 1  the local potentials start from the global one,
+                             which is the value they must approach as the
+                             global population loses its weight;
+      going towards eta = 0  the global potential starts from the volume
+                             average of the two local ones.
+
+    Cold-starting each eta separately is the fragile part of an eta scan,
+    especially near the Maxwell endpoint and with a soft hadronic phase; walking
+    eta in small steps from a converged neighbour is what makes the scan hold
+    together. Returns a list in the slot order of `mixed_slots(spec, eta)`.
+    """
+    p = dict(result.potentials)
+    chi = p.get("chi", result.chi)
+    mu_eG = p.get("mu_eG")
+    mu_eL_H, mu_eL_Q = p.get("mu_eL_H"), p.get("mu_eL_Q")
+    if mu_eL_H is None:                    # came from eta = 0
+        mu_eL_H = mu_eL_Q = mu_eG
+    if mu_eG is None:                      # came from eta = 1
+        mu_eG = (1.0 - chi) * mu_eL_H + chi * mu_eL_Q
+    filled = dict(p, mu_eG=mu_eG, mu_eL_H=mu_eL_H, mu_eL_Q=mu_eL_Q)
+    return [filled[name] for name in mixed_slots(spec, eta, flags)]
+
+
+# ---------------------------------------------------------------------------
+# the unknown vector and its context
+# ---------------------------------------------------------------------------
 
 def _quark_mus_from_charges(mu_B, mu_C, mu_S):
     """(mu_B, mu_C, mu_S) -> (mu_u, mu_d, mu_s), inverting vMIT's convention
@@ -68,43 +210,6 @@ def _quark_mus_from_charges(mu_B, mu_C, mu_S):
     mu_d = (mu_B - mu_C) / 3.0
     mu_s = mu_d + mu_S
     return mu_u, mu_d, mu_s
-
-
-@dataclass(frozen=True)
-class LeptonDomain:
-    """The negatively-charged leptons sharing one neutrality domain.
-
-    `n`, `P`, `e`, `s` are the electron plus (if enabled) muon totals;
-    `mu_dot_n` is mu_e n_e + mu_mu n_mu, and `kappa` = dn/dmu_e, which is what
-    the Jacobian needs (mu_mu tracks mu_e one-for-one, so the muon
-    susceptibility simply adds).
-    """
-    n: float = 0.0
-    P: float = 0.0
-    e: float = 0.0
-    s: float = 0.0
-    mu_dot_n: float = 0.0
-    n_e: float = 0.0
-    n_mu: float = 0.0
-
-
-def charged_leptons(mu_e, T, muons, mu_nue=0.0):
-    """Electron (+muon) thermodynamics in one neutrality domain.
-
-    Muons are in equilibrium with electrons at mu_mu = mu_e - mu_nue: for
-    neutrino-transparent matter that is mu_mu = mu_e, and with trapped
-    electron-neutrinos the muon family stays transparent, matching
-    eos/dd2/solver.py.
-    """
-    e = electron_thermo(mu_e, T)
-    if not muons:
-        return LeptonDomain(n=e.n, P=e.P, e=e.e, s=e.s,
-                            mu_dot_n=mu_e * e.n, n_e=e.n)
-    mu_mu = mu_e - mu_nue
-    m = muon_thermo(mu_mu, T)
-    return LeptonDomain(
-        n=e.n + m.n, P=e.P + m.P, e=e.e + m.e, s=e.s + m.s,
-        mu_dot_n=mu_e * e.n + mu_mu * m.n, n_e=e.n, n_mu=m.n)
 
 
 def has_leptons(spec: ChargeSpec):
@@ -223,6 +328,10 @@ def build_mixed_ctx(spec, eta, n_B, par, flags, vmit_params, T=0.0,
 )
 
 
+# ---------------------------------------------------------------------------
+# the phases at trial potentials
+# ---------------------------------------------------------------------------
+
 def evaluate_phases(x, ctx):
     """Solve both phases at the trial potentials.
 
@@ -273,6 +382,10 @@ def evaluate_phases(x, ctx):
 )
     return th_H, th_Q, d, extras
 
+
+# ---------------------------------------------------------------------------
+# the residual
+# ---------------------------------------------------------------------------
 
 def mixed_residual(x, ctx):
     """Dimensionless residual vector, assembled by regime.
@@ -339,3 +452,206 @@ def mixed_residual(x, ctx):
     if lep and eta < 1.0:                                             # (7) global
         res.append(((1.0 - chi) * th_H.n_C + chi * th_Q.n_C - G.n) / ns)
     return res
+
+
+# ---------------------------------------------------------------------------
+# the solve
+# ---------------------------------------------------------------------------
+
+def _jac_with_fallback(ctx):
+    """Wrap the analytic Jacobian so a trial point where a phase solve fails
+    still yields a usable matrix.
+
+    The residual answers such a point with a large penalty rather than an
+    exception; the Jacobian mirrors that by falling back to a finite difference
+    of the (penalised) residual, so the outer solver backs off instead of
+    aborting.
+
+    Returns None when `backends/` is absent: the backends are deletable
+    (CLAUDE.md section 9), so `analytic_jac=True` then means the solver's own
+    numeric Jacobian rather than an ImportError.
+    """
+    import numpy as np
+    try:
+        from eos.mixed.backends.jacobian import mixed_jacobian
+    except ImportError:
+        return None
+
+    def jac(x, ctx_):
+        try:
+            return mixed_jacobian(x, ctx_)
+        except (RuntimeError, np.linalg.LinAlgError):
+            n = len(ctx_.slots)
+            J = np.zeros((len(mixed_residual(x, ctx_)), n))
+            for i in range(n):
+                h = max(1e-4, 1e-6 * abs(x[i]))
+                xp, xm = list(x), list(x)
+                xp[i] += h
+                xm[i] -= h
+                J[:, i] = (np.array(mixed_residual(xp, ctx_))
+                           - np.array(mixed_residual(xm, ctx_))) / (2.0 * h)
+            return J
+    return jac
+
+
+def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
+                x0=None, n_B_guess=None, check_consistency=True,
+                analytic_jac=False):
+    """Solve the mixed phase at (n_B, T, eta) for the regime assignment `spec`.
+
+    par         : DD2 `Parametrization`
+    flags       : `SpeciesFlags` — which baryons, leptons and meson gases exist
+    n_B         : total baryon density [fm^-3]
+    eta         : local-neutrality fraction in [0, 1] (0 Gibbs, 1 Maxwell)
+    spec        : `ChargeSpec` from one of the named mode factories
+    x0          : optional warm start, in the slot order of
+                  `mixed_slots(spec, eta, flags)`
+    analytic_jac: supply the hand-assembled Jacobian instead of the solver's
+                  own numeric one. The numeric path is the correctness oracle.
+
+    Returns a `MixedResult`; raises RuntimeError if the residual gate is not
+    met from any guess, so non-convergence is never silent.
+    """
+    if vmit_params is None:
+        from eos.vmit.parameters import get_vmit_default
+        vmit_params = get_vmit_default()
+    ctx = build_mixed_ctx(spec, eta, n_B, par, flags, vmit_params, T=T,
+                          n_B_guess=n_B_guess)
+    jac = _jac_with_fallback(ctx) if analytic_jac else None
+
+    # Lazy: the cold start costs a full DD2 solve plus a full vMIT solve, so it
+    # is built only if `x0` is missing or its solve does not converge. In a
+    # warm-started sweep it is never evaluated, which is the hot-path win.
+    def guesses():
+        if x0 is not None:
+            yield list(x0)
+        yield default_guess(ctx)
+
+    sol = None
+    for guess in guesses():
+        ctx.cache.clear()          # a fresh guess invalidates the phase cache
+        sol = root(mixed_residual, guess, args=(ctx,), method="hybr",
+                   tol=1e-12, jac=jac)
+        res_max = max(abs(r) for r in mixed_residual(sol.x, ctx))
+        if res_max <= RESIDUAL_TOL:
+            break
+    else:
+        raise RuntimeError(
+            f"mixed solve failed at n_B={n_B}, T={T}, eta={eta}: {sol.message} "
+            f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
+
+    th_H, th_Q, d, extras = evaluate_phases(sol.x, ctx)
+    chi = d["chi"]
+    L_H, L_Q, G, nu = extras["L_H"], extras["L_Q"], extras["G"], extras["nu"]
+
+    P_total, eps_total, s_total, mu_dot_n = assemble(
+        chi, eta, th_H, th_Q, L_H, L_Q, G, nu,
+        mu_nue=d.get("mu_nue", 0.0), T=T)
+
+    result = MixedResult(
+        converged=True, error=res_max, n_B=n_B, T=T, eta=eta, chi=chi,
+        th_H=th_H, th_Q=th_Q, potentials=d, mu_B=th_H.mu_B,
+        P=P_total, eps=eps_total, s=s_total, extras=extras)
+
+    # Bose-Einstein condensation is not implemented, so a condensed hadronic
+    # phase is outside the model rather than a hard point. It has to be checked
+    # HERE and not left to the caller: `solve_bose_jel` caps mu*_j at m_j
+    # instead of diverging, so the phase converges happily on a saturated gas
+    # that is not the physical state, and every residual row it feeds -- the
+    # charge rows above all, since the gas carries n_C and n_S -- is then
+    # quietly wrong. Refused rather than returned, matching how `eos.dd2`
+    # refuses the same condition; `eos.mixed.eos_point` turns it into a status.
+    # The quark phase has no meson gas and reports 0.
+    condensation = max(th_H.condensation, th_Q.condensation)
+    if condensation >= 1.0:
+        raise ValueError(
+            f"the hadronic phase's thermal meson gas Bose-condenses at "
+            f"n_B={n_B}, T={T}, eta={eta} (max |mu*|/m = {condensation:.3f}); "
+            f"a condensate is not implemented, so this state is outside the "
+            f"model")
+
+    if check_consistency and result.in_mixed_phase:
+        dP = (th_H.P + eta * L_H.P) - (th_Q.P + eta * L_Q.P)
+        if abs(dP) > 1e-6 * max(abs(P_total), 1.0):
+            raise ValueError(
+                f"mechanical equilibrium violated at n_B={n_B}, eta={eta}: "
+                f"dP={dP:.2e} MeV/fm^3")
+        # Euler / Hugenholtz-Van Hove for the whole mixture (CLAUDE.md §8):
+        # eps + P = T s + sum_i mu_i n_i.
+        hvh = euler_residual(P_total, eps_total, s_total, mu_dot_n, T)
+        if abs(hvh) > HVH_RTOL:
+            raise ValueError(
+                f"Euler / Hugenholtz-Van Hove violated at n_B={n_B}, T={T}, "
+                f"eta={eta}: |{hvh:.2e}| > {HVH_RTOL:.0e} — a thermal or "
+                f"lepton term is inconsistent")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# the density sweep
+# ---------------------------------------------------------------------------
+
+def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
+                max_bisect=6, x0=None, analytic_jac=False,
+                mixed_only=False, nH0=None):
+    """Warm-started sweep over `n_B_grid` at fixed eta.
+
+    A cold seed only converges near the transition onset; through the window
+    the previous solved density is by far the best predictor. So the sweep is
+    warm-started along n_B, and when a step misses, it is bisected rather than
+    abandoned — the same continuation tactic `eos/dd2/solver.sweep_octet` uses.
+
+    Returns a list of `MixedResult` in grid order. Each solved point seeds the
+    next; a missed step is bisected up to `max_bisect` levels, and a density
+    that still fails is skipped, leaving a hole rather than aborting the sweep.
+
+    `x0` seeds the first point (otherwise the physical cold start is used).
+    `nH0` seeds that first point's *hadronic phase* density; see `solve_from`
+    below for why the total density is the wrong guess once chi is appreciable.
+    Pass it whenever `x0` comes from a solved point deep inside the window,
+    otherwise the first step re-derives that point from a guess known to stall.
+    `mixed_only=True` keeps only the points genuinely inside the window.
+    """
+    slots = mixed_slots(spec, eta, flags)
+
+    def solve_from(n_B, seed, nH):
+        # `nH` seeds the hadronic phase's own internal solve. It must be that
+        # phase's density, NOT the total: deep in the window the two diverge
+        # badly (as chi -> 1 the hadronic phase thins out and stops tracking
+        # n_B at all), and seeding the phase at the total density walks it
+        # towards scalar collapse and stalls the solve.
+        return solve_mixed(par, flags, n_B, eta, spec, vmit_params=vmit_params,
+                           T=T, x0=seed, n_B_guess=(nH if nH is not None else n_B),
+                           check_consistency=False, analytic_jac=analytic_jac)
+
+    def step(n_prev, n_target, seed, nH, depth):
+        try:
+            return solve_from(n_target, seed, nH)
+        except RuntimeError:
+            if depth >= max_bisect or n_prev is None:
+                raise
+            n_mid = 0.5 * (n_prev + n_target)
+            p_mid = step(n_prev, n_mid, seed, nH, depth + 1)
+            return step(n_mid, n_target, _as_x0(p_mid, slots),
+                        p_mid.th_H.n_B, depth + 1)
+
+    out, seed, n_prev, nH = [], x0, None, nH0
+    for n_B in n_B_grid:
+        try:
+            p = step(n_prev, float(n_B), seed, nH, 0)
+        except RuntimeError:
+            continue
+        out.append(p)
+        seed, n_prev, nH = _as_x0(p, slots), float(n_B), p.th_H.n_B
+    return [r for r in out if r.in_mixed_phase] if mixed_only else out
+
+
+def find_mixed_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0):
+    """The subset of a full sweep that is genuinely mixed (0 < chi < 1).
+
+    Kept for callers that want every mixed point on the grid rather than just
+    the boundaries; `eos.mixed.boundaries.locate_window` is much cheaper when
+    only the boundaries are needed.
+    """
+    return sweep_mixed(par, flags, n_B_grid, eta, spec,
+                       vmit_params=vmit_params, T=T, mixed_only=True)

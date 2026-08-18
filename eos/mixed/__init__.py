@@ -5,8 +5,12 @@ Hadron-quark mixed-phase equations of state: the DD2 density-dependent
 relativistic mean-field hadronic engine (`eos.dd2`) coupled to the vMIT
 vector-bag quark engine (`eos.vmit`) across a first-order phase transition.
 
-Everything you need is imported from this module. The subpackages
-(`equilibrium`, `solvers`, `tables`) are internal structure.
+Everything you need is imported from this module. The package is laid out the
+way the models are (CLAUDE.md §5): `charges` declares the equilibria,
+`thermodynamics` computes quantities from the state, `solver` finds the state,
+`boundaries` locates the transition window, `hybrid` stitches the complete
+hybrid equation of state, `table` drives grids, `api` is the uniform surface,
+and `backends/` holds the deletable accelerated paths.
 
 What the engine does
 --------------------
@@ -35,7 +39,7 @@ one solver rather than four:
     fixed_YC_YS(Y_C, Y_S, leptons=...)  (n_B, Y_C, Y_S, T)
 
 Here C is the NON-leptonic electric charge (hadrons and quarks only) and
-strangeness counts +1 per s-quark — see `eos.mixed.equilibrium.charges` and
+strangeness counts +1 per s-quark — see `eos.mixed.charges` and
 CLAUDE.md §2 before assuming either sign.
 
 Typical use
@@ -64,7 +68,7 @@ Units are fm-based on every public boundary: densities fm^-3, pressure and
 energy density MeV/fm^3, temperature and chemical potentials MeV.
 """
 # --- equilibrium modes and the regime declaration behind them ---------------
-from eos.mixed.equilibrium.charges import (
+from eos.mixed.charges import (
     ChargeSpec, Regime, Locality,
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
     QUARK_QN, quark_charges, hadronic_qn, hadronic_charges,
@@ -76,18 +80,17 @@ from eos.mixed.adapters import (
 )
 
 # --- solving one point, and sweeping density -------------------------------
-from eos.mixed.solvers.point import MixedResult, solve_mixed
-from eos.mixed.solvers.sweep import (
-    MixedWindow, sweep_mixed, locate_window, find_mixed_window,
-    seed_across_eta,
+from eos.mixed.solver import (
+    MixedResult, solve_mixed, sweep_mixed, find_mixed_window, seed_across_eta,
 )
+from eos.mixed.boundaries import MixedWindow, locate_window
 
 # --- generating, stitching and storing tables ------------------------------
-from eos.mixed.tables.generate import (
+from eos.mixed.table import (
     MixedTableSpec, build_mixed_table, solve_mixed_at_entropy,
     make_charge_spec, composition_row, MODE_FRACTIONS,
 )
-from eos.mixed.tables.core_eos import (
+from eos.mixed.hybrid import (
     MixedEoSTable, build_mixed_eos_table, mass_radius_mixed,
 )
 from eos.general.table_io import save_table, load_table, export_csv

@@ -1,25 +1,18 @@
 """
-mixed/solvers/sweep.py
-======================
-Warm-started density sweeps and location of the mixed-phase window.
+mixed/boundaries.py
+===================
+Location of the mixed-phase window: where the first-order transition sits on a
+density line.
 
-*Public API* (re-exported from `eos.mixed`): `sweep_mixed`, `locate_window`,
-`MixedWindow`.
+*Public API* (re-exported from `eos.mixed`): `MixedWindow`, `locate_window`.
 
-Two facts shape this module.
+Solving the mixed system at a density that turns out to be pure phase is
+wasted work, and most of a realistic grid is pure phase. `locate_window` finds
+the two boundaries first, using chi as the indicator (chi <= 0 hadronic,
+chi >= 1 quark, in between mixed), so the expensive mixed solve runs only
+where it is the answer.
 
-First, a cold seed only converges near the transition onset; through the window
-the previous solved density is by far the best predictor. So every sweep is
-warm-started along n_B, and when a step misses, it is bisected rather than
-abandoned — the same continuation tactic `eos/dd2/solver.sweep_octet` uses.
-
-Second, and this is what makes a full table affordable: solving the mixed
-system at a density that turns out to be pure phase is wasted work, and most of
-a realistic grid is pure phase. `locate_window` finds the two boundaries first,
-using chi as the indicator (chi <= 0 hadronic, chi >= 1 quark, in between
-mixed), so the expensive mixed solve runs only where it is the answer.
-
-There is a trap in that second point worth stating plainly, because it produced
+There is a trap in that point worth stating plainly, because it produced
 silently missing transitions. chi is only readable where the mixed system has a
 solution, and below the onset it has none — so a density down there does not
 report chi <= 0, it drops out of the sweep entirely. The probe set can
@@ -30,106 +23,17 @@ window (`walk_to_crossing`), where a step that will not converge is itself the
 hadronic side rather than missing information.
 
 The empirical bracketing heuristics live here rather than in the residual,
-mirroring the Phase-1 split between physics and continuation.
+mirroring the split between physics and continuation.
 """
 from dataclasses import dataclass
 
 import numpy as np
 
-from eos.mixed.equilibrium.residual import mixed_slots
-from eos.mixed.solvers.point import solve_mixed
+from eos.mixed.solver import _as_x0, mixed_slots, sweep_mixed
 
 #: Most single-tolerance steps `locate_window` will take when it has to walk to
-#: a boundary the probe set never bracketed. The walk normally ends within a
-#: few steps -- the probes that were dropped are the ones adjacent to the
 #: boundary -- so this is a cost ceiling, not a working limit.
 MAX_WALK = 64
-
-
-def _as_x0(result, slots):
-    return [result.potentials[name] for name in slots]
-
-
-def seed_across_eta(result, spec, eta, flags=None):
-    """Re-express a solved point as a starting vector for a different eta.
-
-    eta changes the *shape* of the unknown vector — at eta = 0 only a global
-    lepton potential exists, at eta = 1 only the two local ones, in between all
-    three — so a solution at one eta cannot be handed to another directly.
-    This maps it across, using the physical correspondence between the
-    populations that appear and disappear:
-
-      going towards eta = 1  the local potentials start from the global one,
-                             which is the value they must approach as the
-                             global population loses its weight;
-      going towards eta = 0  the global potential starts from the volume
-                             average of the two local ones.
-
-    Cold-starting each eta separately is the fragile part of an eta scan,
-    especially near the Maxwell endpoint and with a soft hadronic phase; walking
-    eta in small steps from a converged neighbour is what makes the scan hold
-    together. Returns a list in the slot order of `mixed_slots(spec, eta)`.
-    """
-    p = dict(result.potentials)
-    chi = p.get("chi", result.chi)
-    mu_eG = p.get("mu_eG")
-    mu_eL_H, mu_eL_Q = p.get("mu_eL_H"), p.get("mu_eL_Q")
-    if mu_eL_H is None:                    # came from eta = 0
-        mu_eL_H = mu_eL_Q = mu_eG
-    if mu_eG is None:                      # came from eta = 1
-        mu_eG = (1.0 - chi) * mu_eL_H + chi * mu_eL_Q
-    filled = dict(p, mu_eG=mu_eG, mu_eL_H=mu_eL_H, mu_eL_Q=mu_eL_Q)
-    return [filled[name] for name in mixed_slots(spec, eta, flags)]
-
-
-def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
-                max_bisect=6, x0=None, analytic_jac=False,
-                mixed_only=False, nH0=None):
-    """Warm-started sweep over `n_B_grid` at fixed eta.
-
-    Returns a list of `MixedResult` in grid order. Each solved point seeds the
-    next; a missed step is bisected up to `max_bisect` levels, and a density
-    that still fails is skipped, leaving a hole rather than aborting the sweep.
-
-    `x0` seeds the first point (otherwise the physical cold start is used).
-    `nH0` seeds that first point's *hadronic phase* density; see `solve_from`
-    below for why the total density is the wrong guess once chi is appreciable.
-    Pass it whenever `x0` comes from a solved point deep inside the window,
-    otherwise the first step re-derives that point from a guess known to stall.
-    `mixed_only=True` keeps only the points genuinely inside the window.
-    """
-    slots = mixed_slots(spec, eta, flags)
-
-    def solve_from(n_B, seed, nH):
-        # `nH` seeds the hadronic phase's own internal solve. It must be that
-        # phase's density, NOT the total: deep in the window the two diverge
-        # badly (as chi -> 1 the hadronic phase thins out and stops tracking
-        # n_B at all), and seeding the phase at the total density walks it
-        # towards scalar collapse and stalls the solve.
-        return solve_mixed(par, flags, n_B, eta, spec, vmit_params=vmit_params,
-                           T=T, x0=seed, n_B_guess=(nH if nH is not None else n_B),
-                           check_consistency=False, analytic_jac=analytic_jac)
-
-    def step(n_prev, n_target, seed, nH, depth):
-        try:
-            return solve_from(n_target, seed, nH)
-        except RuntimeError:
-            if depth >= max_bisect or n_prev is None:
-                raise
-            n_mid = 0.5 * (n_prev + n_target)
-            p_mid = step(n_prev, n_mid, seed, nH, depth + 1)
-            return step(n_mid, n_target, _as_x0(p_mid, slots),
-                        p_mid.th_H.n_B, depth + 1)
-
-    out, seed, n_prev, nH = [], x0, None, nH0
-    for n_B in n_B_grid:
-        try:
-            p = step(n_prev, float(n_B), seed, nH, 0)
-        except RuntimeError:
-            continue
-        out.append(p)
-        seed, n_prev, nH = _as_x0(p, slots), float(n_B), p.th_H.n_B
-    return [r for r in out if r.in_mixed_phase] if mixed_only else out
 
 
 @dataclass
@@ -385,14 +289,3 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                 and not any(r.chi >= 1.0 for r in probes)):
             n_offset = mixed[-1]
     return MixedWindow(float(n_onset), float(n_offset), probes)
-
-
-def find_mixed_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0):
-    """The subset of a full sweep that is genuinely mixed (0 < chi < 1).
-
-    Kept for callers that want every mixed point on the grid rather than just
-    the boundaries; `locate_window` is much cheaper when only the boundaries
-    are needed.
-    """
-    return sweep_mixed(par, flags, n_B_grid, eta, spec,
-                       vmit_params=vmit_params, T=T, mixed_only=True)

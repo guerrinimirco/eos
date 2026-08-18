@@ -1,11 +1,13 @@
 """
-mixed/equilibrium/jacobian.py
-=============================
+mixed/backends/jacobian.py
+==========================
 Hand-assembled analytic Jacobian of the mixed-phase residual.
 
 *Internal module.* Supplied to the root finder by `eos.mixed.solve_mixed`
 when `analytic_jac=True`; the numeric-Jacobian path remains the correctness
 oracle (CLAUDE.md §4), and a finite-difference agreement test guards this file.
+Like every backends/ module it is deletable: without it `analytic_jac=True`
+falls back to the numeric Jacobian and the numbers do not change.
 
 The residual couples two phases that are each themselves an implicit solve, so
 the Jacobian is built from per-phase derivative blocks and then contracted
@@ -47,10 +49,9 @@ from eos.general.thermodynamics_leptons import muon_thermo, neutrino_thermo
 from eos.dd2.thermodynamics import (
     assemble as dd2_assemble, self_consistency_residual,
 )
-from eos.mixed.equilibrium.charges import Regime
-from eos.mixed.equilibrium.residual import (
-    charged_leptons, has_leptons, _quark_mus_from_charges,
-)
+from eos.mixed.charges import Regime
+from eos.mixed.solver import has_leptons, _quark_mus_from_charges
+from eos.mixed.thermodynamics import charged_leptons
 from eos.mixed.adapters import hadronic_phase, quark_phase
 from eos.vmit.thermodynamics import compute_quark_density
 

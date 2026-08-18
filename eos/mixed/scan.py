@@ -74,8 +74,8 @@ from eos.dd2.nmp import from_nmp
 from eos.dd2.parameters import Parametrization
 from eos.dd2.solver import sweep_beta_eq_octet
 from eos.vmit.parameters import get_vmit_custom
-from eos.mixed.equilibrium.charges import beta_eq_neutrinoless
-from eos.mixed.solvers.sweep import locate_window
+from eos.mixed.charges import beta_eq_neutrinoless
+from eos.mixed.boundaries import locate_window
 
 #: The nuclear-matter parameters `eos.dd2.invert_nmp` consumes, in the order a
 #: report reads best. Every key is required — the inversion has no defaults.
@@ -495,7 +495,7 @@ def _tov_columns(par, flags, grid, eta, spec, params, T, window, tov_parallel):
     the sequence was integrated from, since `mass_radius_mixed` reports the
     central energy density and the transition boundaries are in n_B.
     """
-    from eos.mixed.tables.core_eos import build_mixed_eos_table, mass_radius_mixed
+    from eos.mixed.hybrid import build_mixed_eos_table, mass_radius_mixed
     from eos.mixed.responses import sound_speed_eq
 
     table = build_mixed_eos_table(par, flags, grid, float(eta), spec,

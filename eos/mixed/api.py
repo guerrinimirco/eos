@@ -47,9 +47,9 @@ import numpy as np
 from eos.general.tabulate import temperature_at_entropy
 from eos.dd2.species import SpeciesFlags
 from eos.mixed.responses import sound_speed_frozen
-from eos.mixed.equilibrium.residual import mixed_slots
-from eos.mixed.solvers.point import MixedResult, solve_mixed
-from eos.mixed.tables.generate import (
+from eos.mixed.solver import mixed_slots
+from eos.mixed.solver import MixedResult, solve_mixed
+from eos.mixed.table import (
     MODE_FRACTIONS, MixedTableSpec, build_mixed_table, make_charge_spec,
 )
 
@@ -58,7 +58,7 @@ class PointResult:
     """One eos_point outcome: a convergence status the caller can test.
 
     `ok` is judged on the largest mixed-residual component (see
-    `eos.mixed.solvers.point.RESIDUAL_TOL`); when it is False, `point` is None
+    `eos.mixed.solver.RESIDUAL_TOL`); when it is False, `point` is None
     and `message` says what went wrong. A converged point may still be OUTSIDE
     the coexistence window -- test `.point.phase`, which is 'H', 'mix' or 'Q'.
     """

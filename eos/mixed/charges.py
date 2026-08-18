@@ -1,6 +1,6 @@
 """
-mixed/equilibrium/charges.py
-============================
+mixed/charges.py
+================
 Which conserved charges are equilibrated, and how — the single declaration that
 configures the whole mixed-phase solver.
 

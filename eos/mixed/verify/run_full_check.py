@@ -37,12 +37,12 @@ from eos.dd2 import Parametrization, SpeciesFlags
 from eos.vmit.parameters import get_vmit_default
 from eos.mixed import beta_eq_neutrinoless, fixed_YC, fixed_YC_YS
 from eos.general.modes import Conservation, ModeSpec
-from eos.mixed.equilibrium.charges import ChargeSpec, Regime
-from eos.mixed.solvers.point import solve_mixed
-from eos.mixed.solvers.sweep import sweep_mixed
-from eos.mixed.equilibrium.residual import build_mixed_ctx, mixed_residual, mixed_slots
-from eos.mixed.equilibrium.jacobian import mixed_jacobian
-from eos.mixed.tables.core_eos import build_mixed_eos_table
+from eos.mixed.charges import ChargeSpec, Regime
+from eos.mixed.solver import solve_mixed
+from eos.mixed.solver import sweep_mixed
+from eos.mixed.solver import build_mixed_ctx, mixed_residual, mixed_slots
+from eos.mixed.backends.jacobian import mixed_jacobian
+from eos.mixed.hybrid import build_mixed_eos_table
 
 
 @dataclass
@@ -203,7 +203,8 @@ def _check_sound_speeds(par, flags, vp, grid):
     the freeze is not actually freezing anything.
     """
     from eos.mixed.responses import sound_speed_eq, frozen_along
-    from eos.mixed.solvers.sweep import locate_window, sweep_mixed
+    from eos.mixed.boundaries import locate_window
+    from eos.mixed.solver import sweep_mixed
 
     spec = beta_eq_neutrinoless()
     window = locate_window(par, flags, grid, 1.0, spec, vmit_params=vp)
@@ -227,7 +228,7 @@ def _check_sound_speeds(par, flags, vp, grid):
 
 
 def _check_tov(par, flags, vp, grid):
-    from eos.mixed.tables.core_eos import mass_radius_mixed
+    from eos.mixed.hybrid import mass_radius_mixed
     r = mass_radius_mixed(par, flags, grid, 1.0, beta_eq_neutrinoless(), vmit_params=vp,
                           n_ec=40, backend="fast")
     ok = 1.9 < r["M_max"] < 2.6 and 10.0 < r["R_Mmax"] < 15.0

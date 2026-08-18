@@ -1,6 +1,6 @@
 """
-mixed/tables/core_eos.py
-========================
+mixed/hybrid.py
+===============
 The stellar-core equation of state across a first-order transition, and its
 TOV integration.
 
@@ -38,7 +38,8 @@ import numpy as np
 
 from eos.dd2.solver import sweep_beta_eq_octet
 from eos.vmit.eos import solve_vmit_beta_eq
-from eos.mixed.solvers.sweep import locate_window, sweep_mixed
+from eos.mixed.boundaries import locate_window
+from eos.mixed.solver import sweep_mixed
 
 
 @dataclass

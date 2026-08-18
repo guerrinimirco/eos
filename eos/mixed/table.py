@@ -1,6 +1,6 @@
 """
-mixed/tables/generate.py
-========================
+mixed/table.py
+==============
 Multi-axis EoS table generation for every equilibrium mode.
 
 *Public API* (re-exported from `eos.mixed`): `MixedTableSpec`,
@@ -35,12 +35,13 @@ import numpy as np
 from eos.general.tabulate import (
     TEMPERATURE_AXES, lines_from_axes, print_progress, split_conditions,
 )
-from eos.mixed.equilibrium.charges import (
+from eos.mixed.charges import (
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
 )
-from eos.mixed.equilibrium.residual import mixed_slots
-from eos.mixed.solvers.point import solve_mixed
-from eos.mixed.solvers.sweep import locate_window, sweep_mixed
+from eos.mixed.solver import mixed_slots
+from eos.mixed.solver import solve_mixed
+from eos.mixed.boundaries import locate_window
+from eos.mixed.solver import sweep_mixed
 
 #: The fraction axes a table may sweep, in the canonical order they are keyed
 #: in. Fixing the order here rather than reading it off the caller's dict is
