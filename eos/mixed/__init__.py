@@ -85,7 +85,9 @@ from eos.mixed.solver import (
     solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
     solve_fixed_yc, solve_fixed_yc_ys,
 )
-from eos.mixed.boundaries import MixedWindow, locate_window
+from eos.mixed.boundaries import (
+    MixedWindow, locate_window, refine_window, solve_fixed_chi,
+)
 
 # --- generating, stitching and storing tables ------------------------------
 from eos.mixed.table import (
@@ -131,6 +133,7 @@ __all__ = [
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",
     "sweep_mixed", "locate_window", "find_mixed_window", "MixedWindow",
+    "solve_fixed_chi", "refine_window",
     "seed_across_eta",
     "solve_mixed_at_entropy",
     # tables

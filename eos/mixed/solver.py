@@ -140,11 +140,12 @@ def default_guess(ctx):
     from eos.vmit.eos import solve_vmit_beta_eq
     seed_flags = replace(ctx.flags, include_pseudoscalars=False,
                          include_thermal_vectors=False)
-    base = solve_beta_eq_octet(ctx.par, ctx.n_B, seed_flags, T=ctx.T,
+    n_seed = ctx.n_B if ctx.n_B is not None else ctx.n_B_guess
+    base = solve_beta_eq_octet(ctx.par, n_seed, seed_flags, T=ctx.T,
                                include_photons=False, check_consistency=False)
     mu_tilde_B = base.mu_B - base.Sigma_R
     try:
-        q = solve_vmit_beta_eq(ctx.n_B, ctx.T, params=ctx.vmit_params)
+        q = solve_vmit_beta_eq(n_seed, ctx.T, params=ctx.vmit_params)
         mu_B_Q, mu_eL_Q = q.mu_B, q.mu_e
     except Exception:
         mu_B_Q, mu_eL_Q = base.mu_B, base.mu_e
@@ -152,6 +153,7 @@ def default_guess(ctx):
         "mu_tilde_B_H": mu_tilde_B,
         "mu_B_Q": mu_B_Q,
         "chi": 0.5,
+        "n_B": n_seed,                 # the unknown of the fixed-chi layout
         "mu_eL_H": base.mu_e,
         "mu_eL_Q": mu_eL_Q,
         "mu_eG": base.mu_e,
@@ -233,11 +235,18 @@ def has_leptons(spec: ChargeSpec):
             or (spec.C is Regime.GLOBAL and spec.yc_leptons))
 
 
-def mixed_slots(spec: ChargeSpec, eta: float, flags=None):
+def mixed_slots(spec: ChargeSpec, eta: float, flags=None, fixed_chi=False):
     """Ordered unknown-vector slot names implied by `spec` at `eta`.
 
     Always present: the hadronic kinetic baryon potential (mu_tilde_B_H), the
     quark physical baryon potential (mu_B_Q), and chi.
+
+    `fixed_chi=True` swaps exactly one slot: chi becomes a GIVEN and the total
+    density n_B becomes the unknown in its place. Every residual row is
+    unchanged — only which symbol is solved for moves — which is what lets a
+    phase boundary be located in one solve: chi = 0 returns n_onset and
+    chi = 1 returns n_offset exactly, with no grid resolution in the answer
+    (`eos.mixed.boundaries.solve_fixed_chi`).
 
     Then, by regime: a GLOBAL C contributes the charge potential(s) — per-phase
     (mu_C_H, mu_C_Q, tied by the eta-shifted matching condition) when
@@ -272,7 +281,7 @@ def mixed_slots(spec: ChargeSpec, eta: float, flags=None):
     # Interior eta on practical grids is fine. If a near-endpoint eta is
     # genuinely needed, warm-start it from the eta=0/1 solution rather than
     # snapping the activation threshold.
-    slots = ["mu_tilde_B_H", "mu_B_Q", "chi"]
+    slots = ["mu_tilde_B_H", "mu_B_Q", "n_B" if fixed_chi else "chi"]
     if spec.C is Regime.GLOBAL:
         slots += ["mu_C_H", "mu_C_Q"] if spec.yc_leptons else ["mu_C"]
     if spec.S is Regime.GLOBAL:
@@ -311,6 +320,7 @@ class MixedCtx:
     vmit_params: object
     slots: tuple
     n_B_guess: float    # seed density for the hadronic phase-internal solve
+    chi: float = None   # the imposed volume fraction in the fixed-chi layout
     # residual normalization, so every row is dimensionless and O(1)
     n_scale: float = 1.0
     mu_scale: float = 100.0
@@ -326,15 +336,25 @@ class MixedCtx:
 
 
 def build_mixed_ctx(spec, eta, n_B, par, flags, vmit_params, T=0.0,
-                    n_B_guess=None):
+                    n_B_guess=None, chi=None):
+    """Context for one solve. Exactly one of `n_B` (the given total density,
+    chi unknown) and `chi` (the imposed volume fraction, n_B unknown) is set;
+    the second flavour is the fixed-chi layout of `mixed_slots` and needs
+    `n_B_guess` because the target density is now an unknown."""
     if not (0.0 <= eta <= 1.0):
         raise ValueError(f"eta must be in [0, 1], got {eta}")
-    slots = mixed_slots(spec, eta, flags)
+    if (n_B is None) == (chi is None):
+        raise ValueError("exactly one of n_B (given) / chi (imposed) "
+                         "must be set")
+    if n_B is None and n_B_guess is None:
+        raise ValueError("the fixed-chi layout needs n_B_guess: the density "
+                         "is an unknown and its solve must start somewhere")
+    slots = mixed_slots(spec, eta, flags, fixed_chi=(n_B is None))
     return MixedCtx(
         spec=spec, eta=eta, n_B=n_B, T=T, par=par, flags=flags,
-        vmit_params=vmit_params, slots=slots,
+        vmit_params=vmit_params, slots=slots, chi=chi,
         n_B_guess=(n_B if n_B_guess is None else n_B_guess),
-        n_scale=max(n_B, 0.01),
+        n_scale=max(n_B if n_B is not None else n_B_guess, 0.01),
 )
 
 
@@ -423,7 +443,9 @@ def residual(x, ctx):
         th_H, th_Q, d, extras = evaluate_phases(x, ctx)
     except RuntimeError:
         return [1.0e6] * len(ctx.slots)
-    chi, eta, spec = d["chi"], ctx.eta, ctx.spec
+    chi = d.get("chi", ctx.chi)          # unknown, or imposed (fixed-chi)
+    n_B = d.get("n_B", ctx.n_B)          # given, or unknown (fixed-chi)
+    eta, spec = ctx.eta, ctx.spec
     lep = has_leptons(spec)
     ns, mus = ctx.n_scale, ctx.mu_scale
     L_H, L_Q, G = extras["L_H"], extras["L_Q"], extras["G"]
@@ -434,13 +456,13 @@ def residual(x, ctx):
 
     res = [
         (th_H.mu_B - d["mu_B_Q"]) / mus,                              # (1)
-        ((1.0 - chi) * th_H.n_B + chi * th_Q.n_B - ctx.n_B) / ns,     # (2)
+        ((1.0 - chi) * th_H.n_B + chi * th_Q.n_B - n_B) / ns,         # (2)
         (P_H_eff - P_Q_eff) / Ps,                                     # (3)
     ]
     if spec.C is Regime.GLOBAL:                                       # (4)
         Y_C = spec.targets["Y_C"]
         res.append(((1.0 - chi) * th_H.n_C + chi * th_Q.n_C
-                    - Y_C * ctx.n_B) / ns)
+                    - Y_C * n_B) / ns)
         if spec.yc_leptons:
             # The local electron potential shifts the charge matching between
             # phases; the global one does not appear, because it neutralizes
@@ -450,12 +472,12 @@ def residual(x, ctx):
     if spec.S is Regime.GLOBAL:                                       # (5)
         Y_S = spec.targets["Y_S"]
         res.append(((1.0 - chi) * th_H.n_S + chi * th_Q.n_S
-                    - Y_S * ctx.n_B) / ns)
+                    - Y_S * n_B) / ns)
     if spec.L_e is Regime.GLOBAL:                                     # (6)
         Y_Le = spec.targets["Y_Le"]
         n_e_avg = (eta * ((1.0 - chi) * L_H.n_e + chi * L_Q.n_e)
                    + (1.0 - eta) * G.n_e)
-        res.append((n_e_avg + extras["nu"].n - Y_Le * ctx.n_B) / ns)
+        res.append((n_e_avg + extras["nu"].n - Y_Le * n_B) / ns)
     if lep and eta > 0.0:                                             # (7) local
         res.append((th_H.n_C - L_H.n) / ns)
         res.append((th_Q.n_C - L_Q.n) / ns)
@@ -550,8 +572,22 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
             f"mixed solve failed at n_B={n_B}, T={T}, eta={eta}: {sol.message} "
             f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
 
-    th_H, th_Q, d, extras = evaluate_phases(sol.x, ctx)
-    chi = d["chi"]
+    return result_from_root(sol.x, ctx, res_max,
+                            check_consistency=check_consistency)
+
+
+def result_from_root(x, ctx, res_max, check_consistency=True):
+    """A `MixedResult` from a residual root, in either slot layout.
+
+    Assembles the totals, refuses a Bose-condensed state, and asserts the
+    consistency identities. Shared by `solve_mixed` and by the fixed-chi
+    boundary solve in `eos.mixed.boundaries`, whose only difference is which
+    of (n_B, chi) was the unknown.
+    """
+    th_H, th_Q, d, extras = evaluate_phases(x, ctx)
+    chi = d.get("chi", ctx.chi)
+    n_B = d.get("n_B", ctx.n_B)
+    T, eta = ctx.T, ctx.eta
     L_H, L_Q, G, nu = extras["L_H"], extras["L_Q"], extras["G"], extras["nu"]
 
     P_total, eps_total, s_total, mu_dot_n = assemble(

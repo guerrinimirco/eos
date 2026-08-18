@@ -1019,6 +1019,15 @@ a reason that has nothing to do with seeding.
   belongs in `general/thermodynamics_leptons.py`.
 
 ### mixed
+- The analytic Jacobian (`backends/jacobian.py`) covers only the normal slot
+  layout, where chi is the unknown. The fixed-chi layout of
+  `mixed_slots(..., fixed_chi=True)` — chi imposed, n_B unknown, used by
+  `boundaries.solve_fixed_chi` to land on a phase boundary in one solve —
+  runs on the solver's numeric Jacobian. The missing column is cheap (the
+  n_B column is constant: -1/n_scale in the density row, -Y_X/n_scale in
+  each conservation row, zero elsewhere, replacing the chi column), but a
+  boundary location is a couple of solves per isotherm, so nothing profiles
+  as needing it yet.
 - (The entry claiming the hadronic phase adapter treated the thermal meson gas
   as a spectator in the charge and strangeness bookkeeping was WRONG, and is
   removed. `hadronic_phase` takes n_C and n_S from `assemble_octet`'s totals,

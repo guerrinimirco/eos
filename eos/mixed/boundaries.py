@@ -29,7 +29,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from eos.mixed.solver import mixed_slots, sweep_mixed, warm_start
+from scipy.optimize import root
+
+from eos.mixed.solver import (
+    RESIDUAL_TOL, build_mixed_ctx, default_guess, mixed_slots, residual,
+    result_from_root, sweep_mixed, warm_start,
+)
 
 #: Most single-tolerance steps `locate_window` will take when it has to walk to
 #: boundary -- so this is a cost ceiling, not a working limit.
@@ -46,10 +51,18 @@ class MixedWindow:
     becomes favourable for these parameters, which is a physics outcome, not a
     failure). `probes` keeps the solved points used to find the boundaries so a
     caller can reuse them.
+
+    `onset_state` / `offset_state` are the converged fixed-chi solves AT the
+    boundaries when the window was refined exactly (`refine="exact"`), and
+    None when the boundary is only a bisected estimate. They carry the full
+    unknown vector at chi = 0 and chi = 1, which is what seeds a neighbouring
+    temperature's boundary search and the window sweep's first point.
     """
     n_onset: float
     n_offset: float
     probes: list
+    onset_state: object = None
+    offset_state: object = None
 
     @property
     def exists(self):
@@ -92,7 +105,7 @@ class MixedWindow:
 
 def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                   n_probe=12, tol=None, analytic_jac=False, x0=None,
-                  hint=None, max_refine=2):
+                  hint=None, max_refine=2, refine="bisect"):
     """Find the mixed window on `n_B_grid` by bracketing the chi crossings.
 
     Probes the grid coarsely, reading chi as the regime indicator (chi <= 0
@@ -100,6 +113,12 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     to `tol` (default: half a grid spacing). In exchange for a couple of dozen
     solves, the caller can then skip the mixed system everywhere outside the
     window, which on a realistic density grid is most of it.
+
+    `refine` chooses how far each located boundary is sharpened:
+    `"bisect"` stops at the scan's resolution (half a grid spacing);
+    `"exact"` finishes with one fixed-chi solve per boundary (`refine_window`),
+    so the reported density is the chi crossing itself, with no grid
+    resolution in the answer.
 
     `hint` is an optional (n_lo, n_hi) span to concentrate the probes in, for
     when a neighbouring temperature or eta has already shown roughly where the
@@ -288,4 +307,140 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         if (not np.isfinite(n_offset) and reached[-1] >= hi - tol
                 and not any(r.chi >= 1.0 for r in probes)):
             n_offset = mixed[-1]
-    return MixedWindow(float(n_onset), float(n_offset), probes)
+    window = MixedWindow(float(n_onset), float(n_offset), probes)
+    if refine == "exact":
+        window = refine_window(window, par, flags, eta, spec,
+                               vmit_params=vmit_params, T=T)
+    elif refine != "bisect":
+        raise ValueError(f"refine must be 'bisect' or 'exact', got {refine!r}")
+    return window
+
+
+def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
+                    n_B0=None, x0=None, check_consistency=False):
+    """The density at which the mixed system has volume fraction `chi`:
+    chi is IMPOSED and the total density n_B is solved for.
+
+    Same residual as `solve_mixed` with one slot swapped
+    (`mixed_slots(..., fixed_chi=True)`), so chi = 0 returns the onset and
+    chi = 1 the offset of the coexistence window, each in one solve, exactly —
+    no grid resolution enters the answer. The idea is salvaged from the
+    first-generation hybrid codes (docs/SALVAGE.md section 1).
+
+    n_B0 : required starting density — the unknown must start somewhere, and
+           it also seeds the hadronic phase's internal solve.
+    x0   : warm start in the slot order of
+           `mixed_slots(spec, eta, flags, fixed_chi=True)`. Without one the
+           physical cold start is used, which is reliable only near the
+           transition: the fixed-chi system can walk to the wrong root from
+           far away, which is why the scan of `locate_window` stays the
+           cold-start finder and this solve is its finisher.
+
+    Returns a `MixedResult` whose `n_B` is the located boundary; raises
+    RuntimeError when no guess meets the residual gate.
+    """
+    if n_B0 is None:
+        raise ValueError("n_B0 is required: the density is the unknown and "
+                         "its solve must start somewhere")
+    if vmit_params is None:
+        from eos.vmit.parameters import get_vmit_default
+        vmit_params = get_vmit_default()
+    ctx = build_mixed_ctx(spec, eta, None, par, flags, vmit_params, T=T,
+                          n_B_guess=float(n_B0), chi=float(chi))
+
+    def guesses():
+        if x0 is not None:
+            yield list(x0)
+        yield default_guess(ctx)
+
+    sol = None
+    for guess in guesses():
+        ctx.cache.clear()          # a fresh guess invalidates the phase cache
+        sol = root(residual, guess, args=(ctx,), method="hybr", tol=1e-12)
+        res_max = max(abs(r) for r in residual(sol.x, ctx))
+        if res_max <= RESIDUAL_TOL:
+            break
+    else:
+        raise RuntimeError(
+            f"fixed-chi solve failed at chi={chi}, T={T}, eta={eta} "
+            f"(started from n_B0={n_B0}): {sol.message} "
+            f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
+    return result_from_root(sol.x, ctx, res_max,
+                            check_consistency=check_consistency)
+
+
+def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0):
+    """Sharpen a scan-located window with one exact fixed-chi solve per
+    boundary.
+
+    The division of labour: the scan decides WHICH root — its probes establish
+    that a transition exists and roughly where — and the exact solve decides
+    WHERE, by imposing chi = 0 (onset) and chi = 1 (offset) and solving for
+    the density. Each solve is seeded from the scan's own probes: the onset
+    from the lowest mixed probe, the offset from the converged onset state
+    (the best predictor across the window, docs/SALVAGE.md section 2), falling
+    back to the highest mixed probe.
+
+    A solve that fails, or lands outside the bracket the probes established,
+    is rejected and the bisected estimate kept — the exact solve is an
+    accelerator on top of the scan, never a second opinion against it. A
+    boundary the scan never located (nan) is left alone.
+
+    Returns a new `MixedWindow` carrying `onset_state` / `offset_state` for
+    the boundaries that were refined.
+    """
+    mixed = [p for p in window.probes if p.in_mixed_phase]
+    if not mixed:
+        return window
+    slots = mixed_slots(spec, eta, flags, fixed_chi=True)
+
+    def seed(point, n_scan):
+        # The probe's potentials, with the scan estimate in the n_B slot.
+        filled = dict(point.potentials, n_B=n_scan)
+        return [filled[name] for name in slots]
+
+    def accepted(n_exact, n_scan):
+        # Within the tightest probe bracket around the scan estimate, widened
+        # by its own width: the bisection narrowed that bracket to its
+        # tolerance, so an exact root belonging to the same crossing cannot
+        # be far outside it.
+        below = [p.n_B for p in window.probes if p.n_B <= n_scan]
+        above = [p.n_B for p in window.probes if p.n_B >= n_scan]
+        lo = max(below) if below else n_scan
+        hi = min(above) if above else n_scan
+        margin = max(hi - lo, 1e-3)
+        return (lo - margin) <= n_exact <= (hi + margin)
+
+    def refine(chi_target, n_scan, x0, n_B0):
+        try:
+            r = solve_fixed_chi(par, flags, chi_target, eta, spec,
+                                vmit_params=vmit_params, T=T,
+                                n_B0=n_B0, x0=x0)
+        except (RuntimeError, ValueError):
+            return None
+        return r if accepted(r.n_B, n_scan) else None
+
+    n_onset, onset_state = window.n_onset, None
+    if np.isfinite(window.n_onset):
+        probe = min(mixed, key=lambda p: p.n_B)
+        # chi = 0: the hadronic phase IS the mixture, so the scan estimate
+        # seeds the phase-internal solve too.
+        onset_state = refine(0.0, window.n_onset,
+                             seed(probe, window.n_onset), window.n_onset)
+        if onset_state is not None:
+            n_onset = onset_state.n_B
+
+    n_offset, offset_state = window.n_offset, None
+    if np.isfinite(window.n_offset):
+        hi_probe = max(mixed, key=lambda p: p.n_B)
+        base = onset_state if onset_state is not None else hi_probe
+        # chi = 1: the hadronic phase has thinned out and its density no
+        # longer tracks n_B, so its internal solve is seeded from the deepest
+        # mixed probe's own hadronic density.
+        offset_state = refine(1.0, window.n_offset,
+                              seed(base, window.n_offset), hi_probe.th_H.n_B)
+        if offset_state is not None:
+            n_offset = offset_state.n_B
+
+    return MixedWindow(float(n_onset), float(n_offset), window.probes,
+                       onset_state, offset_state)
