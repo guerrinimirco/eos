@@ -78,7 +78,7 @@ from eos.mixed.charges import (
 from eos.mixed.adapters import (
     Phase, PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
     dd2_phase, vmit_phase, default_pair,
-    sfho_phase, zl_phase, alphabag_phase,
+    sfho_phase, zl_phase, alphabag_phase, enjl_branch_pair,
 )
 
 # --- solving one point, and sweeping density -------------------------------
@@ -88,7 +88,8 @@ from eos.mixed.solver import (
     solve_fixed_yc, solve_fixed_yc_ys,
 )
 from eos.mixed.boundaries import (
-    MixedWindow, locate_window, refine_window, solve_fixed_chi,
+    MixedWindow, locate_window, locate_windows, refine_window,
+    solve_fixed_chi,
 )
 
 # --- generating, stitching and storing tables ------------------------------
@@ -131,12 +132,13 @@ __all__ = [
     # phase adapters and pairings
     "Phase", "PhaseThermo", "hadronic_phase", "hadronic_seed", "quark_phase",
     "dd2_phase", "vmit_phase", "default_pair",
-    "sfho_phase", "zl_phase", "alphabag_phase",
+    "sfho_phase", "zl_phase", "alphabag_phase", "enjl_branch_pair",
     # solving
     "solve_mixed", "MixedResult",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",
-    "sweep_mixed", "locate_window", "find_mixed_window", "MixedWindow",
+    "sweep_mixed", "locate_window", "locate_windows", "find_mixed_window",
+    "MixedWindow",
     "solve_fixed_chi", "refine_window",
     "seed_across_eta",
     "solve_mixed_at_entropy",

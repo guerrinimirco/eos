@@ -905,3 +905,37 @@ def alphabag_phase(params=None):
 
     return Phase(name="alphaBag", thermo=thermo, potential_kind="physical",
                  cold_start=cold_start, wing_sweep=wing_sweep)
+
+
+def enjl_branch_pair(par, branches=("broken", "restored")):
+    """Two `Phase`s over ONE functional: an ENJL construction pairs branches.
+
+    Each phase is `enjl_phase` at a declared branch of the same parameter
+    set — the same thermodynamic potential admits several self-consistent
+    states at one set of potentials, and a first-order transition in this
+    model is a construction between two of them.
+
+    The Phase declarations carry the ENJL rules: physical potentials on both
+    slots (the rearrangement terms are unknowns inside its residual),
+    `max_T = 0` (the surface is T = 0 only), NO seed cache and NO cold start —
+    the seed ladder inside `enjl_phase` is a pure function of the arguments
+    because it CHOOSES THE BRANCH, and an eta < 1 solve is seeded from a
+    located eta = 1 Maxwell point rather than from any equilibrium of its
+    own. No wings and no frozen block yet: the multi-window construction
+    driver is the follow-up that needs them (docs/DEFERRED.md).
+    """
+    def make(branch):
+        if branch not in ENJL_BRANCHES:
+            raise ValueError(f"unknown ENJL branch {branch!r}; "
+                             f"expected one of {ENJL_BRANCHES}")
+
+        def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+                   return_state=False):
+            th = enjl_phase(par, branch, mu, mu_C=mu_C, mu_S=mu_S, T=T)
+            return (th, None) if return_state else th
+
+        return Phase(name=branch, thermo=thermo, potential_kind="physical",
+                     seed_cacheable=False, max_T=0.0)
+
+    lo, hi = branches
+    return make(lo), make(hi)

@@ -643,3 +643,38 @@ def locate_maxwell(phase_lo, phase_hi, mu_B_grid, T=0.0, muons=True,
     return MaxwellPoint(mu_B=mu_B, P=0.5 * (lo[0] + hi[0]),
                         n_B_lo=lo[1], n_B_hi=hi[1],
                         mu_e_lo=-lo[2], mu_e_hi=-hi[2], branches=tuple(labels))
+
+
+def locate_windows(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
+                   max_windows=4, phases=None, muons=None, **kw):
+    """Every coexistence window on the grid, in density order.
+
+    A model with several branches (ENJL) can put MORE than one first-order
+    transition on one density axis. This is the thin loop
+    docs/enjl/PHASE_TRANSITION_DESIGN.md section 4 asks for: `locate_window`
+    repeatedly, each search starting just above the previous offset, stopping
+    at the first search that finds nothing or after `max_windows`. Which
+    branch PAIRS to sweep is the caller's business — the engine stays a
+    two-phase engine, and each call of this function is one pair.
+
+    `**kw` passes `locate_window`'s tuning through (n_probe, tol, refine, ...).
+    Returns a list of `MixedWindow`, possibly empty.
+    """
+    grid = np.asarray(n_B_grid, dtype=float)
+    if grid.size < 2:
+        return []
+    step = float(np.min(np.diff(np.sort(grid))))
+    windows = []
+    lo = float(grid[0])
+    for _ in range(max_windows):
+        sub = grid[grid >= lo]
+        if sub.size < 2:
+            break
+        w = locate_window(par, flags, sub, eta, spec,
+                          vmit_params=vmit_params, T=T, phases=phases,
+                          muons=muons, **kw)
+        if not w.exists:
+            break
+        windows.append(w)
+        lo = w.n_offset + step
+    return windows
