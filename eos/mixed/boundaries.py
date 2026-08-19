@@ -483,7 +483,14 @@ def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0,
 #: Kept coarse deliberately: the residual is smooth in mu_C and the bisection
 #: below refines it, while every extra scan point off the branch costs a full
 #: failed seed ladder, which is the dominant cost of this construction.
-MU_C_SCAN = (-300.0, -20.0, 11)
+#:
+#: The upper end must stay close to zero. Nearly symmetric quark matter is
+#: nearly neutral on its own, so it neutralizes at a very small mu_e: the
+#: deconfined branch of the f_q = 0.7, B = 0 set does it at mu_C = -7.9 MeV.
+#: A scan that stops at -20 MeV reports that branch as non-existent and the
+#: deconfinement transition as absent -- which is what it did, until this
+#: comment was written.
+MU_C_SCAN = (-320.0, -2.0, 15)
 
 
 @dataclass
