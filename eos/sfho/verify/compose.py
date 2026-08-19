@@ -40,7 +40,7 @@ import os
 
 import numpy as np
 
-from eos.sfho.compose_loader import read_compose_data
+from eos.general.compose import read_compose_data
 from eos.sfho.solver import solve_fixed_yc
 
 #: Local CompOSE data locations (downloaded from compose.obspm.fr).

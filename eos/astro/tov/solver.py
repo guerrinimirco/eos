@@ -19,6 +19,7 @@ from pathlib import Path
 
 # Import physical constants
 from eos import REPO_ROOT
+from eos.general.compose import ComposeLookup
 from eos.general.physics_constants import (
     M_sun_MeV, r_sun_fm, r_sun_km, rho_sol, G_natural, m_nucleon_MeV,
     n0_default, hc, MEV_FM3_TO_KM2_INV, MEV_FM3_TO_DYNE_CM2, MEV_FM3_TO_G_CM3
@@ -253,16 +254,19 @@ def _load_compose_crust(filepath: str, T: float = 0.0, Y_C: float = 0.5) -> EOST
     Returns:
         EOSTable_for_TOV with the subnuclear (n_B ≤ 0.16) slice at (T, Y_C).
     """
-    # Lazy import to avoid a circular import (compose_loader pulls in
-    # EOSTable_for_TOV from this module).
-    from eos.sfho.compose_loader import SFHOComposeLookup
-
     compose_dir = str(Path(filepath).parent)
     if compose_dir not in _SFHO_LOOKUP_CACHE:
-        _SFHO_LOOKUP_CACHE[compose_dir] = SFHOComposeLookup(compose_dir)
-    # Trim to subnuclear range so the crust ↔ core blend in add_crust() stays
+        _SFHO_LOOKUP_CACHE[compose_dir] = ComposeLookup(compose_dir)
+    # Trim to subnuclear range so the crust <-> core blend in add_crust() stays
     # on the side that's actually "crust".
-    return _SFHO_LOOKUP_CACHE[compose_dir].to_crust_table(T, Y_C, n_B_max=0.16)
+    #
+    # The reader hands back plain arrays and this layer wraps them: astro
+    # consumes what general produces, which is the direction CLAUDE.md
+    # section 1 fixes. It used to be a lazy import inside this function,
+    # because the two modules imported each other.
+    P, eps, n_B = _SFHO_LOOKUP_CACHE[compose_dir].slice_arrays(
+        T, Y_C, n_B_max=0.16)
+    return EOSTable_for_TOV(P=P, epsilon=eps, nB=n_B)
 
 
 def add_crust(

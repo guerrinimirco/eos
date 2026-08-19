@@ -1,17 +1,22 @@
-"""
-compose_loader.py
-=================
-In-memory lookup for the SFHO CompOSE EOS as a 3-axis (n_B, Y_C, T) table.
+"""Reading a CompOSE equation-of-state table: the 3-axis (n_B, Y_C, T) grid.
 
-Reads the full 3-D CompOSE grid once through :func:`read_compose_data` below,
-caches it, and exposes bilinear interpolation in (T, Y_C) along the native n_B
-grid. Designed for crust attachment in
-:mod:`eos.astro.tov.solver` (the ``compose_sfho_nYCT`` crust option), but useful
-anywhere a (T, Y_C) slice of SFHO is needed.
+CompOSE (Typel et al., the CompOSE manual) distributes a tabulated EoS as a
+set of plain files -- ``eos.nb``, ``eos.t``, ``eos.yq`` for the three axes and
+``eos.thermo`` for the quantities on them. This module reads that layout once,
+caches it, and interpolates bilinearly in (T, Y_C) along the native n_B grid.
+Nothing here is specific to one tabulated model; SFHo is simply the table this
+repository is usually pointed at.
+
+It lives in ``general/`` because it PRODUCES data and imports nothing else in
+the repository (CLAUDE.md section 1). In particular it does not know about
+``EOSTable_for_TOV``: a slice comes back as plain arrays, and the layer
+entitled to wrap those into a structure-solver table is ``eos.astro.tov``,
+which consumes them. Reading it the other way round is what made this module
+and ``eos.astro.tov.solver`` import each other.
 
 Quantities exposed per (T, Y_C) slice:
-    n_B [fm⁻³], P [MeV/fm³], epsilon [MeV/fm³], mu_B [MeV], mu_C [MeV],
-    mu_L [MeV], s [per baryon], f [MeV/fm³]
+    n_B [fm^-3], P [MeV/fm^3], epsilon [MeV/fm^3], mu_B [MeV], mu_C [MeV],
+    mu_L [MeV], s [per baryon], f [MeV/fm^3]
 """
 
 from __future__ import annotations
@@ -22,7 +27,6 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from eos.astro.tov.solver import EOSTable_for_TOV
 
 
 @dataclass
@@ -121,7 +125,7 @@ def read_compose_data(compose_dir: str, name: str = "CompOSE",
     )
 
 
-class SFHOComposeLookup:
+class ComposeLookup:
     """Cached lookup over the full SFHO CompOSE (n_B, Y_C, T) grid.
 
     Parameters
@@ -137,7 +141,7 @@ class SFHOComposeLookup:
 
     _QUANTITIES = ("P", "e", "s", "f", "mu_B", "mu_C", "mu_L")
 
-    def __init__(self, compose_dir: str, name: str = "SFHO_CompOSE"):
+    def __init__(self, compose_dir: str, name: str = "CompOSE"):
         self.compose_dir = compose_dir
         self.data: CompOSEData = read_compose_data(compose_dir, name=name)
 
@@ -202,26 +206,30 @@ class SFHOComposeLookup:
         slice_out["Y_C"] = float(Y_C)
         return slice_out
 
-    def to_crust_table(
+    def slice_arrays(
         self,
         T: float,
         Y_C: float,
         n_B_max: Optional[float] = None,
-    ) -> EOSTable_for_TOV:
-        """Return the (T, Y_C) slice as an :class:`EOSTable_for_TOV`.
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(P, epsilon, n_B) of the (T, Y_C) slice, finite rows only.
+
+        Plain arrays, deliberately: this module produces data and does not
+        know what will be built from it. `eos.astro.tov.solver` is what turns
+        these into an ``EOSTable_for_TOV`` for crust attachment.
 
         Parameters
         ----------
         T, Y_C : float
             Slice coordinates.
         n_B_max : float, optional
-            If given, drop rows with ``n_B > n_B_max`` so the table covers only
-            the subnuclear/crust regime (good for crust attachment). If
-            ``None``, return the full native n_B range.
+            If given, drop rows with ``n_B > n_B_max``, so the result covers
+            only the subnuclear regime -- which is what crust attachment
+            wants. If ``None``, the full native n_B range comes back.
 
         Notes
         -----
-        Rows where P or epsilon are ``NaN`` are dropped automatically.
+        Rows where P, epsilon or n_B are not finite are dropped.
         """
         s = self.get_slice(T, Y_C)
         n_B = s["n_B"]
@@ -232,7 +240,7 @@ class SFHOComposeLookup:
         if n_B_max is not None:
             mask &= n_B <= n_B_max
 
-        return EOSTable_for_TOV(P=P[mask], epsilon=eps[mask], nB=n_B[mask])
+        return P[mask], eps[mask], n_B[mask]
 
 
 # ---- helpers -----------------------------------------------------------

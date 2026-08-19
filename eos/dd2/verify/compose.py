@@ -26,7 +26,7 @@ from eos.general.particles import Electron
 from eos.general.physics_constants import hc3
 from eos.general.thermodynamics_leptons import photon_thermo
 from eos.general.fermi_integrals import invert_fermi_density
-from eos.sfho.compose_loader import read_compose_data
+from eos.general.compose import read_compose_data
 from eos.dd2.thermodynamics import kinetic_thermo
 from eos.dd2.solver import solve_composition
 

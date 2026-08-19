@@ -89,26 +89,29 @@ and both the crossing and the pivot are pinned by tests. What is left is to
 rename the columns to something like `Esym_stiff` / `Esym_soft` in SOURCES.md
 and the converter, so the file stops implying an ordering it does not have.
 
-### The CompOSE reader creates a cycle, and moving it is not just a move
+### The CompOSE reader cycle is CLOSED
 
-`eos/sfho/compose_loader.py` imports `EOSTable_for_TOV` from `eos.astro.tov.solver`,
-and `eos.astro.tov.solver` imports `SFHOComposeLookup` back from it — a genuine
-import cycle, currently worked around with a lazy import inside the function
-and a comment saying so. On top of that, `eos/dd2/verify/compose.py` imports
-the same module, so a model depends on another model.
+`eos/sfho/compose_loader.py` imported `EOSTable_for_TOV` from
+`eos.astro.tov.solver` while that module imported `SFHOComposeLookup` back
+from it -- a genuine cycle, worked around with a lazy import inside the
+function. `eos/dd2/verify/compose.py` imported the same module, so a model
+depended on another model.
 
-Both are violations of the layering in CLAUDE.md section 1, and the plan's
-remedy — move it to `general/compose.py` — cannot be applied literally,
-because `general/` may import nothing else in the repository and the reader
-currently returns an `EOSTable_for_TOV`.
+Done as designed, in the `astro/tov` session where the crust path has test
+cover. `eos/sfho/compose_loader.py` is now `eos/general/compose.py`; it
+imports nothing else in the repository, and `to_crust_table` -- which had to
+know about `EOSTable_for_TOV` -- is `slice_arrays`, returning plain
+(P, epsilon, n_B). `eos.astro.tov.solver` wraps those into the table, at a
+normal top-level import, because astro consumes what general produces. The
+class is `ComposeLookup`: nothing in it was ever SFHo-specific, SFHo is just
+the table this repository points it at, and a name saying otherwise inside
+`general/` was misleading.
 
-The shape the move has to take: `general/compose.py` reads a CompOSE table and
-returns plain arrays (P, eps, n_B); the crust-table wrapper `to_crust_table`
-moves to `astro/tov`, which is the layer entitled to know about
-`EOSTable_for_TOV`. That resolves the cycle in the right direction — general
-produces data, astro consumes it — and drops the `dd2 -> sfho` edge. It should
-be done in the `astro/tov` session, where the crust path has test cover: a
-silent fall back to no crust shifts M_max by about 1%.
+The `dd2 -> sfho` edge is gone with it; `dd2/verify/compose.py` and
+`sfho/verify/compose.py` both read from `general/`. ONE dd2 -> sfho import
+survives, `dd2/notebook_api.py` reaching for `eos.sfho.table`, and it is not
+worth fixing separately: that file is slated for deletion in the dd2 entry
+above, and the edge dies with it.
 
 ### One notebook still sets rcParams
 
