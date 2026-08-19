@@ -697,6 +697,12 @@ class EOSCollection:
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
+    from eos.general.figure_style import STANDARD_COLORS, set_paper_style
+
+    # Geometry, fonts and colours come from the one styling module
+    # (`eos.general.figure_style`); nothing here sets rcParams of its own.
+    set_paper_style()
+
     print("="*70)
     print("Simple EOS Reader Example")
     print("="*70)
@@ -729,17 +735,29 @@ if __name__ == "__main__":
         n_B_array = np.linspace(0.1, 0.8, 100)
         P_array = eos.P_tot(n_B_array, T=0.0, eta=0.6)
 
-        plt.figure(figsize=(8, 5))
-        plt.plot(n_B_array, P_array, 'b-', linewidth=2)
-        plt.xlabel('n_B [fm$^{-3}$]')
-        plt.ylabel('P [MeV/fm$^3$]')
-        plt.title('Pressure vs Baryon Density')
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.savefig('simple_pressure_plot.png', dpi=150)
-        print("Saved: simple_pressure_plot.png")
+        fig, ax = plt.subplots()
+        ax.plot(n_B_array, P_array, color=STANDARD_COLORS['Blue'])
+        ax.set_xlabel(r'$n_B$ [fm$^{-3}$]')
+        ax.set_ylabel(r'$P$ [MeV fm$^{-3}$]')
+        ax.set_title('Pressure vs baryon density')
+        fig.tight_layout()
+
+        # Generated figures belong under output/, in a per-study subfolder --
+        # never in whatever directory the example happened to be run from.
+        out_dir = REPO_ROOT / "output" / "zlvmit"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_file = out_dir / "simple_pressure_plot.png"
+        fig.savefig(out_file)
+        plt.close(fig)
+        print(f"Saved: {out_file}")
     else:
-        print(f"File not found: {eos_file}")
+        # Say where the table comes from rather than only that it is absent:
+        # these are generated output, not shipped data, so a fresh clone has
+        # none of them and a bare "not found" leaves the reader stuck.
+        print(f"File not found: {eos_file}\n"
+              f"  ZLvMIT tables are generated, not shipped. Build them with\n"
+              f"  `python -m eos.zlvmit.hybrid_table_generator`, which writes\n"
+              f"  into {REPO_ROOT / 'output' / 'zlvmit_hybrid_outputs'}.")
 
     # Example 2: Collection of files
     print("\n2. Loading collection of EOS tables:")
