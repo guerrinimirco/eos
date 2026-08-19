@@ -396,7 +396,7 @@ measures the difference between the two.
 Solve Tolman-Oppenheimer-Volkoff equations for neutron star mass-radius relations.
 
 ```python
-from eos.tov.solver import (
+from eos.astro.tov.solver import (
     compute_tov_sequence,
     EOSTable_for_TOV,
     add_crust,

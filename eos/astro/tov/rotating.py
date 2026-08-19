@@ -10,8 +10,8 @@ The stationary, rigidly rotating configurations are computed by the
 Komatsu-Eriguchi-Hachisu (1989, MNRAS 237, 355) self-consistent-field method
 with the modifications of Cook, Shapiro & Teukolsky (1994, ApJ 422, 227), as
 implemented in RNS (Stergioulas & Friedman 1995, ApJ 444, 306). This module
-drives that solver; `eos.tov.rns_backend` owns its file format and command
-line. Non-rotating models come from `eos.tov.solver` and are untouched here.
+drives that solver; `eos.astro.tov.rns_backend` owns its file format and command
+line. Non-rotating models come from `eos.astro.tov.solver` and are untouched here.
 
 *Public API*: :class:`RotatingResult`, :func:`prepare_rotating_eos`,
 :func:`kepler_model`, :func:`rratio_scan`, :func:`rotating_model`,
@@ -50,7 +50,7 @@ Public arguments and results are in the units used throughout this repository:
 energy density MeV/fm^3, pressure MeV/fm^3, baryon density fm^-3, mass M_sun,
 radius km, frequency Hz, angular velocity rad/s. Angular momentum is the
 dimensionless cJ/(G M_sun^2) that the solver reports. The conversion to the
-solver's CGS conventions happens in `eos.tov.rns_backend` and does not leak
+solver's CGS conventions happens in `eos.astro.tov.rns_backend` and does not leak
 across this boundary.
 """
 
@@ -66,14 +66,14 @@ from scipy.interpolate import PchipInterpolator
 from scipy.optimize import brentq
 
 from eos.general.physics_constants import MEV_FM3_TO_G_CM3
-from eos.tov.solver import (
+from eos.astro.tov.solver import (
     EOSTable_for_TOV,
     add_crust,
     compute_tov_sequence,
     load_crust_table,
 )
-from eos.tov import rns_backend
-from eos.tov.rns_backend import (
+from eos.astro.tov import rns_backend
+from eos.astro.tov.rns_backend import (
     MAX_EOS_ROWS,
     RNS_RHO_SURFACE,
     have_rns,
@@ -216,7 +216,7 @@ def _extend_to_surface(eos: EOSTable_for_TOV,
     """
     Prepend the crust rows that lie below the table's own lowest point.
 
-    :func:`eos.tov.solver.add_crust` discards rows below n_B = 1e-8 fm^-3,
+    :func:`eos.astro.tov.solver.add_crust` discards rows below n_B = 1e-8 fm^-3,
     which keeps the merged table well conditioned for the TOV integrator but
     truncates the BPS crust at ~3e7 g/cm^3. The rotating solver instead
     extrapolates its 4-point interpolation below the first tabulated point to
@@ -249,7 +249,7 @@ def prepare_rotating_eos(eos: Union[str, EOSTable_for_TOV],
 
     The solver pins the stellar surface at 7.8 g/cm^3, so a table that stops at
     the crust-core transition never matches its surface and no model converges.
-    A crust is therefore attached with :func:`eos.tov.solver.add_crust` unless
+    A crust is therefore attached with :func:`eos.astro.tov.solver.add_crust` unless
     the table already reaches that density. `BPST0.dat` bottoms out at
     7.86 g/cm^3, which is exactly what is needed.
 
@@ -259,7 +259,7 @@ def prepare_rotating_eos(eos: Union[str, EOSTable_for_TOV],
         A table, or a path already in the solver's own format (returned
         unchanged), or a path to a three-column `P, epsilon, nB` file.
     crust : str
-        Any name accepted by :func:`eos.tov.solver.add_crust`, or ``'No'`` to
+        Any name accepted by :func:`eos.astro.tov.solver.add_crust`, or ``'No'`` to
         attach nothing. Ignored when the table already reaches the surface.
     crust_mode : str
         ``'attach'``, ``'interpolate'`` or ``'maxwell'``.
@@ -269,7 +269,7 @@ def prepare_rotating_eos(eos: Union[str, EOSTable_for_TOV],
         Where to write. Defaults to a cached file in a session temporary
         directory, reused for identical tables.
     **crust_kwargs
-        Forwarded to :func:`eos.tov.solver.add_crust`.
+        Forwarded to :func:`eos.astro.tov.solver.add_crust`.
 
     Returns
     -------
@@ -335,7 +335,7 @@ def _pmap(func, items, parallel: bool, n_jobs: int = -1):
     Every model is a separate solver process, so this is clean process
     parallelism. Set `parallel=False` when this call is already inside a
     parallel map -- the same convention as the `tov_parallel` flag of
-    :func:`eos.tov.solver.compute_tov_sequence`.
+    :func:`eos.astro.tov.solver.compute_tov_sequence`.
     """
     items = list(items)
     if not parallel or len(items) < 2:
@@ -373,7 +373,7 @@ def kepler_model(eos_path: str, e_c: float, *,
     omega_tol : float
         Allowed relative mismatch between Omega and Omega_K.
     **run_kwargs
-        Forwarded to :func:`eos.tov.rns_backend.run_rns` (`timeout`,
+        Forwarded to :func:`eos.astro.tov.rns_backend.run_rns` (`timeout`,
         `accuracy`, `cf`, `rns_binary`, `ladder`).
 
     Returns
@@ -434,7 +434,7 @@ def rratio_scan(eos_path: str, e_c: float, *,
     n_jobs : int
         Worker count for joblib; -1 uses every core.
     **run_kwargs
-        Forwarded to :func:`eos.tov.rns_backend.run_rns`.
+        Forwarded to :func:`eos.astro.tov.rns_backend.run_rns`.
 
     Returns
     -------
@@ -571,7 +571,7 @@ def rotating_model(eos: Union[str, EOSTable_for_TOV], e_c: float, *,
     crust : str
         Passed to :func:`prepare_rotating_eos`.
     **run_kwargs
-        Forwarded to :func:`eos.tov.rns_backend.run_rns`.
+        Forwarded to :func:`eos.astro.tov.rns_backend.run_rns`.
 
     Returns
     -------
@@ -660,7 +660,7 @@ def kepler_sequence(eos: Union[str, EOSTable_for_TOV],
     crust : str
         Passed to :func:`prepare_rotating_eos`.
     **run_kwargs
-        Forwarded to :func:`eos.tov.rns_backend.run_rns`.
+        Forwarded to :func:`eos.astro.tov.rns_backend.run_rns`.
 
     Returns
     -------
@@ -725,7 +725,7 @@ def rotating_grid(eos: Union[str, EOSTable_for_TOV],
     crust : str
         Passed to :func:`prepare_rotating_eos`.
     **run_kwargs
-        Forwarded to :func:`eos.tov.rns_backend.run_rns`.
+        Forwarded to :func:`eos.astro.tov.rns_backend.run_rns`.
 
     Returns
     -------
@@ -895,7 +895,7 @@ def static_cross_check(eos: Union[str, EOSTable_for_TOV],
     Both codes are given the same EOS, the rotating one at unit axis ratio. The
     two should agree but will not agree exactly: the rotating code pins its own
     stellar surface at 7.8 g/cm^3 and works from a table thinned to at most 200
-    rows on a spectral-like grid, while :func:`eos.tov.solver.compute_tov_sequence`
+    rows on a spectral-like grid, while :func:`eos.astro.tov.solver.compute_tov_sequence`
     integrates the supplied table directly. A disagreement of a few tenths of a
     percent is the expected level; a systematically larger one means the table
     conversion is wrong.
@@ -912,7 +912,7 @@ def static_cross_check(eos: Union[str, EOSTable_for_TOV],
     parallel, n_jobs : bool, int
         Parallelise the rotating-code models.
     **run_kwargs
-        Forwarded to :func:`eos.tov.rns_backend.run_rns`.
+        Forwarded to :func:`eos.astro.tov.rns_backend.run_rns`.
 
     Returns
     -------

@@ -73,7 +73,7 @@ interpolation between them,
     c_dy^2 = c_eq^2 + (c_ad^2 - c_eq^2) / (1 + gamma / (i omega))
 
 written for a perturbation going as e^{+i omega t}, the convention
-`eos.gmode.cowling` therefore adopts as well. In it a damped mode has
+`eos.astro.gmode.cowling` therefore adopts as well. In it a damped mode has
 Im(omega) > 0.
 
 So gamma << omega recovers `c_ad^2` (frozen), gamma >> omega recovers `c_eq^2`

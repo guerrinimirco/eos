@@ -164,5 +164,5 @@ two rows; add `--tov` for those (it costs ~40 s).
 
 **Not implemented** (see `docs/DEFERRED.md`): the nuclear-statistical-
 equilibrium cluster description below saturation (Section III of the paper —
-`eos/tov` attaches a crust instead), the inverse NMP map, a trapped muon
+`eos/astro/tov` attaches a crust instead), the inverse NMP map, a trapped muon
 family, and the phi contribution to the thermal kaon potentials.

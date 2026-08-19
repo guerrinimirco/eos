@@ -41,7 +41,7 @@ reports rather than prints.
  13. Residual gate       every state solved here is inside the tolerance the
                          model claims to accept at.
  14. Stellar structure   M_max and R_1.4 against Table VIII, through
-                         `eos.tov`. Off by default (two TOV sequences take
+                         `eos.astro.tov`. Off by default (two TOV sequences take
                          about forty seconds); `--tov` switches it on.
 
 Run as `python -m eos.did.verify.run_full_check`.

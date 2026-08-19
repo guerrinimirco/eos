@@ -8,7 +8,7 @@ method with the Cook, Shapiro & Teukolsky (1994) modifications.
 
 This module owns everything that is specific to RNS's on-disk format and its
 command line. It knows nothing about sequences, root-finding or physics
-targets; that is `eos.tov.rotating`.
+targets; that is `eos.astro.tov.rotating`.
 
 *Public API*: :func:`find_rns_binary`, :func:`write_rns_eos`,
 :func:`parse_rns_output`, :func:`run_rns`.
@@ -42,7 +42,7 @@ are the usual source of silent factor errors:
   prints ``e_c`` in **10^15 g/cm^3**.
 - ``-o`` takes the angular velocity in **10^4 s^-1**, not rad/s, and the
   report prints ``Omega`` in the same units. (This module never uses ``-o``;
-  see `eos.tov.rotating` for why.)
+  see `eos.astro.tov.rotating` for why.)
 - ``-j`` takes the **dimensionless** angular momentum cJ/(G M_sun^2).
 - ``M_0`` is a rest mass built with RNS's own fixed baryon mass
   m_B = 1.66e-24 g, 0.03% below this repository's ``m_nucleon_MeV = 931.494``.
@@ -82,7 +82,7 @@ from eos.general.physics_constants import (
     MEV_FM3_TO_DYNE_CM2,
     MEV_FM3_TO_G_CM3,
 )
-from eos.tov.solver import EOSTable_for_TOV
+from eos.astro.tov.solver import EOSTable_for_TOV
 
 # ---------------------------------------------------------------------------
 # Limits and constants fixed by the RNS sources
@@ -294,7 +294,7 @@ def rns_columns(eos: EOSTable_for_TOV, n_points: int = MAX_EOS_ROWS
             f"The table starts at {rho_min:.3g} g/cm^3 but RNS pins the stellar "
             f"surface at {RNS_RHO_SURFACE} g/cm^3; without a crust reaching that "
             "density the surface is never matched and no model converges. "
-            "Attach one first, e.g. eos.tov.solver.add_crust(table, 'BPS')."
+            "Attach one first, e.g. eos.astro.tov.solver.add_crust(table, 'BPS')."
         )
 
     h = _specific_enthalpy(P, eps)
@@ -446,7 +446,7 @@ def run_rns(eos_path: str, task: str, e_c: float, *,
     Only the ``model`` and ``kepler`` tasks should be used. RNS's ``omega``,
     ``jmoment``, ``gmass`` and ``rmass`` tasks wrap the field iteration in a
     second, secant-like loop over the requested quantity, and that outer loop is
-    where the code loses convergence; `eos.tov.rotating` reaches those targets
+    where the code loses convergence; `eos.astro.tov.rotating` reaches those targets
     by inverting a scan instead.
 
     Parameters

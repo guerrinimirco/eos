@@ -617,7 +617,7 @@ plt.show()
 #   parameter set's chiral transition to 0.3% in both $P$ and $\mu_b$), but
 #   which branches are admissible is the open question above. The reference
 #   tables contain four verified coexistence windows to gate one against.
-# * **TOV sequences and mass-radius curves (paper Fig. 8)** — `eos.tov` is
+# * **TOV sequences and mass-radius curves (paper Fig. 8)** — `eos.astro.tov` is
 #   ready and needs a table spanning the full density range, which needs the
 #   branch question closed. It also needs a crust: a crustless star is about
 #   0.9 km too small at 1.4 solar masses, larger than the spread Fig. 8 shows.

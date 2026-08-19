@@ -163,7 +163,7 @@ same signature:
 `conditions` are the independent variables of the mode, named exactly n_B, T,
 Y_C, Y_S, Y_Le, Y_Lmu. Every public boundary is fm-based: n in fm^-3, T and mu
 in MeV, eps and P in MeV/fm^3. Natural units stay inside the physics modules.
-What eos_table() returns is directly consumable by eos/tov/ and by the
+What eos_table() returns is directly consumable by eos/astro/tov/ and by the
 plotting code with no per-model adapter.
 
 WHAT THE LIBRARY IS FOR. The API is shaped by its downstream uses, and a
@@ -450,7 +450,7 @@ The refactor is done. Make eos usable by someone who is not me.
 
 2. Rewrite eos/README.md: what the library computes, install, and four
    runnable examples — (a) one point from one model in BETA_NEUTRINOLESS,
-   (b) a FIXED_YC table swept over n_B and T, (c) that table fed to eos/tov/
+   (b) a FIXED_YC table swept over n_B and T, (c) that table fed to eos/astro/tov/
    for an M-R curve and maximum mass, (d) the same model with hyperons
    enabled, showing the species flags. Then a fifth: an M-R figure with the
    observational constraints overlaid, in the house style, in under ten lines.

@@ -3,7 +3,7 @@ gmode/verify/run_full_check.py
 ==============================
 Physics-invariant verification suite for the g-mode engine.
 
-Run it directly (`python -m eos.gmode.verify.run_full_check`) for a pass/fail
+Run it directly (`python -m eos.astro.gmode.verify.run_full_check`) for a pass/fail
 report. Each check returns a structured result with its worst error rather than
 printing, so the suite can also be called from a script or a notebook.
 
@@ -11,7 +11,7 @@ These are invariants the engine must satisfy on its own terms, not agreement
 with any earlier implementation:
 
   1. background: the profile-returning TOV integration reproduces the mass and
-     radius `eos.tov` gets from the same table, and the metric functions join
+     radius `eos.astro.tov` gets from the same table, and the metric functions join
      the exterior Schwarzschild solution at the surface;
   2. gravity: g = nu'/2, the identity that lets nu be obtained by quadrature
      from the pressure profile instead of by integrating another ODE;
@@ -39,13 +39,13 @@ import numpy as np
 from eos.dd2 import Parametrization, SpeciesFlags
 from eos.dd2.responses import sound_speed_eq
 from eos.dd2.solver import sweep_beta_eq_octet, solve_beta_eq_octet
-from eos.tov.solver import (
+from eos.astro.tov.solver import (
     EOSTable_for_TOV, solve_tov_single, _create_interpolators,
 )
-from eos.gmode.background import build_background, with_crust
-from eos.gmode.cowling import mode_spectrum, solve_gmode
-from eos.gmode.sound_speeds import cs2_frozen_nucleonic, cs2_dynamical
-from eos.gmode.rates import equilibration_rate
+from eos.astro.gmode.background import build_background, with_crust
+from eos.astro.gmode.cowling import mode_spectrum, solve_gmode
+from eos.astro.gmode.sound_speeds import cs2_frozen_nucleonic, cs2_dynamical
+from eos.astro.gmode.rates import equilibration_rate
 
 
 @dataclass
@@ -88,7 +88,7 @@ def _check_background_vs_tov():
     ref = solve_tov_single(900.0, eos, P_of_e, e_of_P, n_of_P,
                            compute_baryonic=False, compute_tidal=False)
     err = max(abs(bg.M_msun - ref.M) / ref.M, abs(bg.R - ref.R) / ref.R)
-    return CheckResult("background vs eos.tov", err < 1e-3, err,
+    return CheckResult("background vs eos.astro.tov", err < 1e-3, err,
                        f"M={bg.M_msun:.4f} vs {ref.M:.4f}, "
                        f"R={bg.R:.3f} vs {ref.R:.3f} km")
 

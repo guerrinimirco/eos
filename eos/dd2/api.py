@@ -117,7 +117,7 @@ def eos_table(par, mode, species, axes, fixed=None, skip_errors=True,
     A thin wrapper over eos.dd2.build_table: axes and fixed follow TableSpec
     (axes={'nB': grid, 'T' or 'SnB': grid, optionally 'Y_C'/'Y_S'/'Y_Le'}),
     the density axis is warm-started with bisected continuation through
-    onsets, and the result's points/rows feed eos.tov and the plotting code
+    onsets, and the result's points/rows feed eos.astro.tov and the plotting code
     directly. skip_errors=True drops non-converged points from their line
     (the sampler-friendly default) rather than aborting the table.
 

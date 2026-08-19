@@ -7,13 +7,13 @@ the Brunt-Vaisala frequency.
 
 Why this module exists
 ----------------------
-`eos.tov.solver` integrates the TOV equations and returns scalars (M, R, k2,
+`eos.astro.tov.solver` integrates the TOV equations and returns scalars (M, R, k2,
 Lambda); the profiles are discarded and the metric function `nu(r)` is never
 formed, because a static structure calculation does not need it. A g-mode does:
 the Cowling system is an ODE *in* `r` whose responses are the background
 fields. This module therefore re-integrates the same equations keeping the
 profiles, and adds `nu`. It imports the equation-of-state plumbing from
-`eos.tov.solver` rather than duplicating it, and does not modify it.
+`eos.astro.tov.solver` rather than duplicating it, and does not modify it.
 
 Metric and units
 ----------------
@@ -65,7 +65,7 @@ from scipy.interpolate import PchipInterpolator
 from eos.general.physics_constants import MEV_FM3_TO_KM2_INV, r_sun_km
 
 # Half the solar Schwarzschild radius: G M_sun / c^2, i.e. 1 M_sun expressed in
-# km. Derived from the same constant `eos.tov` uses so the two agree by
+# km. Derived from the same constant `eos.astro.tov` uses so the two agree by
 # construction rather than by a second hard-coded literal.
 KM_PER_MSUN = 0.5 * r_sun_km
 
@@ -100,7 +100,7 @@ class StellarBackground:
     g        : local gravity -(dP/dr)/(eps + P) [km^-1]
     cs2_eq   : equilibrium sound speed squared, dimensionless (units of c)
     cs2_ad   : frozen/adiabatic sound speed squared; may be complex if a finite
-               reaction rate was folded in (see `eos.gmode.sound_speeds`)
+               reaction rate was folded in (see `eos.astro.gmode.sound_speeds`)
     N2       : Brunt-Vaisala frequency squared [km^-2]; complex when cs2_ad is
     gamma    : chemical equilibration rate [s^-1] carried onto the star, or
                None. Only used to rebuild N^2 at a trial frequency.
@@ -130,7 +130,7 @@ class StellarBackground:
         Returns `self` unchanged when no rate was supplied.
         """
         from dataclasses import replace
-        from eos.gmode.sound_speeds import cs2_dynamical
+        from eos.astro.gmode.sound_speeds import cs2_dynamical
 
         if self.gamma is None:
             return self
@@ -226,11 +226,11 @@ def with_crust(eos, cs2_eq, cs2_ad, crust="BPS", n_transition=0.08,
 
     eos          : core `EOSTable_for_TOV`
     cs2_eq/cs2_ad: sound speeds on the core rows
-    crust        : name understood by `eos.tov.solver.load_crust_table`, or
+    crust        : name understood by `eos.astro.tov.solver.load_crust_table`, or
                    "No" to skip and return the input unchanged
     n_transition : baryon density [fm^-3] below which crust rows are kept
     """
-    from eos.tov.solver import EOSTable_for_TOV, load_crust_table
+    from eos.astro.tov.solver import EOSTable_for_TOV, load_crust_table
 
     cs2_eq = np.asarray(cs2_eq)
     cs2_ad = np.asarray(cs2_ad)
@@ -331,7 +331,7 @@ def build_background(eos, cs2_eq, cs2_ad, e_c=None, M_target=None,
     if gamma is not None:
         gamma = gamma[order]
     # A Maxwell plateau repeats P; keep the last (high-density) entry so the
-    # inverse map eps(P) stays single-valued, matching `eos.tov`'s convention.
+    # inverse map eps(P) stays single-valued, matching `eos.astro.tov`'s convention.
     keep = np.concatenate([np.diff(P_tab) > 0, [True]])
     P_tab, e_tab, n_tab = P_tab[keep], e_tab[keep], n_tab[keep]
     cs2_eq, cs2_ad = cs2_eq[keep], cs2_ad[keep]

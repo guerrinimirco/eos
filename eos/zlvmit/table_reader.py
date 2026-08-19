@@ -667,7 +667,7 @@ class EOSCollection:
         Returns:
             EOSTable_for_TOV ready for tov_solver.solve_tov_sequence()
         """
-        from eos.tov.solver import EOSTable_for_TOV
+        from eos.astro.tov.solver import EOSTable_for_TOV
         
         valid_eta = self._validate_eta(eta)
         reader = self.eos_tables[valid_eta]

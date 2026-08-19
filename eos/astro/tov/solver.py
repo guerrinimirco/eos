@@ -1058,7 +1058,7 @@ def compute_tov_sequence(
 
     # --- fast backend: dispatch to the numba solver, trim to the flag layout ---
     if backend == 'fast':
-        from eos.tov.solver_fast import compute_tov_sequence_fast
+        from eos.astro.tov.solver_fast import compute_tov_sequence_fast
         full = compute_tov_sequence_fast(eos, np.asarray(e_c_vec, float),
                                          parallel=tov_parallel)
         # full cols: 0=e_c 1=n_c 2=P_c 3=R 4=M 5=M_b 6=k2 7=Lambda

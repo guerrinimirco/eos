@@ -239,7 +239,7 @@ def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
     no transition on the grid the table is pure hadronic.
 
     Returns a `HybridResult` — test `.ok` before using `.table`, whose
-    `.to_tov()` is the contract into `eos.tov` (§6: non-convergence is a
+    `.to_tov()` is the contract into `eos.astro.tov` (§6: non-convergence is a
     return value). A malformed call — an unknown mode, a fraction the mode
     does not take, a species flag the mode needs — raises before any solve.
     """

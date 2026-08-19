@@ -185,7 +185,7 @@ def _hadronic_tov(par, flags, n_ec=120, tov_parallel=True):
     will not integrate is a finding about the parameters.
     """
     from eos.dd2.verify.tov import build_core_table, N_TRANSITION
-    from eos.tov.solver import (
+    from eos.astro.tov.solver import (
         compute_tov_sequence, find_mmax_precise, generate_ec_logspace,
         CRUST_PATHS,
     )

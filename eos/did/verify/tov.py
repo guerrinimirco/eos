@@ -13,7 +13,7 @@ import os
 
 import numpy as np
 
-from eos.tov.solver import (
+from eos.astro.tov.solver import (
     CRUST_PATHS, EOSTable_for_TOV, compute_tov_sequence, find_mmax_precise,
     generate_ec_logspace,
 )

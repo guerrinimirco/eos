@@ -91,8 +91,8 @@ and the converter, so the file stops implying an ordering it does not have.
 
 ### The CompOSE reader creates a cycle, and moving it is not just a move
 
-`eos/sfho/compose_loader.py` imports `EOSTable_for_TOV` from `eos.tov.solver`,
-and `eos.tov.solver` imports `SFHOComposeLookup` back from it — a genuine
+`eos/sfho/compose_loader.py` imports `EOSTable_for_TOV` from `eos.astro.tov.solver`,
+and `eos.astro.tov.solver` imports `SFHOComposeLookup` back from it — a genuine
 import cycle, currently worked around with a lazy import inside the function
 and a comment saying so. On top of that, `eos/dd2/verify/compose.py` imports
 the same module, so a model depends on another model.
@@ -707,7 +707,7 @@ a reason that has nothing to do with seeding.
   excluded-volume van der Waals gas inside the RMF sea, and it is what the
   paper's crust and its Table VIII radii are built on. `eos/did` is the
   uniform-matter part alone; below saturation a caller attaches a crust table
-  through `eos/tov`, as every other model in this repository does. The
+  through `eos/astro/tov`, as every other model in this repository does. The
   consequence is measured rather than assumed: with BPS attached,
   R_1.4 = 12.07 km against the published 11.99 km, and M_max agrees to
   0.002 M_sun. Closing it means a cluster sector — a new module and a new set

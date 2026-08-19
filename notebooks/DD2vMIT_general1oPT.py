@@ -117,10 +117,10 @@ from eos.dd2 import (Parametrization, SpeciesFlags, hadronic_row,
 from eos.dd2.solver import sweep_beta_eq_octet, sweep_octet
 from eos.vmit.parameters import get_vmit_custom
 from eos.vmit.eos import solve_vmit_beta_eq, solve_vmit_fixed_yc
-from eos.tov.solver import find_mmax_precise
-from eos.tov.rotating import (kepler_sequence, rotating_grid, turning_point,
+from eos.astro.tov.solver import find_mmax_precise
+from eos.astro.tov.rotating import (kepler_sequence, rotating_grid, turning_point,
                               GRID_COLUMNS, KEPLER_COLUMNS)
-from eos.tov.rns_backend import have_rns
+from eos.astro.tov.rns_backend import have_rns
 from eos.mixed import (
     beta_eq_neutrinoless, fixed_YC,
     MixedTableSpec, build_mixed_table, build_mixed_eos_table,
@@ -343,7 +343,7 @@ def _hadronic_mr(par, flags):
     """
     import os
     from eos.dd2.verify.tov import build_core_table, N_TRANSITION
-    from eos.tov.solver import (compute_tov_sequence, find_mmax_precise,
+    from eos.astro.tov.solver import (compute_tov_sequence, find_mmax_precise,
                                 generate_ec_logspace, CRUST_PATHS)
     try:
         core = build_core_table(par, flags)
@@ -927,7 +927,7 @@ SCAN_GRID = np.linspace(0.05, 1.6, 120)           # coarser than NB: a probe
 SCAN_TOV = True                                   # also record M_max, R_1.4
 
 # ---- rotation (III.7) -----------------------------------------------------
-# Uniformly rotating models, computed by RNS through eos.tov.rotating. One
+# Uniformly rotating models, computed by RNS through eos.astro.tov.rotating. One
 # axis-ratio scan per central density answers every J and every frequency at
 # once, so the cost is ROT_N_SCAN solver runs per (eta, n_B_c) and is set by
 # ROT_N_SCAN x len(ROT_NB_C), not by how many isolines you ask for.
@@ -1473,7 +1473,7 @@ for (_m, _fk, _e), _rs in sorted(_by.items(), key=lambda kv: str(kv[0])):
 # tables above answer. The mass-radius curve below therefore does *not* change when you
 # change `MODE`.
 #
-# A Maxwell (η=1) table carries a constant-pressure plateau, and `eos.tov` detects it
+# A Maxwell (η=1) table carries a constant-pressure plateau, and `eos.astro.tov` detects it
 # and applies the tidal correction across the density discontinuity by itself.
 # The integration uses the Numba backend by default (`backend="fast"`), which agrees
 # with the scipy reference to ~1e-4 M_sun on M_max; pass `backend="scipy"` to check.
@@ -2553,7 +2553,7 @@ if problems:
 #
 # Uniformly rotating, axisymmetric models of the *same* stitched EOSs Part II.3 integrated,
 # computed with the Komatsu-Eriguchi-Hachisu self-consistent field method as implemented
-# in RNS (Stergioulas & Friedman 1995, ApJ 444, 306), driven through `eos.tov.rotating`.
+# in RNS (Stergioulas & Friedman 1995, ApJ 444, 306), driven through `eos.astro.tov.rotating`.
 #
 # **Read this before trusting a number.** `rotating_grid` never asks the solver for a
 # physical target directly. It scans the axis ratio r_p/r_e — where every model converges —
@@ -2568,7 +2568,7 @@ if problems:
 # stationary in central density marks the onset of secular instability to axisymmetric
 # collapse: nothing beyond it is a star. Along a constant-M_0 sequence the same
 # configuration is where M stops falling and starts to rise, so the same routine finds it
-# with the sign flipped. `eos.tov.rotating.turning_point` takes the *first* stationary
+# with the sign flipped. `eos.astro.tov.rotating.turning_point` takes the *first* stationary
 # point, not the largest, which matters here: with a first-order transition the mass can
 # turn over, dip and rise again into a twin branch whose peak is higher, and the first
 # branch still becomes unstable at its own turning point.
@@ -2591,7 +2591,7 @@ ROT_M0 = [1.8, 2.1, 2.4, 2.7]
 rot_kepler, rot_iso = {}, {}
 if not have_rns():
     print("No `rns` executable found — III.10 skipped.\n"
-          "eos.tov.rns_backend.find_rns_binary() looks on PATH and at the usual\n"
+          "eos.astro.tov.rns_backend.find_rns_binary() looks on PATH and at the usual\n"
           "build locations; point it at your build or pass rns_path= to run it.")
 else:
     for eta in TOV_ETAS:

@@ -100,7 +100,7 @@ def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=False,
 
     A thin wrapper over `eos.did.table.build_table`: axes and fixed follow
     `TableSpec`, the density axis is warm-started with bisected continuation
-    through the hyperon onsets, and the result feeds `eos.tov` and the
+    through the hyperon onsets, and the result feeds `eos.astro.tov` and the
     plotting code directly. skip_errors=True drops non-converged points from
     their line rather than aborting the table.
 

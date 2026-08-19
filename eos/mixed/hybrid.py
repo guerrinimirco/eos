@@ -33,7 +33,7 @@ to close gaps.
 
 eta shapes the window and nothing else: eta = 0 gives a Gibbs mixed phase whose
 pressure rises through the window, eta = 1 a Maxwell plateau at constant
-pressure with a genuine density jump. Both are handed to `eos/tov/` unchanged;
+pressure with a genuine density jump. Both are handed to `eos/astro/tov/` unchanged;
 `compute_tov_sequence` detects the plateau itself and applies the Takatsy &
 Kovacs (2020) tidal correction across the discontinuity, so `mass_radius_mixed`
 needs no flag for it.
@@ -49,7 +49,7 @@ from eos.mixed.solver import sweep_mixed
 
 @dataclass
 class MixedEoSTable:
-    """A monotone core equation of state. Feed `.to_tov()` to `eos/tov/`."""
+    """A monotone core equation of state. Feed `.to_tov()` to `eos/astro/tov/`."""
     n_B: np.ndarray          # fm^-3, ascending
     P: np.ndarray            # MeV/fm^3
     eps: np.ndarray          # MeV/fm^3
@@ -66,7 +66,7 @@ class MixedEoSTable:
         return np.isfinite(self.n_onset) and np.isfinite(self.n_offset)
 
     def to_tov(self):
-        from eos.tov.solver import EOSTable_for_TOV
+        from eos.astro.tov.solver import EOSTable_for_TOV
         return EOSTable_for_TOV(P=self.P, epsilon=self.eps, nB=self.n_B)
 
 
@@ -216,9 +216,9 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     carries a plateau, so it needs no flag here.
 
     This is a convenience wrapper, not a separate TOV implementation: the
-    integration is `eos.tov`'s, and the equation of state reaches it through
+    integration is `eos.astro.tov`'s, and the equation of state reaches it through
     `MixedEoSTable.to_tov()`, which is the contract to use directly when you
-    want to drive `eos.tov` yourself.
+    want to drive `eos.astro.tov` yourself.
 
     backend       : 'fast' (default) is the Numba solver; 'scipy' is the
                     readable reference it is validated against. They agree to
@@ -232,7 +232,7 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     an already-built `table` to skip re-solving the EoS.
     """
     import os
-    from eos.tov.solver import (
+    from eos.astro.tov.solver import (
         compute_tov_sequence, find_mmax_precise, generate_ec_logspace,
         CRUST_PATHS,
 )

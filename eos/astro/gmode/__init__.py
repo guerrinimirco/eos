@@ -1,5 +1,5 @@
 """
-eos.gmode
+eos.astro.gmode
 =========
 Composition g-modes of neutron stars: the oscillation whose restoring force is
 buoyancy, and which therefore measures the *composition gradient* of dense
@@ -34,16 +34,16 @@ Layout
 
 Quick start
 -----------
-    from eos.gmode import gmode_frequency, with_crust
+    from eos.astro.gmode import gmode_frequency, with_crust
 
     eos, c_eq, c_ad = with_crust(core_table, c_eq_core, c_ad_core)
     mode = gmode_frequency(eos, c_eq, c_ad, M_target=1.4)
     print(mode.label, mode.nu_hz)
 
 The two sound speeds are the entire physics input. Supply them from wherever
-the equation of state lives: `eos.gmode.sound_speeds.cs2_frozen_nucleonic` and
+the equation of state lives: `eos.astro.gmode.sound_speeds.cs2_frozen_nucleonic` and
 `eos.dd2.responses.sound_speed_eq` for a nucleonic star,
-`eos.gmode.sound_speeds.cs2_frozen_along` and
+`eos.astro.gmode.sound_speeds.cs2_frozen_along` and
 `eos.mixed.responses.sound_speed_eq` for a DD2 + vMIT hybrid.
 
 Everything is in the relativistic Cowling approximation, which gives real
@@ -51,20 +51,20 @@ eigenfrequencies accurate to a few per cent for g-modes but no
 gravitational-wave damping time. A finite reaction rate does produce a damping
 time, the bulk-viscous one; pass `gamma` to `gmode_frequency` for it.
 """
-from eos.gmode.background import (
+from eos.astro.gmode.background import (
     StellarBackground, build_background, with_crust, brunt_vaisala,
     omega_to_hz, hz_to_omega,
 )
-from eos.gmode.sound_speeds import (
+from eos.astro.gmode.sound_speeds import (
     sound_speed_eq, cs2_frozen_isobaric, cs2_frozen_nucleonic,
     cs2_frozen_point, cs2_frozen_along, cs2_dynamical, bulk_viscosity,
     ISOBARIC, EQUAL_COMPRESSION, CONVENTIONS,
 )
-from eos.gmode.rates import (
+from eos.astro.gmode.rates import (
     equilibration_rate, equilibration_rate_along, susceptibility_A,
     lambda_direct_urca, lambda_modified_urca,
 )
-from eos.gmode.cowling import (
+from eos.astro.gmode.cowling import (
     Mode, mode_spectrum, solve_gmode, gmode_frequency, integrate_mode,
     surface_discriminant,
 )

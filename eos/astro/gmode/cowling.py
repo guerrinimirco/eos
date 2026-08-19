@@ -78,7 +78,7 @@ and for a well-resolved g_k it agrees.
 Finite reaction rates
 ---------------------
 When the background carries a complex dynamical sound speed (see
-`eos.gmode.sound_speeds.cs2_dynamical`), N^2 and the coefficients are complex
+`eos.astro.gmode.sound_speeds.cs2_dynamical`), N^2 and the coefficients are complex
 and so is the eigenfrequency. Its imaginary part is the bulk-viscous damping
 rate of the mode. The complex root is found by seeding from the real solution,
 which also fixes the mode's identity: node counting is not meaningful for a
@@ -93,7 +93,7 @@ e^{-Im(omega) t} and a *damped* mode therefore has **Im(omega) > 0**. Mixing
 this with the opposite convention silently flips the sign of the damping while
 leaving the frequency untouched, so it is worth stating explicitly.
 
-Units follow `eos.gmode.background`: geometric, with `r` in km and `omega` in
+Units follow `eos.astro.gmode.background`: geometric, with `r` in km and `omega` in
 km^-1. Public results are also reported in Hz.
 """
 import numpy as np
@@ -101,7 +101,7 @@ from dataclasses import dataclass
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq
 
-from eos.gmode.background import omega_to_hz, hz_to_omega
+from eos.astro.gmode.background import omega_to_hz, hz_to_omega
 
 
 @dataclass
@@ -375,7 +375,7 @@ def gmode_frequency(eos, cs2_eq, cs2_ad, e_c=None, M_target=1.4, l=2, order=1,
     """Equation of state in, g-mode frequency out. The package's front door.
 
     eos      : `EOSTable_for_TOV` (P, epsilon in MeV/fm^3, nB in fm^-3), crust
-               already attached — see `eos.gmode.background.with_crust`
+               already attached — see `eos.astro.gmode.background.with_crust`
     cs2_eq   : equilibrium c^2 = dP/deps, one per row of `eos`
     cs2_ad   : frozen c^2 = (dP/deps)_x, one per row of `eos`
     e_c      : central energy density [MeV/fm^3], or
@@ -385,12 +385,12 @@ def gmode_frequency(eos, cs2_eq, cs2_ad, e_c=None, M_target=1.4, l=2, order=1,
                row of `eos`. When given, the frozen sound speed is replaced by
                the complex dynamical one at the mode's own frequency and the
                result carries a bulk-viscous damping time. See
-               `eos.gmode.rates.equilibration_rate`.
+               `eos.astro.gmode.rates.equilibration_rate`.
 
     Returns a `Mode`. The two sound speeds are the entire physics input: their
     difference is the buoyancy, and where they coincide there is no g-mode.
     """
-    from eos.gmode.background import build_background
+    from eos.astro.gmode.background import build_background
 
     bg = build_background(eos, cs2_eq, cs2_ad, e_c=e_c, M_target=M_target,
                           n_points=n_points, gamma=gamma, **bg_kw)
@@ -470,7 +470,7 @@ def _refine_complex(bg, seed, l=2, rtol=1e-6, atol=1e-10):
     # mode has Im(omega) > 0 and its e-folding time is 1/Im(omega). Bulk
     # viscosity can only remove energy, so a root on the other side is not a
     # physical answer -- it means the search left the branch it was continuing.
-    from eos.gmode.background import C_KM_S
+    from eos.astro.gmode.background import C_KM_S
     omega_i = float(np.imag(w)) * C_KM_S
     if omega_i < 0.0:
         raise RuntimeError(

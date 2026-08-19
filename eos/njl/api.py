@@ -126,7 +126,7 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
     A thin wrapper over `eos.njl.table.build_table`: axes and fixed follow
     `TableSpec`, the density axis is warm-started with bisected continuation
     through the strange-quark and pairing onsets, and the result feeds
-    `eos.tov` and the plotting code directly. skip_errors=True drops
+    `eos.astro.tov` and the plotting code directly. skip_errors=True drops
     non-converged points from their line rather than aborting the table.
 
     progress : callable, invoked once per completed line with
