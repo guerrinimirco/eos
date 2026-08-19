@@ -963,6 +963,20 @@ a reason that has nothing to do with seeding.
   converged answer; found while renaming the ZL entry points and left alone,
   because zlvmit is kept for its published results and even a seed change
   moves the last bits of a baseline row.
+- Styling is DONE: `eos/general/figure_style.py` is now the only source of
+  rcParams, colours and figure geometry anywhere in `eos/zlvmit`.
+  `plot_results.setup_matplotlib_style` is a wrapper that passes this study's
+  25/20 pt text and DejaVu-first font order into `set_paper_style` rather than
+  setting anything itself -- that font order is deliberate and must not be
+  "fixed" to prefer CMU, because these are published figures and some CMU
+  Serif installs are partial. The usage example in `table_reader.py` was the
+  last holdout (figsize, dpi and a literal 'b-') and now writes into
+  `output/zlvmit/` instead of the working directory.
+- What is deliberately NOT done, and is not a gap: the uniform API. CLAUDE.md
+  section 1 exempts zlvmit from it, and new hybrid work goes through
+  `eos/mixed`. The module keeps its own solvers, its own table stack and its
+  own `.dat` reader. It carries no `.tex`, no `verify/` and no
+  `eos_point`/`eos_table`, and none of those are owed.
 
 ### enjl
 - **Finite temperature is implemented; what is NOT is the CONSTRUCTION above
