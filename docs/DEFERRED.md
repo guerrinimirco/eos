@@ -45,6 +45,21 @@ is carried by no populated species. Options: report the potential as undefined
 have the mode raise. Until then `test/baseline` does not freeze mu_S where n_S
 is zero, or mu_e where n_e is zero, because there is nothing there to freeze.
 
+### `neutralizing_leptons` now has a home, and two models still carry copies
+
+`eos/general/thermodynamics_leptons.py` gained `neutralizing_leptons(n_charge,
+T, include_muons)` — the electrons and muons at the single potential that
+neutralizes a given non-leptonic charge, which is what a `fixed_YC` mode with
+leptons needs after its solve. It is model-independent (masses and T are all
+that enter), which is why it moved there, and `eos/did` uses it.
+
+`eos/dd2/thermodynamics.py` and `eos/sfho` still carry their own versions;
+dd2's docstring already recorded that it owed the move. Migrating them is a
+two-line change each, but it is a change to solved numbers at the last bits
+(a different brentq bracket walks to a different final digit), so it belongs
+with a session that regenerates those baselines deliberately rather than with
+a session that adds a model.
+
 ### The pure-Python integral fallback is not a bit-exact reference
 
 `general/fermi_integrals.py` and `general/bose_integrals.py` define their
@@ -685,6 +700,68 @@ a reason that has nothing to do with seeding.
   the spec name `thermal_neutrinos` means the untracked mu = 0 gas, which dd2
   does not implement). Unifying the names across models is deferred until the
   other models reach the spec API, so it lands as one rename, not five.
+
+### did
+- The low-density nuclear-statistical-equilibrium sector is not implemented.
+  Section III of arXiv:2511.15646 embeds 8244 nuclei from AME20/FRDM12 as an
+  excluded-volume van der Waals gas inside the RMF sea, and it is what the
+  paper's crust and its Table VIII radii are built on. `eos/did` is the
+  uniform-matter part alone; below saturation a caller attaches a crust table
+  through `eos/tov`, as every other model in this repository does. The
+  consequence is measured rather than assumed: with BPS attached,
+  R_1.4 = 12.07 km against the published 11.99 km, and M_max agrees to
+  0.002 M_sun. Closing it means a cluster sector — a new module and a new set
+  of degrees of freedom, not a wiring job — and it belongs with whatever
+  session brings NSE to the whole repository.
+- The inverse nuclear-matter map is not implemented and is not published for
+  this functional form. `nmp.compute_nmp` is the forward direction only: the
+  couplings come from a Bayesian analysis over 18 observables (hyperon
+  potentials in two media, saturation properties, chi-EFT and heavy-ion
+  pressures), and the nuclear-matter parameters are what that fit PREDICTS.
+  An inversion would have to choose which 15 of those observables to impose,
+  which is a modelling decision the paper does not make.
+- `eos_response` implements the `equilibrium` freeze only (c_s^2 isothermal
+  and adiabatic, C_V, C_P, Gamma_th, in every mode). The composition freezes
+  — held species fractions, held Y_C with the species re-equilibrating — and
+  the susceptibility matrix chi_ab are not wired and raise naming this file.
+  For DID a frozen-composition derivative has a wrinkle the other models do
+  not have: holding the composition holds beta, so the couplings stop moving
+  too, and whether that is what "frozen" should mean is a physics choice to
+  make deliberately rather than inherit.
+- The muon lepton family is not tracked as a conserved charge:
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) and a Y_Lmu raises. The muon
+  SPECIES is wired and selectable, and it matters: it moves the hyperon onsets
+  up by about 0.03 fm^-3 relative to the paper's electron-only sector.
+- The thermal kaon effective potentials carry the omega and rho shifts but not
+  the phi. The arithmetic is inherited from `eos/dd2`, where g_phiN = 0 makes
+  the omission exact; in DID the SU(3) vector sector gives the nucleon
+  g_phiN = -5.2, so the kaon's strange quark sees a field the potential does
+  not know about. Fixing it means deciding what the additive-quark shift is
+  for a hidden-strange vector, which is model physics rather than a missing
+  term, and it should be decided once for every model that carries a phi.
+- The Delta(1232) quartet is an EXTENSION, not part of arXiv:2511.15646:
+  there is no published DID Delta coupling table, so the ratios default to
+  universal coupling and `nmp.delta_ratios_from_potential` offers the
+  U_Delta inversion. Any Delta result from this model is this
+  implementation's, and did.tex says so.
+- DDBY, the comparison parameterisation of the paper's Table V, is not
+  shipped. Its four sigma couplings are published there but the base DDB model
+  they attach to is not (Ref. 92 of arXiv:2511.15646 carries it), so a DDBY
+  set here would be four numbers on top of a parameterisation this repository
+  does not have. It is a comparison curve, not part of DID, and adding it
+  means adding DDB.
+- The delta (a_0(980)) and f_0(980) mesons are absent by the model's own
+  design, not by omission here, and there is no species flag for them. Adding
+  either changes the model rather than switching on a sector.
+- S_2, L_2 and K_sym2 are extracted as coefficients of a beta^4-truncated
+  expansion (one Richardson step from beta = -1 and -0.5), and agree with the
+  published values to about one percent, against two parts in a thousand for
+  everything else in Table VI. The gap is a definition, not an error: the true
+  beta -> 0 curvature is nearer 32.9 MeV, the published S_2 is 32.44, and
+  which one a given extraction returns depends on how much beta^6 behaviour it
+  absorbs. A small-step estimator cannot decide it either — at beta = 0.05 the
+  signal is 0.08 MeV on a binding energy of 900 MeV. Closing it means asking
+  the authors what their fit window was.
 
 ### sfho
 - The muon lepton family is not wired: it appears in no residual, no
