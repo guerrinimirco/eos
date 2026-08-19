@@ -113,6 +113,27 @@ survives, `dd2/notebook_api.py` reaching for `eos.sfho.table`, and it is not
 worth fixing separately: that file is slated for deletion in the dd2 entry
 above, and the edge dies with it.
 
+### astro/gmode is expensive, not hung
+
+Worth recording because it was misdiagnosed once in this repository's own
+notes. `test/gmode` does not hang. It is slow, and the cost is the
+crust-attached background. Measured:
+
+    no crust data, -m "not slow"      69 s      29 passed, 5 skipped
+    crust configured, -m "not slow"   17.5 min  34 passed
+    one `slow` test on its own        3.6 min
+
+`pyproject.toml` already declares the convention --
+`markers = ["slow: long-running (excluded with -m 'not slow')"]` -- so a gate
+should use it. A run that looks stuck after a dozen dots is a `slow` test
+doing a complex frequency scan, and a run that looked stuck BEFORE the
+astro/tov session was the crust being found through a hardcoded path and the
+full background being built.
+
+The five crust-dependent tests now skip when no crust table is configured,
+rather than erroring, for the same reason the rotating ones do: a fresh clone
+carries no external data and must still produce a green suite.
+
 ### Five models still import `eos.astro`, which section 1 forbids
 
 CLAUDE.md section 1 says plainly that no model imports `astro/`. Five do:
