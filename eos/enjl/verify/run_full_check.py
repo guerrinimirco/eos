@@ -53,8 +53,8 @@ import numpy as np
 
 from eos.enjl import (
     Parameters, SpeciesFlags, TableSpec, build_table, eos_point, eos_response,
-    solve_beta_eq_neutrinoless, thermo_from_n, vacuum_energy_density,
-    vacuum_solution,
+    eos_table, solve_beta_eq_neutrinoless, thermo_from_n,
+    vacuum_energy_density, vacuum_solution,
 )
 from eos.enjl.solver import (
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
@@ -133,7 +133,13 @@ def _densities(n_B_fm, y_p, y_L, y_q):
             "e": 0.0, "mu": 0.0}
 
 
-def _solved(par, entry, seed=None):
+#: Temperatures the identities are checked at. T = 0 keeps the exact closed
+#: forms; the other two are where the T s term is large enough that dropping
+#: it could not pass.
+TEMPERATURES = (0.0, 10.0, 30.0)
+
+
+def _solved(par, entry, seed=None, T=0.0):
     """The state at one composition, warm-started so the gap solve lands.
 
     The cold start of the gap equation is the vacuum constituent masses, which
@@ -143,47 +149,138 @@ def _solved(par, entry, seed=None):
     n = _densities(*entry)
     for x0 in ([seed] if seed is not None else []) + [None, [5.5, 5.5, 200.0]]:
         try:
-            return thermo_from_n(n, par=par, x0=x0), n
+            return thermo_from_n(n, par=par, T=T, x0=x0), n
         except RuntimeError:
             continue
     return None, n
 
 
 def check_euler():
-    """eps + P = T s + sum_i mu_i n_i, at T = 0 where s = 0."""
+    """eps + P = T s + sum_i mu_i n_i, at T = 0 and at T > 0.
+
+    The T s term is the whole of what temperature adds to this identity, and
+    it is checked at temperatures where it is not small: at T = 30 MeV it is
+    several per cent of eps, so a dropped or mis-scaled entropy could not
+    hide inside the tolerance.
+
+    READ THE ZERO CORRECTLY. `thermo_from_n` DEFINES P through this relation,
+    so the residual is exact by construction and not a measurement of
+    anything: it catches an assembly that forgets a species or a sign in the
+    sum, and nothing else. `check_free_energy` is the same identity
+    rearranged and is equally definitional. What is NOT definitional, and is
+    where the thermodynamics is actually tested, is `check_rearrangement`
+    (mu_i = d eps/d n_i by finite difference) and `check_entropy_limit`.
+    """
     worst, detail = 0.0, ""
     for par in SETS:
         for entry in COMPOSITIONS:
-            point, _ = _solved(par, entry)
-            if point is None:
-                continue
-            lhs = point.eps + point.P
-            rhs = point.s * 0.0 + sum(point.mu[sp] * point.n[sp]
-                                      for sp in SPECIES)
-            err = abs(lhs - rhs) / abs(lhs)
-            if err > worst:
-                worst, detail = err, f"{par.f_q}/{par.B_GeV_fm3} {entry[0]}"
-    return CheckResult("euler", worst < 1e-13, worst, detail)
+            for T in TEMPERATURES:
+                point, _ = _solved(par, entry, T=T)
+                if point is None:
+                    continue
+                lhs = point.eps + point.P
+                rhs = T * point.s + sum(point.mu[sp] * point.n[sp]
+                                        for sp in SPECIES)
+                err = abs(lhs - rhs) / abs(lhs)
+                if err >= worst:
+                    worst, detail = err, (f"{par.f_q}/{par.B_GeV_fm3} "
+                                          f"n_B={entry[0]} T={T}")
+    return CheckResult("euler", worst < 1e-13, worst,
+                       f"{detail}; exact by construction -- P is defined "
+                       f"through this relation")
 
 
 def check_free_energy():
-    """f = eps - T s = eps at T = 0, and f = -P + sum_i mu_i n_i."""
+    """f = eps - T s and f = -P + sum_i mu_i n_i, at T = 0 and at T > 0.
+
+    Also that s IS still exactly zero at T = 0. That is not a limit here: the
+    exact closed form of `eos.general.fermi_integrals` returns s = 0.0, and it
+    is what makes `test/baseline` bit-for-bit across this seam.
+    """
     worst, detail = 0.0, ""
     for par in SETS:
         for entry in COMPOSITIONS:
-            point, _ = _solved(par, entry)
-            if point is None:
-                continue
-            f_from_eps = point.eps - 0.0 * point.s
-            f_from_P = -point.P + sum(point.mu[sp] * point.n[sp]
-                                      for sp in SPECIES)
-            err = abs(f_from_eps - f_from_P) / abs(f_from_eps)
-            if err > worst:
-                worst, detail = err, f"{par.f_q}/{par.B_GeV_fm3} {entry[0]}"
-            if point.s != 0.0:
-                return CheckResult("free_energy", False, np.inf,
-                                   "s is not identically zero at T = 0")
+            for T in TEMPERATURES:
+                point, _ = _solved(par, entry, T=T)
+                if point is None:
+                    continue
+                f_from_eps = point.eps - T * point.s
+                f_from_P = -point.P + sum(point.mu[sp] * point.n[sp]
+                                          for sp in SPECIES)
+                err = abs(f_from_eps - f_from_P) / abs(f_from_eps)
+                if err > worst:
+                    worst, detail = err, (f"{par.f_q}/{par.B_GeV_fm3} "
+                                          f"n_B={entry[0]} T={T}")
+                if T == 0.0 and point.s != 0.0:
+                    return CheckResult("free_energy", False, np.inf,
+                                       "s is not identically zero at T = 0")
     return CheckResult("free_energy", worst < 1e-13, worst, detail)
+
+
+def check_entropy_limit():
+    """s > 0 at T > 0, s rises with T, and s -> 0 as T -> 0 -- to a FLOOR.
+
+    The floor is the point of this check. `eos.general.fermi_integrals`
+    evaluates the exact T = 0 closed form at T = 0 and the JEL fit at every
+    T != 0, and the fit does not converge back to the closed form: it steps
+    off the moment T != 0 and STAYS at that offset as T falls, flat from
+    T = 1e-3 MeV downward. Measured on single species, the step is +6.9e-6 in
+    n (u at nu = 400, M = 5.5), -6.3e-5 (s at nu = 500, M = 140.7) and
+    -3.0e-6 (neutron at nu = 1000), with the same numbers in eps.
+
+    So "take T small and compare against the T = 0 baseline" is not a
+    validation route below about 1e-4 relative, and this check states that
+    rather than chasing it. What it does assert is what is true: the entropy
+    itself goes to zero linearly in T (it carries no such offset, being zero
+    at T = 0 in both branches), while eps and P approach their T = 0 values
+    only to the fit's floor.
+
+    That is a property of the fit, not of this port, and it is the reason
+    `check_temperature` keeps the exact T = 0 branch as a special case rather
+    than routing everything through the fit for smoothness -- which would move
+    every frozen number in the repository for a 1e-5 cosmetic gain.
+    """
+    #: The JEL fit's offset from the exact T = 0 closed form. Anything below
+    #: this is the fit, not the model.
+    floor = 1.0e-4
+    par = Parameters.default()
+    entry = COMPOSITIONS[2]
+    cold, _ = _solved(par, entry, T=0.0)
+    if cold is None:
+        return CheckResult("entropy_limit", False, np.inf,
+                           "the T = 0 reference state did not solve")
+
+    failures = []
+    if cold.s != 0.0:
+        failures.append(f"s = {cold.s} at T = 0, not identically zero")
+
+    previous = 0.0
+    for T in (0.5, 2.0, 10.0, 30.0):
+        point, _ = _solved(par, entry, T=T)
+        if point is None:
+            failures.append(f"T = {T} MeV did not solve")
+            continue
+        if point.s <= previous:
+            failures.append(f"s did not rise from T = {previous} to {T} MeV")
+        previous = point.s
+
+    # The approach to T = 0: s vanishes, eps only to the fit's floor.
+    warm, _ = _solved(par, entry, T=1.0e-3)
+    d_eps = abs(warm.eps - cold.eps) / abs(cold.eps)
+    s_over_nB = warm.s / warm.n_b
+    if s_over_nB > 1.0e-4:
+        failures.append(f"s/n_B = {s_over_nB:.3e} at T = 1e-3 MeV, not small")
+    if d_eps > floor:
+        failures.append(f"eps at T = 1e-3 MeV is {d_eps:.3e} from the T = 0 "
+                        f"value, above the {floor:.0e} JEL floor")
+    detail = (f"s = 0 exactly at T = 0 and rises to {previous / cold.n_b:.3f} "
+              f"per baryon by T = 30 MeV; at T = 1e-3 MeV s/n_B = "
+              f"{s_over_nB:.2e} while eps sits {d_eps:.1e} from its T = 0 "
+              f"value -- the JEL fit's step off the exact closed form, floor "
+              f"{floor:.0e}, not a continuity error")
+    return CheckResult("entropy_limit", not failures,
+                       d_eps if not failures else np.inf,
+                       "; ".join(failures) if failures else detail)
 
 
 def check_rearrangement():
@@ -603,23 +700,34 @@ def check_trapped_lepton_number():
 
 
 def check_refusals():
-    """What this model refuses: a temperature, a species flag, a response.
+    """What this model refuses: a construction at T > 0, a flag, a response.
 
-    All four modes of CLAUDE.md section 3 are closed here, so none of them is
-    on this list. What is: any T > 0, since every kinetic expression is a
-    zero-temperature closed form; any species flag moved from the value the
-    model fixes it at; leptons=False in a beta-equilibrium mode, which is
-    defined by the leptons; and eos_response, which needs either T > 0 or a
-    settled branch.
+    All four modes of CLAUDE.md section 3 are closed here at any non-negative
+    temperature, so neither a mode nor a temperature is on this list any
+    longer. What is: a NEGATIVE temperature; the CONSTRUCTED table above
+    T = 0, since locating a coexistence at T > 0 puts the entropy into the
+    bookkeeping and that is not done; the species flags the model genuinely
+    fixes -- which no longer include photons and thermal_neutrinos, both of
+    which are now implemented and selectable; leptons=False in a
+    beta-equilibrium mode, which is defined by the leptons; and eos_response,
+    which needs a settled branch.
     """
     par = Parameters.default()
     failures = []
     try:
-        eos_point(par, "beta_eq_neutrinoless", n_B=0.3, T=10.0)
+        eos_point(par, "beta_eq_neutrinoless", n_B=0.3, T=-1.0)
+    except ValueError:
+        pass
+    else:
+        failures.append("T = -1 MeV returned a state")
+    try:
+        eos_table(par, "beta_eq_neutrinoless",
+                  axes={"nB": [0.3, 0.4], "T": [10.0]},
+                  coexistences=[])
     except NotImplementedError:
         pass
     else:
-        failures.append("T = 10 MeV returned a state")
+        failures.append("a constructed table at T = 10 MeV was accepted")
     try:
         eos_point(par, "beta_eq_neutrinoless", n_B=0.3, leptons=False)
     except ValueError:
@@ -633,13 +741,18 @@ def check_refusals():
     else:
         failures.append("fixed_YC without Y_C was accepted")
     for flag, value in (("hyperons", False), ("muons", False),
-                        ("deltas", True), ("thermal_mesons", True),
-                        ("photons", True), ("thermal_neutrinos", True)):
+                        ("deltas", True), ("thermal_mesons", True)):
         try:
             SpeciesFlags(**{flag: value})
         except NotImplementedError:
             continue
         failures.append(f"SpeciesFlags({flag}={value}) was accepted")
+    # ... and the two that are now the caller's must NOT raise.
+    try:
+        SpeciesFlags(photons=True, thermal_neutrinos=True)
+    except NotImplementedError:
+        failures.append("photons/thermal_neutrinos still raise, but they are "
+                        "implemented")
     try:
         eos_response(par, n_B=0.3)
     except NotImplementedError:
@@ -648,8 +761,9 @@ def check_refusals():
         failures.append("eos_response returned a response")
     return CheckResult("refusals", not failures, float(len(failures)),
                        "; ".join(failures)
-                       or "T > 0, six flags, a malformed call and "
-                          "eos_response all raise")
+                       or "T < 0, a constructed table at T > 0, four fixed "
+                          "flags, a malformed call and eos_response all "
+                          "raise; photons and thermal_neutrinos do not")
 
 
 def check_non_convergence_is_returned():
@@ -785,7 +899,8 @@ def check_delivered_table():
 
 
 
-CHECKS = (check_euler, check_free_energy, check_rearrangement,
+CHECKS = (check_euler, check_free_energy, check_entropy_limit,
+          check_rearrangement,
           check_gap_equation, check_charge_basis, check_beta_equilibrium,
           check_fixed_fractions, check_symmetric_matter_slice,
           check_trapped_lepton_number, check_thermo_from_mu,

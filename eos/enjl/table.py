@@ -25,9 +25,10 @@ import numpy as np
 
 from eos.enjl.parameters import Parameters
 from eos.enjl.solver import (
-    BetaPoint, check_mode, check_temperature, solve,
+    BetaPoint, check_mode, check_temperature, solve, solve_at_entropy,
     warm_start,
 )
+from eos.enjl.species import SpeciesFlags
 from eos.general.tabulate import lines_from_axes, sweep_lines
 
 DIRECTIONS = ("up", "down")
@@ -37,18 +38,25 @@ DIRECTIONS = ("up", "down")
 class TableSpec:
     """What to solve: the mode, its fractions, the density axis, the branch.
 
-    The temperature axis is accepted for the shape every model's table spec
-    has, and must be 0.0: this is a T = 0 model. `fractions` carries the
-    mode's own conditions under CLAUDE.md section 5's names -- Y_C, Y_S, Y_Le
-    -- and is empty for beta_eq_neutrinoless.
+    `T` is ONE temperature, the line this table is solved along; give `SnB`
+    instead to solve an isentrope, where the temperature is found per density
+    by an outer 1-D solve (`solver.solve_at_entropy`). Exactly one of the two
+    is given. `fractions` carries the mode's own conditions under CLAUDE.md
+    section 5's names -- Y_C, Y_S, Y_Le -- and is empty for
+    beta_eq_neutrinoless.
+
+    `species` is the SpeciesFlags; only `photons` and `thermal_neutrinos` are
+    the caller's, and neither enters an equation.
     """
     nB: np.ndarray
     mode: str = "beta_eq_neutrinoless"
     par: Parameters = field(default_factory=Parameters.default)
     direction: str = "up"
     T: float = 0.0
+    SnB: float = None
     x0: list = None
     leptons: bool = True
+    species: SpeciesFlags = None
     fractions: dict = field(default_factory=dict)
 
 
@@ -56,8 +64,9 @@ class TableSpec:
 class TableResult:
     """A solved ENJL grid: the conditions of each line, and its points.
 
-    There is exactly one line, T = 0, because the model has one temperature
-    and the mode it closes fixes no fraction to sweep. `points` is shorter
+    There is exactly one line: a table here is a density CONTINUATION, and
+    that is what carries the sweep, so a second temperature or a second
+    fraction is a second call rather than a second column. `points` is shorter
     than `nB` wherever a density could not be reached from its neighbour.
     """
     par: Parameters
@@ -106,6 +115,8 @@ def build_table(spec, progress=None, verbose=False):
     """
     check_mode(spec.mode)
     check_temperature(spec.T)
+    if spec.SnB is not None and spec.T:
+        raise ValueError("give exactly one of T / SnB")
     if spec.direction not in DIRECTIONS:
         raise ValueError(f"direction must be one of {DIRECTIONS}, "
                          f"got {spec.direction!r}")
@@ -115,11 +126,17 @@ def build_table(spec, progress=None, verbose=False):
 
     def solve_one(n_B, conditions, x0):
         seed = spec.x0 if x0 is None and spec.x0 is not None else x0
-        return solve(spec.mode, n_B, par=spec.par, x0=seed,
-                     cold_start=seed is None, leptons=spec.leptons,
-                     T=spec.T, **spec.fractions)
+        common = dict(par=spec.par, x0=seed, cold_start=seed is None,
+                      leptons=spec.leptons, species=spec.species)
+        if spec.SnB is None:
+            return solve(spec.mode, n_B, T=spec.T, **common, **spec.fractions)
+        # An isentrope: the temperature is a different number at every
+        # density, so it is solved for at every density.
+        return solve_at_entropy(spec.mode, n_B, spec.SnB,
+                                **common, **spec.fractions)
 
-    lines = lines_from_axes({"T": [spec.T]}, fixed=spec.fractions)
+    axis = {"T": [spec.T]} if spec.SnB is None else {"SnB": [spec.SnB]}
+    lines = lines_from_axes(axis, fixed=spec.fractions)
     solved = sweep_lines(lines, order, solve_one, warm_start=warm_start,
                          progress=progress, verbose=verbose, mode=spec.mode,
                          reset_on_failure=False)
@@ -309,6 +326,16 @@ def build_constructed_table(spec, coexistences, eta=1.0, progress=None,
     import time
 
     check_temperature(spec.T)
+    if spec.T != 0.0 or spec.SnB:
+        raise NotImplementedError(
+            f"eos.enjl builds a CONSTRUCTED table at T = 0 only; got "
+            f"T = {spec.T} MeV, SnB = {spec.SnB}. The raw continuation "
+            f"`build_table` is closed at any temperature -- what is not is "
+            f"the construction across a window: locating a coexistence at "
+            f"T > 0 means equating the Gibbs free energies rather than "
+            f"P and mu_B alone, so the entropy enters the coexistence "
+            f"bookkeeping, and the plateau's lever rule then averages it "
+            f"too. `eos.mixed.construction` raises for the same reason")
     if eta != 1.0:
         raise NotImplementedError(
             f"eos.enjl delivers the eta = 1 (Maxwell) construction; got "

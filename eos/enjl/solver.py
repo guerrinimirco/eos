@@ -36,8 +36,9 @@ from scipy.optimize import brentq, least_squares
 
 from eos.enjl.parameters import Parameters
 from eos.enjl.species import (
-    BARYON_NUMBER, BARYONS, CHARGE, DEGENERACY, ISOSPIN, LEPTONS, QUARKS,
-    SPECIES, STRANGENESS, coupling_rescalings,
+    BARYON_NUMBER, BARYONS, CHARGE, DEGENERACY, ISOSPIN, LEPTONS,
+    NEUTRINO_FLAVOURS, QUARKS, SPECIES, STRANGENESS, SpeciesFlags,
+    coupling_rescalings,
 )
 from eos.enjl.thermodynamics import (
     EoSPoint, _baryon_scalar_densities, baryon_masses,
@@ -50,6 +51,7 @@ from eos.general.modes import (
 )
 from eos.general.physics_constants import hc3
 from eos.general.solve import RESIDUAL_TOL, scaled_residual_max
+from eos.general.tabulate import temperature_at_entropy
 
 #: The four modes of CLAUDE.md section 3, as the factories that declare them.
 #: Every one is reachable here; what this model refuses is a temperature, not
@@ -78,12 +80,19 @@ def check_mode(mode):
 
 
 def check_temperature(T):
-    """Raise unless T = 0, the only temperature this model has."""
-    if T != 0.0:
-        raise NotImplementedError(
-            f"eos.enjl is a T = 0 model: every kinetic expression in it is a "
-            f"zero-temperature closed form and s = 0 identically; got "
-            f"T = {T} MeV")
+    """Raise unless T >= 0.
+
+    Every mode of this model is closed at any non-negative temperature. T = 0
+    is not merely the T -> 0 limit of the rest: it keeps the exact closed
+    forms of `eos.general.fermi_integrals`, which the JEL fit the T > 0 path
+    uses does not converge back to (it steps off by ~1e-5 relative the moment
+    T != 0 and stays there). That is a property of the fit, not of the port,
+    and it is why a T -> 0 continuity check has a floor near 1e-4 -- see
+    `eos.enjl.verify.check_entropy_limit`.
+    """
+    if T < 0.0:
+        raise ValueError(
+            f"temperature must be non-negative; got T = {T} MeV")
 
 
 def mode_spec(mode, leptons=True, **fractions):
@@ -208,6 +217,24 @@ def default_guess(mode, n_B_fm, par, spec=None, **fractions):
                 seed.append((6.0 * math.pi ** 2 * n_nue) ** (1.0 / 3.0))
             seeds.append(seed)
     return seeds
+
+
+def thermal_neutrino_flavours(spec, species):
+    """How many mu = 0 neutrino flavours `species.thermal_neutrinos` adds.
+
+    CLAUDE.md section 4 defines that flag as the flavours NOT tracked in the
+    matter composition. This model tracks the electron neutrino, and only
+    where a mode holds Y_Le: the muon family is transparent here
+    (mu_mu = mu_e - mu_nue) and the tau family is never carried. So a
+    neutrinoless mode leaves all three flavours to the thermal gas and a
+    trapped one leaves two.
+
+    Deciding this is the solver's job and not `thermodynamics.py`'s, which
+    never knows which mode it is in; that module is handed the COUNT.
+    """
+    if not species.thermal_neutrinos:
+        return 0
+    return NEUTRINO_FLAVOURS - (1 if spec.is_fixed("L_e") else 0)
 
 
 def warm_start(point):
@@ -492,7 +519,7 @@ class BetaPoint:
 
 
 def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
-          T=0.0, **fractions):
+          T=0.0, species=None, **fractions):
     """One equilibrium solve at n_B [fm^-3], for any of the four modes.
 
     The mode declaration decides the unknowns and the rows (`state_at`);
@@ -530,6 +557,11 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
                     either way; with leptons=False the result is charged
                     matter, which is what a mixed-phase construction needs per
                     pure phase.
+        T:          temperature [MeV].
+        species:    SpeciesFlags. Only `photons` and `thermal_neutrinos` are
+                    the caller's here, and neither enters an equation of the
+                    solve: they carry no conserved charge, so they are added
+                    to eps, P and s once the composition is found.
         fractions:  the mode's own conditions, named Y_C, Y_S, Y_Le.
 
     Returns:
@@ -539,6 +571,7 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
         par = Parameters.default()
     check_temperature(T)
     T = float(T)
+    species = SpeciesFlags() if species is None else species
     spec = mode_spec(mode, leptons=leptons, **fractions)
     n_B = n_B_fm * hc3
     lo, hi = _bounds(n_B_fm, spec)
@@ -598,7 +631,9 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
     # The reported state comes from one code path whichever mode was asked:
     # the composition just found is handed to `thermo_from_n`, seeded with the
     # constituent masses so it stays on the branch that was solved.
-    point = thermo_from_n(n, par=par, T=T, x0=list(solved[:3]))
+    point = thermo_from_n(
+        n, par=par, T=T, x0=list(solved[:3]), photons=species.photons,
+        thermal_neutrinos=thermal_neutrino_flavours(spec, species))
     return BetaPoint(
         converged=True, error=best_error,
         n_b_fm=n_B_fm, T=T, spec=spec,
@@ -608,6 +643,45 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
         mu_b=mu_B, mu_e=mu_e, mu_C=mu_C, mu_S=mu_S,
         point=point, x=tuple(solved),
     )
+
+
+def solve_at_entropy(mode, n_B_fm, SnB, par=None, T_lo=0.2, T_hi=80.0,
+                     **kwargs):
+    """The state whose entropy per baryon is `SnB`: an outer 1-D solve for T.
+
+    CLAUDE.md section 3 accepts entropy per baryon wherever it accepts a
+    temperature, and this is what that means: an isentrope is an isotherm
+    whose temperature is solved for at every density. s/n_B is monotone
+    increasing in T at fixed density, so the bracket is well posed; the
+    bracketing and the outer root are `eos.general.tabulate`'s, shared with
+    every other model that takes the axis.
+
+    SnB = 0 is answered directly at T = 0 rather than through the bracket. It
+    is the only entropy the exact T = 0 branch reaches, and no positive
+    bracket contains it.
+
+    Every evaluation of the bracket is a FULL equilibrium solve, so this costs
+    the outer iteration count times `solve`; `kwargs` carries `x0` through, so
+    a sweep's warm start seeds every one of them.
+
+    Raises RuntimeError if the entropy is out of reach, which is what the
+    public boundary turns into a status.
+    """
+    if SnB == 0.0:
+        return solve(mode, n_B_fm, par=par, T=0.0, **kwargs)
+
+    def entropy_per_baryon_at(T):
+        point = solve(mode, n_B_fm, par=par, T=T, **kwargs)
+        return point.s / point.n_b_fm
+
+    try:
+        T = temperature_at_entropy(entropy_per_baryon_at, SnB,
+                                   T_lo=T_lo, T_hi=T_hi)
+    except ValueError as err:
+        raise RuntimeError(
+            f"ENJL could not bracket s/n_B = {SnB} at n_B={n_B_fm:.4f} fm^-3 "
+            f"between T = {T_lo} and {T_hi} MeV: {err}") from err
+    return solve(mode, n_B_fm, par=par, T=T, **kwargs)
 
 
 def solve_beta_eq_neutrinoless(n_B_fm, par=None, x0=None, cold_start=True):

@@ -34,6 +34,7 @@ from eos.enjl.species import (
 )
 from eos.general.fermi_integrals import invert_fermi_density, solve_fermi_jel
 from eos.general.physics_constants import hc3
+from eos.general.thermodynamics_leptons import neutrino_thermo, photon_thermo
 
 _PI2 = math.pi ** 2
 
@@ -540,7 +541,8 @@ class EoSPoint:
         return (self.eps / self.n_b) - 938.9
 
 
-def thermo_from_n(n, par=None, T=0.0, x0=None, _vac_mass=None):
+def thermo_from_n(n, par=None, T=0.0, x0=None, photons=False,
+                  thermal_neutrinos=0, _vac_mass=None):
     """The state at given species densities: the block at fixed composition.
 
     This is not one of the repository's four modes and is not named like one.
@@ -573,6 +575,12 @@ def thermo_from_n(n, par=None, T=0.0, x0=None, _vac_mass=None):
         T:   temperature [MeV].
         x0:  starting guess for (M_u, M_d, M_s); the vacuum masses by default,
              which is a poor guess in the chirally restored region.
+        photons: whether a blackbody gas is added.
+        thermal_neutrinos: HOW MANY mu = 0 neutrino flavours are added. A
+             count and not a flag, because which flavours a mode leaves
+             untracked is a property of the mode, and this module never knows
+             which mode it is in; `eos.enjl.solver.thermal_neutrino_flavours`
+             is where that is decided.
 
     Returns:
         EoSPoint, in natural units.
@@ -648,6 +656,20 @@ def thermo_from_n(n, par=None, T=0.0, x0=None, _vac_mass=None):
         + 0.5 * par.Gamma_r(n_b) * fields.J_rho ** 2
     eps -= 4.0 * par.K * nbar["u"] * nbar["d"] * nbar["s"]
     eps -= vacuum_energy_density(par, _vac_mass=_vac_mass)
+
+    # --- the thermal sectors that carry no conserved charge ---
+    # Photons and untracked neutrinos have mu = 0, so they enter eps and s and
+    # nothing else: the Euler relation below then hands them their own
+    # pressure without their appearing in it, since eps_X + P_X = T s_X there.
+    # Both vanish identically at T = 0.
+    if photons:
+        gas = photon_thermo(T)
+        eps += gas.e * hc3
+        s += gas.s * hc3
+    if thermal_neutrinos:
+        gas = neutrino_thermo(0.0, T, include_antiparticles=True)
+        eps += thermal_neutrinos * gas.e * hc3
+        s += thermal_neutrinos * gas.s * hc3
 
     # --- chemical potentials, Eqs. (14)-(16) ---
     mu = {}
@@ -733,7 +755,9 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, x0=None):
     Parameters:
         par:   Parameters.
         mu_B, mu_C, mu_S: the conserved-charge potentials [MeV].
-        T:     temperature [MeV]; only 0.0 is implemented.
+        T:     temperature [MeV]. This is the FORWARD direction, potentials
+               to densities, so a temperature costs it nothing beyond the
+               Fermi integral itself -- nothing here is inverted.
         x0:    starting guess (M_u, M_d, M_s, n_B, n_B^Q, g_omega omega,
                g_rho rho, Sigma^R_b, Sigma^R_q), natural units.
 
@@ -749,9 +773,8 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, x0=None):
 
     from eos.general.solve import RESIDUAL_TOL, scaled_residual_max
 
-    if T != 0.0:
-        raise NotImplementedError(
-            f"eos.enjl is a T = 0 model; got T = {T} MeV")
+    if T < 0.0:
+        raise ValueError(f"temperature must be non-negative; got T = {T} MeV")
     charges = {sp: (BARYON_NUMBER[sp] * mu_B + CHARGE[sp] * mu_C
                     + STRANGENESS[sp] * mu_S)
                for sp in BARYONS + QUARKS}

@@ -8,9 +8,11 @@ drives any model the same way:
     eos_table(par, mode, species, axes)             a solved grid
     eos_response(par, mode, species, ...)           second derivatives
 
-All four modes of CLAUDE.md section 3 are closed here, at T = 0; what this
-model refuses is a temperature, not a mode. Any T > 0 raises, because every
-kinetic expression in the model is a zero-temperature closed form.
+All four modes of CLAUDE.md section 3 are closed here, at any non-negative
+temperature, and entropy per baryon is accepted wherever a temperature is --
+an isentrope is an isotherm whose temperature is solved for at every density.
+What this model still refuses is the CONSTRUCTION at T > 0: mapping a branch
+is closed, replacing a first-order window by its plateau is not.
 
 Conditions are named exactly n_B, T, Y_C, Y_S and Y_Le. Units at this
 boundary are fm-based:
@@ -31,6 +33,7 @@ import numpy as np
 from eos.enjl.parameters import Parameters
 from eos.enjl.solver import (
     MODE_FRACTIONS, check_mode, check_temperature, mode_spec, solve,
+    solve_at_entropy,
 )
 from eos.enjl.species import SpeciesFlags
 from eos.enjl.table import (
@@ -51,25 +54,25 @@ class PointResult:
 
 
 def _check_call(mode, species, T, SnB, conditions, leptons=True):
-    """Raise unless the request is one this model can be asked at all.
+    """(T, SnB, species) of a request, or a raise if it is not one to make.
 
     `mode_spec` validates the fractions against the mode, so a missing or
     surplus condition is refused before any work rather than defaulted.
+    Exactly one thermal variable is given: a temperature or an entropy per
+    baryon. `SnB` comes back unresolved, because resolving it is an outer
+    solve that needs the density as well.
     """
     check_mode(mode)
     mode_spec(mode, leptons=leptons, **conditions)
-    if SnB is not None:
-        if T is not None:
-            raise ValueError("give exactly one of T / SnB")
-        if SnB != 0.0:
-            raise NotImplementedError(
-                f"eos.enjl is a T = 0 model, where s = 0 identically and the "
-                f"only entropy per baryon it reaches is zero; got "
-                f"SnB = {SnB}")
-        T = 0.0
-    check_temperature(0.0 if T is None else T)
-    SpeciesFlags() if species is None else species   # flags validate on init
-    return 0.0
+    if SnB is not None and T:
+        raise ValueError("give exactly one of T / SnB")
+    T = 0.0 if T is None else float(T)
+    check_temperature(T)
+    if SnB is not None and SnB < 0.0:
+        raise ValueError(f"entropy per baryon must be non-negative; "
+                         f"got SnB = {SnB}")
+    species = SpeciesFlags() if species is None else species
+    return T, SnB, species
 
 
 def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
@@ -96,9 +99,9 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
     n_B : float
         Total baryon density [fm^-3].
     T, SnB : float
-        Temperature [MeV] or entropy per baryon; both are zero, and any other
-        value raises rather than being quietly rounded to the model's one
-        temperature.
+        Temperature [MeV], or entropy per baryon in its place -- exactly one
+        of the two. SnB costs an outer 1-D solve for T, every evaluation of
+        which is a full equilibrium solve.
     x0 : list
         Optional starting guess in the order of `eos.enjl.solver.UNKNOWNS`,
         normally a neighbouring point's `warm_start`. Above a first-order
@@ -110,15 +113,20 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
     -------
     PointResult -- test `.ok` before using `.point`.
     """
-    T = _check_call(mode, species, T, SnB, conditions, leptons=leptons)
+    T, SnB, species = _check_call(mode, species, T, SnB, conditions,
+                                  leptons=leptons)
     if n_B is None:
         raise ValueError("n_B is required")
     if n_B <= 0.0:
         raise ValueError(f"n_B must be positive, got {n_B}")
 
+    common = dict(par=par, x0=x0, cold_start=x0 is None, leptons=leptons,
+                  species=species)
     try:
-        point = solve(mode, n_B, par=par, x0=x0, cold_start=x0 is None,
-                      leptons=leptons, T=T, **conditions)
+        if SnB is None:
+            point = solve(mode, n_B, T=T, **common, **conditions)
+        else:
+            point = solve_at_entropy(mode, n_B, SnB, **common, **conditions)
     except RuntimeError as err:
         return PointResult(False, str(err))
     return PointResult(True, "converged", point)
@@ -130,9 +138,12 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
               eta=1.0):
     """A solved grid along the density axis, following one branch.
 
-    axes = {'nB': grid, 'T': [0.0]}; the temperature axis may be omitted, in
-    which case T = 0 is understood, since it is the only value the model has.
-    The result feeds `eos.astro.tov` and the plotting code directly.
+    axes = {'nB': grid, 'T': [T]}, or 'SnB' in place of 'T' for an isentrope;
+    the thermal axis may be omitted, in which case T = 0 is understood. Each
+    axis carries ONE value: a table here is a density continuation and that is
+    what carries the sweep, so a second temperature or a second fraction is a
+    second call, not a second column. The result feeds `eos.astro.tov` and the
+    plotting code directly.
 
     Each point is warm-started from its neighbour, and `direction` selects
     which branch is followed -- "up" from the low-density chirally broken
@@ -162,11 +173,12 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
     check_mode(mode)
     axes = dict(axes or {})
     nB = np.atleast_1d(np.asarray(axes.pop("nB"), dtype=float))
+    entropies = axes.pop("SnB", None)
     temps = np.atleast_1d(np.asarray(axes.pop("T", [0.0]), dtype=float))
     wanted = set(MODE_FRACTIONS[mode])
     fractions = {k: axes.pop(k) for k in list(axes) if k in wanted}
     if axes:
-        raise ValueError(f"mode {mode!r} takes axes nB, T and "
+        raise ValueError(f"mode {mode!r} takes axes nB, T (or SnB) and "
                          f"{sorted(wanted)}; got {sorted(axes)} as well")
     for key, value in list(fractions.items()):
         grid = np.atleast_1d(np.asarray(value, dtype=float))
@@ -177,18 +189,31 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
                 f"value -- the density continuation is what carries a sweep "
                 f"here, and a fraction axis would restart it")
         fractions[key] = float(grid[0])
+    SnB = None
+    if entropies is not None:
+        grid = np.atleast_1d(np.asarray(entropies, dtype=float))
+        if len(grid) != 1:
+            raise NotImplementedError(
+                f"eos.enjl sweeps one thermal value per table; the SnB axis "
+                f"has {len(grid)} values. Call eos_table once per value -- "
+                f"the density continuation is what carries a sweep here, and "
+                f"a second thermal value would restart it")
+        SnB = float(grid[0])
     if len(temps) != 1:
         raise NotImplementedError(
-            f"eos.enjl has one temperature, T = 0; got a temperature axis of "
-            f"{len(temps)} values")
-    T = _check_call(mode, species, float(temps[0]), None, fractions,
-                    leptons=leptons)
+            f"eos.enjl sweeps one thermal value per table; the T axis has "
+            f"{len(temps)} values. Call eos_table once per temperature -- the "
+            f"density continuation is what carries a sweep here, and a second "
+            f"temperature would restart it")
+    T, SnB, species = _check_call(mode, species, float(temps[0]), SnB,
+                                  fractions, leptons=leptons)
     if direction not in DIRECTIONS:
         raise ValueError(f"direction must be one of {DIRECTIONS}, "
                          f"got {direction!r}")
 
     table_spec = TableSpec(nB=nB, mode=mode, par=par, direction=direction,
-                           T=T, x0=x0, leptons=leptons, fractions=fractions)
+                           T=T, SnB=SnB, x0=x0, leptons=leptons,
+                           species=species, fractions=fractions)
     if coexistences is not None:
         built = build_constructed_table(table_spec, coexistences, eta=eta,
                                         progress=progress, verbose=verbose)

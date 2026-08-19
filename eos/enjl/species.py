@@ -123,15 +123,11 @@ _WHY_FIXED = {
         "of g^2/m^2, and the model leaves their bare masses undetermined for "
         "exactly that reason -- there is no meson with a mass to put in a "
         "thermal gas. There is no pion or kaon sector either"),
-    "photons": (
-        False,
-        "a thermal sector, identically zero at T = 0, which is the only "
-        "temperature this model has"),
-    "thermal_neutrinos": (
-        False,
-        "a thermal sector, identically zero at T = 0, which is the only "
-        "temperature this model has"),
 }
+
+#: Neutrino flavours in nature, so that `thermal_neutrinos` can carry the ones
+#: a mode does not track. See `eos.enjl.solver.thermal_neutrino_flavours`.
+NEUTRINO_FLAVOURS = 3
 
 
 @dataclass(frozen=True)
@@ -147,6 +143,21 @@ class SpeciesFlags:
 
     Nucleons and the three quark flavours are always present and have no flag,
     the way nucleons have none in a hadronic model.
+
+    Two flags ARE the caller's, and both are thermal sectors that carry no
+    conserved charge and so enter eps, P and s and no equation of the solve:
+
+      photons            a blackbody gas at mu = 0, `general.photon_thermo`.
+      thermal_neutrinos  the neutrino flavours the mode does not track, as
+                         mu = 0 gases. This model tracks the electron neutrino
+                         and only where a mode holds Y_Le, so a neutrinoless
+                         mode leaves all three flavours to this gas and a
+                         trapped one leaves two; the count is
+                         `eos.enjl.solver.thermal_neutrino_flavours`.
+
+    Both are identically zero at T = 0 and default to False, so a T = 0 result
+    is what it always was. They are off unless asked for -- CLAUDE.md section
+    4: a sector that is off is off because its flag says so.
     """
     hyperons: bool = True
     muons: bool = True
