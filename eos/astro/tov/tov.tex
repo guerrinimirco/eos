@@ -1,0 +1,455 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\Msun}{M_\odot}
+\newcommand{\rsun}{r_\odot}
+\newcommand{\rhosol}{\rho_\odot}
+
+\begin{document}
+
+\title{Stellar structure in \texttt{eos/astro/tov}: \\
+       the TOV system, tidal deformability, the crust, and rotation}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+\texttt{eos/astro/tov} turns an equation of state into a star. It integrates
+the Tolman--Oppenheimer--Volkoff
+system~\cite{Tolman1939,OppenheimerVolkoff1939} for the mass and radius, the
+$l = 2$ static tidal perturbation~\cite{Hinderer2008,DamourNagar2009} for the
+Love number $k_2$ and the dimensionless deformability $\Lambda$, and --- through
+the external RNS code~\cite{StergioulasFriedman1995} --- uniformly rotating
+models. It also assembles the table it integrates, joining a tabulated crust to
+the core an \texttt{eos} model produced.
+
+This note states every equation the code solves and every quantity it returns.
+Two things in it are easy to get wrong and are given in full: the
+\emph{dimensionless variables} the integration is actually carried out in,
+because the residual expressions look unfamiliar until the scaling is written
+down; and the \emph{jump} in the tidal variable at a first-order interface,
+whose denominator is $m + 4\pi r^3 P$ and not $m$~\cite{TakatsyKovacs2020}.
+
+This layer consumes tables and produces observables. It never imports model
+internals, and the table it takes --- \texttt{EOSTable\_for\_TOV}, three parallel
+arrays $(P, \varepsilon, \nB)$ --- lives in \texttt{eos/general/state.py},
+which is the layer both a model and this one may import.
+\end{abstract}
+
+\maketitle
+
+\section{What is integrated, and in which variables}
+\label{sec:units}
+
+The TOV system in geometric units ($G = c = 1$) is
+%
+\begin{align}
+\frac{dm}{dr} &= 4\pi r^2 \varepsilon ,
+\label{eq:dmdr_phys}\\[2pt]
+\frac{dP}{dr} &= -\,\frac{(\varepsilon + P)\,(m + 4\pi r^3 P)}
+                          {r\,(r - 2m)} .
+\label{eq:dpdr_phys}
+\end{align}
+%
+The code does not integrate these in physical units. It uses
+%
+\begin{equation}
+\hat r = \frac{r}{\rsun}, \qquad
+\hat m = \frac{m}{\Msun}, \qquad
+\hat p = \frac{P}{P_c},
+\label{eq:scaling}
+\end{equation}
+%
+where $\rsun = 2G\Msun/c^2 = 2.953$~km is the solar Schwarzschild radius,
+$\Msun = 1.11542\times10^{60}$~MeV$/c^2$, and $P_c$ is the \emph{central}
+pressure of the star being built, so that $\hat p = 1$ at the centre. The
+combination that appears throughout is
+%
+\begin{equation}
+\rhosol \;=\; \frac{3\,\Msun}{4\pi\,\rsun^3} ,
+\label{eq:rhosol}
+\end{equation}
+%
+the mean density of a solar mass inside its own Schwarzschild radius. The
+choice $\rsun = 2G\Msun/c^2$ is what makes the metric factor collapse:
+%
+\begin{equation}
+1 - \frac{2Gm}{rc^2} \;=\; 1 - \frac{\hat m}{\hat r} ,
+\label{eq:metric}
+\end{equation}
+%
+with no constant left over.
+
+\paragraph{One expression, two factors --- read this before comparing with the
+source.} $4\pi r^2 \varepsilon$ appears both as a \emph{mass per unit radius}
+(in $dm/dr$) and as a \emph{dimensionless} geometric quantity (inside $F$ and
+$Q$ of Sec.~\ref{sec:tidal}), and it does NOT carry the same numerical factor
+in the two places. A mass scales as
+%
+\begin{equation}
+\frac{4\pi r^3 P}{\Msun} = 3\,\frac{P}{\rhosol}\,\hat r^3 ,
+\qquad
+\frac{d\hat m}{d\hat r} = 3\,\frac{\varepsilon}{\rhosol}\,\hat r^2 ,
+\label{eq:scale_mass}
+\end{equation}
+%
+directly from Eq.~\eqref{eq:rhosol}. A dimensionless geometric combination
+picks up one further factor of $\rsun/\Msun = 2G/c^4$, which halves it:
+%
+\begin{equation}
+\big[\,4\pi r^2 \varepsilon\,\big]_{\rm geom}
+   \;=\; \frac{3}{2}\,\frac{\varepsilon}{\rhosol}\,\hat r^2 .
+\label{eq:scale_geom}
+\end{equation}
+%
+This is why the code carries $3/2$ in $F$ and in the first term of $r^2Q$ while
+carrying $3$ in $d\hat m/d\hat r$ and in $m + 4\pi r^3 P$. Deriving one from
+the other and expecting the same coefficient is the mistake to avoid.
+
+Equations
+\eqref{eq:dmdr_phys}--\eqref{eq:dpdr_phys} are therefore integrated as
+%
+\begin{align}
+\frac{d\hat m}{d\hat r} &= 3\,\frac{\varepsilon}{\rhosol}\,\hat r^2 ,
+\label{eq:dmdr}\\[2pt]
+\frac{d\hat p}{d\hat r} &=
+  -\,\frac{1}{2}\,\frac{\varepsilon}{P_c}\,\hat m\,
+   \left(1 + \frac{P}{\varepsilon}\right)
+   \left(1 + 3\,\frac{P_c}{\rhosol}\,\frac{\hat p\,\hat r^3}{\hat m}\right)
+   \frac{1}{\hat r\,(\hat r - \hat m)} ,
+\label{eq:dpdr}
+\end{align}
+%
+with $P = \hat p P_c$ and $\varepsilon = \varepsilon(P)$ read from the table by
+linear interpolation on the $P$ grid. Both right-hand sides are returned as
+zero for $\hat p \le 0$ or $\hat r \le 0$, and $d\hat p/d\hat r$ is set to zero
+if $|\hat r - \hat m| < 10^{-30}$, which is the horizon the integration must
+never reach.
+
+\paragraph{Initial conditions and termination.}
+Integration starts at $\hat r_{\min} = 10^{-3}$ with the uniform-core value
+%
+\begin{equation}
+\hat m(\hat r_{\min}) = \frac{4\pi}{3}\,
+   \frac{\varepsilon_c\, (\hat r_{\min}\rsun)^3}{\Msun}
+ \quad\text{written as}\quad
+   \varepsilon_c \frac{4}{3}\pi \hat r_{\min}^3 / \Msun
+\label{eq:m0}
+\end{equation}
+%
+in the module's units, and $\hat p(\hat r_{\min}) = 1$. The surface is located
+by a terminal event, $\hat p = 10^{-10}$, crossed from above; the solver is
+\texttt{DOP853} with \texttt{rtol} $=10^{-10}$, \texttt{atol} $=10^{-12}$ and
+dense output. The returned radius is $R = \hat r_s \rsun$ in km and the mass
+$M = \hat m(\hat r_s)$ in $\Msun$, both already in the units
+Eq.~\eqref{eq:scaling} defines.
+
+\section{Baryonic mass}
+\label{sec:mb}
+
+The baryon number inside the star counts proper volume, not coordinate volume:
+%
+\begin{equation}
+M_b \;=\; m_N \int_0^{R} \frac{4\pi r^2\, \nB(r)}
+                              {\sqrt{1 - 2Gm(r)/rc^2}}\; dr
+      \;=\; m_N \int_0^{\hat r_s} \frac{4\pi (\hat r \rsun)^2\, \nB}
+                              {\sqrt{1 - \hat m/\hat r}}\; \rsun\, d\hat r ,
+\label{eq:Mb}
+\end{equation}
+%
+with $m_N$ the nucleon mass and $\nB(r) = \nB(P(r))$ from the table. The
+integral is evaluated on 500 equally spaced points by the trapezoidal rule on
+the dense output of the structure solve. The metric factor is floored at
+$0.01$ where $\hat r \le \hat m$, which cannot happen at a converged solution
+and guards the sampling only. $M_b - M$ is the gravitational binding energy.
+
+\section{Tidal deformability}
+\label{sec:tidal}
+
+\subsection{The perturbation equation}
+
+A static $l = 2$ even-parity perturbation of the metric obeys a second-order
+equation for $H(r)$, which is integrated here in the logarithmic-derivative
+variable
+%
+\begin{equation}
+Y(r) \;=\; \frac{r\,H'(r)}{H(r)} ,
+\label{eq:Ydef}
+\end{equation}
+%
+because $Y$ stays finite where $H$ grows over many orders of magnitude. It
+satisfies the Riccati form~\cite{Hinderer2008,DamourNagar2009,Postnikov2010}
+%
+\begin{equation}
+\boxed{\;
+r\,\frac{dY}{dr} + Y^2 + Y\,F(r) + r^2 Q(r) \;=\; 0 , \qquad Y(0) = 2 , \;}
+\label{eq:Y}
+\end{equation}
+%
+with
+%
+\begin{align}
+F(r) &= \frac{1 - 4\pi r^2\,(\varepsilon - P)}{1 - 2m/r} ,
+\label{eq:F}\\[2pt]
+r^2 Q(r) &= \frac{4\pi r^2\left[\,5\varepsilon + 9P
+             + \dfrac{\varepsilon + P}{dP/d\varepsilon}\,\right]}{1 - 2m/r}
+          \;-\; \frac{6}{1 - 2m/r}
+          \;-\; \left[\frac{m + 4\pi r^3 P}{r\,(1 - 2m/r)}\right]^2 .
+\label{eq:Q}
+\end{align}
+%
+$Y(0) = 2$ is the regular solution at the centre. In the variables of
+Sec.~\ref{sec:units}, writing $\hat e = \varepsilon/\rhosol$ and
+$\pi_P = P/\varepsilon$, the code evaluates
+%
+\begin{align}
+F &= \Big(1 - \tfrac{3}{2}\,\hat e\,\hat r^2\,(1 - \pi_P)\Big)\,
+     \frac{\hat r}{\hat r - \hat m} ,
+\label{eq:Fcode}\\[2pt]
+r^2 Q &= \tfrac{3}{2}\,\hat e\,\hat r^2\,\frac{\hat r}{\hat r - \hat m}
+         \left[\,5 + 9\pi_P + \frac{1 + \pi_P}{c_s^2}\,\right]
+       \;-\; \frac{6\,\hat r}{\hat r - \hat m}
+       \;-\; \frac{\big(\hat m + 3(P_c/\rhosol)\,\hat r^3 \hat p\big)^2}
+                   {(\hat r - \hat m)^2} ,
+\label{eq:Qcode}
+\end{align}
+%
+and steps $d Y/d\hat r = -(Y^2 + Y F + r^2 Q)/\hat r$ alongside
+Eqs.~\eqref{eq:dmdr}--\eqref{eq:dpdr}, so the three components
+$(\hat m, \hat p, Y)$ are advanced by one solver.
+
+\paragraph{The sound speed is tabulated, not differentiated in the loop.}
+$c_s^2 = dP/d\varepsilon$ enters Eq.~\eqref{eq:Q} through
+$(\varepsilon+P)/(dP/d\varepsilon)$. It is computed ONCE before the
+integration, as a finite difference of $\varepsilon(P)$ on the table's own $P$
+grid, $c_s^2 = 1/(d\varepsilon/dP)$, clipped to $[10^{-6}, 1]$, and then
+interpolated like any other column. Differentiating inside the right-hand side
+would make every step depend on a numerical derivative of an interpolant. The
+lower clip matters at a Maxwell plateau, where $d\varepsilon/dP \to \infty$ and
+$c_s^2 \to 0$ exactly.
+
+\subsection{The Love number}
+
+With the surface value $Y_R = Y(R)$ and the compactness $C = GM/Rc^2$,
+%
+\begin{align}
+k_2 &= \frac{8}{5}\,C^5\,\frac{(1-2C)^2\,\big[\,2 - Y_R + 2C(Y_R-1)\,\big]}{D} ,
+\label{eq:k2}\\[4pt]
+D &= 2C\Big[\,6 - 3Y_R + 3C(5Y_R - 8)\,\Big] \nonumber\\
+  &\quad + 4C^3\Big[\,13 - 11 Y_R + C(3Y_R - 2) + 2C^2(1 + Y_R)\,\Big]
+     \nonumber\\
+  &\quad + 3(1-2C)^2\Big[\,2 - Y_R + 2C(Y_R-1)\,\Big]\ln(1-2C) ,
+\label{eq:k2den}\\[4pt]
+\Lambda &= \frac{2}{3}\,\frac{k_2}{C^5} .
+\label{eq:Lambda}
+\end{align}
+%
+This is Eq.~(23) of Ref.~\cite{Hinderer2008}. The implementation returns
+$k_2 = \Lambda = 0$ outside $0.005 < C < 0.5$ and where $|D| < 10^{-30}$: the
+closed form is ill-conditioned there, and a number produced from it would not
+mean anything.
+
+\subsection{The jump at a first-order interface}
+\label{sec:jump}
+
+Where the energy density is discontinuous while $P$ is continuous --- the
+surface of a self-bound star, or an internal Maxwell transition --- $H'$ is
+discontinuous and $Y$ jumps. Integrating $Y$ straight through such an
+interface is simply wrong. The jump is
+%
+\begin{equation}
+\boxed{\;
+\Delta Y \;=\; -\,\frac{4\pi r_d^3\, \Delta\varepsilon}
+                       {m(r_d) + 4\pi r_d^3 P(r_d)}
+ \;=\; -\,\frac{3(\Delta\varepsilon/\rhosol)\,\hat r_d^3}
+               {\hat m + 3 (P_d/\rhosol)\,\hat r_d^3} \;}
+\label{eq:dY}
+\end{equation}
+%
+with $\Delta\varepsilon = \varepsilon_{\rm in} - \varepsilon_{\rm out} > 0$
+across the interface at $r_d$.
+
+\textbf{The denominator is $m + 4\pi r^3 P$, not $m$.} The two agree only at a
+surface, where $P = 0$, which is why the familiar form
+$\Delta Y = -4\pi R^3 \varepsilon_s/M$ is correct for a bare quark-star surface
+and wrong inside a hybrid star. This is the correction of
+Ref.~\cite{TakatsyKovacs2020} to Ref.~\cite{Postnikov2010}; using $m$ alone
+biases $\Lambda$ for self-bound stars and for hybrid stars with a strong
+transition. The implementation returns $\Delta Y = 0$ for
+$\Delta\varepsilon \le 0$ or $\hat m \le 10^{-12}$.
+
+\paragraph{How a transition is crossed.} When a Maxwell plateau is present the
+integration is split. A second terminal event fires at $\hat p = P_t/P_c$; at
+that radius the state $(\hat m, \hat p, Y)$ is taken from the dense output, $Y$
+is replaced by $Y + \Delta Y$ from Eq.~\eqref{eq:dY}, the EoS interpolant is
+restricted to the low-density branch ($\varepsilon \le 1.01\,\varepsilon_{\rm
+low}$), $c_s^2$ is retabulated on that branch, and the integration is resumed
+from $r_d$ to the surface. The plateau itself is located beforehand by scanning
+the table for a run of points with $|dP|/P$ below tolerance.
+
+\section{The crust}
+\label{sec:crust}
+
+A model computes uniform dense matter. Below roughly
+$\nB \sim 0.08\;\mathrm{fm^{-3}}$ matter is not uniform, and that regime comes
+from a separate tabulated calculation --- here the BPS
+crust~\cite{BaymPethickSutherland1971} or a subnuclear slice of a CompOSE
+table~\cite{TypelCompOSE2015}. The two must be joined into one
+$(P, \varepsilon, \nB)$ table.
+
+\textbf{Splitting on density alone does not work.} The crust and the core are
+independent calculations and disagree on $P$ at the same $\nB$: at
+$\nB = 0.080\;\mathrm{fm^{-3}}$ BPS gives $P = 0.406\;\mathrm{MeV\,fm^{-3}}$
+where one DD2 parametrization gives $0.225$. Concatenating at a chosen
+$\nB$ therefore steps \emph{down} in $P$ at the seam. A table whose $P$
+decreases with $\nB$ is not an equation of state: $\varepsilon(P)$ becomes
+double-valued, the implied $c_s^2$ is negative there, and an integration
+crossing it diverges. Three join modes are implemented, and they differ
+precisely in how they avoid this.
+
+\begin{description}
+\item[\texttt{attach}] Keep crust points with $\nB \le n_t$ AND
+  $P < \min P_{\rm core}$, and core points with $\nB > n_t$. The second
+  condition is what makes it safe: the join happens where the two $P(\nB)$
+  curves \emph{cross}, not at a density fixed in advance, so $P$ cannot step
+  down. $n_t$ only bounds how much crust is considered.
+
+\item[\texttt{interpolate}] Blend in $\nB$ over $n_t \pm \delta n$ with
+  %
+  \begin{equation}
+  f(\nB) = \tfrac12\left[1 + \tanh\!\left(\frac{\nB - n_t}{\delta n/2}\right)\right] ,
+  \label{eq:blend_n}
+  \end{equation}
+  %
+  applied to $P$ and to the baryon chemical potential
+  $\mu_B = (P + \varepsilon)/\nB$, from which
+  $\varepsilon = \mu_B \nB - P$ is recovered. Blending $\mu_B$ rather than
+  $\varepsilon$ directly is what keeps the blended region thermodynamically
+  consistent: the Euler relation is linear in the pair $(P, \mu_B)$ at fixed
+  $\nB$, so a convex combination of two consistent states is consistent.
+
+\item[\texttt{maxwell}] Find $P_t$ where $\mu_B^{\rm crust}(P) =
+  \mu_B^{\rm core}(P)$ --- the genuine Maxwell condition, equal $\mu_B$ at equal
+  $P$ --- and blend in pressure,
+  %
+  \begin{equation}
+  \varepsilon(P) = \tfrac12\left[1 - \tanh\frac{P - P_t}{\delta P}\right]
+                     \varepsilon_{\rm crust}(P)
+                 + \tfrac12\left[1 + \tanh\frac{P - P_t}{\delta P}\right]
+                     \varepsilon_{\rm core}(P) ,
+  \label{eq:blend_P}
+  \end{equation}
+  %
+  reducing to a sharp construction as $\delta P \to 0$.
+\end{description}
+
+\noindent
+Rows with non-finite $P$, $\varepsilon$ or $\nB$, and rows below
+$\nB = 10^{-8}\;\mathrm{fm^{-3}}$, are dropped before any of this.
+
+\paragraph{Where the tables come from.} Crust tables are large external data,
+neither shipped with the package nor tracked in git. They are resolved by name
+--- \texttt{BPS}, \texttt{compose\_sfho\_nYCT},
+\texttt{compose\_sfho\_nT0\_beta}, \texttt{compose\_sfho\_nYLS\_trap} --- against
+an explicit path, then each directory of \texttt{\$EOS\_CRUST\_DIR} (a search
+path, several directories separated by the platform's path separator), then
+\texttt{<repo>/data/crust}. A name that cannot be resolved raises with the
+file, every directory tried and the variable that adds one. \texttt{have\_crust}
+is the predicate a caller uses before falling back: falling back to no crust
+moves $M_{\max}$ by about 1\%, so the decision is made visible rather than
+silent.
+
+\section{Sequences}
+\label{sec:sequences}
+
+A sequence integrates Eq.~\eqref{eq:dmdr}--\eqref{eq:dpdr} once per central
+energy density on a grid, normally logarithmic, and returns the columns
+$(\varepsilon_c, n_c, P_c, R, M, M_b, k_2, \Lambda)$.
+
+$M_{\max}$ is not read off the grid. The maximum is located on the finite
+subset of the sequence --- central states beyond the table's validity integrate
+to NaN and must not enter an interpolation --- a window of $\pm 5$ points about
+the discrete maximum is fitted with a monotone cubic, and the peak of the fit
+is returned together with the index of the last stable point. The stable branch
+is everything up to $dM/d\varepsilon_c = 0$; beyond it the configurations are
+unstable to radial oscillations and are not stars, so
+\texttt{truncate\_to\_stable\_branch} removes them before a mass--radius curve
+is drawn.
+
+\section{Uniform rotation}
+\label{sec:rotating}
+
+Rotating models are not computed here. They are computed by
+RNS~\cite{StergioulasFriedman1995}, a third-party Fortran code driven as a
+subprocess; this module writes its input, runs it and parses its output. The
+binary is located from an explicit argument, then \texttt{\$RNS\_BIN}, then
+\texttt{PATH}, then \texttt{<repo>/external/rns}.
+
+Four properties of RNS shape the interface and are worth stating, because each
+one is a constraint the caller cannot see:
+
+\begin{itemize}
+\item \textbf{The table is capped at 200 rows.} RNS declares
+  \texttt{double[201]} and does not check the bound, so a longer table
+  overruns silently. A denser table is resampled, not rejected.
+\item \textbf{The surface is hardwired} at $\rho = 7.8\;\mathrm{g\,cm^{-3}}$.
+  A table that does not reach it is rejected with a message saying to attach a
+  crust, rather than being integrated to a wrong answer. The check exists to
+  catch a \emph{missing} crust, which is wrong by seven decades, so it is
+  applied with a factor-of-ten tolerance.
+\item \textbf{The path buffer is \texttt{char[80]}}, filled by
+  \texttt{sscanf("\%s")}. The EoS file is therefore symlinked to a short fixed
+  name inside the run directory, so the path handed to the solver can never
+  approach that limit.
+\item \textbf{The enthalpy column must round-trip.} RNS divides it by its own
+  value of $c$, $2.9979\times10^{10}\;\mathrm{cm\,s^{-1}}$; writing it with the
+  same constant makes the round trip exact instead of accurate to $3\times
+  10^{-6}$.
+\end{itemize}
+
+\noindent
+Non-convergence is retried on a ladder of (accuracy, relaxation factor) pairs,
+$(10^{-5}, 1.0)$, $(10^{-6}, 0.8)$, $(10^{-7}, 0.8)$, $(10^{-4}, 0.6)$,
+tightening before loosening: most failures here are an iteration oscillating
+about the solution, which a smaller step fixes and a larger tolerance only
+hides.
+
+The Kepler (mass-shedding) limit and constant-$J$ or constant-$M_0$ sequences
+are built by scanning the axis ratio $r_{\rm ratio}$. Along a rotating sequence
+the stability boundary is the turning point $\partial M/\partial \varepsilon_c
+= 0$ at fixed $J$ or fixed $M_0$~\cite{FriedmanIpserSorkin1988}; the
+implementation takes the \emph{first} stationary point, which is the one that
+bounds the stable branch.
+
+\section{What a solved star returns}
+\label{sec:returns}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+field & quantity & where it comes from \\
+\midrule
+\texttt{e\_c}   & $\varepsilon_c$ [MeV\,fm$^{-3}$] & the grid point \\
+\texttt{n\_c}   & $\nB(P_c)$ [fm$^{-3}$]           & the table \\
+\texttt{P\_c}   & $P_c$ [MeV\,fm$^{-3}$]           & $P(\varepsilon_c)$ \\
+\texttt{R}      & $R$ [km]                          & $\hat r_s \rsun$ \\
+\texttt{M}      & $M$ [$\Msun$]                     & $\hat m(\hat r_s)$ \\
+\texttt{M\_b}   & $M_b$ [$\Msun$]                   & Eq.~\eqref{eq:Mb} \\
+\texttt{k2}     & $k_2$                             & Eq.~\eqref{eq:k2} \\
+\texttt{Lambda} & $\Lambda$                         & Eq.~\eqref{eq:Lambda} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\texttt{M\_b}, \texttt{k2} and \texttt{Lambda} are \texttt{None} when not
+requested; the tidal integration roughly doubles the cost of a point, so it is
+optional rather than always on.
+
+\bibliographystyle{apsrev4-2}
+\bibliography{../../../docs/eos}
+
+\end{document}
