@@ -79,6 +79,7 @@ from eos.mixed.adapters import (
     Phase, PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
     dd2_phase, vmit_phase, default_pair,
     sfho_phase, zl_phase, alphabag_phase, enjl_branch_pair,
+    did_phase, did_seed,
 )
 
 # --- solving one point, and sweeping density -------------------------------
@@ -133,6 +134,7 @@ __all__ = [
     "Phase", "PhaseThermo", "hadronic_phase", "hadronic_seed", "quark_phase",
     "dd2_phase", "vmit_phase", "default_pair",
     "sfho_phase", "zl_phase", "alphabag_phase", "enjl_branch_pair",
+    "did_phase", "did_seed",
     # solving
     "solve_mixed", "MixedResult",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
