@@ -79,7 +79,7 @@ from eos.mixed.adapters import (
     Phase, PhaseThermo, hadronic_phase, hadronic_seed, quark_phase,
     dd2_phase, vmit_phase, default_pair,
     sfho_phase, zl_phase, alphabag_phase, enjl_branch_pair,
-    did_phase, did_seed,
+    did_phase, did_seed, njl_phase,
 )
 
 # --- where a multi-branch model's transitions are, as data ------------------
@@ -140,7 +140,7 @@ __all__ = [
     "dd2_phase", "vmit_phase", "default_pair",
     "sfho_phase", "zl_phase", "alphabag_phase", "enjl_branch_pair",
     "CONSTRUCTION_PAIRS", "Coexistence", "enjl_coexistences",
-    "did_phase", "did_seed",
+    "did_phase", "did_seed", "njl_phase",
     # solving
     "solve_mixed", "MixedResult",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",

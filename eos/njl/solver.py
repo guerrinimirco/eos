@@ -1,0 +1,633 @@
+"""The equilibrium conditions of the NJL model, and the solves that close them.
+
+`thermodynamics.py` computes quantities FROM a state; this module FINDS the
+state. It is where the mode lives -- the conditions that pick one composition
+out of the many `state_at` would evaluate -- and where the PATTERN lives, which
+is the second thing this model has to choose and no other model in this
+repository does.
+
+A mode is a declaration (`eos.general.modes.ModeSpec`): per conserved charge,
+either its fraction is imposed and its potential is an unknown, or its
+potential is set by an equilibrium relation and the fraction comes out. The
+unknown vector and the rows are assembled from that declaration, so the
+equations are written once each and there is no per-mode residual to drift.
+The vector is
+
+    always   M_u, M_d, M_s, mu_B, mu_C
+    plus     Delta_eta   for each gap the PATTERN makes free
+    plus     mu_3, mu_8  whenever the pattern pairs at all
+    plus     Sigma_V     where there is a vector coupling to carry
+    plus     mu_S        iff the mode holds Y_S
+    plus     mu_nue      iff the mode holds Y_Le
+
+and the rows are, in order: three mass gap equations, one gap equation per
+free gap, the two colour-neutrality rows where the pattern pairs, the vector
+self-energy definition, the baryon density, and the mode's own charge rows.
+
+A pattern is NOT a mode
+-----------------------
+Which diquark condensates are nonzero is not something a caller declares and
+not something an equilibrium condition fixes: it is decided by which candidate
+minimises the free energy at the given conditions. So `solve` enumerates
+seeds -- unpaired, 2SC, CFL, and one asymmetric free seed that can land on
+uSC, dSC or an unequal-gap state -- solves each to self-consistency, and
+returns the survivor with the lowest f = eps - T s at the fixed density. The
+comparison is by FREE ENERGY because these modes fix n_B; a comparison at
+fixed mu_B (which is what `thermo_from_mu` and therefore `eos.mixed` do) is by
+pressure instead, and the two agree.
+
+Enumeration is necessary rather than tidy. The gap equation has three roots at
+any Fermi-surface mismatch -- zero, a barrier maximum, and the physical BCS
+root -- so a single Newton solve returns whichever root its seed was nearest,
+silently. Every point reports the pattern it was solved in for the same reason
+`eos.mixed` reports its window: it is part of the answer.
+
+Two seeding facts, both from experience rather than taste:
+
+  * CFL is electrically neutral WITHOUT electrons, so its seed puts mu_C at
+    zero. Seeded with an electron-bearing potential the solve converges to a
+    spurious point with an 11% flavour-density spread;
+  * in an UNPAIRED region mu_8 is unconstrained -- n_8 vanishes identically at
+    mu_8 = 0 -- so it is pinned there, never solved for.
+
+Natural units inside, fm-based at the entry points: n_B arrives in fm^-3
+because that is what a caller holds, and is converted once.
+"""
+from dataclasses import dataclass, field
+import math
+
+import numpy as np
+
+from eos.general.modes import (
+    beta_eq_neutrino_trapped, beta_eq_neutrinoless, electron_potential,
+    fixed_YC, fixed_YC_YS, muon_potential,
+)
+from eos.general.physics_constants import hc3
+from eos.general.solve import solve_system
+from eos.general.thermodynamics_leptons import (
+    ThermoResult, electron_thermo, muon_thermo, neutralizing_leptons,
+    neutrino_thermo, photon_thermo,
+)
+from eos.njl.species import (
+    DEFAULT_PATTERNS, SpeciesFlags, pattern_mask, pattern_seed,
+)
+from eos.njl.thermodynamics import has_vector, state_at, vacuum_solution
+
+#: The four modes of CLAUDE.md section 3, and the fractions each takes beyond
+#: (n_B, T). Every one is closed here, at any temperature.
+MODE_FRACTIONS = {
+    "beta_eq_neutrinoless": (),
+    "beta_eq_neutrino_trapped": ("Y_Le",),
+    "fixed_YC": ("Y_C",),
+    "fixed_YC_YS": ("Y_C", "Y_S"),
+}
+
+MODE_FACTORIES = {
+    "beta_eq_neutrinoless": beta_eq_neutrinoless,
+    "beta_eq_neutrino_trapped": beta_eq_neutrino_trapped,
+    "fixed_YC": fixed_YC,
+    "fixed_YC_YS": fixed_YC_YS,
+}
+
+_EMPTY = ThermoResult(n=0.0, P=0.0, e=0.0, s=0.0)
+
+
+def mode_spec(mode, leptons=True, **fractions):
+    """The `ModeSpec` for a named mode and its fractions.
+
+    The names and the fractions are the repository's and the factories are
+    `eos.general.modes`'s, so this model cannot invent a fifth mode or spell
+    an existing one differently.
+    """
+    if mode not in MODE_FRACTIONS:
+        raise ValueError(f"unknown mode {mode!r}; eos.njl closes "
+                         f"{sorted(MODE_FRACTIONS)}")
+    if "Y_Lmu" in fractions:
+        raise NotImplementedError(
+            "eos.njl does not trap the muon lepton family: "
+            "beta_eq_neutrino_trapped takes (n_B, Y_Le, T) only "
+            "(docs/DEFERRED.md)")
+    expected, given = set(MODE_FRACTIONS[mode]), set(fractions)
+    if given != expected:
+        raise ValueError(f"mode {mode!r} takes fractions {sorted(expected)}; "
+                         f"got {sorted(given)}")
+    if mode.startswith("beta_eq"):
+        if not leptons:
+            raise ValueError(
+                "leptons=False has no meaning in beta equilibrium, which is "
+                "defined by the leptons; it applies to fixed_YC and "
+                "fixed_YC_YS, where it is the charged pure phase a "
+                "mixed-phase construction needs")
+        return MODE_FACTORIES[mode](**fractions)
+    return MODE_FACTORIES[mode](leptons=leptons, **fractions)
+
+
+# =============================================================================
+# THE UNKNOWNS
+# =============================================================================
+def unknown_slots(par, spec, pattern):
+    """The unknown vector's names, in order (see the module docstring)."""
+    names = ["M_u", "M_d", "M_s"]
+    mask = pattern_mask(pattern)
+    names += [f"Delta_{eta + 1}" for eta in range(3) if mask[eta]]
+    if any(mask):
+        names += ["mu_3", "mu_8"]
+    if has_vector(par):
+        names.append("Sigma_V")
+    names += ["mu_B", "mu_C"]
+    if spec.is_fixed("S"):
+        names.append("mu_S")
+    if spec.is_fixed("L_e"):
+        names.append("mu_nue")
+    return tuple(names)
+
+
+def _unpack(x, par, spec, pattern):
+    """The state variables the unknown vector carries."""
+    got = {name: float(value)
+           for name, value in zip(unknown_slots(par, spec, pattern), x)}
+    Delta = np.array([got.get(f"Delta_{eta + 1}", 0.0) for eta in range(3)])
+    return (np.array([got["M_u"], got["M_d"], got["M_s"]]), Delta,
+            got.get("mu_3", 0.0), got.get("mu_8", 0.0),
+            got.get("Sigma_V", 0.0), got["mu_B"], got["mu_C"],
+            got.get("mu_S", 0.0), got.get("mu_nue", 0.0))
+
+
+def default_guess(par, spec, pattern, n_B_fm, T, vac=None):
+    """The cold start of one mode in one pattern.
+
+    The baryon potential comes from the free massless relation at one flavour
+    per colour, floored so a vanishing density does not give a vanishing
+    potential; the masses interpolate from the broken vacuum towards the
+    current masses; the gaps take the pattern's own seed at a tenth of the
+    quark potential, which is well above the barrier root the gap equation
+    also carries.
+
+    mu_C starts slightly negative -- unpaired strange quark matter is
+    negatively charged and needs electrons -- EXCEPT in CFL, which is neutral
+    without them and whose seed therefore puts mu_C at zero (section 6.3 of
+    the specification).
+    """
+    if vac is None:
+        vac = vacuum_solution(par)
+    n_q = max(3.0 * n_B_fm * hc3, 1.0)
+    mu_q = max((0.5 * math.pi ** 2 * n_q) ** (1.0 / 3.0), 50.0)
+
+    x = min(mu_q / 400.0, 1.0)
+    M = vac.M * (1.0 - x) + np.array(par.current_masses) * x
+    guess = list(M)
+
+    mask = pattern_mask(pattern)
+    seed = pattern_seed(pattern, max(0.1 * mu_q, 20.0))
+    guess += [seed[eta] for eta in range(3) if mask[eta]]
+    if any(mask):
+        guess += [0.0, -0.02 * mu_q]
+    if has_vector(par):
+        guess.append(0.0)
+
+    guess += [3.0 * mu_q, 0.0 if pattern == "CFL" else -0.05 * mu_q]
+    if spec.is_fixed("S"):
+        guess.append(0.0)
+    if spec.is_fixed("L_e"):
+        guess.append(0.3 * mu_q)
+    return np.array(guess, dtype=float)
+
+
+def seed_from(point, par, spec, pattern):
+    """A seed for `pattern`, built from an already solved point of another one.
+
+    The masses and the potentials of a converged unpaired state are a far
+    better start for a paired solve than any analytic guess, because pairing
+    moves them by percents while a cold guess is out by tens of percent. What
+    the seed cannot take from the unpaired state is the gaps -- there are none
+    -- so those come from the pattern's own declaration, and mu_8 is scaled to
+    the gap, since the colour potential a paired phase needs is of the order
+    of the gap it carries and is zero without one.
+
+    CFL still overrides mu_C to zero: it is electrically neutral WITHOUT
+    electrons, and starting it from the unpaired state's electron-bearing
+    potential is what sends the solve to a spurious point.
+    """
+    M, _, _, _, Sigma_V, mu_B, mu_C, mu_S, mu_nue = _unpack(
+        point.x, par, spec, point.pattern)
+    gap_scale = max(0.1 * mu_B / 3.0, 20.0)
+
+    guess = list(M)
+    mask = pattern_mask(pattern)
+    seed = pattern_seed(pattern, gap_scale)
+    guess += [seed[eta] for eta in range(3) if mask[eta]]
+    if any(mask):
+        guess += [0.0, -0.03 * gap_scale]
+    if has_vector(par):
+        guess.append(Sigma_V)
+    guess += [mu_B, 0.0 if pattern == "CFL" else mu_C]
+    if spec.is_fixed("S"):
+        guess.append(mu_S)
+    if spec.is_fixed("L_e"):
+        guess.append(mu_nue)
+    return np.array(guess, dtype=float)
+
+
+def warm_start(point):
+    """The seed taken from an already solved point, as {pattern: vector}.
+
+    Keyed by pattern because the pattern decides the vector's LAYOUT -- a 2SC
+    vector has one gap in it and a CFL vector three -- so a seed handed to the
+    wrong pattern is not merely a poor guess, it is the wrong length. A
+    density sweep therefore carries the winning pattern's seed and lets the
+    others start cold, which is also what keeps the enumeration honest: a
+    pattern that only ever sees a warm start from itself can never be
+    displaced.
+    """
+    return {point.pattern: np.array(point.x, dtype=float)}
+
+
+# =============================================================================
+# THE LEPTON SECTOR
+# =============================================================================
+def lepton_block(mu_e, mu_nue, T, flags):
+    """The leptons at given potentials: (blocks, n_charged, n_Le).
+
+    Electrons always, muons where the flag allows them, at
+    mu_mu = mu_e - mu_nue (muon decay equilibrium with a transparent muon
+    family). Neutrinos only where they are trapped, mu_nue != 0; the
+    free-streaming case carries no lepton number and no pressure, which is
+    what mu_nue = 0 means.
+    """
+    electrons = electron_thermo(mu_e, T)
+    muons = muon_thermo(muon_potential(mu_e, mu_nue), T) if flags.muons else _EMPTY
+    neutrinos = neutrino_thermo(mu_nue, T) if mu_nue != 0.0 else _EMPTY
+    return ((electrons, muons, neutrinos), electrons.n + muons.n,
+            electrons.n + neutrinos.n)
+
+
+def thermal_sectors(T, flags, trapped):
+    """(P, eps, s) of the sectors carrying no conserved charge [fm-based].
+
+    Photons, and the neutrino flavours not tracked in the composition: three
+    where the electron neutrino is free-streaming, two where it is trapped,
+    since the trapped flavour is already counted at its own potential.
+    """
+    P = e = s = 0.0
+    if flags.photons:
+        gamma = photon_thermo(T)
+        P, e, s = P + gamma.P, e + gamma.e, s + gamma.s
+    if flags.thermal_neutrinos:
+        nu = neutrino_thermo(0.0, T)
+        n_flavours = 2.0 if trapped else 3.0
+        P += n_flavours * nu.P
+        e += n_flavours * nu.e
+        s += n_flavours * nu.s
+    return P, e, s
+
+
+# =============================================================================
+# THE RESIDUAL
+# =============================================================================
+def _state(x, par, spec, pattern, T, vac):
+    """The `NJLState` an unknown vector describes."""
+    M, Delta, mu_3, mu_8, Sigma_V, mu_B, mu_C, mu_S, _ = _unpack(
+        x, par, spec, pattern)
+    return state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
+                    vac=vac, pattern=pattern)
+
+
+def _charge_rows(x, par, flags, spec, pattern, st, T):
+    """The mode's own rows: one per fraction it holds, plus neutrality.
+
+    In a fixed-fraction mode the neutralizing leptons are NOT a row: they are
+    solved after the matter, from the charge the matter turned out to carry
+    (`eos.general.thermodynamics_leptons.neutralizing_leptons`), because they
+    feel no field the matter feels and nothing about them feeds back.
+    """
+    _, _, _, _, _, _, mu_C, _, mu_nue = _unpack(x, par, spec, pattern)
+    rows = []
+    if spec.is_fixed("C"):
+        rows.append(st.n_C_fm - spec.targets["Y_C"] * st.n_B_fm)
+    else:
+        _, n_charged, _ = lepton_block(
+            electron_potential(mu_C, mu_nue), mu_nue, T, flags)
+        rows.append(st.n_C_fm - n_charged)
+    if spec.is_fixed("S"):
+        rows.append(st.n_S_fm - spec.targets["Y_S"] * st.n_B_fm)
+    if spec.is_fixed("L_e"):
+        _, _, n_Le = lepton_block(
+            electron_potential(mu_C, mu_nue), mu_nue, T, flags)
+        rows.append(n_Le - spec.targets["Y_Le"] * st.n_B_fm)
+    return rows
+
+
+def residual(x, par, flags, spec, pattern, n_B_fm, T, vac):
+    """The equations of one mode in one pattern, in assembly order."""
+    st = _state(x, par, spec, pattern, T, vac)
+    mask = pattern_mask(pattern)
+
+    rows = list(st.mass_residual)
+    rows += [st.gap_residual[eta] for eta in range(3) if mask[eta]]
+    if any(mask):
+        rows += [st.n_3, st.n_8]
+    if has_vector(par):
+        rows.append(st.vector_residual)
+
+    rows.append(st.n_B_fm - n_B_fm)
+    rows += _charge_rows(x, par, flags, spec, pattern, st, T)
+    return rows
+
+
+def residual_scales(par, spec, pattern, n_B_fm, mu_scale):
+    """The scale each row balances, so one tolerance means one thing.
+
+    A mass row is a potential, judged against mu_B. A GAP row is not:
+    Delta_eta/(2 G_D) has units of MeV^3, since G_D carries MeV^-2, so it is a
+    density and is judged against the quark-density scale (mu_B/3)^3/pi^2 --
+    as are the two colour rows. The density and charge rows are baryon
+    densities in fm^-3.
+
+    Without this the norm would be dominated by whichever row happens to carry
+    the largest units, which here is the colour pair by twenty orders of
+    magnitude; and judging a gap row against a potential rather than a density
+    is four orders of magnitude too strict, which makes a perfectly converged
+    solve report a residual of 1e-8.
+    """
+    mask = pattern_mask(pattern)
+    n_scale = max(n_B_fm, 1.0e-3)
+    colour_scale = max((mu_scale / 3.0) ** 3 / math.pi ** 2, 1.0)
+    scales = [mu_scale] * 3
+    scales += [colour_scale] * sum(mask)
+    if any(mask):
+        scales += [colour_scale, colour_scale]
+    if has_vector(par):
+        scales.append(mu_scale)
+    scales.append(n_scale)
+    scales += [n_scale] * (1 + int(spec.is_fixed("S"))
+                           + int(spec.is_fixed("L_e")))
+    return scales
+
+
+# =============================================================================
+# ONE SOLVED POINT
+# =============================================================================
+@dataclass
+class EoSPoint:
+    """One solved NJL state, with the status a caller must test first.
+
+    `converged` is judged on `error`, the largest equilibrium residual once
+    each has been divided by the scale of the quantity it balances; the gate
+    is `eos.general.solve.RESIDUAL_TOL`. When `converged` is False every other
+    field holds the best iterate reached, which is not a physical state.
+
+    Three fields exist only because this model pairs, and each is part of the
+    answer rather than a diagnostic:
+
+        pattern   which of the enumerated candidates won, by free energy;
+        Delta     the three gaps [MeV], zero where the pattern does not pair;
+        gapless   whether a quasiparticle branch has reached zero. A gapless
+                  state is physical, but comparing candidates by Omega across
+                  one is not, so it is reported rather than silently ranked.
+    """
+    converged: bool = False
+    error: float = 0.0
+    mode: str = ""
+
+    n_B: float = 0.0                # fm^-3
+    T: float = 0.0                  # MeV
+    Y_C: float = 0.0
+    Y_S: float = 0.0
+    Y_L: float = 0.0
+
+    pattern: str = "unpaired"
+    gapless: bool = False
+    Delta: tuple = (0.0, 0.0, 0.0)  # MeV
+    M: tuple = (0.0, 0.0, 0.0)      # MeV
+
+    mu_B: float = 0.0               # MeV
+    mu_C: float = 0.0
+    mu_S: float = 0.0
+    mu_3: float = 0.0
+    mu_8: float = 0.0
+    mu_e: float = 0.0
+    mu_nu: float = 0.0
+
+    n_u: float = 0.0                # fm^-3
+    n_d: float = 0.0
+    n_s: float = 0.0
+    n_e: float = 0.0
+    n_mu: float = 0.0
+    n_nu: float = 0.0
+
+    P_total: float = 0.0            # MeV/fm^3
+    e_total: float = 0.0
+    s_total: float = 0.0            # fm^-3
+    f_total: float = 0.0            # MeV/fm^3
+
+    Y_u: float = 0.0
+    Y_d: float = 0.0
+    Y_s: float = 0.0
+    Y_e: float = 0.0
+    Y_nu: float = 0.0
+
+    #: The matter block and the unknown vector that produced it: the state,
+    #: and the warm start for the next point.
+    state: object = None
+    x: np.ndarray = field(default_factory=lambda: np.zeros(0))
+
+
+def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
+    """Assemble the totals of one state: matter, leptons and the thermal gases.
+
+    Where the mode holds Y_C the neutralizing leptons are solved here, from
+    the charge the matter carries, at the single potential that makes the
+    system neutral. Where the mode is a beta equilibrium they are already
+    determined, by mu_e = mu_nue - mu_C.
+    """
+    mu_nue = float(x[-1]) if spec.is_fixed("L_e") else 0.0
+
+    if spec.is_fixed("C"):
+        if spec.leptons:
+            mu_e, electrons, muons = neutralizing_leptons(
+                st.n_C_fm, T, include_muons=flags.muons)
+            neutrinos = _EMPTY
+        else:
+            mu_e = 0.0
+            electrons = muons = neutrinos = _EMPTY
+    else:
+        mu_e = electron_potential(st.mu_C, mu_nue)
+        (electrons, muons, neutrinos), _, _ = lepton_block(
+            mu_e, mu_nue, T, flags)
+
+    P_th, e_th, s_th = thermal_sectors(T, flags, trapped=mu_nue != 0.0)
+    P = st.P_fm + electrons.P + muons.P + neutrinos.P + P_th
+    e = st.eps_fm + electrons.e + muons.e + neutrinos.e + e_th
+    s = st.s_fm + electrons.s + muons.s + neutrinos.s + s_th
+
+    n_B = st.n_B_fm
+    per_B = (lambda n: n / n_B if n_B else 0.0)
+    n_u, n_d, n_s = st.n_flavour / hc3
+    return EoSPoint(
+        converged=converged, error=error, mode=mode, n_B=n_B, T=T,
+        Y_C=st.n_C_fm / n_B if n_B else 0.0,
+        Y_S=st.n_S_fm / n_B if n_B else 0.0,
+        Y_L=per_B(electrons.n + neutrinos.n),
+        pattern=st.pattern, gapless=st.gapless,
+        Delta=tuple(float(d) for d in st.Delta),
+        M=tuple(float(m) for m in st.M),
+        mu_B=st.mu_B, mu_C=st.mu_C, mu_S=st.mu_S, mu_3=st.mu_3, mu_8=st.mu_8,
+        mu_e=mu_e, mu_nu=mu_nue,
+        n_u=n_u, n_d=n_d, n_s=n_s,
+        n_e=electrons.n, n_mu=muons.n, n_nu=neutrinos.n,
+        P_total=P, e_total=e, s_total=s, f_total=e - T * s,
+        Y_u=per_B(n_u), Y_d=per_B(n_d), Y_s=per_B(n_s),
+        Y_e=per_B(electrons.n), Y_nu=per_B(neutrinos.n),
+        state=st, x=np.asarray(x, dtype=float))
+
+
+# =============================================================================
+# THE SOLVE
+# =============================================================================
+def solve_pattern(mode, n_B_fm, T, par, flags, pattern, spec=None, x0=None,
+                  vac=None, **fractions):
+    """One mode in ONE declared pattern. The pattern is not chosen here."""
+    if spec is None:
+        spec = mode_spec(mode, leptons=fractions.pop("leptons", True),
+                         **fractions)
+    if vac is None:
+        vac = vacuum_solution(par)
+    if not flags.csc and pattern != "unpaired":
+        raise ValueError(
+            f"pattern {pattern!r} needs SpeciesFlags(csc=True): with the "
+            f"colour-superconducting sector off there are no gaps to solve for")
+
+    cold = default_guess(par, spec, pattern, n_B_fm, T, vac)
+    warm = x0 is not None
+    x0 = np.asarray(x0, dtype=float) if warm else cold
+
+    def rows(x):
+        """The rows ALREADY DIVIDED by their scales.
+
+        The root finder terminates on its own view of the residual, and the
+        raw rows here span twenty orders of magnitude -- masses in MeV against
+        gap and colour rows in MeV^3. Handing it a dimensionless vector, and
+        the matching tolerance, is what lets it drive every row to the gate
+        rather than whichever one happens to be largest (CLAUDE.md's
+        `solve_system(..., tol=...)`).
+        """
+        raw = residual(x, par, flags, spec, pattern, n_B_fm, T, vac)
+        return [r / s for r, s in zip(raw, scales_at(x))]
+
+    def scales_at(x):
+        mu_B = _unpack(x, par, spec, pattern)[5]
+        return residual_scales(par, spec, pattern, n_B_fm, max(abs(mu_B), 1.0))
+
+    def unit_scales(x):
+        return [1.0] * len(unknown_slots(par, spec, pattern))
+
+    x, err, ok = solve_system(rows, x0, unit_scales, tol=1.0e-13)
+    if not ok and warm:
+        # A seed that lands in the right basin can still stall just above the
+        # gate -- the CFL point at n_B = 1.2 fm^-3 stops at 8e-9 from a
+        # continuation seed and reaches 3e-11 from the cold one, on the SAME
+        # root. So the cold start is retried in full (both methods) rather
+        # than as `solve_system`'s single fallback attempt, and the better of
+        # the two is kept.
+        x_cold, err_cold, ok_cold = solve_system(rows, cold, unit_scales,
+                                                 tol=1.0e-13)
+        if err_cold < err:
+            x, err, ok = x_cold, err_cold, ok_cold
+
+    st = _state(x, par, spec, pattern, T, vac)
+    return point_from_state(st, par, flags, spec, mode, x, ok, err, T)
+
+
+def solve(mode, n_B_fm, T=0.0, par=None, flags=None, x0=None, patterns=None,
+          vac=None, **fractions):
+    """One mode at (n_B, T), with the pairing pattern chosen by free energy.
+
+    Every enumerated pattern is solved to self-consistency and the converged
+    candidates are ranked by f = eps - T s, the right potential at fixed
+    density. A candidate that did not converge is dropped, not substituted; if
+    none converged, the best iterate of the first candidate comes back with
+    `converged = False`, which is a value a sampler can score (CLAUDE.md
+    section 6) rather than an exception it has to catch.
+
+    `x0` is either a bare vector, which seeds the first pattern tried, or a
+    {pattern: vector} mapping as `warm_start` returns, which seeds each named
+    pattern and leaves the rest cold. A seed belongs to the layout it was
+    solved in, so it cannot simply be handed to whichever pattern comes next.
+    """
+    if par is None:
+        raise TypeError("eos.njl.solve needs `par`: model parameters are "
+                        "arguments, never defaults reached for on the "
+                        "caller's behalf (CLAUDE.md section 6)")
+    if flags is None:
+        flags = SpeciesFlags()
+    leptons = fractions.pop("leptons", True)
+    spec = mode_spec(mode, leptons=leptons, **fractions)
+    if vac is None:
+        vac = vacuum_solution(par)
+    if patterns is None:
+        patterns = DEFAULT_PATTERNS if flags.csc else ("unpaired",)
+    elif not flags.csc and any(p != "unpaired" for p in patterns):
+        # An explicitly requested pattern the flags forbid is a malformed
+        # CALL, not a bad draw, so it raises here rather than being dropped by
+        # the enumeration's own tolerance for candidates that do not solve.
+        raise ValueError(
+            f"patterns {tuple(patterns)!r} need SpeciesFlags(csc=True): with "
+            f"the colour-superconducting sector off there are no gaps to "
+            f"solve for")
+
+    seeds = ({} if x0 is None else
+             dict(x0) if isinstance(x0, dict) else {patterns[0]: x0})
+
+    candidates = []
+    # The first converged candidate seeds every later one that has no warm
+    # start of its own. In the default enumeration that is the unpaired state,
+    # which is the cheapest to reach and the closest thing to a continuation
+    # the paired patterns can be given.
+    reference = None
+    for pattern in patterns:
+        seed = seeds.get(pattern)
+        if seed is None and reference is not None:
+            seed = seed_from(reference, par, spec, pattern)
+        try:
+            point = solve_pattern(mode, n_B_fm, T, par, flags, pattern,
+                                  spec=spec, x0=seed, vac=vac)
+        except (ValueError, RuntimeError, np.linalg.LinAlgError):
+            continue
+        candidates.append(point)
+        if reference is None and point.converged:
+            reference = point
+
+    converged = [p for p in candidates if p.converged]
+    if converged:
+        return min(converged, key=lambda p: p.f_total)
+    if candidates:
+        return candidates[0]
+    return solve_pattern(mode, n_B_fm, T, par, flags, "unpaired", spec=spec,
+                         vac=vac)
+
+
+def solve_beta_eq_neutrinoless(n_B_fm, T=0.0, par=None, flags=None, x0=None,
+                               **kwargs):
+    """Beta equilibrium with free-streaming neutrinos. Variables (n_B, T)."""
+    return solve("beta_eq_neutrinoless", n_B_fm, T, par, flags, x0, **kwargs)
+
+
+def solve_beta_eq_neutrino_trapped(n_B_fm, Y_Le, T=0.0, par=None, flags=None,
+                                   x0=None, **kwargs):
+    """Beta equilibrium with a trapped electron family. (n_B, Y_Le, T)."""
+    return solve("beta_eq_neutrino_trapped", n_B_fm, T, par, flags, x0,
+                 Y_Le=Y_Le, **kwargs)
+
+
+def solve_fixed_yc(n_B_fm, Y_C, T=0.0, par=None, flags=None, x0=None,
+                   leptons=True, **kwargs):
+    """Fixed non-leptonic charge fraction. Variables (n_B, Y_C, T)."""
+    return solve("fixed_YC", n_B_fm, T, par, flags, x0, Y_C=Y_C,
+                 leptons=leptons, **kwargs)
+
+
+def solve_fixed_yc_ys(n_B_fm, Y_C, Y_S, T=0.0, par=None, flags=None, x0=None,
+                      leptons=True, **kwargs):
+    """Fixed charge and strangeness. Variables (n_B, Y_C, Y_S, T)."""
+    return solve("fixed_YC_YS", n_B_fm, T, par, flags, x0, Y_C=Y_C, Y_S=Y_S,
+                 leptons=leptons, **kwargs)

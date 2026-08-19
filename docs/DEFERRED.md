@@ -1196,6 +1196,172 @@ a reason that has nothing to do with seeding.
   exactly, as `charged_leptons` does at mu_nue = 0, and switching them off
   moves P by 1.1-3.3 MeV/fm^3, two to three orders ABOVE the gap.
 
+### njl
+
+- **RG-consistent regularization is not implemented; `lambda_UV != 1` raises.**
+  The medium integral is not a spectator in this model. At T = 0 and unpaired
+  it is self-limiting at k_F and cutoff-free while k_F < Lambda, but that
+  protection disappears at finite T and in ANY colour-superconducting phase,
+  where the Fermi surface is smeared. Two consequences are measured rather
+  than argued: with everything cut at Lambda the density SATURATES at
+  n_B = Lambda^3/pi^2 = 2.881 fm^-3 and freezes (checked by
+  `verify/run_full_check.py`); and the gap dies at mu ~ 1.13 Lambda, so a
+  sharp-cutoff three-flavour CSC calculation is quantitatively safe only for
+  mu << Lambda/2, which is BELOW deconfinement onset. There is effectively no
+  window where lambda = 1 is trustworthy for CSC, and it is shipped for code
+  validation against published sharp-cutoff results, not for production.
+
+  The fix is RG consistency: integrate the medium term to Lambda_UV >> Lambda,
+  keep the vacuum integral at Lambda, and subtract a counterterm cancelling
+  the medium divergence, which is logarithmic, exists only when mu != 0 AND
+  Delta != 0, and does not scale with the quark masses:
+  Gamma_med/V_4 ~= -(2/pi^2) mubar^2 Delta^2 ln Lambda_UV (the coefficient is
+  confirmed to 0.08% in docs/njl_csc_implementation.md section 7.2). The
+  parameter `lambda_UV` and `Lambda_medium` exist and are threaded through;
+  what is missing is the counterterm's closed form, which
+  docs/njl_csc_implementation.md documents as unwritten -- it says of the
+  three published schemes that the massive one is rejected by its own authors
+  and that massless and minimal both have closed forms, without stating
+  either. Writing one from Gholami, Hofmann & Buballa (arXiv:2408.06704) is
+  the work. Until then any lambda != 1 raises `NotImplementedError`, because a
+  lambda-dependent answer would be worse than an exception.
+
+  Two things follow and are recorded here rather than worked around. The
+  published Kunkel set (`Parameters.named("kunkel")`) ships its COUPLINGS
+  (eta_D = 1.45, eta_V = 0.7) at lambda = 1 rather than their lambda ~ 10, and
+  the two are not independent -- RG-consistent CFL gaps run almost 90% above
+  sharp-cutoff ones -- so it is a strong-coupling point, not a reproduction of
+  that paper. And the conformal asymptotics of the vector sector cannot be
+  EXHIBITED at lambda = 1 at all: c_s^2 -> max(1 - alpha, 1/3) is a statement
+  about n_B -> infinity and this regularization has no densities above
+  2.881 fm^-3. `verify/check_sound_speed` therefore asserts causality and
+  monotonicity only, and says so.
+
+- **The paired scalar density disagrees with the specification's 2SC light
+  masses, and the thermodynamic identity decides in favour of the code.**
+  At the solved 2SC point (mu_B = 1500 MeV, T = 0, eta_D = 0.75)
+  docs/njl_csc_implementation.md section 6 reports M_u, M_d = (11.96, 7.65)
+  MeV; this implementation gives (9.73, 8.90). Everything else in that row
+  agrees to the reported precision: Delta_3 = 95.50, mu_3 = 0,
+  mu_8 = -2.46 MeV, M_s = 243.13, mu_C = -62.3, n_B = 1.4887 fm^-3,
+  P = 324.7 MeV/fm^3.
+
+  The difference is the SIGN of the hole amplitudes in the paired scalar
+  density delta_rho_s: whether the Hellmann-Feynman derivative of the BdG
+  eigenvalue with respect to M_f carries (|top|^2 - |bot|^2) or
+  (|top|^2 + |bot|^2). Reproducing the specification's masses requires the
+  latter, and it was reproduced exactly with it -- so this is a convention
+  difference, not a coincidence.
+
+  It was settled by n_B = dP/dmu_B along the neutral solution, which is the
+  statement that the gap equation IS stationarity of Omega rather than merely
+  a plausible self-consistency. As implemented it holds to 3e-7, the
+  finite-difference floor; with the other sign it fails by 2.6e-4, three
+  orders of magnitude worse. `test/njl/test_pairing_patterns.py` and
+  `verify/check_density_derivative` both pin this, and the light masses are
+  deliberately left ungated in `verify/check_anchor` with the reason in its
+  docstring.
+
+  Why it shows up only in M_u and M_d: near chiral restoration M - m is the
+  small difference of two large numbers, so a percent-level change in one
+  scalar density moves the light constituent masses by twenty percent and
+  moves nothing else measurably. Closing this means an independent third
+  calculation, or the specification's author confirming which sign
+  `verify_njl_csc.py` used.
+
+- **The 't Hooft--diquark cross-term is omitted and eta_D absorbs it.** The
+  determinant term expanded in the presence of diquark condensates generates a
+  term coupling |Delta_eta|^2 to the quark-antiquark condensates. Ruester et
+  al. state it explicitly and neglect it; SRP absorb it into their diquark
+  coupling; Kunkel et al. do not include it. Baym et al. (arXiv:1707.04966) DO
+  carry it, with a coupling K' ~= K from the Fierz transformation, and their
+  form is stationarity-consistent (the apparent K'/2 versus K'/4 mismatch
+  between Omega_cond and the two channels is required, not a typo). So a
+  coefficient is available if it is wanted. It is not implemented here, which
+  means eta_D = G_D/G_S must be READ as an effective coupling that has
+  absorbed it -- any paper using this code should say so. Adding it is
+  Baym's Eq. set, not an invention; what it would change is that it raises
+  M_i and REDUCES the effective pairing strength H -> H - (K'/4) sigma_i, with
+  sigma_i negative in the broken phase, so it encourages coexistence of the
+  chiral and diquark condensates.
+
+- **The trapped muon lepton family is not a conserved charge.**
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) only; passing Y_Lmu raises.
+  The muon SPECIES is fully available through `SpeciesFlags(muons=True)` and
+  is populated in beta equilibrium above mu_e = m_mu. What is missing is the
+  second lepton-family constraint and the mu_numu unknown that goes with it.
+  This is the same gap alphabag has, and closing it is one more row and one
+  more unknown in `_charge_rows` plus the muon-neutrino block in
+  `lepton_block`.
+
+- **`eos_response` implements only the `equilibrium` freeze.** The composition
+  freezes of CLAUDE.md section 5 -- held Y_i, held Y_C -- and the one this
+  model adds, held Delta, are not wired, and neither is the susceptibility
+  matrix chi_ab. The gap freeze is the interesting one: holding Delta against
+  its own gap equation while the density is perturbed is what a sound wave
+  faster than the pairing-relaxation timescale would see, and there is no
+  reason to expect it to equal the equilibrium value in a gapped phase.
+  Everything returned is a finite difference along a re-solved sequence, which
+  is the reference flavour; there is no accelerated flavour and none is owed.
+
+- **A cold start stops converging around n_B = 2.1 fm^-3.** `default_guess`
+  builds mu_B from the free massless relation, which knows nothing about a
+  cutoff and therefore cannot see mu_B running away as the density approaches
+  the saturation ceiling at 2.881 fm^-3. A warm-started sweep reaches
+  2.82 fm^-3 without trouble (`verify/check_saturation_density` does exactly
+  that), so this bites only a caller asking for a single high-density point
+  cold. The fix is a guess that inverts the CUT density integral rather than
+  the free one.
+
+- **The mixed adapter runs a full internal solve per call, and may not cache
+  its seed.** Unlike vMIT or alphaBag, whose thermodynamics is explicit in mu,
+  `njl_phase.thermo` closes a Newton system (three masses, the free gaps, the
+  two colour potentials, Sigma_V) at every call: about 0.15 s unpaired and
+  several seconds paired. The mixed residual calls the adapter once per
+  evaluation and is finite-differenced, so a window search is thousands of
+  calls. `seed_cacheable=False` makes it worse and is nonetheless correct --
+  the seed chooses the chiral branch, so caching it would change which state
+  is found, not how fast (the ENJL rule).
+
+  Consequences today: `test/mixed/test_njl_pair.py` locates its window once,
+  on a coarse grid with `refine="bisect"`, and pins the finite-temperature
+  behaviour with a single mixed solve rather than a second window search; and
+  a CSC window is not attempted at all. What would fix it is a cheap analytic
+  `jacobian_block` for this phase (the `Phase` contract already has the slot,
+  and it is optional by design), or a seed cache keyed by the BRANCH rather
+  than forbidden outright -- which needs a way for the adapter to say which
+  chiral branch a seed belongs to. Performance work is profile-driven and
+  comes after correctness (CLAUDE.md section 6); this entry is the profile.
+
+- **The pairing sector is the reference flavour only; there is no fast one.**
+  A paired point diagonalises a batch of 18x18 matrices at every quadrature
+  node and every residual evaluation, which makes a four-pattern enumeration
+  at one (n_B, T) take a few seconds against a few tenths for the unpaired
+  model. That is the honest cost of the general path, and the 2SC closed form
+  of `eos.general.pairing.twosc_dispersion` is already there as the obvious
+  fast path for the one pattern that has one -- it is used as a unit test of
+  the general path but is not yet wired as a production shortcut. Doing so is
+  a `backends/` job by CLAUDE.md section 9, and it comes after correctness.
+
+- **The dilaton / colour-dielectric graft is not implemented.**
+  docs/njl_csc_implementation.md section 10 works out four graft points for
+  coupling a colour-dielectric field to the NJL four-fermion interaction and
+  finds that exactly one of them works (Variant II / Graft D: chi dresses the
+  medium term only, with a D2 chain-rule source, B_g, p = 1, q in {0, 1}). It
+  also records that there is NO published model doing this -- every dielectric
+  quark-matter paper pairs the dielectric with a linear sigma model instead --
+  so it would be new work, and that it is untested for transition order,
+  pairing coexistence and finite temperature. Parked with that section cited.
+
+- **The CFL branch is the least robust of the enumerated patterns.** It is
+  electrically neutral without electrons, so its seed puts mu_C at zero
+  (docs/njl_csc_implementation.md section 6.3 records that an electron-bearing
+  seed converges to a spurious point with an 11% flavour-density spread), and
+  with that seed it converges cleanly at the densities tested here and wins on
+  free energy at eta_D = 0.75. What is not done is a Ginzburg-Landau-informed
+  seed, which is what the specification asks for and what would make the
+  branch reliable across a whole table rather than at the points checked.
+
 ### general
 - Most of the thermal meson gas is missing from `general/particles.py`, so it
   cannot be summed as species. `pi+`, `pi-`, `pi0`, `K+`, `K-`, `K0` and `eta`
