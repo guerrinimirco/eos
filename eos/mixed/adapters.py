@@ -1045,6 +1045,144 @@ def alphabag_phase(params=None):
                  cold_start=cold_start, wing_sweep=wing_sweep)
 
 
+def njl_phase(par, flags=None, patterns=None):
+    """The three-flavour NJL quark phase as a `Phase` (physical potential slot).
+
+    Two things make this adapter different from every other quark one here.
+
+    COLOUR NEUTRALITY IS CLOSED INSIDE IT. A colour-superconducting phase must
+    carry mu_3 and mu_8 to be colour neutral, and those are not conserved
+    charges of the mixed system -- no hadronic phase has them, and there is
+    nothing across the interface for them to equilibrate with. So they are
+    solved within the phase, by `eos.njl.thermodynamics.thermo_from_mu`, and
+    the engine never learns they exist. That is exactly what the phase-adapter
+    contract asks for: "solving the phase's own internal self-consistency at
+    those fixed potentials".
+
+    THE SEED CHOOSES THE ROOT, so `seed_cacheable=False` -- the ENJL rule. The
+    gap equation has three roots at any Fermi-surface mismatch, so a cached
+    seed would not merely change how fast a point is reached but which state
+    is reached. The adapter enumerates the pairing patterns at every call and
+    keeps the one with the largest pressure, which at fixed potentials is the
+    stable one; the winner's label rides on the returned block's `fields`
+    alongside the gaps and the colour potentials, since a mixed table that
+    does not say which quark phase it found is not reporting its own result.
+
+    `frozen_thermo` is absent: NJL exposes no thermo-at-given-densities
+    surface, so the frozen-composition responses raise for a pairing that
+    includes it (docs/DEFERRED.md).
+    """
+    from eos.njl.parameters import Parameters as NJLParameters
+    from eos.njl.species import DEFAULT_PATTERNS, SpeciesFlags as NJLFlags
+    from eos.njl.thermodynamics import thermo_from_mu, vacuum_solution
+    from eos.njl.solver import (
+        solve_beta_eq_neutrinoless as _njl_beta,
+        solve_beta_eq_neutrino_trapped as _njl_trapped,
+        solve_fixed_yc as _njl_yc,
+        solve_fixed_yc_ys as _njl_yc_ys,
+    )
+    if par is None:
+        par = NJLParameters.default()
+    if flags is None:
+        flags = NJLFlags()
+    if patterns is None:
+        patterns = DEFAULT_PATTERNS if flags.csc else ("unpaired",)
+    vac = vacuum_solution(par)
+
+    def _block(st):
+        n = st.n_flavour / hc3
+        mu_u, mu_d, mu_s = quark_potentials(st.mu_B, st.mu_C, st.mu_S)
+        fields = {"M_u": st.M[0], "M_d": st.M[1], "M_s": st.M[2],
+                  "Delta_1": st.Delta[0], "Delta_2": st.Delta[1],
+                  "Delta_3": st.Delta[2], "mu_3": st.mu_3, "mu_8": st.mu_8,
+                  "Sigma_V": st.Sigma_V}
+        return PhaseThermo(
+            T=st.T, mu_B=st.mu_B, mu_C=st.mu_C, mu_S=st.mu_S, fields=fields,
+            densities={"u": n[0], "d": n[1], "s": n[2]},
+            mu_i={"u": mu_u, "d": mu_d, "s": mu_s},
+            mu_eff_i={"u": mu_u - st.Sigma_V, "d": mu_d - st.Sigma_V,
+                      "s": mu_s - st.Sigma_V},
+            m_eff_i={"u": st.M[0], "d": st.M[1], "s": st.M[2]},
+            n_B=st.n_B_fm, n_C=st.n_C_fm, n_S=st.n_S_fm,
+            P=st.P_fm, eps=st.eps_fm, s=st.s_fm,
+            mu_dot_n=st.mu_dot_n / hc3)
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        seeds = dict(x0) if isinstance(x0, dict) else {}
+        best = best_state = None
+        for pattern in patterns:
+            st, ok, _ = thermo_from_mu(par, mu, mu_C, mu_S, T,
+                                       pattern=pattern,
+                                       x0=seeds.get(pattern), vac=vac)
+            if not ok:
+                continue
+            if best is None or st.P > best.P:
+                best, best_state = st, {pattern: _internal_vector(st, par,
+                                                                  pattern)}
+        if best is None:
+            raise RuntimeError(
+                f"eos.njl: no pairing pattern converged at mu_B={mu:g}, "
+                f"mu_C={mu_C:g}, mu_S={mu_S:g}, T={T:g} MeV")
+        th = _block(best)
+        return (th, best_state) if return_state else th
+
+    def cold_start(n_B, T):
+        p = _njl_beta(n_B, T, par=par, flags=flags, patterns=patterns)
+        if not p.converged:
+            raise RuntimeError(f"eos.njl cold start failed at n_B={n_B}")
+        return p.mu_B, p.mu_e, p.mu_B
+
+    def _wing_point(spec, n_B, T):
+        if spec.C is Regime.NOT_CONSERVED:
+            if spec.L_e is Regime.GLOBAL:
+                return _njl_trapped(n_B, spec.targets["Y_Le"], T, par=par,
+                                    flags=flags, patterns=patterns)
+            return _njl_beta(n_B, T, par=par, flags=flags, patterns=patterns)
+        if spec.S is Regime.GLOBAL:
+            return _njl_yc_ys(n_B, spec.targets["Y_C"], spec.targets["Y_S"], T,
+                              par=par, flags=flags, leptons=spec.yc_leptons,
+                              patterns=patterns)
+        return _njl_yc(n_B, spec.targets["Y_C"], T, par=par, flags=flags,
+                       leptons=spec.yc_leptons, patterns=patterns)
+
+    def wing_sweep(spec, n_B_grid, T):
+        out = []
+        for n in n_B_grid:
+            try:
+                p = _wing_point(spec, float(n), T)
+            except Exception:
+                continue
+            if p.converged:
+                out.append((p.n_B, p.P_total, p.e_total))
+        return out
+
+    return Phase(name="NJL", thermo=thermo, potential_kind="physical",
+                 seed_cacheable=False, cold_start=cold_start,
+                 wing_sweep=wing_sweep)
+
+
+def _internal_vector(st, par, pattern):
+    """The internal unknown vector of a solved NJL state, for a warm start.
+
+    The layout is `eos.njl.thermodynamics.internal_unknowns`, rebuilt from the
+    state rather than carried out of the solve, so the adapter stays a pure
+    function of its arguments -- the mixed residual is finite-differenced, and
+    an adapter that remembered its previous trial point would corrupt the
+    Jacobian.
+    """
+    from eos.njl.species import pattern_mask
+    from eos.njl.thermodynamics import has_vector
+    mask = pattern_mask(pattern)
+    vector = list(st.M)
+    vector += [st.Delta[eta] for eta in range(3) if mask[eta]]
+    if any(mask):
+        vector += [st.mu_3, st.mu_8]
+    if has_vector(par):
+        vector.append(st.Sigma_V)
+    return np.array(vector, dtype=float)
+
+
 def enjl_branch_pair(par, branches=("broken", "restored")):
     """Two `Phase`s over ONE functional: an ENJL construction pairs branches.
 
