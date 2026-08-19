@@ -234,13 +234,13 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     import os
     from eos.astro.tov.solver import (
         compute_tov_sequence, find_mmax_precise, generate_ec_logspace,
-        CRUST_PATHS,
+        have_crust,
 )
     if table is None:
         table = build_mixed_eos_table(par, flags, n_B_grid, eta, spec,
                                       vmit_params=vmit_params, T=T,
                                       phases=phases, muons=muons)
-    if crust == "BPS" and not os.path.isfile(CRUST_PATHS.get("BPS", "")):
+    if crust == "BPS" and not have_crust("BPS"):
         crust = "No"
     e_c_vec = generate_ec_logspace(e_c_min, e_c_max, n_ec)
     results = compute_tov_sequence(

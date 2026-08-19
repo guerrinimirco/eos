@@ -32,7 +32,7 @@ from eos.dd2.nmp import from_nmp
 from eos.dd2.solver import sweep_octet
 from eos.dd2.verify.tov import build_core_table, N_TRANSITION
 from eos.astro.tov.solver import (
-    compute_tov_sequence, find_mmax_precise, generate_ec_logspace, CRUST_PATHS,
+    compute_tov_sequence, find_mmax_precise, generate_ec_logspace, have_crust,
 )
 from eos.general.observational_constraints import (
     add_observational_constraints, DEFAULT_CONTOUR_DIR,
@@ -250,7 +250,7 @@ def compute_tov(par, flags=NUCLEONIC, e_c_min=150.0, e_c_max=3000.0, n_ec=180,
     for the readable reference implementation it is validated against.
     """
     core = build_core_table(par, flags)
-    crust = "BPS" if os.path.isfile(CRUST_PATHS.get("BPS", "")) else "No"
+    crust = "BPS" if have_crust("BPS") else "No"
     e_c_vec = generate_ec_logspace(e_c_min, e_c_max, n_ec)
     res = compute_tov_sequence(
         core, e_c_vec, add_crust_table=crust, add_crust_mode="attach",

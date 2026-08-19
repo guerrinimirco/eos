@@ -78,6 +78,7 @@ import numpy as np
 from scipy.integrate import cumulative_trapezoid
 from scipy.interpolate import PchipInterpolator
 
+from eos import REPO_ROOT
 from eos.general.physics_constants import (
     MEV_FM3_TO_DYNE_CM2,
     MEV_FM3_TO_G_CM3,
@@ -109,10 +110,11 @@ _LINK_NAME = "eos.rns"
 # round trip exact instead of accurate to 3e-6.
 RNS_C_CGS = 2.9979e10
 
-# Fallback location of the build that ships with this project's working tree.
-_RNS_DEFAULT_PATH = (
-    "/Users/mircoguerrini/Desktop/Research/rns-main-official/source/rns.v1.1d/rns"
-)
+# Last place looked, after $RNS_BIN and $PATH: a build sitting beside the
+# repository. RNS is third-party Fortran (Stergioulas & Friedman 1995) with its
+# own build, so it is neither vendored nor tracked here -- what this records is
+# only where an unconfigured checkout will glance before giving up.
+_RNS_DEFAULT_PATH = str(REPO_ROOT / "external" / "rns")
 
 # (accuracy, relaxation factor) attempted in order. The first entry is RNS's
 # own default and reproduces the values in the code's `examples.test`; the rest
@@ -137,7 +139,9 @@ def find_rns_binary(path: Optional[str] = None) -> str:
     Locate the `rns` executable.
 
     Resolution order: explicit argument, ``$RNS_BIN``, ``rns`` on ``PATH``,
-    then the default build location.
+    then ``<repo>/external/rns``. No absolute path to anyone's machine appears
+    in this module; a working setup either puts `rns` on PATH or names it in
+    ``$RNS_BIN``.
 
     Parameters
     ----------
@@ -160,9 +164,10 @@ def find_rns_binary(path: Optional[str] = None) -> str:
         if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
             return os.path.abspath(cand)
     raise FileNotFoundError(
-        "Could not find an executable 'rns'. Set $RNS_BIN, put it on PATH, or "
-        "pass rns_binary=... . Searched: "
-        + ", ".join(repr(c) for c in candidates if c)
+        "Could not find an executable 'rns'. RNS is third-party code with its "
+        "own build (Stergioulas & Friedman 1995, ApJ 444, 306); build it, then "
+        "set $RNS_BIN to the binary, put it on PATH, or pass rns_binary=... . "
+        "Searched: " + ", ".join(repr(c) for c in candidates if c)
     )
 
 

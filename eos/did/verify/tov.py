@@ -14,7 +14,7 @@ import os
 import numpy as np
 
 from eos.astro.tov.solver import (
-    CRUST_PATHS, EOSTable_for_TOV, compute_tov_sequence, find_mmax_precise,
+    EOSTable_for_TOV, compute_tov_sequence, find_mmax_precise, have_crust,
     generate_ec_logspace,
 )
 from eos.did.solver import solve_beta_eq_neutrinoless, warm_start
@@ -51,7 +51,7 @@ def mass_radius(par, flags, crust="BPS", n_ec=180, e_c_min=150.0,
                 e_c_max=3000.0):
     """The TOV sequence, as {M_max, R_Mmax, R_1p4, e_c_max, results}."""
     core = build_core_table(par, flags)
-    if crust == "BPS" and not os.path.isfile(CRUST_PATHS.get("BPS", "")):
+    if crust == "BPS" and not have_crust("BPS"):
         crust = "No"
     results = compute_tov_sequence(
         core, generate_ec_logspace(e_c_min, e_c_max, n_ec),

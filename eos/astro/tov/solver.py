@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 
 # Import physical constants
+from eos import REPO_ROOT
 from eos.general.physics_constants import (
     M_sun_MeV, r_sun_fm, r_sun_km, rho_sol, G_natural, m_nucleon_MeV,
     n0_default, hc, MEV_FM3_TO_KM2_INV, MEV_FM3_TO_DYNE_CM2, MEV_FM3_TO_G_CM3
@@ -77,13 +78,90 @@ class TOVResult:
 # CRUST HANDLING
 # =============================================================================
 
-# Default crust file paths
-CRUST_PATHS = {
-    'BPS': '/Users/mircoguerrini/Desktop/Research/Crust/BPST0.dat',
-    'compose_sfho_nYCT': '/Users/mircoguerrini/Desktop/Research/Compose/SFHO_Compose/eos.thermo.ns',
-    'compose_sfho_nT0_beta': '/Users/mircoguerrini/Desktop/Research/Crust/SFHO_compose_betaeq_T0.dat',
-    'compose_sfho_nYLS_trap': '/Users/mircoguerrini/Desktop/Research/Crust/SFHO_compose_betaeq_S.dat',
+class MissingCrustData(FileNotFoundError):
+    """A named crust table could not be found, with where to put it."""
+
+
+#: Filename of each named crust table, RELATIVE to a data root. These are
+#: large external tables -- a BPS crust and slices of the SFHO CompOSE grid --
+#: so they are not shipped with the package and not tracked in git; what is
+#: recorded here is their names and where they are looked for.
+CRUST_FILES = {
+    'BPS': 'BPST0.dat',
+    'compose_sfho_nYCT': 'SFHO_Compose/eos.thermo.ns',
+    'compose_sfho_nT0_beta': 'SFHO_compose_betaeq_T0.dat',
+    'compose_sfho_nYLS_trap': 'SFHO_compose_betaeq_S.dat',
 }
+
+#: Environment variable naming where to look. It is a SEARCH PATH, several
+#: directories separated by os.pathsep like $PATH, because these tables do not
+#: naturally live together: a working setup commonly keeps the crust files in
+#: one directory and the CompOSE tree in another.
+CRUST_DIR_ENV = "EOS_CRUST_DIR"
+
+
+def crust_search_path():
+    """Directories searched for crust tables, in order.
+
+    ``$EOS_CRUST_DIR`` first, then ``<repo>/data/crust``. Nothing here reads
+    the filesystem; it is the list of places `crust_path` will try.
+    """
+    roots = []
+    env = os.environ.get(CRUST_DIR_ENV, "")
+    for entry in env.split(os.pathsep):
+        if entry:
+            roots.append(Path(entry).expanduser())
+    roots.append(REPO_ROOT / "data" / "crust")
+    return roots
+
+
+def crust_path(crust_name: str, custom_path: Optional[str] = None) -> Path:
+    """Absolute path of a named crust table, or a message saying how to supply it.
+
+    Resolution order: the explicit ``custom_path``, then each directory of
+    `crust_search_path`. Raises `MissingCrustData` naming the file, every
+    directory tried and the environment variable that adds one -- never a bare
+    FileNotFoundError, because the caller's next question is always "where do
+    I put it".
+    """
+    if custom_path is not None:
+        given = Path(custom_path).expanduser()
+        if not given.is_file():
+            raise MissingCrustData(f"crust file not found: {given}")
+        return given
+
+    if crust_name not in CRUST_FILES:
+        raise ValueError(f"unknown crust {crust_name!r}; "
+                         f"known: {sorted(CRUST_FILES)}")
+
+    relative = CRUST_FILES[crust_name]
+    roots = crust_search_path()
+    for root in roots:
+        candidate = root / relative
+        if candidate.is_file():
+            return candidate
+    raise MissingCrustData(
+        f"crust table {crust_name!r} needs the file {relative!r}, which was "
+        f"not found in any of:\n"
+        + "".join(f"    {root}\n" for root in roots)
+        + f"These tables are large external data and are neither shipped with "
+        f"the package nor tracked in git. Point {CRUST_DIR_ENV} at the "
+        f"directory holding them (several may be given, separated by "
+        f"{os.pathsep!r}), or pass an explicit path.")
+
+
+def have_crust(crust_name: str) -> bool:
+    """Whether a named crust table can be found. For callers that fall back.
+
+    Use this rather than testing a path yourself. Falling back to no crust is
+    not free -- it moves M_max by about 1% -- so the decision deserves to be
+    visible at the call site.
+    """
+    try:
+        crust_path(crust_name)
+        return True
+    except (MissingCrustData, ValueError):
+        return False
 
 
 def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
@@ -114,7 +192,7 @@ def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
     elif crust_name == 'BPS':
         # BPS file format: P [km^-2], epsilon [km^-2], nB [fm⁻³]
         # Convert to MeV/fm³
-        filepath = CRUST_PATHS['BPS']
+        filepath = str(crust_path('BPS'))
         data = np.loadtxt(filepath)
         P_geo = data[:, 0]       # km^-2
         e_geo = data[:, 1]       # km^-2
@@ -130,19 +208,19 @@ def load_crust_table(crust_name: str, custom_path: Optional[str] = None,
         # Compose format — full 3D table (n_B, Y_C, T); needs T and Y_C
         if T is None or Y_C is None:
             raise ValueError("Must provide T and Y_C for 'compose_sfho_nYCT' crust")
-        filepath = CRUST_PATHS['compose_sfho_nYCT']
+        filepath = str(crust_path('compose_sfho_nYCT'))
         return _load_compose_crust(filepath, T=T, Y_C=Y_C)
 
     elif crust_name == 'compose_sfho_nT0_beta':
         # SFHO beta-equilibrium at T=0 - columns: P [MeV/fm³], epsilon [MeV/fm³], nB [fm⁻³]
-        filepath = CRUST_PATHS['compose_sfho_nT0_beta']
+        filepath = str(crust_path('compose_sfho_nT0_beta'))
         return EOSTable_for_TOV.from_file(filepath, columns=(0, 1, 2))
 
     elif crust_name == 'compose_sfho_nYLS_trap':
         # SFHO with trapped neutrinos - columns: YL, S, P, epsilon, nB
         if YL is None or S is None:
             raise ValueError("Must provide YL and S for 'compose_sfho_nYLS_trap' crust")
-        filepath = CRUST_PATHS['compose_sfho_nYLS_trap']
+        filepath = str(crust_path('compose_sfho_nYLS_trap'))
         data = np.loadtxt(filepath)
         # Filter rows matching YL and S (with tolerance for float comparison)
         tol = 1e-6

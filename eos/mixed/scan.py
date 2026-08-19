@@ -187,7 +187,7 @@ def _hadronic_tov(par, flags, n_ec=120, tov_parallel=True):
     from eos.dd2.verify.tov import build_core_table, N_TRANSITION
     from eos.astro.tov.solver import (
         compute_tov_sequence, find_mmax_precise, generate_ec_logspace,
-        CRUST_PATHS,
+        have_crust,
     )
     import os
 
@@ -196,7 +196,7 @@ def _hadronic_tov(par, flags, n_ec=120, tov_parallel=True):
         core = build_core_table(par, flags)
         if core.P.size < 10:
             return nan3
-        crust = ("BPS" if os.path.isfile(CRUST_PATHS.get("BPS", "")) else "No")
+        crust = "BPS" if have_crust("BPS") else "No"
         res = compute_tov_sequence(
             core, generate_ec_logspace(150.0, 3000.0, n_ec),
             add_crust_table=crust, add_crust_mode="attach",

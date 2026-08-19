@@ -344,12 +344,12 @@ def _hadronic_mr(par, flags):
     import os
     from eos.dd2.verify.tov import build_core_table, N_TRANSITION
     from eos.astro.tov.solver import (compute_tov_sequence, find_mmax_precise,
-                                generate_ec_logspace, CRUST_PATHS)
+                                generate_ec_logspace, have_crust)
     try:
         core = build_core_table(par, flags)
         if core.P.size < 10:
             return np.array([]), np.array([])
-        crust = "BPS" if os.path.isfile(CRUST_PATHS.get("BPS", "")) else "No"
+        crust = "BPS" if have_crust("BPS") else "No"
         res = compute_tov_sequence(
             core, generate_ec_logspace(150.0, 3000.0, 120),
             add_crust_table=crust, add_crust_mode="attach",

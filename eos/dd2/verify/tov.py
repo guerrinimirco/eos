@@ -14,7 +14,7 @@ import numpy as np
 
 from eos.astro.tov.solver import (
     EOSTable_for_TOV, compute_tov_sequence, find_mmax_precise,
-    generate_ec_logspace, CRUST_PATHS,
+    generate_ec_logspace, have_crust,
 )
 from eos.dd2.solver import sweep_beta_eq_octet
 
@@ -50,7 +50,7 @@ def mass_radius(par, flags, crust="BPS", n_ec=180,
     crust: 'BPS' (default, if the file is present) or 'No'.
     """
     core = build_core_table(par, flags)
-    if crust == "BPS" and not os.path.isfile(CRUST_PATHS.get("BPS", "")):
+    if crust == "BPS" and not have_crust("BPS"):
         crust = "No"
     e_c_vec = generate_ec_logspace(e_c_min, e_c_max, n_ec)
     results = compute_tov_sequence(
