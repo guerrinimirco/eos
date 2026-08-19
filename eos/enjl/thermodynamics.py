@@ -32,7 +32,7 @@ from eos.enjl.species import (
     SPECIES, STRANGENESS, VALENCE, VALENCE_TOTAL, coupling_rescalings,
     current_masses,
 )
-from eos.general.fermi_integrals import solve_fermi_jel
+from eos.general.fermi_integrals import invert_fermi_density, solve_fermi_jel
 from eos.general.physics_constants import hc3
 
 _PI2 = math.pi ** 2
@@ -106,7 +106,7 @@ def vacuum_energy(m, g, Lambda):
         y * (2.0 * y * y + 1.0) * math.sqrt(y * y + 1.0) - math.asinh(y))
 
 
-def kinetic_thermo(nu, m, g, Lambda=0.0):
+def kinetic_thermo(nu, m, g, Lambda=0.0, T=0.0):
     """(n, P, eps, s, n_s) of one species at kinetic potential nu [MeV].
 
     The free-gas part comes from `eos.general.fermi_integrals`, the single
@@ -124,8 +124,20 @@ def kinetic_thermo(nu, m, g, Lambda=0.0):
     would truncate the physical Fermi sea.
 
     Because the vacuum terms depend on (m, g, Lambda) alone they are
-    independent of nu and of temperature, which is what makes this function
-    the single place a finite-temperature extension would touch.
+    independent of nu and of temperature: the Dirac sea is a property of the
+    vacuum, and the cut-off regularizes it there rather than in the medium.
+    That is why adding T is this signature plus one argument passed on --
+    `vacuum_energy` and `vacuum_scalar_density` take no T because there is
+    none in them to take.
+
+    Antiparticles are counted at T > 0 and not at T = 0. At T = 0 the exact
+    closed form of `eos.general.fermi_integrals` has none for nu > 0, which is
+    the only sign the model ever evaluates, so the flag is measurably a no-op
+    there (0.000e+00 on n and eps for the u, s, neutron and electron cases of
+    `enjl.tex`); leaving it off keeps the T = 0 arithmetic literally
+    unchanged. At T > 0 it is not a no-op and the antiparticles are real: at
+    T = 50 MeV they are 2.8e-2 of n_e at mu_e = 100 MeV, and 3.4e-6 of n_u at
+    nu = 400 MeV, the quarks being far more degenerate than the leptons.
 
     `P` is the MEDIUM pressure of the species, nu*n - eps_medium. The total
     pressure of a state is not the sum of these: it is Eq. (19), assembled in
@@ -136,8 +148,8 @@ def kinetic_thermo(nu, m, g, Lambda=0.0):
     eps in MeV^4. Quark masses bottom out at the current mass m_q0 = 5.5 MeV,
     so the massless branch of the shared integrals is never reached.
     """
-    n, P, eps, s, n_s = solve_fermi_jel(nu, 0.0, m, g,
-                                        include_antiparticles=False)
+    n, P, eps, s, n_s = solve_fermi_jel(nu, T, m, g,
+                                        include_antiparticles=T > 0.0)
     return (n * hc3, P * hc3, eps * hc3 - vacuum_energy(m, g, Lambda),
             s * hc3, n_s * hc3 - vacuum_scalar_density(m, g, Lambda))
 
@@ -159,6 +171,63 @@ def fermi_momentum(nu, m):
     if not math.isfinite(k2) or k2 <= 0.0:
         return 0.0
     return min(math.sqrt(k2), 5000.0)
+
+
+def kinetic_state(nu_proposed, m, g, T=0.0):
+    """(nu, kF, n) of one species from the potential a solver has proposed.
+
+    `nu_proposed` is mu_i minus the vector and rearrangement shifts, taken
+    straight off an unknown vector, so it can be anything a bounded least
+    squares tries. What comes back is the kinetic potential the integrals are
+    then evaluated at, the Fermi momentum that is its T = 0 view, and the
+    number density.
+
+    At T = 0 the Fermi surface is sharp: kF = sqrt(nu^2 - m^2) with the
+    excursion clamps of `fermi_momentum`, an empty sea is nu = m exactly, and
+    the density is the closed form n = g kF^3/6 pi^2. nu is rebuilt FROM kF so
+    that every integral downstream sees the one number the closed form is
+    written in.
+
+    At T > 0 there is no sharp surface to clamp, and nu below m is a
+    thermally populated state rather than an empty one, so the clamp applies
+    to nu itself and the density comes from the Fermi integral. The kF
+    returned is then the T = 0 view of nu and nothing evaluates it.
+    """
+    if T == 0.0:
+        kF = fermi_momentum(nu_proposed, m)
+        # `** 2` and not `kF * kF`: the two differ in the last bit for about
+        # one argument in a thousand on this platform's libm, and this is the
+        # expression `test/baseline` is frozen against.
+        return math.sqrt(kF ** 2 + m ** 2), kF, n_from_kF(kF, g)
+    if not (math.isfinite(nu_proposed) and math.isfinite(m)) or m <= 0.0:
+        return 0.0, 0.0, 0.0
+    nu = min(max(nu_proposed, -5000.0), 5000.0)
+    return nu, fermi_momentum(nu, m), kinetic_thermo(nu, m, g, 0.0, T)[0]
+
+
+def nu_from_n(n, m, g, T=0.0):
+    """Kinetic potential nu [MeV] of a species held at density n [MeV^3].
+
+    The direction `thermo_from_n` needs, and the only one that needs it: a
+    solver that carries densities has to recover the potential the integrals
+    are written in.
+
+    At T = 0 that is algebra -- kF from Eq. (11), then nu = sqrt(kF^2 + m^2)
+    -- and an empty state is nu = m. At T > 0 it is a genuine inversion of the
+    Fermi integral, `eos.general.fermi_integrals.invert_fermi_density`, which
+    is the single home for it (CLAUDE.md section 7); no model writes its own.
+    The inversion costs about 30 us against 0.1 us for the closed form, which
+    is why T = 0 keeps the closed form and not merely why the baseline does.
+
+    The T > 0 cost lands INSIDE the gap solve for the six strongly interacting
+    species: nu depends on the mass and the masses are the gap unknowns, so
+    each is re-inverted every iteration. The two leptons have fixed masses and
+    are inverted once.
+    """
+    if T == 0.0:
+        kF = kF_from_n(n, g) if n > 0.0 else 0.0
+        return math.sqrt(kF ** 2 + m ** 2)
+    return invert_fermi_density(n / hc3, T, m, g, include_antiparticles=True)
 
 
 # --------------------------------------------------------------------------
@@ -196,7 +265,7 @@ def quark_masses_from_gap(nbar_s, par):
             for q in QUARKS}
 
 
-def effective_scalar_densities(kF, M_q, n_s_b, alpha_S, Lambda):
+def effective_scalar_densities(nu, M_q, n_s_b, alpha_S, Lambda, T=0.0):
     """nbar^s_q of Eq. (6), the source the gap equation is fed.
 
         nbar^s_q = n^s_q(M_q, nu_q) + alpha_S sum_{i=p,n,Lambda} N^q_i n^s_i
@@ -217,11 +286,15 @@ def effective_scalar_densities(kF, M_q, n_s_b, alpha_S, Lambda):
 
     Once nbar^s_q is zero the gap equation returns M_q = m_q0 exactly, and the
     't Hooft term of the remaining flavours loses its coupling to this one.
+
+    `nu` maps each flavour to its kinetic potential. That is the primary
+    quantity everywhere in this model, not kF: at T > 0 the Fermi surface is
+    not sharp and there is no kF, while nu is what the integrals are written
+    in at either temperature.
     """
     out = {}
     for q in QUARKS:
-        nu_q = math.sqrt(kF[q] ** 2 + M_q[q] ** 2)
-        n_sq = kinetic_thermo(nu_q, M_q[q], DEGENERACY[q], Lambda)[4]
+        n_sq = kinetic_thermo(nu[q], M_q[q], DEGENERACY[q], Lambda, T)[4]
         cluster = sum(VALENCE[b][QUARKS.index(q)] * n_s_b[b] for b in BARYONS)
         out[q] = min(n_sq + alpha_S * cluster, 0.0)
     return out
@@ -411,11 +484,21 @@ class EoSPoint:
     the `_fm` properties convert to the fm-based public boundary. `enjl.tex`
     Sec. "What a solved point returns" lists every field against the equation
     it comes from.
+
+    `nu` is the primary kinetic quantity, the potential every Fermi integral
+    of the model is written in. `kF` is its T = 0 derived view,
+    sqrt(nu^2 - m^2): at T = 0 the two carry the same information and kF is
+    the more readable of them, while at T > 0 the Fermi surface is not sharp
+    and kF describes no edge of anything. A consumer that needs the effective
+    potential -- the phase adapter of `eos.mixed` is the one in this
+    repository -- reads `nu` and not kF.
     """
     n: dict                                   # all species densities [MeV^3]
     M_q: dict                                 # M_u, M_d, M_s [MeV]
     M_b: dict                                 # M_p, M_n, M_Lambda [MeV]
-    kF: dict                                  # Fermi momenta [MeV]
+    nu: dict                                  # kinetic potentials [MeV]
+    kF: dict                                  # Fermi momenta [MeV], T = 0 view
+    T: float                                  # temperature [MeV]
     n_s: dict                                 # scalar densities [MeV^3]
     nbar_s: dict                              # effective scalar densities [MeV^3]
     alpha_S: float                            # structural function
@@ -430,7 +513,7 @@ class EoSPoint:
     mu: dict                                  # chemical potentials [MeV]
     eps: float                                # energy density [MeV^4]
     P: float                                  # pressure [MeV^4]
-    s: float                                  # entropy density [MeV^3], zero
+    s: float                                  # entropy density [MeV^3]
     n_b: float                                # total baryon density [MeV^3]
     n_bQ: float                               # quark baryon density [MeV^3]
     n_C: float                                # non-leptonic charge density [MeV^3]
@@ -457,7 +540,7 @@ class EoSPoint:
         return (self.eps / self.n_b) - 938.9
 
 
-def thermo_from_n(n, par=None, x0=None, _vac_mass=None):
+def thermo_from_n(n, par=None, T=0.0, x0=None, _vac_mass=None):
     """The state at given species densities: the block at fixed composition.
 
     This is not one of the repository's four modes and is not named like one.
@@ -475,10 +558,19 @@ def thermo_from_n(n, par=None, x0=None, _vac_mass=None):
     mean field thermodynamically consistent, and it is checked directly, as
     mu_i = d eps / d n_i, by `eos.enjl.verify`.
 
+    THIS IS THE ONE DIRECTION THAT INVERTS A FERMI INTEGRAL. Densities are
+    given and the potentials the integrals are written in are wanted, so at
+    T > 0 every species needs `nu_from_n`. For the six strongly interacting
+    ones that inversion sits inside the gap iteration, because nu depends on
+    the mass and the masses are what the gap solves for; the two leptons have
+    fixed masses and are inverted once, outside it. At T = 0 all eight are the
+    closed form and none of this costs anything.
+
     Parameters:
         n:   dict keyed by "p","n","Lambda","u","d","s","e","mu" [MeV^3].
              Missing species are treated as zero density.
         par: Parameters (default: the shipped set).
+        T:   temperature [MeV].
         x0:  starting guess for (M_u, M_d, M_s); the vacuum masses by default,
              which is a poor guess in the chirally restored region.
 
@@ -502,14 +594,20 @@ def thermo_from_n(n, par=None, x0=None, _vac_mass=None):
     n_b, n_C, n_S = assemble(n)
     n_bQ = (n["u"] + n["d"] + n["s"]) / 3.0
     alpha_S = par.alpha_S(n_b)
+    # The T = 0 derived view of the state, kept because a great deal of the
+    # reading of this model is done in kF and because it is what `EoSPoint`
+    # has always carried. Nothing below is evaluated at it.
     kF = {sp: kF_from_n(n[sp], DEGENERACY[sp]) if n[sp] > 0 else 0.0
           for sp in SPECIES}
 
     def gap_residual(x):
         M_q = dict(zip(QUARKS, x))
         M_b = baryon_masses(par, M_q, alpha_S, n_bQ)
-        n_s_b = _baryon_scalar_densities(kF, M_b)
-        nbar = effective_scalar_densities(kF, M_q, n_s_b, alpha_S, par.Lambda)
+        nu_b = {b: nu_from_n(n[b], M_b[b], DEGENERACY[b], T) for b in BARYONS}
+        n_s_b = _baryon_scalar_densities(nu_b, M_b, T)
+        nu_q = {q: nu_from_n(n[q], M_q[q], DEGENERACY[q], T) for q in QUARKS}
+        nbar = effective_scalar_densities(nu_q, M_q, n_s_b, alpha_S,
+                                          par.Lambda, T)
         gap = quark_masses_from_gap(nbar, par)
         return [x[i] - gap[q] for i, q in enumerate(QUARKS)]
 
@@ -523,20 +621,26 @@ def thermo_from_n(n, par=None, x0=None, _vac_mass=None):
 
     M_q = dict(zip(QUARKS, sol.x))
     M_b = baryon_masses(par, M_q, alpha_S, n_bQ)
-    n_s_b = _baryon_scalar_densities(kF, M_b)
-    nbar = effective_scalar_densities(kF, M_q, n_s_b, alpha_S, par.Lambda)
+    mass = {**M_b, **M_q, **m_l}
+    nu = {sp: nu_from_n(n[sp], mass[sp], DEGENERACY[sp], T) for sp in SPECIES}
+    n_s_b = _baryon_scalar_densities(nu, M_b, T)
+    nbar = effective_scalar_densities(nu, M_q, n_s_b, alpha_S, par.Lambda, T)
     fields = mean_fields(n, n_s_b, M_q, par, n_b)
 
     # --- energy density, Eq. (13), with the E0 vacuum subtraction ---
+    # The entropy is assembled in the same pass. Only the medium integrals
+    # carry it: the Dirac-sea subtraction is a vacuum term and the mean-field
+    # interaction energy is a function of the densities alone, so neither has
+    # a temperature derivative at fixed composition.
     n_s_q = {}
     eps = 0.0
+    s = 0.0
     for sp in SPECIES:
-        mass = M_b.get(sp, M_q.get(sp, m_l.get(sp)))
         Lambda = par.Lambda if sp in QUARKS else 0.0
-        nu = math.sqrt(kF[sp] ** 2 + mass ** 2)
-        _, _, eps_i, _, n_s_i = kinetic_thermo(nu, mass, DEGENERACY[sp],
-                                               Lambda)
+        _, _, eps_i, s_i, n_s_i = kinetic_thermo(nu[sp], mass[sp],
+                                                 DEGENERACY[sp], Lambda, T)
         eps += eps_i
+        s += s_i
         if sp in QUARKS:
             n_s_q[sp] = n_s_i
     eps += 2.0 * par.GS * sum(nbar[q] ** 2 for q in QUARKS)
@@ -548,37 +652,41 @@ def thermo_from_n(n, par=None, x0=None, _vac_mass=None):
     # --- chemical potentials, Eqs. (14)-(16) ---
     mu = {}
     for b in BARYONS:
-        mu[b] = math.sqrt(kF[b] ** 2 + M_b[b] ** 2) \
-            + f[b] * (3.0 * fields.gomega_omega
-                      + fields.grho_rho * ISOSPIN[b]) + fields.SigmaR_b
+        mu[b] = nu[b] + f[b] * (3.0 * fields.gomega_omega
+                                + fields.grho_rho * ISOSPIN[b]) \
+            + fields.SigmaR_b
     for q in QUARKS:
-        mu[q] = math.sqrt(kF[q] ** 2 + M_q[q] ** 2) \
-            + f[q] * (fields.gomega_omega
-                      + fields.grho_rho * ISOSPIN[q]) + fields.SigmaR_q
+        mu[q] = nu[q] + f[q] * (fields.gomega_omega
+                                + fields.grho_rho * ISOSPIN[q]) \
+            + fields.SigmaR_q
     for lepton in LEPTONS:
-        mu[lepton] = math.sqrt(kF[lepton] ** 2 + m_l[lepton] ** 2)
+        mu[lepton] = nu[lepton]
 
-    # --- pressure: the Euler relation, Eq. (19), at T = 0 ---
-    P = sum(mu[sp] * n[sp] for sp in SPECIES) - eps
+    # --- pressure: the Euler relation, Eq. (19) ---
+    #     eps + P = T s + sum_i mu_i n_i
+    P = T * s + sum(mu[sp] * n[sp] for sp in SPECIES) - eps
 
     return EoSPoint(
-        n=n, M_q=M_q, M_b=M_b, kF=kF,
+        n=n, M_q=M_q, M_b=M_b, nu=nu, kF=kF, T=T,
         n_s={**n_s_b, **n_s_q}, nbar_s=nbar, alpha_S=alpha_S,
         Gw=par.Gamma_w(n_b), Gr=par.Gamma_r(n_b),
         J_omega=fields.J_omega, J_rho=fields.J_rho,
         gomega_omega=fields.gomega_omega, grho_rho=fields.grho_rho,
         SigmaR_b=fields.SigmaR_b, SigmaR_q=fields.SigmaR_q,
-        mu=mu, eps=eps, P=P, s=0.0,
+        mu=mu, eps=eps, P=P, s=s,
         n_b=n_b, n_bQ=n_bQ, n_C=n_C, n_S=n_S,
     )
 
 
-def _baryon_scalar_densities(kF, M_b):
-    """n^s_i of the three baryons, Eq. (12) with no cut-off."""
+def _baryon_scalar_densities(nu, M_b, T=0.0):
+    """n^s_i of the three baryons, Eq. (12) with no cut-off.
+
+    `nu` maps each baryon to its kinetic potential, for the reason
+    `effective_scalar_densities` gives.
+    """
     out = {}
     for b in BARYONS:
-        nu = math.sqrt(kF[b] ** 2 + M_b[b] ** 2)
-        out[b] = kinetic_thermo(nu, M_b[b], DEGENERACY[b], 0.0)[4]
+        out[b] = kinetic_thermo(nu[b], M_b[b], DEGENERACY[b], 0.0, T)[4]
     return out
 
 
@@ -656,22 +764,19 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, x0=None):
         M_b = baryon_masses(par, M_q, alpha_S, n_bQ)
         mass = {**M_b, **M_q}
 
-        kF, n = {}, {sp: 0.0 for sp in SPECIES}
+        nu, n = {}, {sp: 0.0 for sp in SPECIES}
         for sp in BARYONS + QUARKS:
             if sp in BARYONS:
                 shift = f[sp] * (3.0 * g_w + ISOSPIN[sp] * g_r) + SigmaR_b
             else:
                 shift = f[sp] * (g_w + ISOSPIN[sp] * g_r) + SigmaR_q
-            kF[sp] = fermi_momentum(charges[sp] - shift, mass[sp])
-            n[sp] = n_from_kF(kF[sp], DEGENERACY[sp])
-        for sp in LEPTONS:
-            kF[sp] = 0.0
+            nu[sp], _, n[sp] = kinetic_state(charges[sp] - shift, mass[sp],
+                                             DEGENERACY[sp], T)
 
-        n_s_b = {b: kinetic_thermo(math.sqrt(kF[b] ** 2 + M_b[b] ** 2),
-                                   M_b[b], DEGENERACY[b], 0.0)[4]
-                 for b in BARYONS}
+        n_s_b = _baryon_scalar_densities(nu, M_b, T)
         fields = mean_fields(n, n_s_b, M_q, par, n_B)
-        nbar = effective_scalar_densities(kF, M_q, n_s_b, alpha_S, par.Lambda)
+        nbar = effective_scalar_densities(nu, M_q, n_s_b, alpha_S,
+                                          par.Lambda, T)
         gap = quark_masses_from_gap(nbar, par)
 
         res = [M_q[q] - gap[q] for q in QUARKS]
@@ -732,4 +837,4 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, x0=None):
             f"{RESIDUAL_TOL:.0e} bound")
     sol = best
     n, _ = state(sol.x)
-    return thermo_from_n(n, par=par, x0=list(sol.x[:3]))
+    return thermo_from_n(n, par=par, T=T, x0=list(sol.x[:3]))

@@ -450,11 +450,12 @@ def enjl_phase_thermo(point, mu_B, mu_C, mu_S):
     n = {sp: value / hc3 for sp, value in point.n.items()}
     mu_i = {sp: point.mu[sp] for sp in point.n}
     m_eff = dict(point.M_b, **point.M_q)
-    # T = 0, so the effective (kinetic) potential is the Fermi energy.
-    mu_eff = {sp: float(np.sqrt(point.kF[sp] ** 2 + m_eff[sp] ** 2))
-              for sp in point.kF if sp in m_eff}
+    # The effective (kinetic) potential is carried by the point itself. It was
+    # rebuilt here from kF while `eos.enjl` was a T = 0 model, where the two
+    # agree; at T > 0 there is no sharp Fermi surface and only nu is defined.
+    mu_eff = {sp: float(point.nu[sp]) for sp in point.nu if sp in m_eff}
     return PhaseThermo(
-        T=0.0,
+        T=point.T,
         densities=n,
         fields={"gomega_omega": point.gomega_omega,
                 "grho_rho": point.grho_rho,

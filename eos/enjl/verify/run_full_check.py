@@ -264,8 +264,8 @@ def check_gap_equation():
                 if err > worst:
                     worst, detail = err, f"n_B={entry[0]} {q}"
             recomputed = effective_scalar_densities(
-                point.kF, point.M_q, {b: point.n_s[b] for b in BARYONS},
-                point.alpha_S, par.Lambda)
+                point.nu, point.M_q, {b: point.n_s[b] for b in BARYONS},
+                point.alpha_S, par.Lambda, point.T)
             for q in QUARKS:
                 scale = max(abs(point.nbar_s[q]), 1e-6 * hc3)
                 err = abs(recomputed[q] - point.nbar_s[q]) / scale

@@ -40,9 +40,9 @@ from eos.enjl.species import (
     SPECIES, STRANGENESS, coupling_rescalings,
 )
 from eos.enjl.thermodynamics import (
-    EoSPoint, baryon_masses, effective_scalar_densities, fermi_momentum,
-    kinetic_thermo, mean_fields, n_from_kF, quark_masses_from_gap,
-    thermo_from_n,
+    EoSPoint, _baryon_scalar_densities, baryon_masses,
+    effective_scalar_densities, kinetic_state, kinetic_thermo, mean_fields,
+    quark_masses_from_gap, thermo_from_n,
 )
 from eos.general.modes import (
     ModeSpec, beta_eq_neutrino_trapped, beta_eq_neutrinoless, electron_potential,
@@ -280,7 +280,7 @@ def _massless_density(mu, g):
     return g * mu ** 3 / (6.0 * math.pi ** 2)
 
 
-def state_at(x, par, spec, n_B):
+def state_at(x, par, spec, n_B, T=0.0):
     """(densities, residuals) of the equilibrium system at `x`.
 
     The state is built forwards from the unknowns of `unknown_slots`: the
@@ -301,7 +301,11 @@ def state_at(x, par, spec, n_B):
     it after the solve, entering no equation.
 
     Subtracting the vector and rearrangement shifts gives the kinetic
-    potential nu_i, hence kF_i, n_i and n^s_i.
+    potential nu_i, and `kinetic_state` turns that into n_i; n^s_i follows
+    from the same nu. This is the FORWARD direction, potentials to densities,
+    so it inverts nothing and costs no more at T > 0 than at T = 0: the
+    excursion clamp is the one difference, and it moves from kF onto nu
+    because at T > 0 there is no sharp Fermi surface to clamp.
 
     The rows, in order: the gap equation for each flavour (Eq. 5); baryon
     number against the target; the definition of n_B^Q; the two vector-field
@@ -325,7 +329,7 @@ def state_at(x, par, spec, n_B):
     else:
         mu_lepton = {"e": 0.0, "mu": 0.0}
 
-    kF = {}
+    nu = {}
     n = {}
     for sp in SPECIES:
         if sp in LEPTONS:
@@ -338,14 +342,12 @@ def state_at(x, par, spec, n_B):
                 shift = f[sp] * (3.0 * g_w + ISOSPIN[sp] * g_r) + SigmaR_b
             else:
                 shift = f[sp] * (g_w + ISOSPIN[sp] * g_r) + SigmaR_q
-        kF[sp] = fermi_momentum(mu_i - shift, mass[sp])
-        n[sp] = n_from_kF(kF[sp], DEGENERACY[sp])
+        nu[sp], _, n[sp] = kinetic_state(mu_i - shift, mass[sp],
+                                         DEGENERACY[sp], T)
 
-    n_s_b = {b: kinetic_thermo(math.sqrt(kF[b] ** 2 + M_b[b] ** 2),
-                               M_b[b], DEGENERACY[b], 0.0)[4]
-             for b in BARYONS}
+    n_s_b = _baryon_scalar_densities(nu, M_b, T)
     fields = mean_fields(n, n_s_b, M_q, par, n_B)
-    nbar = effective_scalar_densities(kF, M_q, n_s_b, alpha_S, par.Lambda)
+    nbar = effective_scalar_densities(nu, M_q, n_s_b, alpha_S, par.Lambda, T)
     gap = quark_masses_from_gap(nbar, par)
 
     res = [M_q[q] - gap[q] for q in QUARKS]
@@ -371,9 +373,9 @@ def state_at(x, par, spec, n_B):
     return n, res
 
 
-def residual(x, par, spec, n_B):
+def residual(x, par, spec, n_B, T=0.0):
     """The equations that must vanish; see `state_at`."""
-    return state_at(x, par, spec, n_B)[1]
+    return state_at(x, par, spec, n_B, T)[1]
 
 
 def residual_scales(par, spec, n_B):
@@ -399,45 +401,55 @@ def residual_scales(par, spec, n_B):
     return scales
 
 
-def _scaled_residual(x, par, spec, n_B):
+def _scaled_residual(x, par, spec, n_B, T=0.0):
     scales = residual_scales(par, spec, n_B)
-    return [r / s for r, s in zip(residual(x, par, spec, n_B), scales)]
+    return [r / s for r, s in zip(residual(x, par, spec, n_B, T), scales)]
 
 
 # --------------------------------------------------------------------------
 # The neutralizing leptons of a held-charge mode
 # --------------------------------------------------------------------------
 
-def neutralizing_leptons(n_C, par):
+def neutralizing_leptons(n_C, par, T=0.0):
     """(mu_e, n_e, n_mu) of the gas that neutralizes a charge density n_C.
 
     Where Y_C is held, the leptons enter no equation of the solve: n_C is
     already pinned by the charge row, so the electrons and muons that make the
-    total system neutral follow from it afterwards. At T = 0 and with
-    transparent matter (mu_mu = mu_e) the condition n_e + n_mu = n_C is
-    monotone in mu_e, so it is a bracketed 1-D root.
+    total system neutral follow from it afterwards. With transparent matter
+    (mu_mu = mu_e) the condition n_e + n_mu = n_C is monotone in mu_e at any
+    temperature, so it is a bracketed 1-D root.
 
-    Returns zeros for n_C <= 0: a negatively charged or neutral strongly
-    interacting phase needs no negative leptons, and this model carries no
-    positrons at T = 0.
+    The bracket's lower end is the one thing temperature moves. At T = 0 an
+    electron gas needs mu_e >= m_e to exist at all, so the bracket starts
+    there; at T > 0 the gas is populated for any mu_e and the NET density
+    (electrons minus positrons) vanishes at mu_e = 0, which is where the
+    bracket then starts.
+
+    Returns zeros for n_C <= 0. At T = 0 that is exact -- a negatively charged
+    or neutral strongly interacting phase needs no leptons and there are no
+    positrons. At T > 0 a phase with n_C < 0 would be neutralized by a net
+    positron gas at mu_e < 0; no mode of this model asks for a negative Y_C,
+    and the case is refused rather than answered wrongly.
 
     Natural units in and out; n_C and the densities in MeV^3, mu_e in MeV.
     """
     if n_C <= 0.0:
         return 0.0, 0.0, 0.0
 
+    def n_lepton(mu, m, sp):
+        return kinetic_thermo(mu, m, DEGENERACY[sp], 0.0, T)[0]
+
     def excess(mu):
-        n_e = kinetic_thermo(mu, par.m_e, DEGENERACY["e"])[0]
-        n_mu = kinetic_thermo(mu, par.m_mu, DEGENERACY["mu"])[0]
-        return n_e + n_mu - n_C
+        return (n_lepton(mu, par.m_e, "e")
+                + n_lepton(mu, par.m_mu, "mu") - n_C)
 
     hi = 100.0
     while excess(hi) < 0.0 and hi < 1.0e5:
         hi *= 2.0
-    mu_e = brentq(excess, par.m_e, hi, xtol=1e-12, rtol=1e-14)
-    return (mu_e,
-            kinetic_thermo(mu_e, par.m_e, DEGENERACY["e"])[0],
-            kinetic_thermo(mu_e, par.m_mu, DEGENERACY["mu"])[0])
+    lo = par.m_e if T == 0.0 else 0.0
+    mu_e = brentq(excess, lo, hi, xtol=1e-12, rtol=1e-14)
+    return (mu_e, n_lepton(mu_e, par.m_e, "e"),
+            n_lepton(mu_e, par.m_mu, "mu"))
 
 
 # --------------------------------------------------------------------------
@@ -453,17 +465,20 @@ class BetaPoint:
     public units; masses and chemical potentials are in MeV in both systems.
     `point` is the underlying `EoSPoint` in natural units, carrying everything
     `thermo_from_n` returns, and `x` is the converged unknown vector, which is
-    what warm-starts the next density.
+    what warm-starts the next density. `s` is the entropy density [fm^-3] and
+    `T` the temperature [MeV] it was solved at.
     """
     converged: bool
     error: float
     n_b_fm: float
+    T: float
     spec: ModeSpec
     densities: dict
     M_q: dict
     M_b: dict
     eps: float
     P: float
+    s: float
     mu_b: float
     mu_e: float
     mu_C: float
@@ -523,6 +538,7 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
     if par is None:
         par = Parameters.default()
     check_temperature(T)
+    T = float(T)
     spec = mode_spec(mode, leptons=leptons, **fractions)
     n_B = n_B_fm * hc3
     lo, hi = _bounds(n_B_fm, spec)
@@ -550,10 +566,10 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
         already.append(seed)
         tried += 1
         sol = least_squares(
-            lambda x: _scaled_residual(x, par, spec, n_B), seed,
+            lambda x: _scaled_residual(x, par, spec, n_B, T), seed,
             bounds=(lo, hi), x_scale=x_scale,
             xtol=1e-13, ftol=1e-13, gtol=1e-13, max_nfev=1500)
-        error = scaled_residual_max(residual(sol.x, par, spec, n_B),
+        error = scaled_residual_max(residual(sol.x, par, spec, n_B, T),
                                     residual_scales(par, spec, n_B))
         best_error = min(best_error, error)
         if error <= RESIDUAL_TOL:
@@ -566,14 +582,14 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
             f"after {tried} starting points; best scaled residual "
             f"{best_error:.3e} against a {RESIDUAL_TOL:.0e} bound")
 
-    n, _ = state_at(solved, par, spec, n_B)
+    n, _ = state_at(solved, par, spec, n_B, T)
     _, mu_B, mu_C, mu_S, mu_nue, _ = _unpack(solved, spec)
 
     # Where Y_C is held, the neutralizing leptons were not part of any row;
     # they are added now, from the charge density the solve pinned.
     if spec.is_fixed("C") and spec.leptons:
         n_C = sum(CHARGE[sp] * n[sp] for sp in SPECIES if sp not in LEPTONS)
-        mu_e, n["e"], n["mu"] = neutralizing_leptons(n_C, par)
+        mu_e, n["e"], n["mu"] = neutralizing_leptons(n_C, par, T)
     elif spec.is_fixed("C"):
         mu_e = 0.0
     else:
@@ -582,13 +598,13 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
     # The reported state comes from one code path whichever mode was asked:
     # the composition just found is handed to `thermo_from_n`, seeded with the
     # constituent masses so it stays on the branch that was solved.
-    point = thermo_from_n(n, par=par, x0=list(solved[:3]))
+    point = thermo_from_n(n, par=par, T=T, x0=list(solved[:3]))
     return BetaPoint(
         converged=True, error=best_error,
-        n_b_fm=n_B_fm, spec=spec,
+        n_b_fm=n_B_fm, T=T, spec=spec,
         densities={k: v / hc3 for k, v in n.items()},
         M_q=point.M_q, M_b=point.M_b,
-        eps=point.eps / hc3, P=point.P / hc3,
+        eps=point.eps / hc3, P=point.P / hc3, s=point.s / hc3,
         mu_b=mu_B, mu_e=mu_e, mu_C=mu_C, mu_S=mu_S,
         point=point, x=tuple(solved),
     )

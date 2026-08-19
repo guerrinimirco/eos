@@ -143,8 +143,9 @@ def beta_row(point):
     """
     state = point.point
     n = point.densities
-    return dict(n_B=point.n_b_fm, T=0.0,
-                P=point.P, eps=point.eps, s=0.0, S_per_B=0.0,
+    return dict(n_B=point.n_b_fm, T=point.T,
+                P=point.P, eps=point.eps, s=point.s,
+                S_per_B=point.s / point.n_b_fm if point.n_b_fm > 0 else 0.0,
                 chi=state.n_bQ / state.n_b if state.n_b > 0 else 0.0,
                 mu_B=point.mu_b, mu_C=point.mu_C, mu_S=point.mu_S,
                 mu_e=point.mu_e,
@@ -200,11 +201,14 @@ def plateau_row(co, n_B):
     """
     frac = (n_B - co.n_B_lo) / (co.n_B_hi - co.n_B_lo)
     lo, hi = co.row_lo, co.row_hi
-    row = {"n_B": float(n_B), "T": 0.0, "P": co.P, "mu_B": co.mu_B,
-           "mu_S": 0.0, "S_per_B": 0.0, "phase_fraction": float(frac),
+    row = {"n_B": float(n_B), "T": lo["T"], "P": co.P, "mu_B": co.mu_B,
+           "mu_S": 0.0, "phase_fraction": float(frac),
            "branch": f"{co.branches[0]}+{co.branches[1]}"}
     for key in _LEVER_KEYS:
         row[key] = (1.0 - frac) * lo[key] + frac * hi[key]
+    # s/n_B is a ratio of two volume averages, not an average of two ratios:
+    # each edge's S/n_B is relative to its OWN n_B, as its Y are.
+    row["S_per_B"] = row["s"] / n_B if n_B > 0 else 0.0
     # The fractions follow from the averaged densities, not from averaging the
     # fractions: both edges' Y are relative to their OWN n_B, not to this one.
     for key, edge in (("chi", "chi"), ("Y_C", "Y_C"), ("Y_S", "Y_S")):
