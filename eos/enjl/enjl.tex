@@ -17,7 +17,7 @@
 \begin{document}
 
 \title{ENJL: the extended Nambu--Jona-Lasinio model of baryonic and quark
-       matter at $T = 0$ \\
+       matter \\
        --- as implemented in \texttt{eos/enjl}}
 
 \author{M.~Guerrini}
@@ -39,7 +39,8 @@ carries the NJL three-momentum cut-off $\Lambda$, which enters as a
 temperature-independent vacuum subtraction on the quark sector alone.
 
 This note states the model as the code solves it: the single-species
-thermodynamics at $T = 0$ with the cut-off written out, the gap equation in
+thermodynamics at $T = 0$ and at $T > 0$ with the cut-off written out, the
+gap equation in
 the form the code uses rather than the form the paper prints, the vector and
 rearrangement sector, the assembly of $\varepsilon$, $P$, $s$ and $n^s$, the
 conserved-charge bookkeeping in this repository's conventions, the
@@ -47,9 +48,11 @@ equilibrium residual row by row, and how each of the repository's four modes
 --- all four of which are closed --- is assembled from one declaration rather
 than from four solvers. Section~\ref{sec:validation}
 quotes what the implementation actually reproduces, measured against the
-paper and against the author's own tables. The model is $T = 0$ throughout;
-Sec.~\ref{sec:numerics} says where the seam for a finite-temperature
-extension is, and what is still open above the first first-order transition.
+paper and against the author's own tables. Reference~\cite{Xia2024} is a
+$T = 0$ paper; the implementation is closed at any non-negative temperature,
+with entropy per baryon accepted wherever a temperature is, and
+Sec.~\ref{sec:numerics} says what temperature costs and what is still open
+above the first first-order transition.
 \end{abstract}
 
 \maketitle
@@ -101,12 +104,18 @@ $\Lambda$ potential depth, and the three quarks share one value $f_q$ which is
 a parameter of the study (Sec.~\ref{sec:parameters}). Leptons do not couple,
 $f_e = f_\mu = 0$.
 
-\section{Single-species thermodynamics at $T = 0$, and the cut-off}
+\section{Single-species thermodynamics, and the cut-off}
 \label{sec:kinetic}
 
-Each species is a free Fermi gas of degeneracy $g$ and effective mass $M$,
-filled to a Fermi momentum $\kF$, and it is the \emph{only} place temperature
-would enter. Writing $x = \kF/M$ and $\nu = \sqrt{\kF^2 + M^2}$ for the
+Each species is a free Fermi gas of degeneracy $g$ and effective mass $M$ at
+kinetic (effective) chemical potential $\nu$, and it is the \emph{only} place
+temperature enters. At $T = 0$ the gas is filled to a sharp Fermi momentum
+$\kF = \sqrt{\nu^2 - M^2}$ and every integral below has a closed form; at
+$T > 0$ there is no sharp surface, $\kF$ is not defined, and $\nu$ is the
+primary variable. Section~\ref{sec:kineticT} gives the finite-temperature
+integrals and Sec.~\ref{sec:assembly} the entropy they carry.
+
+Writing $x = \kF/M$ and $\nu = \sqrt{\kF^2 + M^2}$ for the
 kinetic (effective) chemical potential, and $\hc = 7.6838\times10^{6}\;
 \mathrm{MeV^3\,fm^{-3}}$ for the conversion to the $\mathrm{fm^{-3}}$ and
 $\mathrm{MeV\,fm^{-3}}$ used at every public boundary,
@@ -136,6 +145,90 @@ model: the code calls
 \texttt{eos.general.fermi\_integrals.solve\_fermi\_jel} at $T = 0$, which
 routes to the exact closed forms above. They are restated here because a
 paper-style description must be self-contained.
+
+\subsection{Finite temperature}
+\label{sec:kineticT}
+
+At $T > 0$ the occupation is Fermi--Dirac rather than a step, and
+antiparticles are thermally populated. With $E(k) = \sqrt{k^2 + M^2}$ and
+%
+\begin{equation}
+f_{\mp}(k) \;=\; \frac{1}{1 + \exp\!\big[\,(E(k) \mp \nu)/T\,\big]}
+\label{eq:fermidirac}
+\end{equation}
+%
+the occupation of particles ($f_-$) and antiparticles ($f_+$), the four
+medium integrals of Eqs.~\eqref{eq:nmed}--\eqref{eq:Pmed} become
+%
+\begin{align}
+n^{\rm med}(\nu, M, g, T) &= \frac{g}{2\pi^2}\int_0^\infty\!\! dk\;k^2
+   \big[\, f_-(k) - f_+(k) \,\big] ,
+\label{eq:nmedT}\\[2pt]
+n^{s,{\rm med}}(\nu, M, g, T) &= \frac{g}{2\pi^2}\int_0^\infty\!\! dk\;k^2\,
+   \frac{M}{E(k)} \big[\, f_-(k) + f_+(k) \,\big] ,
+\label{eq:nsmedT}\\[2pt]
+\varepsilon^{\rm med}(\nu, M, g, T) &= \frac{g}{2\pi^2}\int_0^\infty\!\! dk\;
+   k^2\, E(k) \big[\, f_-(k) + f_+(k) \,\big] ,
+\label{eq:epsmedT}\\[2pt]
+P^{\rm med}(\nu, M, g, T) &= \frac{g}{6\pi^2}\int_0^\infty\!\! dk\;
+   \frac{k^4}{E(k)} \big[\, f_-(k) + f_+(k) \,\big] ,
+\label{eq:PmedT}
+\end{align}
+%
+and the entropy density of the species follows from the Euler relation for
+one free gas,
+%
+\begin{equation}
+s(\nu, M, g, T) \;=\;
+  \frac{\varepsilon^{\rm med} + P^{\rm med} - \nu\, n^{\rm med}}{T} ,
+\label{eq:sT}
+\end{equation}
+%
+which is how the code obtains it, rather than by integrating
+$-[f\ln f + (1-f)\ln(1-f)]$ directly. Note the sign structure: the
+\emph{number} density is the difference of the two occupations, because an
+antiparticle carries the opposite charge, while $n^s$, $\varepsilon$ and $P$
+are sums. Setting $T \to 0$ at fixed $\nu > M$ returns
+Eqs.~\eqref{eq:nmed}--\eqref{eq:s} exactly, with $f_- \to \theta(\kF - k)$ and
+$f_+ \to 0$.
+
+The cut-off subtraction of Sec.~\ref{sec:cutoff} is unchanged at $T > 0$:
+$n^{s,{\rm vac}}$ and $\varepsilon^{\rm vac}$ depend on $(M, g, \Lambda)$
+alone. The Dirac sea is a property of the vacuum, and $\Lambda$ regularizes it
+there and not in the medium, so there is no temperature in either term to
+carry.
+
+\paragraph{How the integrals are evaluated, and one thing to know about it.}
+Equations~\eqref{eq:nmedT}--\eqref{eq:PmedT} are not written a second time
+inside this model: they come from
+\texttt{eos.general.fermi\_integrals.solve\_fermi\_jel}, the single home for
+the Fermi integrals of this repository (CLAUDE.md \S7), which uses the
+rational approximation of Johns, Ellis and
+Lattimer~\cite{JohnsEllisLattimer1996}, accurate to about $10^{-4}$
+relative. That routine evaluates the \emph{exact} closed forms of
+Sec.~\ref{sec:kinetic} at $T = 0$ and the fit at every $T \ne 0$, and the fit
+does not converge back to the closed form: the answer steps discontinuously
+the moment $T \ne 0$ and then \emph{stays} at that offset as $T$ falls. Flat
+from $T = 10^{-3}$~MeV downward, the step is
+%
+\begin{equation}
+\frac{\Delta n}{n} = \begin{cases}
+  +6.9\times10^{-6} & u\ \text{at}\ \nu = 400,\ M = 5.5\ \mathrm{MeV},\\
+  -6.3\times10^{-5} & s\ \text{at}\ \nu = 500,\ M = 140.7\ \mathrm{MeV},\\
+  -3.0\times10^{-6} & n\ \text{at}\ \nu = 1000\ \mathrm{MeV},
+\end{cases}
+\label{eq:jelfloor}
+\end{equation}
+%
+with the same numbers in $\varepsilon$. Two consequences, both deliberate.
+First, ``take $T$ small and compare against the $T = 0$ answer'' is not a
+validation route below about $10^{-4}$ relative, and the continuity check in
+\texttt{verify} states that floor rather than chasing it. Second, $T = 0$ is
+kept as an exact special case rather than routed through the fit for
+smoothness: doing so would move every number this model has ever published,
+including the golden values of CLAUDE.md \S12, to buy a $10^{-5}$ cosmetic
+gain. The entropy itself carries no such offset --- it is zero in both
+branches at $T = 0$ --- so Eq.~\eqref{eq:sT} vanishes smoothly.
 
 \subsection{The cut-off, and the one way it enters}
 \label{sec:cutoff}
@@ -481,36 +574,92 @@ terms of the interaction:
 %
 \begin{equation}
 \boxed{\;
-\varepsilon \;=\; \sum_i \varepsilon(\kF_i, M_i, g_i, \Lambda_i)
+\varepsilon \;=\; \sum_i \varepsilon(\nu_i, M_i, g_i, \Lambda_i, T)
   \;+\; 2 G_S \sum_q \big(\nbs_q\big)^2
   \;-\; 4 K\, \nbs_u \nbs_d \nbs_s
   \;+\; \tfrac12\,\Gamma_\omega J_\omega^2
   \;+\; \tfrac12\,\Gamma_\rho   J_\rho^2
+  \;+\; \varepsilon_\gamma + \varepsilon_\nu
   \;-\; \varepsilon_0 \;}
 \label{eq:eps}
 \end{equation}
 %
 with $\Lambda_i = \Lambda$ for $i \in \{u,d,s\}$ and $\Lambda_i = 0$
-otherwise. \textbf{No rearrangement term appears in
+otherwise, and $\varepsilon_\gamma$, $\varepsilon_\nu$ the optional thermal
+sectors of Sec.~\ref{sec:thermalsectors}, zero unless asked for and
+identically zero at $T = 0$. \textbf{No rearrangement term appears in
 Eq.~\eqref{eq:eps}}, and that is the invariant a density-dependent mean field
 lives or dies by: $\SR$ is the derivative of the couplings, so it belongs to
 $\mu$ and to $P$ and putting it in $\varepsilon$ would count it twice
 (CLAUDE.md \S8; checked by \texttt{eos/enjl/verify}).
 
-The pressure is the Euler relation at $T = 0$,
+The entropy density is the sum of the single-species entropies of
+Eq.~\eqref{eq:sT}, and of the thermal sectors where they are on:
 %
 \begin{equation}
-P \;=\; T s + \sum_i \mu_i n_i - \varepsilon
-  \;=\; \sum_i \mu_i n_i - \varepsilon ,
+\boxed{\; s \;=\; \sum_i s(\nu_i, M_i, g_i, T) \;+\; s_\gamma + s_\nu \;}
+\label{eq:stot}
+\end{equation}
+%
+\textbf{and nothing else in the model carries entropy.} The Dirac-sea
+subtraction is a vacuum term, and the condensate and vector terms of
+Eq.~\eqref{eq:eps} are functions of the densities alone, so neither has a
+temperature derivative at fixed composition. At $T = 0$ every term of
+Eq.~\eqref{eq:stot} is exactly zero, by Eq.~\eqref{eq:s} --- not to a
+tolerance, but identically, which is what keeps the frozen $T = 0$ numbers of
+CLAUDE.md \S12 bit-for-bit across the finite-temperature extension.
+
+The pressure is the Euler relation,
+%
+\begin{equation}
+P \;=\; T s + \sum_i \mu_i n_i - \varepsilon ,
 \label{eq:P}
 \end{equation}
 %
-and it is how the code computes $P$ --- not by summing Eq.~\eqref{eq:Pmed}
+and it is how the code computes $P$ --- not by summing Eq.~\eqref{eq:PmedT}
 over species. The two agree, but only once the interaction and rearrangement
 contributions to the pressure are added by hand, and Eq.~\eqref{eq:P} adds
-them automatically through the $\SR$ inside every $\mu_i$. The entropy density
-is $s = 0$ identically, Eq.~\eqref{eq:s}, and hence the free energy density is
-$f = \varepsilon - Ts = \varepsilon = -P + \sum_i \mu_i n_i$.
+them automatically through the $\SR$ inside every $\mu_i$. It also hands the
+$\mu = 0$ thermal sectors their own pressure without their appearing in it,
+since $\varepsilon_X + P_X = T s_X$ for those. The free energy density is
+$f = \varepsilon - Ts = -P + \sum_i \mu_i n_i$, and reduces to
+$f = \varepsilon$ at $T = 0$.
+
+\subsection{The thermal sectors}
+\label{sec:thermalsectors}
+
+Two sectors carry no conserved charge, so they enter $\varepsilon$, $P$ and
+$s$ and \emph{no equation of the solve}. Both are off by default and are
+selected by the flags CLAUDE.md \S4 names.
+
+\texttt{photons}: a blackbody gas at $\mu = 0$, $g = 2$,
+%
+\begin{equation}
+P_\gamma = \frac{\pi^2}{45}\,\frac{T^4}{(\hbar c)^3} , \qquad
+\varepsilon_\gamma = 3 P_\gamma , \qquad
+s_\gamma = \frac{4\pi^2}{45}\,\frac{T^3}{(\hbar c)^3} .
+\label{eq:photon}
+\end{equation}
+
+\texttt{thermal\_neutrinos}: the neutrino flavours the mode does \emph{not}
+track, each as a massless $\mu = 0$ gas with $g = 1$ and its antiparticle, so
+that per flavour
+%
+\begin{equation}
+\varepsilon_{\nu,1} = \frac{7}{8}\cdot\frac{\pi^2}{15}\,
+   \frac{T^4}{(\hbar c)^3} , \qquad
+P_{\nu,1} = \tfrac13 \varepsilon_{\nu,1} , \qquad
+s_{\nu,1} = \frac{4}{3}\,\frac{\varepsilon_{\nu,1}}{T} ,
+\label{eq:thermalnu}
+\end{equation}
+%
+and $\varepsilon_\nu = N_\nu\,\varepsilon_{\nu,1}$. \textbf{The count $N_\nu$
+is a property of the mode.} This model carries the electron neutrino in the
+composition, and only where a mode holds $Y_{L_e}$; the muon family is
+transparent here ($\mu_\mu = \mu_e - \mu_{\nu_e}$) and the tau family is never
+carried. So $N_\nu = 3$ in \texttt{beta\_eq\_neutrinoless} and in the
+fixed-fraction modes, and $N_\nu = 2$ in
+\texttt{beta\_eq\_neutrino\_trapped}, where $\nu_e$ is already an unknown.
 
 \paragraph{The vacuum constant $\varepsilon_0$.} Equation~\eqref{eq:eps}
 without $\varepsilon_0$ does not vanish in vacuum: the cut-off quark sea
@@ -585,6 +734,7 @@ construction must equate across a boundary (Sec.~\ref{sec:numerics}).
 \label{sec:modes}
 
 \subsection{Fixed composition: not a mode}
+\label{sec:fixedcomp}
 
 The lowest-level entry point, \texttt{thermodynamics.thermo\_from\_n}, is
 given \emph{all eight} species densities and returns the state. It solves
@@ -602,8 +752,9 @@ carry no branch ambiguity because the composition is imposed.
 \subsection{The four modes, as one declaration}
 \label{sec:beta}
 
-All four modes of this repository are closed here, at $T = 0$; what the model
-refuses is a temperature, not a mode. And they are not four solvers: a mode is
+All four modes of this repository are closed here, at any $T \ge 0$, with
+$s/\nB$ accepted in place of $T$ throughout. And they are not four solvers: a
+mode is
 a \emph{declaration}, one binary choice per conserved charge, and the residual
 assembly reads it. For each charge, either its fraction is imposed and its
 conjugate potential is an unknown, or its potential is set by an equilibrium
@@ -614,12 +765,12 @@ relation and the fraction comes out.
 \toprule
 mode & independent variables & extra unknowns & the charge row \\
 \midrule
-\texttt{beta\_eq\_neutrinoless} & $(\nB,\ T = 0)$ & --- &
+\texttt{beta\_eq\_neutrinoless} & $(\nB,\ T)$ & --- &
   $\sum_i q_i n_i = 0$ \\
-\texttt{beta\_eq\_neutrino\_trapped} & $(\nB,\ Y_{L_e},\ T = 0)$
+\texttt{beta\_eq\_neutrino\_trapped} & $(\nB,\ Y_{L_e},\ T)$
   & $\mu_{\nu_e}$ & $\sum_i q_i n_i = 0$ \\
-\texttt{fixed\_YC} & $(\nB,\ Y_C,\ T = 0)$ & --- & $\nC = Y_C \nB$ \\
-\texttt{fixed\_YC\_YS} & $(\nB,\ Y_C,\ Y_S,\ T = 0)$ & $\muS$
+\texttt{fixed\_YC} & $(\nB,\ Y_C,\ T)$ & --- & $\nC = Y_C \nB$ \\
+\texttt{fixed\_YC\_YS} & $(\nB,\ Y_C,\ Y_S,\ T)$ & $\muS$
   & $\nC = Y_C \nB$ \\
 \bottomrule
 \end{tabular}
@@ -725,8 +876,6 @@ Eq.~\eqref{eq:baryonmass}; then for every species, in turn,
  f_q\,(  g_\omega\omega + \tau_i\, g_\rho\rho) + \SR_q , & i = u,d,s \\
  0 , & i = e,\mu
 \end{cases}
-\qquad
-\kF_i = \sqrt{\nu_i^2 - M_i^2}\;\;(\nu_i > M_i),\;\; 0 \text{ otherwise},
 \label{eq:forward}
 \end{equation}
 %
@@ -795,7 +944,57 @@ back to \texttt{thermo\_from\_n}, seeded with the constituent masses just
 found, so the reported state is produced by exactly one code path whichever
 entry point was called.
 
+\paragraph{What temperature changes in the residual: no row, and one map.}
+\emph{Not a single row of the table above changes at $T > 0$}, and neither
+does the unknown vector Eq.~\eqref{eq:unknowns}. The reason is that the
+residual is written in the \emph{potentials}: rows 1--3 equate constituent
+masses, rows 4--9 equate fields and rearrangement terms to their definitions,
+and the last rows equate charge densities to what the mode demands. Every one
+of those statements is temperature-independent as an \emph{equation}.
+
+What changes is the map from $\nu_i$ to the densities that fill those rows.
+At $T = 0$, Eq.~\eqref{eq:forward} continues
+$\kF_i = \sqrt{\nu_i^2 - M_i^2}$ for $\nu_i > M_i$ and $0$ otherwise, and
+then $n_i$ and $n^s_i$ come from the closed forms
+Eqs.~\eqref{eq:nmed}--\eqref{eq:nsmed}. At $T > 0$ there is no $\kF_i$: $n_i$
+and $n^s_i$ come from Eqs.~\eqref{eq:nmedT}--\eqref{eq:nsmedT} evaluated at
+$\nu_i$ directly, and a $\nu_i$ below $M_i$ is a thermally populated state
+rather than an empty one. This is the \emph{forward} direction, potentials to
+densities, so it costs no more than the integral itself.
+
+\paragraph{The one direction that inverts, and where it sits.}
+\texttt{thermo\_from\_n} (Sec.~\ref{sec:fixedcomp}) goes the other way: the
+densities are given and the $\nu_i$ they correspond to are wanted. At $T = 0$
+that is algebra, $\kF_i$ from Eq.~\eqref{eq:nmed} inverted and then
+$\nu_i = \sqrt{\kF_i^2 + M_i^2}$. At $T > 0$ it is a genuine numerical
+inversion of Eq.~\eqref{eq:nmedT}, done by the shared
+\texttt{eos.general.fermi\_integrals.invert\_fermi\_density}.
+
+Where that inversion sits is the structural part. $\kF_i$ depends only on
+$(n_i, g_i)$, so at $T = 0$ it is computed once, \emph{outside} the gap
+iteration. Its $T > 0$ counterpart $\nu_i$ depends on the \emph{mass}, and
+the three constituent masses are exactly what the gap equation solves for ---
+so all six strongly interacting species must be re-inverted at every gap
+iteration. The two leptons have fixed masses and stay outside it. Measured,
+the inversion costs about $30\,\mu$s against $0.1\,\mu$s for the closed form,
+so a \texttt{thermo\_from\_n} call at $T > 0$ costs of order
+$6 \times 20 \times 30\,\mu\mathrm{s} \approx 4$~ms where the $T = 0$ call
+costs nothing extra. That asymmetry --- forward free, inverse not --- is why
+the phase-adapter surface of Sec.~\ref{sec:frommu}, which a mixed-phase
+construction consumes, is the forward one.
+
+\paragraph{Entropy per baryon in place of temperature.}
+Wherever a temperature is accepted, $s/\nB$ is accepted in its place
+(CLAUDE.md \S3). It is an outer one-dimensional solve for $T$: an isentrope is
+an isotherm whose temperature is found, per density, from
+$s(\nB, T)/\nB = (s/\nB)^{\rm target}$, which is monotone increasing in $T$
+at fixed density and so a well-posed bracketed root. Every evaluation of that
+bracket is a full solve of the residual above. $s/\nB = 0$ is answered
+directly at $T = 0$: it is the only entropy the exact $T = 0$ branch reaches,
+and no positive bracket contains it.
+
 \subsection{The block at given potentials}
+\label{sec:frommu}
 \label{sec:fromMu}
 
 One further entry point is neither a mode nor a fixed composition:
@@ -819,15 +1018,16 @@ Jacobian is not the derivative of anything.
 
 \medskip
 \noindent
-\textbf{Temperature.} Every expression in Secs.~\ref{sec:kinetic}
-and~\ref{sec:assembly} is a $T = 0$ expression, $s = 0$ identically by
-Eq.~\eqref{eq:s}, and any $T > 0$ raises. Wherever this repository accepts an
-entropy axis in place of a temperature, $s/\nB = 0$ is the only value the
-model reaches. \textbf{Species.} The composition of Sec.~\ref{sec:dof} is
-fixed by the model: the octet beyond $\Lambda$, the $\Delta$ quartet, a
-thermal meson gas, thermal neutrinos and photons are all absent, and
-switching one on raises rather than being silently ignored. The muon family
-is present and on. A thermal meson gas is not merely unimplemented but
+\textbf{Temperature.} Every mode is closed at any $T \ge 0$, and $s/\nB$ is
+accepted in place of $T$ throughout (Sec.~\ref{sec:residual}); a negative $T$
+raises. What still refuses a temperature is the \emph{construction} of
+Sec.~\ref{sec:construction}, not the model. \textbf{Species.} The composition
+of Sec.~\ref{sec:dof} is fixed by the model: the octet beyond $\Lambda$, the
+$\Delta$ quartet and a thermal meson gas are absent, and switching one on
+raises rather than being silently ignored. The muon family is present and on.
+Photons and thermal neutrinos are the two the caller \emph{does} choose ---
+they are implemented, Eqs.~\eqref{eq:photon}--\eqref{eq:thermalnu}, off by
+default and identically zero at $T = 0$. A thermal meson gas is not merely unimplemented but
 inapplicable: $\sigma$, $\omega$ and $\rho$ here are auxiliary fields
 eliminated in favour of $g^2/m^2$, and Eqs.~\eqref{eq:Gomega}--\eqref{eq:Grho}
 leave the bare masses undetermined for exactly that reason.
@@ -849,8 +1049,13 @@ field & symbol & from \\
 \texttt{kF}         & $\kF_i$ & Eq.~\eqref{eq:nmed} inverted \\
 \texttt{M\_q}       & $M_u, M_d, M_s$ & the gap equation, Eq.~\eqref{eq:gap} \\
 \texttt{M\_b}       & $M_p, M_n, M_\Lambda$ & Eq.~\eqref{eq:baryonmass} \\
+\texttt{nu}         & $\nu_i$, all eight --- the PRIMARY kinetic quantity
+                    & Eq.~\eqref{eq:forward} \\
+\texttt{kF}         & $\kF_i$, the $T = 0$ derived view of $\nu_i$
+                    & $\sqrt{\nu_i^2 - M_i^2}$ \\
 \texttt{n\_s}       & $n^s_i$, all six strongly interacting species
-                    & Eqs.~\eqref{eq:nsmed}, \eqref{eq:nsvac} \\
+                    & Eqs.~\eqref{eq:nsmed}, \eqref{eq:nsmedT},
+                      \eqref{eq:nsvac} \\
 \texttt{nbar\_s}    & $\nbs_q$ & Eq.~\eqref{eq:nbar} \\
 \texttt{alpha\_S}, \texttt{Gw}, \texttt{Gr}
                     & $\alpha_S, \Gamma_\omega, \Gamma_\rho$
@@ -863,7 +1068,8 @@ field & symbol & from \\
                     & $\SR_b, \SR_q$ & Eqs.~\eqref{eq:SigmaRb}--\eqref{eq:SigmaRq} \\
 \texttt{mu}         & $\mu_i$, all eight & Eqs.~\eqref{eq:mub}--\eqref{eq:mul} \\
 \texttt{eps}, \texttt{P} & $\varepsilon$, $P$ & Eqs.~\eqref{eq:eps}, \eqref{eq:P} \\
-\texttt{s}          & $s = 0$ & Eq.~\eqref{eq:s} \\
+\texttt{s}          & $s$, zero at $T = 0$ & Eq.~\eqref{eq:stot} \\
+\texttt{T}          & the temperature it was solved at & --- \\
 \texttt{n\_b}, \texttt{n\_bQ} & $\nB$, $\nB^Q$
                     & Eqs.~\eqref{eq:nB}, \eqref{eq:baryonmass} \\
 \texttt{n\_C}, \texttt{n\_S}  & $\nC$, $\nS$
@@ -950,7 +1156,8 @@ and every density averages with the same weights,
   P = P^{\text{co}},
   \label{eq:plateau}
 \end{equation}
-with $s = 0$ at $T = 0$. The conserved fractions are formed from the
+with the entropy density levering like any other density. The conserved
+fractions are formed from the
 \emph{averaged} densities, $Y_C = \nC/\nB$ and $Y_S = \nS/\nB$, not by
 averaging the two phases' own fractions, which are relative to their own
 $\nB$. The effective masses $M_q$ and $M_i$ are properties of one phase and
@@ -1078,14 +1285,28 @@ potential to equate across such a boundary is $\muB$ of Eq.~\eqref{eq:basis},
 which in the deconfined phase is $\mu_u + 2\mu_d$ and \emph{not} the vanishing
 neutron's own $\mu_n$.
 
-\paragraph{Where finite temperature would enter.} Nowhere except
-Sec.~\ref{sec:kinetic}. The couplings are functions of $\nB$, the gap equation
-is the same equation with $T$-dependent scalar densities, the rearrangement
-terms have the same expressions, and $\varepsilon_0$ is the same number. Only
-Eqs.~\eqref{eq:nmed}--\eqref{eq:s} change --- and the vacuum terms
-\eqref{eq:nsvac}--\eqref{eq:epsvac} do not change even there, being
-$T$-independent by construction. The pressure would revert to the full Euler
-form $P = Ts + \sum_i \mu_i n_i - \varepsilon$ of Eq.~\eqref{eq:P}.
+\paragraph{Where finite temperature entered, and where it did not.}
+Nowhere except Sec.~\ref{sec:kinetic}, as the structure of the model
+predicted. The couplings are functions of $\nB$; the gap equation is the same
+equation with $T$-dependent scalar densities; the rearrangement terms have the
+same expressions; $\varepsilon_0$ is the same number; and \emph{not one row}
+of the residual table of Sec.~\ref{sec:residual} changed, because those rows
+are written in the potentials. Only
+Eqs.~\eqref{eq:nmed}--\eqref{eq:s} became
+Eqs.~\eqref{eq:nmedT}--\eqref{eq:sT} --- and the vacuum terms
+\eqref{eq:nsvac}--\eqref{eq:epsvac} did not change even there, being
+$T$-independent by construction. The pressure is the full Euler form
+$P = Ts + \sum_i \mu_i n_i - \varepsilon$ of Eq.~\eqref{eq:P}.
+
+\paragraph{What the construction still refuses.} The branch \emph{map} of
+Sec.~\ref{sec:construction} --- a warm-started continuation --- runs at any
+temperature. Replacing a first-order window by its plateau does not. Locating
+a coexistence at $T > 0$ means equating the Gibbs free energies of the two
+branches rather than $P$ and $\muB$ alone, so the entropy enters the
+coexistence bookkeeping, and the lever rule of Eq.~\eqref{eq:plateau} then
+averages it across the window as well. Both
+\texttt{eos.enjl.table.build\_constructed\_table} and
+\texttt{eos.mixed.construction} raise above $T = 0$ and say so.
 
 \section{What the implementation reproduces, measured}
 \label{sec:validation}

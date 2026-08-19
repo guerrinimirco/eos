@@ -888,42 +888,58 @@ a reason that has nothing to do with seeding.
   moves the last bits of a baseline row.
 
 ### enjl
-- Finite temperature is not implemented; the model is T = 0 only. The seam is
-  cut and measured: every integral in the model goes through the one function
-  `thermodynamics.kinetic_thermo(nu, m, g, Lambda)`, which already takes its
-  medium part from `general/fermi_integrals.solve_fermi_jel` at T = 0 and adds
-  the two Lambda vacuum terms, both T-independent by construction. Adding T is
-  that signature plus two arguments passed on. The cost is on the caller side:
-  at T > 0 the Fermi surface is not sharp, so `thermo_from_n`'s
-  density -> k_F -> nu path becomes a density -> nu inversion and
-  `solver.state_at`'s k_F clamp becomes a clamp on nu.
+- **Finite temperature is implemented; what is NOT is the CONSTRUCTION above
+  T = 0.** All four modes solve at any T >= 0, entropy per baryon is accepted
+  wherever a temperature is, and photons and thermal_neutrinos are selectable
+  mu = 0 sectors. `build_constructed_table` and `eos.mixed.construction`
+  (`enjl_coexistences`, `enjl_phase`, `locate_maxwell`, `neutral_phase`) still
+  raise for T != 0, and closing that is its own session:
 
-  Three things measured 2026-08-19, before that work starts:
+    - locating a coexistence at T > 0 equates the GIBBS FREE ENERGIES of the
+      two branches, not P and mu_B alone, so the entropy enters the
+      coexistence bookkeeping;
+    - the plateau's lever rule then averages s across the window as well —
+      `table.plateau_row` already levers `s` and derives `S_per_B` from the
+      averaged value, so that half is in place;
+    - and the eta = 1 lepton bookkeeping, which at T > 0 has positrons in it.
 
-  1. **The inversion is already written and is cheap.**
-     `general/fermi_integrals.invert_fermi_density(n, T, m, g,
-     include_antiparticles=False)` is the n -> nu map, so no model writes one
-     (CLAUDE.md section 7). Round trip 1e-13 or better; 25 us at T = 0 and
-     30-38 us at T = 20 MeV, i.e. temperature costs it nothing. Against the
-     algebraic `kF_from_n` it is ~300x slower, which is why T = 0 must keep
-     the closed form -- that is also what holds `test/baseline` bit-for-bit.
-  2. **The inversion moves INSIDE the gap solve, and that is the structural
-     part.** `kF` is currently computed once outside `gap_residual` because it
-     depends only on (n, g). Its T > 0 counterpart nu depends on the MASS, and
-     the masses are the gap unknowns, so all six strongly interacting species
-     must be re-inverted every gap iteration. Roughly 6 x 20 x 30 us = 4 ms per
-     `thermo_from_n` call at T > 0. Leptons keep fixed masses and stay outside.
-  3. **The JEL fit does not converge to the exact T = 0 closed form, so
-     "take T small" is not a validation route below ~1e-4.** `solve_fermi_jel`
-     switches from `_compute_exact_T0` to the fit as soon as T != 0, and the
-     answer steps discontinuously and then STAYS at that offset as T falls:
-     in n, +6.9e-6 (u at nu = 400, M = 5.5), -6.3e-5 (s at nu = 500,
-     M = 140.7), -3.0e-6 (neutron at nu = 1000); in eps, +6.6e-6, -6.3e-5,
-     -3.0e-6. Measured at T = 1e-3 MeV and flat down from there. So a
-     T -> 0 continuity check has a floor of about 1e-4 relative and must say
-     so; it is not a bug in the port. The T = 0 path stays exact and the
-     baseline stays bit-for-bit, which is the reason to keep the special case
-     rather than route everything through the fit for smoothness.
+  Two smaller things left open with it. `eos_table` takes ONE thermal value
+  per call (a T axis or an SnB axis of one value): that is not a temperature
+  limitation but the rule the fraction axis already followed — a table here
+  is a density continuation, and that is what carries the sweep — but a
+  caller wanting a T grid has to loop, and `TableResult` would need a per-line
+  shape to do otherwise. And `neutralizing_leptons` returns zeros for
+  n_C <= 0; at T > 0 a phase with n_C < 0 would be neutralized by a net
+  positron gas at mu_e < 0, which no mode of this model currently asks for.
+
+  Three measurements from the session that built it, worth keeping:
+
+  1. **Forward is free, inverse is not.** `state_at` and `thermo_from_mu` go
+     nu -> n and cost no more at T > 0 than the Fermi integral itself.
+     `thermo_from_n` goes n -> nu and is the only caller that inverts, through
+     `general/fermi_integrals.invert_fermi_density` (round trip 1e-13, ~30 us,
+     temperature-independent). That inversion sits INSIDE the gap iteration for
+     the six strongly interacting species — nu depends on the mass and the
+     masses are the gap unknowns — so a `thermo_from_n` call costs about 4 ms
+     at T > 0 against nothing at T = 0. The leptons have fixed masses and stay
+     outside it.
+  2. **The JEL fit does not converge back to the exact T = 0 closed form.**
+     `solve_fermi_jel` switches branches at T != 0 and the answer steps
+     discontinuously, then STAYS at that offset as T falls: +6.9e-6 in n (u at
+     nu = 400, M = 5.5), -6.3e-5 (s at nu = 500, M = 140.7), -3.0e-6 (neutron
+     at nu = 1000), same in eps, flat from T = 1e-3 MeV down. A T -> 0
+     continuity check therefore has a floor near 1e-4 relative;
+     `verify/check_entropy_limit` states it rather than chasing it. The T = 0
+     branch is kept EXACT for this reason: routing everything through the fit
+     for smoothness would move every frozen number in the repository
+     (CLAUDE.md section 12) to buy 1e-5 of cosmetic continuity.
+  3. **`x ** 2` is not `x * x`.** They differ in the last bit for about one
+     argument in a thousand on this platform's libm. Writing the seam with
+     `kF * kF + m * m` where the old expression was `kF ** 2 + m ** 2` moved
+     a fixed_YC sweep off a point at n_B = 0.533 fm^-3 — the deconfinement
+     onset, a knife edge — nine densities after the last identical one.
+     Anything claiming to hold `test/baseline` bit-for-bit must preserve the
+     EXPRESSION, not merely the value.
 - Cold starts stop converging around 0.5 fm^-3. The beta-equilibrium table is
   built by continuation (`table.build_table`), and the "up" and "down" sweeps
   differ where more than one branch exists — that difference is the branch
@@ -973,9 +989,10 @@ a reason that has nothing to do with seeding.
   difference into one loose bound. Closing it means changing how Eq. (6) is
   regularized — a smooth cutoff, or carrying the cap as an explicit
   constraint in the stationarity condition — which is a physics decision.
-- `eos_response` is not implemented and raises naming both reasons. Half the
-  CompOSE list (C_V, C_P, the thermal index, the isothermal/adiabatic
-  distinction) needs T > 0. The other half (c_s^2, chi_ab = dn_a/dmu_b) needs
+- `eos_response` is not implemented and raises naming both reasons, one of
+  which is now closed: T > 0 is implemented, so C_V, C_P, the thermal index
+  and the isothermal/adiabatic distinction are no longer blocked by it. What
+  remains is that c_s^2 and chi_ab = dn_a/dmu_b need
   the branch the derivative is taken along to be settled, and above the
   model's first first-order transition more than one branch satisfies the
   equilibrium conditions at the same density — differentiating along whichever
@@ -983,10 +1000,11 @@ a reason that has nothing to do with seeding.
   the direction the table was swept in. It unblocks with the Maxwell rule,
   not before.
 - `SpeciesFlags` here is fixed rather than chosen: the model's species set is
-  (p, n, Lambda, u, d, s, e, mu), so `hyperons` and `muons` are True and the
-  rest False, and moving any of them raises. Two of those are worth
-  distinguishing. `deltas`, `thermal_mesons`, `photons` and
-  `thermal_neutrinos` are genuinely absent from the model — in particular
+  (p, n, Lambda, u, d, s, e, mu), so `hyperons` and `muons` are True and
+  `deltas` and `thermal_mesons` False, and moving any of those four raises.
+  `photons` and `thermal_neutrinos` are NO LONGER on that list: both are
+  implemented, default False, and are the caller's.
+  `deltas` and `thermal_mesons` are genuinely absent from the model — in particular
   sigma, omega and rho are auxiliary fields eliminated in favour of g^2/m^2,
   so there is no meson mass to put in a thermal gas. But `hyperons=False` is
   merely unimplemented: switching the Lambda off is dropping it from the

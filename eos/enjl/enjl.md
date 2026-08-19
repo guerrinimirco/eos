@@ -1,4 +1,4 @@
-# ENJL — the extended Nambu-Jona-Lasinio model of dense matter at T = 0
+# ENJL — the extended Nambu-Jona-Lasinio model of dense matter
 
 The full description, with every equation and the bibliography, is `enjl.tex`
 (compiled against `../../docs/eos.bib`). This file is the plain-text summary.
@@ -24,7 +24,28 @@ i, `x = kF/M`, `y = Lambda/M`:
     eps_medium  = (g M^4/16 pi^2) [ x(2x^2+1)(x^2+1)^1/2 - asinh x ]
     n^s         = n^s_medium - (g M^3/4 pi^2) [ y(y^2+1)^1/2 - asinh y ]
     eps         = eps_medium - (g M^4/16 pi^2)[ y(2y^2+1)(y^2+1)^1/2 - asinh y]
-    s           = 0                                            T = 0
+    s           = 0                                            T = 0 exactly
+
+At T > 0 there is no sharp Fermi surface: kF is undefined, nu is the primary
+quantity, and the four medium integrals become Fermi-Dirac integrals over
+f_-(k) = 1/(1+exp[(E-nu)/T]) for particles and f_+ for antiparticles, with
+
+    n^medium    = (g/2 pi^2) INT dk k^2      [ f_- - f_+ ]     a DIFFERENCE
+    n^s_medium  = (g/2 pi^2) INT dk k^2 M/E  [ f_- + f_+ ]
+    eps_medium  = (g/2 pi^2) INT dk k^2 E    [ f_- + f_+ ]
+    P_medium    = (g/6 pi^2) INT dk k^4/E    [ f_- + f_+ ]
+    s           = (eps_medium + P_medium - nu n^medium) / T
+
+from `general.fermi_integrals.solve_fermi_jel` (the JEL fit, ~1e-4). The vacuum
+subtractions above are unchanged: they depend on (M, g, Lambda) alone.
+
+THE JEL FIT DOES NOT CONVERGE BACK TO THE T = 0 CLOSED FORM. It steps off the
+moment T != 0 and stays at that offset as T falls (flat from T = 1e-3 MeV
+down): +6.9e-6 in n for u at nu = 400, -6.3e-5 for s at nu = 500, -3.0e-6 for
+the neutron at nu = 1000, same in eps. So "take T small and compare to T = 0"
+has a floor near 1e-4, which `verify/check_entropy_limit` states rather than
+chases; and T = 0 keeps the EXACT branch rather than being routed through the
+fit for smoothness, which would move every frozen number in the repository.
 
     nbar^s_q    = min( n^s_q + alpha_S sum_i N^q_i n^s_i , 0 )          Eq. (6)
     M_q         = m_q0 - 4 G_S nbar^s_q + 2 K nbar^s_q' nbar^s_q''      Eq. (5)
@@ -58,8 +79,8 @@ subtraction carries Lambda, never the medium integral. The quark kinetic
 potential exceeds Lambda = 602.3 MeV above n_B ~ 3 fm^-3, so cutting the medium
 integral would truncate the physical Fermi sea. Because the vacuum terms depend
 on (M, g, Lambda) alone, they are independent of both kF and T — which is what
-makes `thermodynamics.kinetic_thermo` the single seam a finite-temperature
-extension touches.
+made `thermodynamics.kinetic_thermo` the single seam finite temperature had to
+touch, and it is still the only place T enters the model.
 
 **The 't Hooft term** is written over the OTHER two flavours,
 `2 K nbar_q' nbar_q''`, not as the paper's `2 K nbar_u nbar_d nbar_s / nbar_q`.
@@ -91,8 +112,10 @@ symmetry energies come out (25.50 and 31.55 MeV measured, against 25.5 and
 the tables' isospin splitting gives exactly 9.0000x Eq. (22) at every nucleonic
 density, with no fit. It is `parameters.RHO_FACTOR`. Do not "fix" it back.
 
-**Modes.** All four are closed, at T = 0; what the model refuses is a
-temperature, not a mode. A mode is a DECLARATION (`eos.general.modes.ModeSpec`)
+**Modes.** All four are closed, at any T >= 0, with entropy per baryon
+accepted wherever a temperature is (an outer 1-D solve for T, since s/n_B is
+monotone in T at fixed density; SnB = 0 is answered directly at T = 0). A mode
+is a DECLARATION (`eos.general.modes.ModeSpec`)
 that the residual assembly reads -- one binary choice per conserved charge --
 not a per-mode solver.
 
@@ -224,6 +247,26 @@ composite engine (`eos.mixed.construction.enjl_coexistences`) and the located
 windows are handed to the model as an argument — a model does not import a
 composite engine.
 
-**Not implemented.** Finite temperature; the construction at eta < 1;
-`eos_response`. All are recorded in `docs/DEFERRED.md` with what closing each
-would take.
+**Species flags.** `hyperons` and `muons` are on and fixed; `deltas` and
+`thermal_mesons` are off and fixed (structural: there is no Delta and no meson
+with a mass to put in a gas, sigma/omega/rho being auxiliary fields eliminated
+in favour of g^2/m^2). `photons` and `thermal_neutrinos` ARE the caller's: both
+are mu = 0 gases carrying no conserved charge, so they enter eps, s and (through
+Euler) P and no equation of the solve. The neutrino count is the flavours the
+MODE does not track — three in a neutrinoless or fixed-fraction mode, two where
+Y_Le is held and nu_e is already an unknown. Both default off and are
+identically zero at T = 0.
+
+**What temperature does NOT change: the residual.** Not one row, and not the
+unknown vector — the rows are written in the potentials. What changes is the
+map from nu_i to n_i and n^s_i. The forward direction (`state_at`,
+`thermo_from_mu`) costs nothing beyond the integral; only `thermo_from_n`
+inverts, through the shared `invert_fermi_density`, and that inversion sits
+INSIDE the gap iteration because nu depends on the mass and the masses are the
+gap unknowns (~4 ms per call at T > 0, nothing at T = 0).
+
+**Not implemented.** The CONSTRUCTION at T > 0 — locating a coexistence there
+means equating Gibbs free energies rather than P and mu_B alone, so the entropy
+enters the coexistence bookkeeping and the plateau's lever rule; the
+construction at eta < 1; `eos_response`. All are recorded in
+`docs/DEFERRED.md` with what closing each would take.
