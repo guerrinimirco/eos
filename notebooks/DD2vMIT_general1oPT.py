@@ -343,8 +343,8 @@ def _hadronic_mr(par, flags):
     """
     import os
     from eos.dd2.verify.tov import build_core_table, N_TRANSITION
-    from eos.astro.tov.solver import (compute_tov_sequence, find_mmax_precise,
-                                generate_ec_logspace, have_crust)
+    from eos.astro.tov.crust import have_crust
+    from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
     try:
         core = build_core_table(par, flags)
         if core.P.size < 10:

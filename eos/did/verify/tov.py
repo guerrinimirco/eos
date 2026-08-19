@@ -13,10 +13,9 @@ import os
 
 import numpy as np
 
-from eos.astro.tov.solver import (
-    EOSTable_for_TOV, compute_tov_sequence, find_mmax_precise, have_crust,
-    generate_ec_logspace,
-)
+from eos.general.state import EOSTable_for_TOV
+from eos.astro.tov.crust import have_crust
+from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
 from eos.did.solver import solve_beta_eq_neutrinoless, warm_start
 from eos.general.modes import beta_eq_neutrinoless
 

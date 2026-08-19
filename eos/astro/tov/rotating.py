@@ -66,12 +66,9 @@ from scipy.interpolate import PchipInterpolator
 from scipy.optimize import brentq
 
 from eos.general.physics_constants import MEV_FM3_TO_G_CM3
-from eos.astro.tov.solver import (
-    EOSTable_for_TOV,
-    add_crust,
-    compute_tov_sequence,
-    load_crust_table,
-)
+from eos.general.state import EOSTable_for_TOV
+from eos.astro.tov.crust import add_crust, load_crust_table
+from eos.astro.tov.solver import compute_tov_sequence
 from eos.astro.tov import rns_backend
 from eos.astro.tov.rns_backend import (
     MAX_EOS_ROWS,

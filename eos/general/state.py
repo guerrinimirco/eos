@@ -44,6 +44,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping, Optional
 
+import numpy as np
+
 from eos.general.basis import charges_from_densities, species_potential
 
 
@@ -292,3 +294,42 @@ class EoSPoint(_PicklableFrozenMaps):
     def free_energy_density(self):
         """f = eps - T s [MeV/fm^3], totals."""
         return self.eps - self.T * self.s
+
+
+@dataclass
+class EOSTable_for_TOV:
+    """The (P, epsilon, n_B) table a structure solver integrates.
+
+    This is the CONTRACT between the models and `eos.astro`: a model or a
+    composite engine produces one of these, and `eos.astro.tov` consumes it.
+    It lives in `general/` for exactly that reason -- both sides may import
+    this layer, whereas a model may not import `astro/` (CLAUDE.md section 1).
+
+    Units are the repository's fm-based public ones: P and epsilon in
+    MeV/fm^3, n_B in fm^-3. The three arrays are parallel and ordered by
+    increasing density.
+
+    Nothing here validates monotonicity or causality. A raw model branch may
+    legitimately violate both inside a first-order transition (section 8); the
+    check belongs where the table is DELIVERED to a structure solver, not
+    where it is built.
+    """
+    P: np.ndarray        # Pressure [MeV/fm^3]
+    epsilon: np.ndarray  # Energy density [MeV/fm^3]
+    nB: np.ndarray       # Baryon density [fm^-3]
+
+    def __post_init__(self):
+        self.P = np.asarray(self.P)
+        self.epsilon = np.asarray(self.epsilon)
+        self.nB = np.asarray(self.nB)
+
+    @classmethod
+    def from_file(cls, filepath, columns=(0, 1, 2), skip_header: int = 0):
+        """Read the three columns from a whitespace-delimited text table.
+
+        `columns` gives the (P, epsilon, n_B) column indices, so a file
+        written in another order is read without being rewritten.
+        """
+        data = np.loadtxt(filepath, skiprows=skip_header)
+        P_col, e_col, nB_col = columns
+        return cls(P=data[:, P_col], epsilon=data[:, e_col], nB=data[:, nB_col])

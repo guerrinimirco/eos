@@ -230,7 +230,8 @@ def with_crust(eos, cs2_eq, cs2_ad, crust="BPS", n_transition=0.08,
                    "No" to skip and return the input unchanged
     n_transition : baryon density [fm^-3] below which crust rows are kept
     """
-    from eos.astro.tov.solver import EOSTable_for_TOV, load_crust_table
+    from eos.general.state import EOSTable_for_TOV
+    from eos.astro.tov.crust import load_crust_table
 
     cs2_eq = np.asarray(cs2_eq)
     cs2_ad = np.asarray(cs2_ad)

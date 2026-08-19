@@ -31,9 +31,8 @@ from eos.dd2 import (
 from eos.dd2.nmp import from_nmp
 from eos.dd2.solver import sweep_octet
 from eos.dd2.verify.tov import build_core_table, N_TRANSITION
-from eos.astro.tov.solver import (
-    compute_tov_sequence, find_mmax_precise, generate_ec_logspace, have_crust,
-)
+from eos.astro.tov.crust import have_crust
+from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
 from eos.general.observational_constraints import (
     add_observational_constraints, DEFAULT_CONTOUR_DIR,
 )

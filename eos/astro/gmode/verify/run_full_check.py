@@ -39,9 +39,8 @@ import numpy as np
 from eos.dd2 import Parametrization, SpeciesFlags
 from eos.dd2.responses import sound_speed_eq
 from eos.dd2.solver import sweep_beta_eq_octet, solve_beta_eq_octet
-from eos.astro.tov.solver import (
-    EOSTable_for_TOV, solve_tov_single, _create_interpolators,
-)
+from eos.general.state import EOSTable_for_TOV
+from eos.astro.tov.solver import solve_tov_single, _create_interpolators
 from eos.astro.gmode.background import build_background, with_crust
 from eos.astro.gmode.cowling import mode_spectrum, solve_gmode
 from eos.astro.gmode.sound_speeds import cs2_frozen_nucleonic, cs2_dynamical

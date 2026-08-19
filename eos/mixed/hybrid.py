@@ -66,7 +66,7 @@ class MixedEoSTable:
         return np.isfinite(self.n_onset) and np.isfinite(self.n_offset)
 
     def to_tov(self):
-        from eos.astro.tov.solver import EOSTable_for_TOV
+        from eos.general.state import EOSTable_for_TOV
         return EOSTable_for_TOV(P=self.P, epsilon=self.eps, nB=self.n_B)
 
 
@@ -232,10 +232,8 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     an already-built `table` to skip re-solving the EoS.
     """
     import os
-    from eos.astro.tov.solver import (
-        compute_tov_sequence, find_mmax_precise, generate_ec_logspace,
-        have_crust,
-)
+    from eos.astro.tov.crust import have_crust
+    from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
     if table is None:
         table = build_mixed_eos_table(par, flags, n_B_grid, eta, spec,
                                       vmit_params=vmit_params, T=T,

@@ -83,7 +83,7 @@ from eos.general.physics_constants import (
     MEV_FM3_TO_DYNE_CM2,
     MEV_FM3_TO_G_CM3,
 )
-from eos.astro.tov.solver import EOSTable_for_TOV
+from eos.general.state import EOSTable_for_TOV
 
 # ---------------------------------------------------------------------------
 # Limits and constants fixed by the RNS sources

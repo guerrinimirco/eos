@@ -12,10 +12,9 @@ import os
 
 import numpy as np
 
-from eos.astro.tov.solver import (
-    EOSTable_for_TOV, compute_tov_sequence, find_mmax_precise,
-    generate_ec_logspace, have_crust,
-)
+from eos.general.state import EOSTable_for_TOV
+from eos.astro.tov.crust import have_crust
+from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
 from eos.dd2.solver import sweep_beta_eq_octet
 
 

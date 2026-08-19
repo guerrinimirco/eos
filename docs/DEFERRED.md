@@ -113,6 +113,35 @@ survives, `dd2/notebook_api.py` reaching for `eos.sfho.table`, and it is not
 worth fixing separately: that file is slated for deletion in the dd2 entry
 above, and the edge dies with it.
 
+### Five models still import `eos.astro`, which section 1 forbids
+
+CLAUDE.md section 1 says plainly that no model imports `astro/`. Five do:
+
+    eos/dd2/verify/tov.py        compute_tov_sequence, find_mmax_precise,
+    eos/did/verify/tov.py        generate_ec_logspace, have_crust
+    eos/mixed/hybrid.py
+    eos/mixed/scan.py
+    eos/dd2/notebook_api.py
+
+Two OTHER edges were removed in the astro/tov session and are the reason this
+entry can be written narrowly: `eos/mixed/hybrid.py` and
+`eos/zlvmit/table_reader.py` imported only `EOSTable_for_TOV`, and that record
+is now `eos.general.state.EOSTable_for_TOV` -- the contract between the models
+that PRODUCE a table and the astro layer that CONSUMES one, living in the
+layer both may import.
+
+What is left is different in kind: these five do not want a record, they want
+to RUN a TOV sequence -- a verify suite computing M-R for the model it checks,
+or a convenience wrapper handing a hybrid table straight to the solver. That
+is a model reaching downstream, and no relocation fixes it; either the rule
+admits an exception for `verify/` suites and named convenience wrappers, or
+those callers move up into `astro/` (or into `test/`, which is where a
+model's M-R check arguably belongs). It is a decision about the rule, not a
+refactor, which is why it is recorded rather than done.
+
+`dd2/notebook_api.py` is on the list only until it is deleted, which the dd2
+entry above already schedules; its edge dies with the file.
+
 ### One notebook still sets rcParams
 
 `notebooks/ENJL_usage.py` sets `figure.dpi` and `figure.figsize` directly. It
