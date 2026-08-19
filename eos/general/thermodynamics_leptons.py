@@ -296,3 +296,47 @@ if __name__ == "__main__":
     print(f"   ε       = {res_mu.e:.6e} MeV/fm³")
     print(f"   s       = {res_mu.s:.6e} fm⁻³")
     
+
+# =============================================================================
+# THE NEUTRALIZING LEPTON SECTOR
+# =============================================================================
+def neutralizing_leptons(n_charge: float, T: float, include_muons: bool = False,
+                         mu_max: float = 1.0e4):
+    """Leptons at the single potential that neutralizes `n_charge` [fm^-3].
+
+    A fixed-Y_C mode with leptons=True asks for electrons (and muons, if the
+    species flags enable them) in the amount that makes the TOTAL system
+    electrically neutral, n_e + n_mu = n_C. They enter no field equation --
+    leptons do not feel the strong mean fields -- so they are solved for after
+    the matter, from this one condition. Muons are in leptonic equilibrium at
+    mu_mu = mu_e, so one potential closes it.
+
+    Model-independent: only the lepton masses and the temperature enter, which
+    is why this lives here rather than in each model (CLAUDE.md section 7).
+
+    Returns (mu_e, electrons, muons) with the two blocks as `ThermoResult`;
+    the muon block is all zeros when muons are off. A non-positive charge
+    density gives mu_e = 0 and empty blocks: there is nothing to neutralize.
+    """
+    empty = ThermoResult(n=0.0, P=0.0, e=0.0, s=0.0)
+    if n_charge <= 0.0:
+        return 0.0, empty, empty
+
+    from scipy.optimize import brentq
+
+    def net(mu):
+        n = electron_thermo(mu, T).n
+        if include_muons:
+            n += muon_thermo(mu, T).n
+        return n - n_charge
+
+    hi = 200.0
+    while net(hi) < 0.0:
+        hi *= 2.0
+        if hi > mu_max:
+            raise ValueError(
+                f"no lepton potential below {mu_max} MeV neutralizes "
+                f"n_C = {n_charge} fm^-3 at T = {T} MeV")
+    mu_e = brentq(net, 0.0, hi, xtol=1e-10)
+    muons = muon_thermo(mu_e, T) if include_muons else empty
+    return mu_e, electron_thermo(mu_e, T), muons

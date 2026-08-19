@@ -47,7 +47,7 @@ def scaled_residual_max(residuals, scales):
     return max(abs(r) / s for r, s in zip(residuals, scales))
 
 
-def solve_system(residual, x0, scales_at, x0_fallback=None):
+def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
     """Solve one equilibrium system and judge it on its scaled residual.
 
     Powell's hybrid method first, Levenberg-Marquardt if that does not reach
@@ -60,6 +60,13 @@ def solve_system(residual, x0, scales_at, x0_fallback=None):
     `scales_at(x)` returns the per-equation scales at the point x, so the
     residual is judged in dimensionless terms (see `scaled_residual_max`).
 
+    `tol` is passed straight to the root finder, and is what a model whose
+    rows are already dimensionless needs: MINPACK's own default termination
+    leaves the residual around 1e-9, which is above the gate below, so such a
+    solve would be judged non-converged however good its state was. None keeps
+    the root finder's defaults, which is what every caller predating this
+    argument gets.
+
     Returns (x, scaled residual, converged) for the best attempt made.
     """
     attempts = [('hybr', x0), ('lm', x0)]
@@ -68,7 +75,7 @@ def solve_system(residual, x0, scales_at, x0_fallback=None):
 
     best_x, best_err = np.asarray(x0, dtype=float), np.inf
     for method, guess in attempts:
-        sol = root(residual, guess, method=method)
+        sol = root(residual, guess, method=method, tol=tol)
         err = scaled_residual_max(residual(sol.x), scales_at(sol.x))
         if err < best_err:
             best_x, best_err = sol.x, err
