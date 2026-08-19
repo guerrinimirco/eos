@@ -760,6 +760,144 @@ def sfho_phase(par, flags):
                  frozen_thermo=frozen_thermo)
 
 
+def did_seed(par, flags, T, n_B_guess):
+    """Starting state for the DID phase-internal solve: a solved beta-equilibrium
+    point at `n_B_guess`, in the layout `did.thermodynamics` iterates on.
+
+    Expensive (a full DID solve) but guaranteed physical, and -- this is the
+    point -- INDEPENDENT of the charge potentials, which are the only thing
+    that varies within one mixed-phase solve. So it is computed once and
+    passed back through `x0`, and because it is identical every time it
+    changes no converged number.
+
+    The thermal meson gas is switched off for the seed, as it is for DD2: the
+    gas sources none of the field equations, so it changes nothing here except
+    whether the seed can be built at all.
+    """
+    from eos.did.solver import solve_beta_eq_neutrinoless
+
+    seed_flags = replace(flags, thermal_mesons=False)
+    point = solve_beta_eq_neutrinoless(par, n_B_guess, seed_flags, T=T)
+    if not point.converged:
+        raise RuntimeError(
+            f"DID seed failed at n_B={n_B_guess}, T={T} "
+            f"(residual {point.error:.2e})")
+    return [point.sigma, point.omega, point.rho, point.phi, point.beta,
+            point.Sigma_t, point.n_B]
+
+
+def did_phase(par, flags):
+    """The DID hadronic phase as a `Phase` (kinetic potential slot).
+
+    DID's couplings depend on the density AND on the isospin asymmetry, so its
+    phase-internal solve closes seven equations rather than four: the meson
+    fields, the phase's own density, its asymmetry beta and the isospin
+    rearrangement self-energy Sigma^t. All of that is `eos.did`'s own business
+    and stays inside `eos.did.thermodynamics.thermo_at_potentials`; what
+    reaches the engine is the same `PhaseThermo` every other adapter returns.
+
+    The slot carries the KINETIC potential mu~_B = mu_B - Sigma^r, as DD2's
+    does and for the same reason: the density rearrangement term is a function
+    of the density this solve is finding. The SECOND rearrangement term is not
+    absorbed that way -- it is weighted by (tau_3i - beta) and so differs per
+    species -- and stays inside the phase, which is exactly what the adapter
+    contract allows a phase to keep to itself.
+    """
+    from eos.did.solver import (
+        solve_beta_eq_neutrinoless as _did_beta,
+        solve_beta_eq_neutrino_trapped as _did_trapped,
+        solve_fixed_yc as _did_yc,
+        solve_fixed_yc_ys as _did_yc_ys,
+    )
+    from eos.did.thermodynamics import thermo_at_potentials as _did_at_mu
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        return _did_at_mu(par, flags, mu, mu_C, mu_S, T=T,
+                          n_B_guess=(0.2 if n_B_guess is None else n_B_guess),
+                          x0=x0,
+                          x0_fallback=lambda: did_seed(par, flags, T,
+                                                       0.2 if n_B_guess is None
+                                                       else n_B_guess),
+                          return_state=return_state)
+
+    def seed(T, n_B_guess):
+        return did_seed(par, flags, T, n_B_guess)
+
+    def cold_start(n_B, T):
+        point = _did_beta(par, n_B, flags, T=T)
+        if not point.converged:
+            raise RuntimeError(f"DID cold start failed at n_B={n_B}, T={T}")
+        return point.mu_B - point.Sigma_r, point.mu_e, point.mu_B
+
+    def _wing_point(spec, n_B, T, x0=None):
+        if spec.C is Regime.NOT_CONSERVED:
+            if spec.L_e is Regime.GLOBAL:
+                return _did_trapped(par, n_B, spec.targets["Y_Le"], flags, T=T,
+                                    x0=x0)
+            return _did_beta(par, n_B, flags, T=T, x0=x0)
+        if spec.S is Regime.GLOBAL:
+            return _did_yc_ys(par, n_B, spec.targets["Y_C"],
+                              spec.targets["Y_S"], flags, T=T,
+                              leptons=spec.yc_leptons, x0=x0)
+        return _did_yc(par, n_B, spec.targets["Y_C"], flags, T=T,
+                       leptons=spec.yc_leptons, x0=x0)
+
+    def wing_sweep(spec, n_B_grid, T):
+        # The pure DID wing at the spec's own equilibrium. Warm-started along
+        # the grid, because the wing runs through the hyperon onsets, where a
+        # cold start at one density lands on the branch below the threshold.
+        out, x0 = [], None
+        for n in n_B_grid:
+            try:
+                point = _wing_point(spec, float(n), T, x0=x0)
+            except (RuntimeError, ValueError):
+                x0 = None
+                continue
+            if not point.converged:
+                x0 = None
+                continue
+            out.append((point.n_B, point.P, point.eps))
+            x0 = _did_warm(point, spec, flags)
+        return out
+
+    def frozen_thermo(th, scale, T, mu_slot=None):
+        # This phase compressed by `scale` with its own Y_C and Y_S held (the
+        # frozen convention of eos.mixed.responses), matter only. Seeded from
+        # the phase's own state so the two stencil points of a derivative
+        # start from the same deterministic vector.
+        n_B = th.n_B * scale
+        Y_C, Y_S = th.n_C / th.n_B, th.n_S / th.n_B
+        if flags.hyperons:
+            point = _did_yc_ys(par, n_B, Y_C, Y_S, flags, T=T, leptons=False)
+        else:
+            point = _did_yc(par, n_B, Y_C, flags, T=T, leptons=False)
+        if not point.converged:
+            raise RuntimeError(f"DID frozen block failed at n_B={n_B}")
+        return point.P, point.eps, Y_C * n_B
+
+    return Phase(name="DID", thermo=thermo, potential_kind="kinetic",
+                 seed=seed, cold_start=cold_start, wing_sweep=wing_sweep,
+                 frozen_thermo=frozen_thermo)
+
+
+def _did_warm(point, spec, flags):
+    """The DID warm start for a wing sweep, in the mode the spec declares."""
+    from eos.did.solver import warm_start as _warm
+    from eos.general.modes import (
+        beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
+    )
+    if spec.C is Regime.NOT_CONSERVED:
+        mode = (beta_eq_neutrino_trapped(spec.targets["Y_Le"])
+                if spec.L_e is Regime.GLOBAL else beta_eq_neutrinoless())
+    elif spec.S is Regime.GLOBAL:
+        mode = fixed_YC_YS(spec.targets["Y_C"], spec.targets["Y_S"],
+                           leptons=spec.yc_leptons)
+    else:
+        mode = fixed_YC(spec.targets["Y_C"], leptons=spec.yc_leptons)
+    return _warm(point, mode)
+
+
 def zl_phase(params=None):
     """The ZL nucleonic phase as a `Phase` (physical potential slot).
 

@@ -219,7 +219,7 @@ parameter argument (which is how §6's "parameters are arguments" reads
 there), with the plain (par, flags, vmit_params) signatures remaining the
 DD2+vMIT front door. Whether a phase's slot carries the kinetic or the
 physical baryon potential is a declared property of the phase, never an
-engine assumption. Shipped adapters: DD2, SFHo, ZL (hadronic), vMIT,
+engine assumption. Shipped adapters: DD2, SFHo, ZL, DID (hadronic), vMIT,
 alphaBag (quark), and the ENJL branch pair (two branches of one
 functional); a new pairing is a new adapter, not a new engine.
 
@@ -437,7 +437,7 @@ FileNotFoundError.
 
     eos/            the package (directory name `eos/eos/` — never renamed)
       general/      shared infrastructure (§7, §10)
-      dd2/ sfho/ zl/ vmit/ alphabag/ abpr/ enjl/     one subpackage per model
+      dd2/ sfho/ zl/ did/ vmit/ alphabag/ abpr/ enjl/  one subpackage per model
       mixed/        the composite hadron-quark engine (phase adapters, §5)
       zlvmit/       legacy first-generation hybrid (kept, exempt from §5)
       astro/

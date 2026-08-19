@@ -1,0 +1,828 @@
+\documentclass[aps,prc,onecolumn,superscriptaddress,nofootinbib,10pt]{revtex4-2}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\nB}{n_B}
+\newcommand{\nC}{n_C}
+\newcommand{\nS}{n_S}
+\newcommand{\nzero}{n_0}
+\newcommand{\muB}{\mu_B}
+\newcommand{\muC}{\mu_C}
+\newcommand{\muS}{\mu_S}
+\newcommand{\munue}{\mu_{\nu_e}}
+\newcommand{\mutB}{\tilde{\mu}_B}
+\newcommand{\Sigmar}{\Sigma^{r}}
+\newcommand{\Sigmat}{\Sigma^{t}}
+\newcommand{\meff}[1]{m^{*}_{#1}}
+
+\begin{document}
+
+\title{DID / DIDY: a relativistic mean field with density- and
+       isospin-density-dependent couplings \\
+       --- as implemented in \texttt{eos/did}}
+
+\author{M.~Guerrini}
+\affiliation{University of Ferrara}
+
+\begin{abstract}
+The \texttt{eos/did} subpackage implements the relativistic mean-field model of
+Frohaug, Maslov, Dexheimer \textit{et al.}~\cite{Frohaug2025}: a density-dependent
+RMF in which every baryon--meson coupling depends not only on the baryon
+density $\nB$ but also on the isospin asymmetry
+$\beta = \sum_i \tau_{3i} n_i / \nB$. That second dependence is the model's
+reason for existing --- it is what allows the hyperon single-particle
+potentials to be reproduced in \emph{neutron} matter as well as in symmetric
+matter, as the HAL~QCD-based Br\"uckner--Hartree--Fock calculations
+require~\cite{Kohno2024} --- and it is what makes the model's thermodynamics
+different from an ordinary DD-RMF: there are \emph{two} rearrangement
+self-energies, one for each state variable the couplings depend on. This note
+states the Lagrangian, the coupling functionals and their SU(3) vector sector,
+the full finite-temperature thermodynamics with both rearrangement terms, the
+residual of every equilibrium mode as the solver assembles it, the
+nuclear-matter parameters the shipped set produces, and the phase-adapter
+surface the hybrid engine consumes. It is written from the code, as its
+specification: every equation here is asserted either by
+\texttt{eos/did/verify/run\_full\_check.py} or by \texttt{test/did}.
+\end{abstract}
+
+\maketitle
+
+\section{Conventions}
+\label{sec:conventions}
+
+Three conventions are fixed once and used everywhere, two of which differ from
+the source paper's and neither of which is ever silently flipped.
+
+\paragraph{Isospin.} $\tau_{3i} = 2 I_{3i}$, normalised so that
+$\tau_3 = \pm 1$ for the nucleons: $\tau_{3p} = +1$, $\tau_{3n} = -1$,
+$\tau_3(\Sigma^{\pm}) = \pm 2$, $\tau_3(\Sigma^0) = \tau_3(\Lambda) = 0$,
+$\tau_3(\Xi^0) = +1$, $\tau_3(\Xi^-) = -1$, and $\tau_3(\Delta) = +3, +1, -1,
+-3$. This is the normalisation of Ref.~\cite{Frohaug2025} and it enters the
+model twice: in the $\rho$ coupling $g_{\rho i}\tau_{3i}\rho$ and in the
+isospin asymmetry itself. It is \emph{not} the convention of
+\texttt{eos.general.particles.Particle.t3}, which is the DD2 $\rho$-coupling
+convention in which the $\Sigma$ factor of two is carried by the coupling
+ratio $x_{\rho\Sigma} = 2$ instead; DID fits $g_{\rho\Sigma}$ and
+$g_{\rho\Xi}$ independently and so has no such ratio to absorb it.
+
+\paragraph{Isospin asymmetry.}
+\begin{equation}
+  \beta \;=\; \frac{1}{\nB}\sum_{i \in B} \tau_{3i}\, n_i ,
+  \qquad \nB = \sum_{i \in B} n_i ,
+  \label{eq:beta}
+\end{equation}
+summed over \emph{every} active baryon, so that $\beta = 0$ in isospin-symmetric
+matter (ISM) and $\beta = -1$ in pure neutron matter (NM). For nucleonic matter
+$\beta = 2 Y_C - 1$ with $Y_C$ the proton fraction. Values $|\beta| > 1$ are
+reachable in $\Sigma$-rich matter and the couplings simply extrapolate there.
+
+\paragraph{Strangeness.} $S = +1$ per $s$ quark, so $S_\Lambda = +1$ and
+$S_\Xi = +2$. This is the opposite of the PDG sign used in
+Ref.~\cite{Frohaug2025} and is the repository-wide convention; it cancels out
+of every mode in which $\muS = 0$ and is carried consistently by the shared
+basis maps of \texttt{eos.general.basis} everywhere else. The electric charge
+$C$ counts strongly interacting matter only: leptons are excluded from it, and
+total electric neutrality $\nC = n_e + n_\mu$ is a separate condition that a
+mode may or may not impose.
+
+Units on every public boundary are fm-based: densities in $\mathrm{fm}^{-3}$,
+$T$ and chemical potentials in MeV, $\epsilon$ and $P$ in
+$\mathrm{MeV}\,\mathrm{fm}^{-3}$. The single internal exception is the meson
+field equations, where a density must be written in $\mathrm{MeV}^3$ to divide
+by a squared meson mass; the conversion factor is $(\hbar c)^3$ and appears
+there and nowhere else.
+
+\section{The Lagrangian and the mean fields}
+\label{sec:lagrangian}
+
+The baryon octet (optionally extended by the $\Delta(1232)$ quartet,
+Sec.~\ref{sec:deltas}) is coupled to the scalar $\sigma$ and to the vector
+mesons $\omega$, $\phi$ and $\boldsymbol{\rho}$~\cite{Frohaug2025}:
+\begin{equation}
+\begin{split}
+  \mathcal{L} = \sum_{i \in B} \overline{\psi}_i \Big(
+      i\gamma_\mu \partial^\mu - m_i + g_{\sigma i}\sigma
+      - g_{\omega i}\gamma_\mu \omega^\mu
+      - g_{\phi i}\gamma_\mu \phi^\mu
+      - g_{\rho i}\gamma_\mu \boldsymbol{\tau}_i \cdot \boldsymbol{\rho}^\mu
+    \Big)\psi_i \\
+  + \tfrac{1}{2}\big(\partial_\mu\sigma\,\partial^\mu\sigma
+      - m_\sigma^2\sigma^2\big)
+  - \tfrac{1}{4}\omega_{\mu\nu}\omega^{\mu\nu}
+  + \tfrac{1}{2}m_\omega^2\,\omega_\mu\omega^\mu
+  + \tfrac{1}{2}m_\phi^2\,\phi_\mu\phi^\mu
+  - \tfrac{1}{4}\boldsymbol{\rho}_{\mu\nu}\cdot\boldsymbol{\rho}^{\mu\nu}
+  + \tfrac{1}{2}m_\rho^2\,\boldsymbol{\rho}_\mu\cdot\boldsymbol{\rho}^\mu .
+\end{split}
+\label{eq:lagrangian}
+\end{equation}
+There is no $\delta$ ($a_0(980)$) meson and no $f_0(980)$ / $\sigma^*$: both
+omissions are deliberate in Ref.~\cite{Frohaug2025}. The nucleon effective-mass
+splitting the $\delta$ would produce is poorly constrained experimentally, and
+the $\Lambda\Lambda$ force the $f_0(980)$ carries is known to be much weaker
+than the $\Lambda N$ one --- adding it to DD2Y lowered $M_{\max}$ from
+$2.04\,M_\odot$ to $1.87\,M_\odot$~\cite{Marques2017}. Neither is implemented
+here, and \texttt{SpeciesFlags} carries no flag for them.
+
+In the mean-field approximation the meson fields are replaced by their
+classical, uniform, time-independent expectation values
+$\sigma, \omega, \phi, \rho$ (the third isospin component of
+$\boldsymbol{\rho}$), which satisfy
+\begin{equation}
+  \sigma = \frac{1}{m_\sigma^2}\sum_i g_{\sigma i}\, n^s_i , \qquad
+  \omega = \frac{1}{m_\omega^2}\sum_i g_{\omega i}\, n_i , \qquad
+  \phi   = \frac{1}{m_\phi^2}\sum_i g_{\phi i}\, n_i , \qquad
+  \rho   = \frac{1}{m_\rho^2}\sum_i g_{\rho i}\,\tau_{3i}\, n_i ,
+  \label{eq:fields}
+\end{equation}
+with $n_i$ the number density and $n^s_i$ the scalar density of baryon $i$
+(Sec.~\ref{sec:kinetics}). The $\phi$ field is not a hyperon-only field in this
+model: the SU(3) vector sector of Sec.~\ref{sec:su3} gives the nucleon a
+$\phi$ coupling $g_{\phi N} = -5.20$ at the published parameter set, so
+Eq.~\eqref{eq:fields} carries a nonvanishing $\phi$ already in nucleonic
+matter. Requesting \texttt{SpeciesFlags(phi\_field=False)} therefore raises
+rather than switching a sector off.
+
+\section{The couplings}
+\label{sec:couplings}
+
+\subsection{Density and isospin dependence}
+
+Each coupling interpolates between a branch fitted in symmetric matter and one
+fitted in neutron matter~\cite{Frohaug2025}:
+\begin{equation}
+  g_{Mi}(\nB, \beta) \;=\; \big[1 - w(x,\beta)\big]\, g^S_{Mi}(\nB)
+                        \;+\; w(x,\beta)\, g^N_{Mi}(\nB) ,
+  \qquad
+  w(x,\beta) = \beta^2 \tanh\!\left(\frac{x}{e}\right) ,
+  \qquad
+  x = \frac{\nB}{\nzero} ,
+  \label{eq:blend}
+\end{equation}
+with $e = 1/3$ fixed. The $\tanh(x/e)$ factor is not decoration: it makes the
+couplings isospin-\emph{independent} at zero density, which is what keeps
+$\Sigmat$ (Eq.~\eqref{eq:sigmat}, which carries a $1/\nB$ prefactor) finite as
+$\nB \to 0$.
+
+Both branches carry the same shape in density, so that a vertex is two numbers
+and a meson is one function:
+\begin{equation}
+  g^{S,N}_{Mi}(\nB) = g^{S,N(0)}_{Mi}\, F_M(x) , \qquad
+  F_M(x) = \underbrace{\exp\!\left[1 - \left(\frac{x+1}{2}\right)^{2a_M}\right]}
+           _{\textstyle E_M(x)}
+           \frac{1 - t_M(x)}{2} \; + \; b_M\, \frac{1 + t_M(x)}{2} ,
+  \qquad
+  t_M(x) = \tanh\!\left(\frac{x - c_M}{d_M}\right) .
+  \label{eq:shape}
+\end{equation}
+$g^{S,N(0)}_{Mi}$ is the vertex strength near saturation ($F_M(1) = 1$ exactly
+when $c_M \to \infty$, and $0.988$ for the vector shape of the published set),
+$a_M$ sets the low-density decay, $b_M$ is the high-density plateau in units of
+$g^{(0)}$, and $c_M$, $d_M$ are the centre and width of the switch between
+them, in units of $\nzero$. The published set takes $c_\sigma = \infty$, which
+removes the plateau from the scalar sector entirely --- flattening it drives
+$c_s^2 < 0$ --- and makes $b_\sigma$ and $d_\sigma$ irrelevant. The
+implementation branches on $c_M = \infty$ explicitly rather than feeding it to
+$\tanh$.
+
+Both derivatives are needed and both are analytic:
+\begin{align}
+  \frac{\partial g_{Mi}}{\partial \nB}
+    &= \frac{1}{\nzero}\left\{
+       \big[(1-w) g^{S(0)}_{Mi} + w\, g^{N(0)}_{Mi}\big] F'_M(x)
+       + \big(g^{N(0)}_{Mi} - g^{S(0)}_{Mi}\big)
+         \frac{\partial w}{\partial x} F_M(x) \right\} ,
+  \label{eq:dgdn} \\[2pt]
+  \frac{\partial g_{Mi}}{\partial \beta}
+    &= \big(g^{N(0)}_{Mi} - g^{S(0)}_{Mi}\big)
+       \frac{\partial w}{\partial \beta} F_M(x) ,
+  \label{eq:dgdbeta}
+\end{align}
+with
+\begin{equation}
+  F'_M(x) = E'_M(x)\frac{1-t_M}{2} + \big(b_M - E_M(x)\big)\frac{t'_M(x)}{2},
+  \quad
+  E'_M(x) = -a_M \left(\frac{x+1}{2}\right)^{2a_M-1} E_M(x),
+  \quad
+  t'_M(x) = \frac{1 - t_M^2}{d_M},
+\end{equation}
+and
+\begin{equation}
+  \frac{\partial w}{\partial x} = \frac{\beta^2}{e}
+      \left[1 - \tanh^2\!\left(\frac{x}{e}\right)\right] , \qquad
+  \frac{\partial w}{\partial \beta} = 2\beta \tanh\!\left(\frac{x}{e}\right) .
+\end{equation}
+At $\beta = 0$ both $w$ and $\partial w/\partial\beta$ vanish, so
+$\partial g_{Mi}/\partial\beta = 0$, $\Sigmat = 0$, and $g_{Mi} = g^{S(0)}_{Mi}
+F_M(x)$: in symmetric matter the model \emph{is} an ordinary DD-RMF. That
+statement is a check in \texttt{verify/run\_full\_check.py}, not a remark.
+
+\subsection{The SU(3) vector sector}
+\label{sec:su3}
+
+The $\omega$ and $\phi$ couplings of the whole octet follow from the octet
+coupling $g_8$, the singlet-to-octet ratio $z = g_1/g_8$, the mixing angle
+$\theta$ and $\alpha = F/(D+F)$~\cite{Frohaug2025,Weissenborn2012}. Writing
+$c_i$ for the coefficient of each baryon,
+\begin{equation}
+  \frac{g^{(0)}_{\omega i}}{g_8} = 1 - c_i \tan\theta , \qquad
+  \frac{g^{(0)}_{\phi i}}{g_8}   = -\tan\theta - c_i ,
+  \label{eq:su3}
+\end{equation}
+\begin{equation}
+  c_N = \frac{z}{\sqrt{3}}(1 - 4\alpha), \quad
+  c_\Lambda = \frac{2z}{\sqrt{3}}(1 - \alpha), \quad
+  c_\Sigma = -\frac{2z}{\sqrt{3}}(1 - \alpha), \quad
+  c_\Xi = \frac{z}{\sqrt{3}}(1 + 2\alpha) .
+\end{equation}
+The model fixes ideal mixing, $\tan\theta = 1/\sqrt{2}$, and $\alpha = 1$,
+leaving $z$ as the only fitted parameter of this sector.
+
+\paragraph{One correction to Eq.~(6) of Ref.~\cite{Frohaug2025}.} That equation
+prints the $\Xi$ line of the $\phi$ sector with $2z/\sqrt{3}$ where
+Eq.~\eqref{eq:su3} has $c_\Xi = (z/\sqrt{3})(1+2\alpha)$. The paired form used
+here is fixed by the SU(6) limit: at $z = 1/\sqrt{6}$, $\alpha = 1$ and ideal
+mixing, Eq.~\eqref{eq:su3} gives
+\begin{equation}
+  g_{\omega\Lambda} = g_{\omega\Sigma} = \tfrac{2}{3} g_{\omega N}, \quad
+  g_{\omega\Xi} = \tfrac{1}{3} g_{\omega N}, \quad
+  g_{\phi N} = 0, \quad
+  g_{\phi\Lambda} = g_{\phi\Sigma} = -\tfrac{\sqrt{2}}{3} g_{\omega N}, \quad
+  g_{\phi\Xi} = -\tfrac{2\sqrt{2}}{3} g_{\omega N},
+  \label{eq:su6}
+\end{equation}
+which are the textbook SU(6) ratios; the printed form gives
+$g_{\phi\Xi} = -\sqrt{2}\, g_{\omega N}$ and breaks the limit. The
+implementation asserts Eq.~\eqref{eq:su6} in \texttt{verify/run\_full\_check.py}.
+
+\paragraph{The aggregated strength.} What the Bayesian analysis varies is not
+$g_{\omega N}$ but the combination nucleonic matter actually feels, since both
+vectors enter the energy as $g^2/m^2$ times the density~\cite{Frohaug2025}:
+\begin{equation}
+  \tilde{g}^{S,N(0)}_{\omega N} = g^{S,N(0)}_{\omega N}
+    \sqrt{1 + \left(\frac{g^{S,N(0)}_{\phi N}/m_\phi}
+                         {g^{S,N(0)}_{\omega N}/m_\omega}\right)^2 } .
+  \label{eq:aggregate}
+\end{equation}
+With $g_{\omega N} = g_8 A_\omega$ and $g_{\phi N} = g_8 A_\phi$ from
+Eq.~\eqref{eq:su3}, this inverts in closed form,
+\begin{equation}
+  g_8 = \tilde{g}_{\omega N} \Big/
+        \sqrt{A_\omega^2 + (m_\omega/m_\phi)^2 A_\phi^2} ,
+  \label{eq:g8}
+\end{equation}
+and the implementation stores $\tilde{g}_{\omega N}$ and $z$ and derives
+$g_{\omega i}$, $g_{\phi i}$ from them --- storing the two couplings separately
+would make the fitted quantity a function of two stored ones and let them drift
+apart.
+
+\subsection{Scalar and isovector hyperon couplings, and the branch tying}
+
+The scalar sector is \emph{not} related by SU(3): $g^{S(0)}_{\sigma Y}$ for
+$Y \in \{\Lambda, \Sigma, \Xi\}$ are fitted directly to the HAL~QCD-based
+hyperon potentials, and so are $g^{S(0)}_{\rho\Sigma}$ and
+$g^{S(0)}_{\rho\Xi}$, with $g_{\rho\Lambda} = 0$ identically because the
+$\Lambda$ carries no isospin. The neutron-matter branch of each hyperon vertex
+is tied to the symmetric one by the nucleon ratio of the same meson,
+\begin{equation}
+  g^{N(0)}_{M Y} = g^{S(0)}_{M Y}\,
+                   \frac{g^{N(0)}_{M N}}{g^{S(0)}_{M N}} ,
+  \label{eq:branchtie}
+\end{equation}
+so a hyperon carries one fitted number per meson rather than two. A vertex
+whose symmetric value vanishes stays zero in both branches.
+
+\subsection{$\Delta(1232)$ isobars: an extension beyond the paper}
+\label{sec:deltas}
+
+Ref.~\cite{Frohaug2025} has no $\Delta$ isobars. This implementation adds the
+quartet with the ratio scheme \texttt{eos/dd2} uses,
+\begin{equation}
+  g^{S,N(0)}_{M\Delta} = x_{M\Delta}\; g^{S,N(0)}_{M N} ,
+  \qquad M \in \{\sigma, \omega, \rho\}, \qquad g_{\phi\Delta} = 0 ,
+\end{equation}
+so that the $\Delta$ inherits both the density and the isospin dependence of
+the nucleon vertex. The default is universal coupling,
+$x_{\sigma\Delta} = x_{\omega\Delta} = x_{\rho\Delta} = 1$;
+\texttt{nmp.delta\_ratios\_from\_potential} instead fixes $x_{\sigma\Delta}$
+from a chosen $\Delta$ potential in symmetric matter at saturation, where
+$\rho = 0$ and $\Sigmat = 0$ so that Eq.~\eqref{eq:U} collapses to
+\begin{equation}
+  U_\Delta = -x_{\sigma\Delta}\, g_{\sigma N}\sigma
+             + x_{\omega\Delta}\, g_{\omega N}\omega + \Sigmar ,
+\end{equation}
+one linear equation. There is no published DID $\Delta$ table, so this is a
+choice this implementation offers, not a result of Ref.~\cite{Frohaug2025}.
+
+\section{Thermodynamics}
+\label{sec:thermo}
+
+\subsection{The thermodynamic potential and the two rearrangement terms}
+
+In the mean-field approximation the grand potential per unit volume
+is~\cite{Frohaug2025}
+\begin{equation}
+\begin{split}
+  \frac{\Omega}{V} = \tfrac{1}{2}\big(m_\sigma^2\sigma^2 - m_\omega^2\omega^2
+                     - m_\phi^2\phi^2 - m_\rho^2\rho^2\big)
+                   \; - \; \nB\, \Sigmar
+                   \; - \; \sum_i (\tau_{3i} - \beta)\, n_i\, \Sigmat \\
+   - \sum_i \frac{d_i T}{2\pi^2} \int_0^\infty \! k^2 dk
+     \left( \ln\!\left[1 + e^{-(E^*_{ki} - \nu_i)/T}\right]
+          + \ln\!\left[1 + e^{-(E^*_{ki} + \nu_i)/T}\right] \right) ,
+\end{split}
+\label{eq:omega}
+\end{equation}
+with $E^*_{ki} = \sqrt{k^2 + \meff{i}^2}$, $d_i$ the spin degeneracy, and
+$P = -\Omega/V$. The two rearrangement self-energies are what make this
+consistent when the couplings depend on the state:
+\begin{align}
+  \Sigmar &= \sum_i \left( -\frac{\partial g_{\sigma i}}{\partial \nB}\,
+              \sigma n^s_i
+            + \frac{\partial g_{\omega i}}{\partial \nB}\, \omega n_i
+            + \frac{\partial g_{\phi i}}{\partial \nB}\, \phi n_i
+            + \frac{\partial g_{\rho i}}{\partial \nB}\,
+              \tau_{3i}\, \rho\, n_i \right) ,
+  \label{eq:sigmar} \\[2pt]
+  \Sigmat &= \frac{1}{\nB}\sum_i
+            \left( -\frac{\partial g_{\sigma i}}{\partial \beta}\,
+              \sigma n^s_i
+            + \frac{\partial g_{\omega i}}{\partial \beta}\, \omega n_i
+            + \frac{\partial g_{\phi i}}{\partial \beta}\, \phi n_i
+            + \frac{\partial g_{\rho i}}{\partial \beta}\,
+              \tau_{3i}\, \rho\, n_i \right) .
+  \label{eq:sigmat}
+\end{align}
+$\Sigmar$ is the familiar density rearrangement term; $\Sigmat$ is its isospin
+counterpart and is specific to this model. Both follow from requiring
+$\mu_i = \partial\epsilon/\partial n_i$ at $T = 0$, once the chain rule
+\begin{equation}
+  \frac{\partial}{\partial n_i}
+    = \frac{\partial}{\partial \nB}
+    + \frac{\tau_{3i} - \beta}{\nB}\,\frac{\partial}{\partial \beta}
+  \label{eq:chainrule}
+\end{equation}
+is applied to the couplings --- which is the whole content of Appendix~A of
+Ref.~\cite{Frohaug2025}, and the reason $\Sigmat$ appears weighted by
+$(\tau_{3i} - \beta)$ rather than uniformly.
+
+\paragraph{Two properties that are checked, not assumed.} First, both terms
+enter $\mu_i$ and $P$ and \emph{neither} enters $\epsilon$. Second, the
+$\Sigmat$ term of Eq.~\eqref{eq:omega} vanishes identically at the
+self-consistent $\beta$,
+\begin{equation}
+  \sum_i (\tau_{3i} - \beta)\, n_i = \nB \beta - \beta \nB = 0 ,
+  \label{eq:sigmatcancel}
+\end{equation}
+and so does its contribution to $\sum_i \mu_i n_i$. $\Sigmat$ therefore shifts
+the individual chemical potentials --- which is the point, it is what splits
+the $\Sigma$ and $\Xi$ single-particle potentials in neutron matter --- while
+leaving $P$, $\epsilon$ and $\sum_i \mu_i n_i$ untouched.
+
+\subsection{Effective masses, effective potentials and single-particle potentials}
+
+\begin{equation}
+  \meff{i} = m_i - g_{\sigma i}\,\sigma ,
+  \label{eq:meff}
+\end{equation}
+\begin{equation}
+  \mu_i = \nu_i + \underbrace{g_{\omega i}\omega + g_{\phi i}\phi
+          + g_{\rho i}\tau_{3i}\rho + \Sigmar
+          + (\tau_{3i} - \beta)\Sigmat}_{\textstyle \Sigma^v_i} ,
+  \label{eq:mui}
+\end{equation}
+where $\nu_i$ is the effective (kinetic) chemical potential that enters the
+Fermi integrals. Because the species potentials are derived from the conserved
+charges, $\mu_i = \muB + C_i \muC + S_i \muS$, Eq.~\eqref{eq:mui} inverts to
+\begin{equation}
+  \nu_i = \mutB + C_i \muC + S_i \muS
+          - g_{\omega i}\omega - g_{\phi i}\phi - g_{\rho i}\tau_{3i}\rho
+          - (\tau_{3i} - \beta)\Sigmat ,
+  \qquad \mutB \equiv \muB - \Sigmar ,
+  \label{eq:nui}
+\end{equation}
+which is the form the solver iterates on. $\mutB$ is the \emph{kinetic} baryon
+potential: $\Sigmar$ is common to every species, so carrying it outside the
+iteration removes its density circularity, and $\mutB$ varies smoothly along a
+density sweep, which is what makes warm starts work. $\Sigmat$ cannot be
+absorbed the same way --- it is weighted by $(\tau_{3i}-\beta)$ and so differs
+per species --- and stays inside Eq.~\eqref{eq:nui} as an unknown of the state.
+
+The single-particle potential, the energy gained by adding a baryon at
+$\mathbf{k} = 0$ to the medium, is
+\begin{equation}
+  U_i = \Sigma^v_i - \Sigma^s_i
+      = -g_{\sigma i}\sigma + g_{\omega i}\omega + g_{\phi i}\phi
+        + g_{\rho i}\tau_{3i}\rho + \Sigmar + (\tau_{3i} - \beta)\Sigmat .
+  \label{eq:U}
+\end{equation}
+It is evaluated for a \emph{test} particle at the medium's fields, so $U_Y$ at
+$\nzero$ is meaningful before any hyperon has appeared --- which is what the
+hyperon couplings were fitted to, in ISM and in NM.
+
+\subsection{One species as an ideal gas}
+\label{sec:kinetics}
+
+Every species is an ideal Fermi gas at its own $(\nu_i, \meff{i})$, with
+antiparticles. With
+\begin{equation}
+  f_i(k) = \frac{1}{e^{(E^*_{ki} - \nu_i)/T} + 1} , \qquad
+  \bar{f}_i(k) = \frac{1}{e^{(E^*_{ki} + \nu_i)/T} + 1} ,
+  \label{eq:distributions}
+\end{equation}
+the quantities the model needs are
+\begin{align}
+  n_i   &= \frac{d_i}{2\pi^2}\int_0^\infty \! k^2 dk\,
+           \big(f_i - \bar{f}_i\big) ,
+  \label{eq:n} \\
+  n^s_i &= \frac{d_i}{2\pi^2}\int_0^\infty \! k^2 dk\,
+           \frac{\meff{i}}{E^*_{ki}}\big(f_i + \bar{f}_i\big) ,
+  \label{eq:ns} \\
+  \epsilon^{\rm kin}_i
+        &= \frac{d_i}{2\pi^2}\int_0^\infty \! k^2 dk\; E^*_{ki}
+           \big(f_i + \bar{f}_i\big) ,
+  \label{eq:epskin} \\
+  P^{\rm kin}_i
+        &= \frac{d_i}{6\pi^2}\int_0^\infty \! dk\; \frac{k^4}{E^*_{ki}}
+           \big(f_i + \bar{f}_i\big) ,
+  \label{eq:Pkin} \\
+  s_i   &= -\frac{d_i}{2\pi^2}\int_0^\infty \! k^2 dk\,
+           \Big[ f_i \ln f_i + (1 - f_i)\ln(1 - f_i)
+               + \bar{f}_i \ln \bar{f}_i
+               + (1 - \bar{f}_i)\ln(1 - \bar{f}_i) \Big] .
+  \label{eq:s}
+\end{align}
+At $T = 0$ the antiparticle term vanishes, $f_i$ becomes a step at the Fermi
+momentum $k_{Fi} = \sqrt{\nu_i^2 - \meff{i}^{\,2}}$ (and the species is absent
+where $\nu_i \le \meff{i}$), and the integrals are elementary:
+\begin{align}
+  n_i &= \frac{d_i k_{Fi}^3}{6\pi^2} , \qquad
+  n^s_i = \frac{d_i \meff{i}}{4\pi^2}
+          \left[ k_{Fi}E^*_{Fi}
+                 - \meff{i}^{\,2}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
+  \label{eq:nT0} \\
+  \epsilon^{\rm kin}_i &= \frac{d_i}{16\pi^2}
+          \left[ k_{Fi}E^*_{Fi}\big(2k_{Fi}^2 + \meff{i}^{\,2}\big)
+                 - \meff{i}^{\,4}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
+  \label{eq:epsT0} \\
+  P^{\rm kin}_i &= \frac{d_i}{48\pi^2}
+          \left[ k_{Fi}E^*_{Fi}\big(2k_{Fi}^2 - 3\meff{i}^{\,2}\big)
+                 + 3\meff{i}^{\,4}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
+  \qquad s_i = 0 ,
+  \label{eq:PT0}
+\end{align}
+with $E^*_{Fi} = \sqrt{k_{Fi}^2 + \meff{i}^{\,2}}$. At $T > 0$ the integrals
+are evaluated with the Johns--Ellis--Lattimer approximation~\cite{JohnsEllisLattimer1996}
+in \texttt{eos.general.fermi\_integrals}, which is the repository's single home
+for them; the model implements none of its own. Two identities are used rather
+than integrated, and are how $n^s_i$ and $s_i$ are actually obtained:
+\begin{equation}
+  n^s_i = \frac{\epsilon^{\rm kin}_i - 3 P^{\rm kin}_i}{\meff{i}}
+  \quad\text{(the trace of the energy-momentum tensor)},
+  \qquad
+  s_i = \frac{\epsilon^{\rm kin}_i + P^{\rm kin}_i - \nu_i n_i}{T} .
+  \label{eq:identities}
+\end{equation}
+
+\subsection{The totals}
+
+The matter sector --- baryons and, when enabled, the thermal meson gas of
+Sec.~\ref{sec:extras} --- assembles as
+\begin{align}
+  \epsilon^{\rm matter} &= \sum_i \epsilon^{\rm kin}_i
+     + \tfrac{1}{2}\big(m_\sigma^2\sigma^2 + m_\omega^2\omega^2
+       + m_\phi^2\phi^2 + m_\rho^2\rho^2\big) + \epsilon^{\rm gas} ,
+  \label{eq:epstot} \\
+  P^{\rm matter} &= \sum_i P^{\rm kin}_i
+     + \tfrac{1}{2}\big(-m_\sigma^2\sigma^2 + m_\omega^2\omega^2
+       + m_\phi^2\phi^2 + m_\rho^2\rho^2\big)
+     + \nB \Sigmar + P^{\rm gas} ,
+  \label{eq:Ptot} \\
+  s^{\rm matter} &= \sum_i s_i + s^{\rm gas} ,
+  \qquad
+  \sum_i \mu_i n_i = \muB \nB + \muC \nC + \muS \nS
+                     + \sum_j \mu^*_j n_j\big|_{\rm gas} .
+  \label{eq:stot}
+\end{align}
+The scalar field enters $P$ with a minus sign and the vectors with a plus;
+$\Sigmar$ enters $P$ and not $\epsilon$; the $\Sigmat$ term is absent from both
+by Eq.~\eqref{eq:sigmatcancel}. The conserved-charge densities are
+\begin{equation}
+  \nB = \sum_i n_i , \qquad
+  \nC = \sum_i C_i n_i + n_C^{\rm gas} , \qquad
+  \nS = \sum_i S_i n_i + n_S^{\rm gas} ,
+\end{equation}
+summed through the quantum numbers of \texttt{eos.general.particles}, and the
+fractions reported are $Y_C = \nC/\nB$ and $Y_S = \nS/\nB$ --- the TOTAL
+non-leptonic fractions, meson gas included, which is what the fixed-fraction
+conditions of Sec.~\ref{sec:modes} are stated in terms of.
+
+The state satisfies the Euler (Hugenholtz--Van Hove~\cite{HugenholtzVanHove1958})
+identity
+\begin{equation}
+  \epsilon + P = T s + \sum_i \mu_i n_i
+  \label{eq:euler}
+\end{equation}
+to $\sim 10^{-14}$ relative at every solved point, which is the sharpest test
+that both rearrangement terms are in the right places.
+
+\subsection{Leptons, photons and the thermal meson gas}
+\label{sec:extras}
+
+None of these feel the strong mean fields, and all of them come from
+\texttt{eos.general}:
+\begin{itemize}
+\item \textbf{Leptons.} Electrons always, muons under
+      \texttt{SpeciesFlags(muons=True)}, as ideal Fermi gases with
+      antiparticles. In a beta-equilibrium mode $\mu_e = \munue - \muC$ and
+      $\mu_\mu = \mu_e - \munue + \mu_{\nu_\mu}$; in a fixed-$Y_C$ mode with
+      leptons they are populated afterwards at the single potential that
+      makes $n_e + n_\mu = \nC$. Ref.~\cite{Frohaug2025} carries electrons
+      only; the muon family is an option of this implementation, and it
+      shifts the hyperon onsets by about $0.03\,\mathrm{fm}^{-3}$.
+\item \textbf{Photons.} $P = \epsilon/3 = \pi^2 T^4/45(\hbar c)^3$,
+      $s = 4P/T$; no conserved charge.
+\item \textbf{Thermal neutrinos.} The flavours the composition does not track,
+      as $\mu = 0$ gases contributing to $\epsilon$, $P$ and $s$ only.
+\item \textbf{Thermal mesons.} An ideal $\pi$, $K$ Bose gas at the effective
+      potentials
+      \begin{equation}
+        \mu^*_{\pi^+} = \muC - g_{\rho N}\rho , \quad
+        \mu^*_{K^+} = \muC - \muS
+          - \big(g_{\omega N} - g_{\omega \Lambda}\big)\omega
+          - \tfrac{1}{2}g_{\rho N}\rho , \quad
+        \mu^*_{K^0} = -\muS
+          - \big(g_{\omega N} - g_{\omega \Lambda}\big)\omega
+          + \tfrac{1}{2}g_{\rho N}\rho ,
+      \end{equation}
+      following Ref.~\cite{Lavagno2010}. The gas carries electric charge and
+      strangeness, so it enters $\nC$ and $\nS$ --- and hence neutrality and
+      the fixed-fraction conditions --- not only $\epsilon$, $P$ and $s$. A
+      state in which $\max_j |\mu^*_j|/m_j \ge 1$ is refused rather than
+      returned: the gas Bose-condenses there and the ideal-gas expressions
+      stop describing it.
+\end{itemize}
+
+\section{The solve}
+\label{sec:modes}
+
+\subsection{The unknown vector}
+
+\begin{equation}
+  \mathbf{x} = \big[\, \sigma,\; \omega,\; \rho,\; \phi,\;
+                       \beta,\; \Sigmat,\; \mutB,\; \muC,\;
+                       (\muS),\; (\munue),\; (T) \,\big] .
+  \label{eq:unknowns}
+\end{equation}
+Six entries are present in every mode: the four mean fields, the isospin
+asymmetry $\beta$ and the isospin rearrangement self-energy $\Sigmat$. The last
+two are what distinguishes this model's solve from an ordinary DD-RMF's. They
+cannot be evaluated inside a residual, because the couplings depend on $\beta$
+and $\Sigmat$ shifts the very potentials whose densities define both --- so
+each is carried as an unknown with its defining equation as a row, which is
+what keeps the residual an explicit function of $\mathbf{x}$. $\muC$ is an
+unknown in every mode; what a mode changes is the row that closes it. $\muS$
+and $\munue$ join where strangeness is held or the electron family is trapped,
+and $T$ joins where an entropy per baryon is imposed in its place.
+
+\subsection{The rows}
+
+In the order the residual assembles them, with $\nB^{\rm target}$ the density
+asked for:
+\begin{align}
+  R_{1\ldots4} &: \quad \sigma - \frac{1}{m_\sigma^2}\sum_i g_{\sigma i} n^s_i
+                  \;=\; 0 , \qquad
+                  \omega - \frac{1}{m_\omega^2}\sum_i g_{\omega i} n_i \;=\; 0 ,
+                  \nonumber \\
+               &\qquad \rho - \frac{1}{m_\rho^2}\sum_i g_{\rho i}\tau_{3i} n_i
+                  \;=\; 0 , \qquad
+                  \phi - \frac{1}{m_\phi^2}\sum_i g_{\phi i} n_i \;=\; 0 ,
+  \label{eq:rowfields} \\
+  R_5 &: \quad \beta - \frac{1}{\nB^{\rm target}}\sum_i \tau_{3i} n_i \;=\; 0 ,
+  \label{eq:rowbeta} \\
+  R_6 &: \quad \Sigmat - \frac{1}{\nB^{\rm target}}\sum_i
+               \left( -\frac{\partial g_{\sigma i}}{\partial\beta}\sigma n^s_i
+                    + \frac{\partial g_{\omega i}}{\partial\beta}\omega n_i
+                    + \frac{\partial g_{\phi i}}{\partial\beta}\phi n_i
+                    + \frac{\partial g_{\rho i}}{\partial\beta}
+                      \tau_{3i}\rho n_i \right) \;=\; 0 ,
+  \label{eq:rowsigmat} \\
+  R_7 &: \quad \frac{1}{\nB^{\rm target}}\sum_i n_i - 1 \;=\; 0 ,
+  \label{eq:rownb} \\
+  R_8 &: \quad
+    \begin{cases}
+      \big(\nC - n_e - n_\mu\big)/\nB^{\rm target} = 0
+        & \text{$C$ equilibrated (electric neutrality)} \\[2pt]
+      \nC/\nB^{\rm target} - Y_C = 0 & \text{$C$ held}
+    \end{cases}
+  \label{eq:rowcharge} \\
+  R_9 &: \quad \nS/\nB^{\rm target} - Y_S \;=\; 0
+        \qquad \text{iff $S$ is held,}
+  \label{eq:rowS} \\
+  R_{10} &: \quad \big(n_e + n_{\nu_e}\big)/\nB^{\rm target} - Y_{L_e} \;=\; 0
+        \qquad \text{iff the electron family is trapped,}
+  \label{eq:rowLe} \\
+  R_{11} &: \quad s^{\rm total}/\nB^{\rm target} - (S/A) \;=\; 0
+        \qquad \text{iff an entropy per baryon is imposed.}
+  \label{eq:rowS_A}
+\end{align}
+The four field rows are present in every mode: a mean field does not know what
+is being held fixed. Each row is divided by the scale of the quantity it
+balances --- a field gap by a typical field, a density row by $\nB$ --- so that
+one tolerance means the same thing for all of them; the state is accepted when
+the largest scaled row is below $10^{-10}$. Non-convergence is a value carried
+on the returned record, never an exception and never an unbounded loop.
+
+The entropy row deserves one remark. In a fixed-$Y_C$ mode with neutralizing
+leptons, the leptons enter no field equation and are populated after the solve
+--- but they carry entropy, so $R_{11}$ must see them, and it does. Without
+that, the temperature returned is the one at which the \emph{matter} alone
+carries the requested entropy, which is a different state.
+
+\subsection{The modes}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+mode & independent variables & extra unknowns & extra rows \\
+\midrule
+\texttt{beta\_eq\_neutrinoless} & $(\nB, T)$ & --- & $R_8$ neutrality \\
+\texttt{beta\_eq\_neutrino\_trapped} & $(\nB, Y_{L_e}, T)$ & $\munue$
+  & $R_8$ neutrality, $R_{10}$ \\
+\texttt{fixed\_YC} & $(\nB, Y_C, T)$ & --- & $R_8$ held $Y_C$ \\
+\texttt{fixed\_YC\_YS} & $(\nB, Y_C, Y_S, T)$ & $\muS$
+  & $R_8$ held $Y_C$, $R_9$ \\
+\bottomrule
+\end{tabular}
+\caption{The four modes. Strangeness equilibrates ($\muS = 0$) except where it
+is held; neutrinos free-stream ($\munue = 0$) except where the electron family
+is trapped. The fixed-fraction modes carry a \texttt{leptons} flag: with it,
+neutralizing leptons make the total electrically neutral; without it the matter
+is charged, which is what a mixed-phase construction needs per pure phase.
+Anywhere $T$ appears, an entropy per baryon may be given instead, which adds
+$T$ to Eq.~\eqref{eq:unknowns} and $R_{11}$ to the rows.}
+\end{table}
+
+\texttt{fixed\_YC\_YS} raises without a strange degree of freedom: with
+nucleons only, $\nS \equiv 0$ and $R_9$ is satisfied at $Y_S = 0$ for any
+$\muS$ and unsatisfiable otherwise, so the potential returned would be
+wherever the solver's path happened to end.
+
+\subsection{Tables and continuation}
+
+A table is a set of lines --- one per temperature (or entropy per baryon) and
+per combination of the fractions the mode fixes --- each swept along the baryon
+density with a warm start, each solved point seeding the next. That loop is
+\texttt{eos.general.tabulate}, shared with the other models; what this
+subpackage supplies is which solve a mode name means, what part of a solved
+point becomes the next guess, and how a point flattens into a row. A missed
+step is bisected back towards the last solved point, up to six times: at
+$T = 0$ a hyperon threshold crossed inside one grid interval leaves the
+previous answer outside the new basin, and halving the interval gives the
+continuation a seed on the far side.
+
+\section{Nuclear matter}
+\label{sec:nmp}
+
+Nuclear-matter parameters are computed as \emph{predictions} of the couplings:
+the model's parameters are the output of a Bayesian analysis over 18
+observables, not of an inversion of a fixed list of saturation properties, so
+only the forward map is implemented. The binding energy per baryon is
+\begin{equation}
+  B(\nB, \beta) = \frac{\epsilon - \sum_i m_i n_i}{\nB} ,
+\end{equation}
+with the rest mass following the composition --- subtracting a single average
+nucleon mass instead would leave a term $-\tfrac{1}{2}(m_n - m_p)\beta$, larger
+than the quadratic symmetry term below $\beta \simeq 0.04$. With
+$x = \nB/\nzero$ and derivatives at $x = 1$:
+\begin{equation}
+  K = 9\frac{\partial^2 B}{\partial x^2} , \quad
+  Q = 27\frac{\partial^3 B}{\partial x^3} , \quad
+  M(\nB) = 3\nB \frac{\partial}{\partial \nB}
+           \left[ 9\nB^2 \frac{\partial^2 B}{\partial \nB^2}
+                  + 18\frac{P}{\nB} \right] ,
+\end{equation}
+the last evaluated at $0.11\,\mathrm{fm}^{-3}$, the mean density in the outer
+region of a heavy nucleus. Two symmetry energies are reported, and they differ
+by more here than in a conventional DD-RMF because the isospin dependence of
+the couplings makes $B$ genuinely non-quadratic in $\beta$:
+\begin{equation}
+  B(\beta) = B(0) + S_2 \beta^2 + S_4 \beta^4 + \mathcal{O}(\beta^6) ,
+  \qquad
+  S \equiv B(-1) - B(0) \simeq S_2 + S_4 ,
+\end{equation}
+with slopes $L_2 = 3\,\partial S_2/\partial x$, $L = 3\,\partial S/\partial x$
+and curvatures $K_{\rm sym,2} = 9\,\partial^2 S_2/\partial x^2$,
+$K_{\rm sym} = 9\,\partial^2 S/\partial x^2$. $S_2$ is extracted by one
+Richardson step on the neutron-rich side, $S_2 = [4f(-1/2) - f(-1)]/3$ with
+$f(\beta) = [B(\beta)-B(0)]/\beta^2$: proton-rich matter empties the neutron
+sector and leaves $\muC$ unpinned, and a small-$\beta$ estimator is numerical
+noise, since $B(\beta) - B(0)$ at $\beta = 0.05$ is $0.08$ MeV against a
+binding energy of $900$ MeV.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrl}
+\toprule
+quantity & this implementation & Ref.~\cite{Frohaug2025} & \\
+\midrule
+$\nzero$ [fm$^{-3}$] & 0.158800 & 0.158800 & imposed by $P(\nzero) = 0$ in ISM \\
+$B$ [MeV]            & $-15.402$ & $-15.40$ & \\
+$K$ [MeV]            & $227.07$ & $227.06$ & \\
+$Q$ [MeV]            & $-608.10$ & $-608.09$ & \\
+$M(0.11)$ [MeV]      & $1122.69$ & $1122.72$ & \\
+$S_2$ [MeV]          & $32.12$ & $32.44$ & truncation-defined, see above \\
+$S$ [MeV]            & $29.71$ & $29.72$ & \\
+$L$ [MeV]            & $59.85$ & $59.95$ & \\
+$K_{\rm sym}$ [MeV]  & $-97.33$ & $-97.32$ & \\
+$X_p^{\rm eq}(\nzero)$ & $0.0336$ & $0.0336$ & \\
+\bottomrule
+\end{tabular}
+\caption{Nuclear-matter parameters, against Table VI of
+Ref.~\cite{Frohaug2025} (their $S$, $L$ and $K_{\rm sym}$ are quoted there as
+$S_2 + (S - S_2)$ and so on). Asserted by
+\texttt{verify/run\_full\_check.py}.}
+\end{table}
+
+\section{What the implementation reproduces}
+\label{sec:validation}
+
+Every published number of Ref.~\cite{Frohaug2025} that does not require its
+nuclear-statistical-equilibrium crust is reproduced from the transcribed
+Table II parameters:
+\begin{itemize}
+\item \textbf{Saturation (Table III).} $P(\nzero) = 0$ in symmetric matter to
+      $2\times10^{-7}\,\mathrm{MeV}\,\mathrm{fm}^{-3}$; and the four fitted
+      pressures $P_{\rm NM}(0.08) = 0.4569$, $P_{\rm NM}(0.16) = 3.233$,
+      $P_{\rm ISM}(0.32) = 12.11$, $P_{\rm ISM}(0.56) = 109.0$
+      $\mathrm{MeV}\,\mathrm{fm}^{-3}$, each to the digits published.
+\item \textbf{Hyperon potentials (Table IV).} All twelve values, in ISM and in
+      NM at $\nzero$, to better than $0.01$ MeV --- including the $\Sigma$
+      splitting in neutron matter, $U_{\Sigma^-} - U_{\Sigma^+} = 17.9$ MeV,
+      which is carried almost entirely by $\Sigmat$ (the $\rho$ contribution
+      is negligible, $g_{\rho\Sigma} = 0.0055$).
+\item \textbf{Nuclear matter (Table VI).} The table above.
+\item \textbf{Hyperon onsets (Table VII).} With the paper's lepton sector
+      (electrons only): $\Sigma^-$ at $0.470$, $\Lambda$ at $0.578$, $\Xi^-$
+      at $0.978\ \mathrm{fm}^{-3}$ and no $\Xi^0$ --- the inverted hierarchy
+      that is the model's headline result, to three digits.
+\item \textbf{Speed of sound (Fig.~8).} A non-monotonic $c_s^2$ peaking at
+      $0.706$ near $0.70\,\mathrm{fm}^{-3}$, against $\simeq 0.71$ near
+      $0.66\,\mathrm{fm}^{-3}$ read off the figure.
+\item \textbf{Stellar structure (Table VIII).} $M_{\max} = 2.243\,M_\odot$
+      (DID) and $2.196\,M_\odot$ (DIDY) against $2.245$ and $2.196$;
+      $R_{1.4} = 12.07$ km against $11.99$ km. The radius difference is the
+      crust: Ref.~\cite{Frohaug2025} uses its own NSE crust below saturation
+      and this comparison attaches BPS.
+\end{itemize}
+
+\section{The phase-adapter surface}
+\label{sec:adapter}
+
+For the hybrid engine \texttt{eos/mixed}, DID is presented through the
+phase-adapter contract: a map from $(\mutB, \muC, \muS, T)$ to a solved block,
+with the phase's own density an unknown --- in a mixture only the volume
+average is prescribed, never each phase's own. That solve carries the seven
+unknowns
+$[\sigma, \omega, \rho, \phi, \beta, \Sigmat, \nB]$ against the four field
+equations, the definitions of $\beta$ and $\Sigmat$, and
+$\nB = \sum_i n_i$. There is no charge, strangeness or neutrality row: the
+potentials are inputs, which is what makes this thermodynamics rather than a
+mode.
+
+The slot carries the \emph{kinetic} potential $\mutB = \muB - \Sigmar$, as
+DD2's does and for the same reason. The second rearrangement term is not
+absorbed that way and stays inside the phase, which the contract allows: what
+crosses it is the conserved-charge decomposition
+$\mu_i = \muB + C_i\muC + S_i\muS$, and $\muB$ is restored at assembly.
+
+Two properties of this surface are worth stating because they are physics
+rather than implementation. First, the map $\mutB \mapsto \nB$ is not
+one-to-one below saturation, where the isotherm is mechanically unstable; the
+seed chooses the root, and the adapter's seed is a pure function of its
+arguments so that a finite-difference Jacobian of the mixed residual stays the
+derivative of something. Second, a mixed-phase construction needs each pure
+phase at fixed $Y_C$ \emph{without} leptons, which is the \texttt{leptons=False}
+flavour of Sec.~\ref{sec:modes}.
+
+\section{What is not implemented}
+\label{sec:gaps}
+
+Recorded in \texttt{docs/DEFERRED.md} and repeated here so the document stands
+alone: the nuclear-statistical-equilibrium description of nuclear clusters
+below saturation (Section III of Ref.~\cite{Frohaug2025}), for which the
+repository attaches a crust table instead; the inverse nuclear-matter map,
+which is not published for this functional form; the $\delta$ and $f_0(980)$
+mesons, deliberately absent from the model; a trapped \emph{muon} family; and
+the $\phi$ contribution to the thermal kaon effective potentials, which is
+inherited from a model in which $g_{\phi N} = 0$ and is not one here.
+
+\begin{acknowledgments}
+Written as the specification of \texttt{eos/did}.
+\end{acknowledgments}
+
+\bibliography{../../docs/eos}
+
+\end{document}

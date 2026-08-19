@@ -58,14 +58,15 @@ IS the parameter argument, and DD2+vMIT remains the front door every plain
 potential a phase's slot carries is DECLARED (`potential_kind`), not assumed:
 DD2 declares the KINETIC `mu_tilde_B = mu_B - Sigma_R` (`Sigma_R` depends on
 the phase density, itself an unknown of the phase-internal solve, so this
-keeps that circularity inside the adapter); SFHo, vMIT, alphaBag, ZL and the
-ENJL branches declare physical. The matching row always compares the physical
+keeps that circularity inside the adapter), and so does DID, which has the
+same rearrangement term plus a second one for the isospin dependence; SFHo,
+vMIT, alphaBag, ZL and the ENJL branches declare physical. The matching row always compares the physical
 potentials, so the kinds mix freely. A phase also declares its seeding rules
 (no per-solve cache for a branch-declared adapter — there the seed CHOOSES
 THE ROOT), its limits (`supports_S`, `max_T`) and its optional capabilities
 (`wing_sweep`, `frozen_thermo`, `jacobian_block`); a missing capability makes
 the feature that needs it raise, naming the phase. Shipped pairings: DD2,
-vMIT, SFHo, ZL, alphaBag, and `enjl_branch_pair` — two branches of one
+vMIT, SFHo, ZL, DID, alphaBag, and `enjl_branch_pair` — two branches of one
 functional, which the engine cannot tell from two models.
 
 **The eta split.** The lepton gas is written as a *local* population (one
