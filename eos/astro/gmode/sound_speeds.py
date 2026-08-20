@@ -178,7 +178,7 @@ def cs2_frozen_point(par, flags, result, vmit_params=None,
     result      : a `MixedResult` from `eos.mixed.solve_mixed`; pure phases
                   (chi <= 0 or chi >= 1) are handled and give the pure-phase
                   value under either convention
-    vmit_params : the `VMITParams` the state used
+    vmit_params : the `Parameters` the state used
     convention  : "isobaric" or "equal_compression" — see the module docstring
     leptons     : re-neutralise each phase with leptons, as
                   `eos.mixed.responses.sound_speed_frozen` does

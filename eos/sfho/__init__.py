@@ -15,7 +15,7 @@ References:
 - Steiner, Hempel & Fischer, ApJ 774 (2013) 17
 - Fortin, Oertel & Providencia, PASA 35 (2018) e044
 """
-from eos.sfho.parameters import SFHoParams
+from eos.sfho.parameters import Parameters
 from eos.sfho.species import (
     SpeciesFlags, active_baryons, check_couplings,
 )
@@ -41,7 +41,7 @@ from eos.sfho.api import (
 )
 
 __all__ = [
-    "SFHoParams", "SpeciesFlags", "active_baryons", "check_couplings",
+    "Parameters", "SpeciesFlags", "active_baryons", "check_couplings",
     "EoSPoint", "warm_start", "default_guess", "unknown_names",
     "solve_mode", "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",

@@ -18,9 +18,9 @@ import numpy as np
 from eos.general.tabulate import (
     lines_from_axes, sweep_lines, TEMPERATURE_AXES,
 )
-from eos.vmit.parameters import VMITParams, get_vmit_default
+from eos.vmit.parameters import Parameters, get_vmit_default
 from eos.vmit.species import SpeciesFlags
-from eos.vmit.eos import (
+from eos.vmit.solver import (
     solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
     solve_vmit_trapped_neutrinos, result_to_guess,
 )
@@ -120,7 +120,7 @@ class TableSpec:
             added. Has no meaning in the beta-equilibrium modes, where leptons
             are what the equilibrium is about.
     """
-    params: VMITParams = field(default_factory=get_vmit_default)
+    params: Parameters = field(default_factory=get_vmit_default)
     mode: str = "beta_eq_neutrinoless"
     axes: dict = field(default_factory=dict)
     include: SpeciesFlags = field(default_factory=SpeciesFlags)

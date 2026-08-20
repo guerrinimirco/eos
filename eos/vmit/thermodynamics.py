@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 from eos.general.physics_constants import hc, hc3
-from eos.vmit.parameters import VMITParams, get_vmit_default
+from eos.vmit.parameters import Parameters, get_vmit_default
 from eos.general.fermi_integrals import solve_fermi_jel, invert_fermi_density
 from eos.general import particles
 from eos.general.basis import quark_charges, charge_potentials_from_quarks
@@ -111,7 +111,7 @@ def compute_quark_density(mu_eff: float, T: float, m: float,
 # VECTOR FIELD
 # =============================================================================
 def compute_vector_field(n_u: float, n_d: float, n_s: float,
-                          params: VMITParams) -> float:
+                          params: Parameters) -> float:
     """The vector mean field V = a hbar c (n_u + n_d + n_s), in MeV.
 
     a is in fm^2 and the densities in fm^-3, so hbar c (MeV fm) closes the
@@ -122,14 +122,14 @@ def compute_vector_field(n_u: float, n_d: float, n_s: float,
 
 
 def compute_vector_pressure(n_u: float, n_d: float, n_s: float,
-                             params: VMITParams) -> float:
+                             params: Parameters) -> float:
     """P_V = (1/2) a hbar c (n_u + n_d + n_s)^2, in MeV/fm^3."""
     n_total = n_u + n_d + n_s
     return 0.5 * params.a * hc * n_total**2
 
 
 def compute_vector_energy(n_u: float, n_d: float, n_s: float,
-                           params: VMITParams) -> float:
+                           params: Parameters) -> float:
     """eps_V = P_V: a vector field contributes equally to P and eps."""
     return compute_vector_pressure(n_u, n_d, n_s, params)
 
@@ -137,12 +137,12 @@ def compute_vector_energy(n_u: float, n_d: float, n_s: float,
 # =============================================================================
 # BAG CONSTANT
 # =============================================================================
-def compute_bag_pressure(params: VMITParams) -> float:
+def compute_bag_pressure(params: Parameters) -> float:
     """P_B = -B/(hbar c)^3, in MeV/fm^3 — negative, the confining pressure."""
     return -params.B / hc3
 
 
-def compute_bag_energy(params: VMITParams) -> float:
+def compute_bag_energy(params: Parameters) -> float:
     """eps_B = +B/(hbar c)^3, in MeV/fm^3 — the bag's energy density."""
     return params.B / hc3
 
@@ -151,7 +151,7 @@ def compute_bag_energy(params: VMITParams) -> float:
 # EFFECTIVE CHEMICAL POTENTIAL
 # =============================================================================
 def compute_mu_effective(mu: float, n_u: float, n_d: float, n_s: float,
-                          params: VMITParams) -> float:
+                          params: Parameters) -> float:
     """mu_eff = mu - V, the potential the Fermi integrals are evaluated at."""
     V = compute_vector_field(n_u, n_d, n_s, params)
     return mu - V
@@ -160,7 +160,7 @@ def compute_mu_effective(mu: float, n_u: float, n_d: float, n_s: float,
 def compute_effective_mu_quarks(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
-    params: VMITParams
+    params: Parameters
 ) -> Tuple[float, float, float]:
     """(mu_eff_u, mu_eff_d, mu_eff_s) = (mu_u, mu_d, mu_s) - V.
 
@@ -250,10 +250,10 @@ class QuarkMuDensity:
 def compute_quark_densities_for_solver(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
-    T: float, params: VMITParams
+    T: float, params: Parameters
 ) -> QuarkMuDensity:
     """Effective potentials at the given mean field, and the densities they
-    imply — the inner step of every solver in `eos.vmit.eos`.
+    imply — the inner step of every solver in `eos.vmit.solver`.
 
     `n_u, n_d, n_s` enter only through the vector field V; the returned
     `n_*_calc` are what the resulting effective potentials produce. The solvers
@@ -277,7 +277,7 @@ def compute_quark_densities_for_solver(
 
 
 def compute_mu_physical(mu_eff: float, n_u: float, n_d: float, n_s: float,
-                         params: VMITParams) -> float:
+                         params: Parameters) -> float:
     """mu = mu_eff + V, the inverse of `compute_mu_effective`."""
     V = compute_vector_field(n_u, n_d, n_s, params)
     return mu_eff + V
@@ -289,7 +289,7 @@ def compute_mu_physical(mu_eff: float, n_u: float, n_d: float, n_s: float,
 def compute_vmit_thermo_from_mu_n(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
-    T: float, params: VMITParams = None
+    T: float, params: Parameters = None
 ) -> VMITThermo:
     """Assemble a full quark-matter state from potentials and the mean field.
 
@@ -297,7 +297,7 @@ def compute_vmit_thermo_from_mu_n(
     play the role of the mean field, exactly as the meson fields do in an RMF
     model: they set V, and V sets the effective potentials that produce the
     densities. A converged state satisfies n_q(mu_eff_q, T) = n_q, which is
-    what the solvers in `eos.vmit.eos` impose; away from a solution the
+    what the solvers in `eos.vmit.solver` impose; away from a solution the
     returned densities are the computed ones, not the ones passed in.
     """
     if params is None:
@@ -351,7 +351,7 @@ def compute_vmit_thermo_from_mu_n(
 
 def compute_quark_matter_thermo_from_n(
     n_u: float, n_d: float, n_s: float, T: float,
-    params: VMITParams = None
+    params: Parameters = None
 ) -> Tuple[float, float, float, float, float, float, float]:
     """Quark-matter thermodynamics at given flavour densities.
 
@@ -400,7 +400,7 @@ def compute_quark_matter_thermo_from_n(
 
 def compute_quark_matter_thermo_from_mu(
     mu_u: float, mu_d: float, mu_s: float, T: float,
-    params: VMITParams = None
+    params: Parameters = None
 ) -> Tuple[float, float, float, float, float, float, float]:
     """Quark-matter thermodynamics at given physical chemical potentials.
 

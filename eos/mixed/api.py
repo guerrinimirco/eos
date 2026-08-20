@@ -117,7 +117,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
         outer 1-D solve for T.
     eta : float
         Local-neutrality fraction in [0, 1]; 0 Gibbs, 1 Maxwell.
-    vmit_params : VMITParams
+    vmit_params : Parameters
         The quark phase's parameters; the published default if omitted.
     leptons : bool
         For the fixed-fraction modes: whether neutralizing leptons are present.

@@ -25,7 +25,7 @@ enters the Fermi integrals.
 
 **Parameters.** `B4 = B^(1/4)` in MeV (stored as the fourth root, the form it
 is quoted in), `a` in fm^2, and the three current masses `m_u`, `m_d`, `m_s`.
-All are arguments — `VMITParams` — never module constants.
+All are arguments — `Parameters` — never module constants.
 
 **Thermodynamics.** Each flavour is a free Fermi gas of mass `m_q` and
 degeneracy `g = 2 spin x 3 colour = 6`, with antiparticles, evaluated at

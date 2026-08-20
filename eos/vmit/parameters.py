@@ -16,7 +16,7 @@ B is carried as its fourth root B^(1/4) in MeV, the form it is quoted in;
 `B` returns B itself in MeV^4. a is in fm^2. The masses are current masses in
 MeV, not constituent masses: there is no chiral condensate here to dress them.
 
-Parameters are ALWAYS arguments -- a `VMITParams` instance passed to every
+Parameters are ALWAYS arguments -- a `Parameters` instance passed to every
 call -- never module-level constants. Inference varies B and a across millions
 of evaluations, and a parameter that can only be changed by editing a source
 file makes that impossible. The dataclass is frozen so two parametrizations
@@ -31,7 +31,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class VMITParams:
+class Parameters:
     """One vMIT parametrization.
 
     Attributes:
@@ -57,7 +57,7 @@ class VMITParams:
         return self.B4**4
 
 
-def get_vmit_default() -> VMITParams:
+def get_vmit_default() -> Parameters:
     """The working parametrization of this repository: B^(1/4) = 180 MeV,
     a = 0.2 fm^2, m_s = 150 MeV.
 
@@ -65,19 +65,19 @@ def get_vmit_default() -> VMITParams:
     study scans, and which pair is right depends on the hadronic model it is
     paired with. `eos.mixed.scan` moves over (B4, a, m_s).
     """
-    return VMITParams(name="vMIT_default")
+    return Parameters(name="vMIT_default")
 
 
 def get_vmit_custom(
     m_u: float = 5.0, m_d: float = 7.0, m_s: float = 150.0,
     a: float = 0.2, B4: float = 180.0, name: str = "vMIT_custom"
-) -> VMITParams:
+) -> Parameters:
     """A parametrization with any subset of the four numbers changed.
 
     Keyword-named so a scan can write `get_vmit_custom(B4=170.0, a=0.15)` and
     leave the rest at their defaults.
     """
-    return VMITParams(
+    return Parameters(
         name=name,
         m_u=m_u, m_d=m_d, m_s=m_s,
         a=a, B4=B4

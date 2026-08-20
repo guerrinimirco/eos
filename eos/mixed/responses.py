@@ -157,7 +157,7 @@ def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
     result       : a `MixedResult` from `solve_mixed` — pure phases included,
                    chi = 0 and chi = 1 are handled and give the pure-phase
                    frozen sound speed
-    vmit_params  : the `VMITParams` the state was solved with
+    vmit_params  : the `Parameters` the state was solved with
     rel_dn       : relative density step for the central difference
     leptons      : re-neutralise with leptons (the physical choice for stellar
                    matter, and the default). False gives the matter-only value,

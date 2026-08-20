@@ -281,15 +281,19 @@ own session where the baseline and `test_imports.py` are already being run:
               thermodynamics_hadrons.py -> thermodynamics.py, and species.py
               and api.py added. `result_to_guess(result, eq_type)` is
               `warm_start(result, spec)`, reading the mode declaration rather
-              than a string. What is left is the records (above) and the
-              parameter dataclass name, `SFHoParams` -> `Parameters`.
-    vmit      eos.py -> solver.py
+              than a string. `SFHoParams` is `Parameters`. What is left is the
+              records (above).
+    vmit      DONE: eos.py -> solver.py, and `VMITParams` is `Parameters`.
+              `get_vmit_default()` / `get_vmit_custom()` still carry the model
+              name where section 13 asks for `Parameters.default()` /
+              `Parameters.named()`; zl and abpr have converted, vmit and sfho
+              have not.
     zl        DONE: eos.py -> solver.py, compute_tables.py -> table.py,
               thermodynamics_nucleons.py -> thermodynamics.py, and species.py
               and api.py added. `ZLParams` is `Parameters` and
               `get_zl_default()` is `Parameters.default()` -- the first model
-              to take the section 13 name, so sfho's `SFHoParams` and vmit's
-              `VMITParams` are now the two that differ.
+              to take the section 13 name; sfho and vmit have since
+              followed, so every model's parameter dataclass is `Parameters`.
               `compute_zl_thermo_from_mu` is `thermo_from_mu`,
               `compute_nucleon_thermo` is `kinetic_thermo`,
               `compute_V_interaction` / `compute_P_interaction` are
@@ -416,9 +420,11 @@ module keeps the name `nmp.py` once it holds potential inversions too. About
 ninety call sites use these as classmethods, so the move belongs with the
 `Parametrization` -> `Parameters` rename, which touches the same lines.
 
-`vmit/eos.py` is held back only because `notebooks/DD2vMIT_general1oPT`
-imports from it directly and that notebook has uncommitted work in it; the
-rename and the notebook's import line have to move together.
+`vmit/eos.py` is now `vmit/solver.py`. Its importers moved with it, EXCEPT
+the notebook pair `notebooks/DD2vMIT_general1oPT.{py,ipynb}`, whose
+`from eos.vmit.eos import ...` line is now dead: that notebook is part of the
+notebook rework and was deliberately left untouched, so it does not run until
+that session updates the import to `eos.vmit.solver`.
 
 `vmit/compute_tables.py` is the one deliberate exception to the scheme: it is
 the first-generation settings-object interface, kept because the ZLvMIT

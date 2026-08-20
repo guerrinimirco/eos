@@ -40,7 +40,7 @@ from eos.sfho.solver import (
     EoSPoint, solve_mode, default_guess, warm_start,
 )
 from eos.sfho.parameters import (
-    SFHoParams,
+    Parameters,
     get_sfho_nucleonic,
     get_sfhoy_fortin,
     get_sfhoy_star_fortin,
@@ -155,7 +155,7 @@ def hadronic_row(r: EoSPoint) -> Dict[str, Any]:
 class TableSpec:
     """One table request.
 
-    parametrization: the SFHoParams to solve with -- an argument, never module
+    parametrization: the Parameters to solve with -- an argument, never module
         state, because inference varies it (CLAUDE.md section 6)
     mode : a key of MODES
     axes : {'nB': grid, exactly one of 'T'/'SnB': grid, and optionally any of
@@ -163,7 +163,7 @@ class TableSpec:
     include: the active degrees of freedom
     fixed: scalar values for the fractions the mode needs that are not swept
     """
-    parametrization: SFHoParams
+    parametrization: Parameters
     mode: str
     axes: dict
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
@@ -388,7 +388,7 @@ class TableSettings:
       modes with entropy per baryon imposed instead of temperature
 
     Custom parametrization:
-        Use custom_params to pass a SFHoParams object directly. Example:
+        Use custom_params to pass a Parameters object directly. Example:
 
         from eos.sfho.nmp import create_custom_parametrization
 
@@ -405,7 +405,7 @@ class TableSettings:
     parametrization: str = 'sfho'        # 'sfho', 'sfhoy', 'sfhoy_star', '2fam_phi'
     particle_content: str = 'nucleons'   # 'nucleons', 'nucleons_hyperons', 'nucleons_hyperons_deltas'
     equilibrium: str = 'beta_eq'         # a key of _LEGACY_EQUILIBRIA
-    custom_params: Any = None            # SFHoParams object for custom parametrization
+    custom_params: Any = None            # Parameters object for custom parametrization
 
     # Grid definition
     n_B_values: np.ndarray = field(default_factory=lambda: np.logspace(-2, 0, 50) * 0.16)
@@ -452,8 +452,8 @@ def _to_list(val):
     return [val]
 
 
-def _get_params(settings: TableSettings) -> SFHoParams:
-    """Get SFHoParams from settings."""
+def _get_params(settings: TableSettings) -> Parameters:
+    """Get Parameters from settings."""
     if settings.custom_params is not None:
         return settings.custom_params
 

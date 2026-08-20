@@ -66,7 +66,7 @@ SU6_RATIOS = {
 # PARAMETER DATACLASS
 # =============================================================================
 @dataclass
-class SFHoParams:
+class Parameters:
     """
     Holds the parameters for the SFHo Relativistic Mean Field model.
     
@@ -262,7 +262,7 @@ class SFHoParams:
 # =============================================================================
 # BASE SFHo PARAMETERS (CompOSE table values)
 # =============================================================================
-def _get_base_sfho() -> SFHoParams:
+def _get_base_sfho() -> Parameters:
     """
     Returns base SFHo nuclear parameters from CompOSE table.
     
@@ -277,7 +277,7 @@ def _get_base_sfho() -> SFHoParams:
     - L = 47.10 MeV
     - K_sym = -205.4 MeV
     """
-    p = SFHoParams(name="SFHo")
+    p = Parameters(name="SFHo")
     
     # Couplings from CompOSE table (c = g/m in fm)
     # g = c × m / hc
@@ -335,7 +335,7 @@ def _get_base_sfho() -> SFHoParams:
 # PARAMETRIZATION FACTORY FUNCTIONS
 # =============================================================================
 
-def get_sfho_nucleonic() -> SFHoParams:
+def get_sfho_nucleonic() -> Parameters:
     """
     SFHo with nucleons only (Steiner et al. 2013).
     
@@ -346,7 +346,7 @@ def get_sfho_nucleonic() -> SFHoParams:
     return p
 
 
-def get_sfhoy_fortin() -> SFHoParams:
+def get_sfhoy_fortin() -> Parameters:
     """
     SFHoY parametrization from Fortin et al. 2017 (PASA 35, e044).
     
@@ -402,7 +402,7 @@ def get_sfhoy_fortin() -> SFHoParams:
     return p
 
 
-def get_sfhoy_star_fortin() -> SFHoParams:
+def get_sfhoy_star_fortin() -> Parameters:
     """
     SFHoY* parametrization from Fortin et al. 2017.
     
@@ -454,7 +454,7 @@ def get_sfhoy_star_fortin() -> SFHoParams:
     return p
 
 
-def get_sfho_2fam_phi() -> SFHoParams:
+def get_sfho_2fam_phi() -> Parameters:
     """
     SFHoYD: SFHo with Hyperons and Deltas - includes phi meson coupling.
     
@@ -520,7 +520,7 @@ def get_sfho_2fam_phi() -> SFHoParams:
     return p
 
 
-def get_sfho_2fam() -> SFHoParams:
+def get_sfho_2fam() -> Parameters:
     """
     SFHo with Hyperons and Deltas - NO phi meson coupling (2-family without phi).
     
@@ -555,7 +555,7 @@ def get_sfho_general(
     x_rho_delta: float = 1.0,
     use_scaled_vectors: bool = True,
     name: str = "SFHo_General"
-) -> SFHoParams:
+) -> Parameters:
     """
     General SFHo parametrization with customizable couplings.
     
@@ -577,7 +577,7 @@ def get_sfho_general(
         name: Identifier for the parametrization
         
     Returns:
-        SFHoParams with specified couplings
+        Parameters with specified couplings
     """
     p = _get_base_sfho()
     p.name = name
@@ -638,7 +638,7 @@ def get_sfho_general(
 # UTILITY FUNCTIONS
 # =============================================================================
 
-def print_params_summary(params: SFHoParams) -> None:
+def print_params_summary(params: Parameters) -> None:
     """Print a summary of the parametrization."""
     print(f"Parametrization: {params.name}")
     print("=" * 60)
@@ -664,7 +664,7 @@ def print_params_summary(params: SFHoParams) -> None:
             print(f"  {particle:10s}: R_σ={Rs:.3f}, R_ω={Rw:.3f}, R_ρ={Rr:.3f}, R_φ={Rp:.3f}")
 
 
-def get_all_parametrizations() -> Dict[str, SFHoParams]:
+def get_all_parametrizations() -> Dict[str, Parameters]:
     """Return dictionary of all available parametrizations."""
     return {
         'SFHo_Nucleonic': get_sfho_nucleonic(),

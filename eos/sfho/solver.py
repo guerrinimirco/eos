@@ -67,7 +67,7 @@ from eos.general.basis import species_potential
 from eos.general.modes import (
     ModeSpec, electron_potential, strangeness_potential
 )
-from eos.sfho.parameters import SFHoParams
+from eos.sfho.parameters import Parameters
 from eos.sfho.species import SpeciesFlags, active_baryons, check_couplings
 from eos.sfho.thermodynamics import (
     baryon_thermo, field_residuals, thermal_meson_thermo, thermo_from_mu,
@@ -252,7 +252,7 @@ def _bulk_guess(n_B: float):
 
 
 def get_default_guess_beta_eq(
-    n_B: float, T: float, params: SFHoParams
+    n_B: float, T: float, params: Parameters
 ) -> np.ndarray:
     """
     Generate initial guess for beta equilibrium: [σ, ω, ρ, φ, μ_B, μ_C].
@@ -276,7 +276,7 @@ def get_default_guess_beta_eq(
 
 
 def get_default_guess_fixed_yc(
-    n_B: float, Y_C: float, T: float, params: SFHoParams
+    n_B: float, Y_C: float, T: float, params: Parameters
 ) -> np.ndarray:
     """
     Generate initial guess for fixed Y_C: [σ, ω, ρ, φ, μ_B, μ_C].
@@ -299,7 +299,7 @@ def get_default_guess_fixed_yc(
 
 
 def get_default_guess_fixed_yc_ys(
-    n_B: float, Y_C: float, Y_S: float, T: float, params: SFHoParams
+    n_B: float, Y_C: float, Y_S: float, T: float, params: Parameters
 ) -> np.ndarray:
     """
     Generate initial guess for fixed Y_C and Y_S: [σ, ω, ρ, φ, μ_B, μ_C, μ_S].
@@ -358,7 +358,7 @@ def get_default_guess_fixed_yc_ys(
 
 
 def get_default_guess_trapped(
-    n_B: float, Y_Le: float, T: float, params: SFHoParams
+    n_B: float, Y_Le: float, T: float, params: Parameters
 ) -> np.ndarray:
     """
     Generate initial guess for trapped neutrinos: [σ, ω, ρ, φ, μ_B, μ_C, μ_nue].
@@ -371,7 +371,7 @@ def get_default_guess_trapped(
 
 
 def default_guess(spec: ModeSpec, n_B: float, T: float,
-                  params: SFHoParams, SnB: Optional[float] = None):
+                  params: Parameters, SnB: Optional[float] = None):
     """The cold start for the mode `spec` declares (CLAUDE.md section 13).
 
     Dispatches to the fitted heuristics above -- they differ because the modes
@@ -401,7 +401,7 @@ class System(NamedTuple):
     `T` is the imposed temperature and is None exactly when `SnB` imposes an
     entropy per baryon instead, in which case T joins the unknowns.
     """
-    params: SFHoParams
+    params: Parameters
     particles: List[Particle]
     spec: ModeSpec
     n_B: float
@@ -745,7 +745,7 @@ def solve(sys: System, x0=None) -> EoSPoint:
 # flags, then the temperature axis. `eos.dd2` reads the same way.
 
 def solve_beta_eq_neutrinoless(
-    par: SFHoParams, n_B: float, flags: SpeciesFlags,
+    par: Parameters, n_B: float, flags: SpeciesFlags,
     T: float = 0.0, x0: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
@@ -769,7 +769,7 @@ def solve_beta_eq_neutrinoless(
 
 
 def solve_fixed_yc(
-    par: SFHoParams, n_B: float, Y_C: float, flags: SpeciesFlags,
+    par: Parameters, n_B: float, Y_C: float, flags: SpeciesFlags,
     T: float = 0.0, x0: Optional[np.ndarray] = None, leptons: bool = False
 ) -> EoSPoint:
     """
@@ -798,7 +798,7 @@ def solve_fixed_yc(
 
 
 def solve_fixed_yc_ys(
-    par: SFHoParams, n_B: float, Y_C: float, Y_S: float, flags: SpeciesFlags,
+    par: Parameters, n_B: float, Y_C: float, Y_S: float, flags: SpeciesFlags,
     T: float = 0.0, x0: Optional[np.ndarray] = None, leptons: bool = False
 ) -> EoSPoint:
     """
@@ -825,7 +825,7 @@ def solve_fixed_yc_ys(
 
 
 def solve_beta_eq_neutrino_trapped(
-    par: SFHoParams, n_B: float, Y_Le: float, flags: SpeciesFlags,
+    par: Parameters, n_B: float, Y_Le: float, flags: SpeciesFlags,
     T: float = 0.0, x0: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
@@ -848,7 +848,7 @@ def solve_beta_eq_neutrino_trapped(
 
 
 def solve_isentropic_beta_eq(
-    par: SFHoParams, n_B: float, SnB: float, flags: SpeciesFlags,
+    par: Parameters, n_B: float, SnB: float, flags: SpeciesFlags,
     x0: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
@@ -874,7 +874,7 @@ def solve_isentropic_beta_eq(
 
 
 def solve_isentropic_trapped(
-    par: SFHoParams, n_B: float, SnB: float, Y_Le: float, flags: SpeciesFlags,
+    par: Parameters, n_B: float, SnB: float, Y_Le: float, flags: SpeciesFlags,
     x0: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
@@ -898,7 +898,7 @@ def solve_isentropic_trapped(
 
 
 def solve_mode(
-    par: SFHoParams, n_B: float, flags: SpeciesFlags, spec: ModeSpec,
+    par: Parameters, n_B: float, flags: SpeciesFlags, spec: ModeSpec,
     T: Optional[float] = None, SnB: Optional[float] = None,
     x0: Optional[np.ndarray] = None
 ) -> EoSPoint:

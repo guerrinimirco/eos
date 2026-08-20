@@ -73,7 +73,7 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
 
     Parameters
     ----------
-    par : SFHoParams
+    par : Parameters
         The model parameters — always an argument, never module state.
     mode : str
         One of the modes above.

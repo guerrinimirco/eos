@@ -29,7 +29,7 @@ from eos.general.fermi_integrals import solve_fermi_jel
 from eos.general.bose_integrals import solve_bose_jel
 from eos.general.state import PhaseThermo
 from eos.general import thermal_mesons as _gas
-from eos.sfho.parameters import SFHoParams
+from eos.sfho.parameters import Parameters
 
 
 # =============================================================================
@@ -102,7 +102,7 @@ def baryon_thermo(
     mu_B: float, mu_C: float, mu_S: float,
     sigma: float, omega: float, rho: float, phi: float,
     particles: List[Particle],
-    params: SFHoParams
+    params: Parameters
 ) -> HadronThermoResult:
     """
     Compute thermodynamic quantities for all hadron species.
@@ -124,7 +124,7 @@ def baryon_thermo(
         rho: ρ-meson field (MeV)
         phi: φ-meson field (MeV)
         particles: List of Particle objects to include
-        params: SFHoParams with model parameters
+        params: Parameters with model parameters
         
     Returns:
         HadronThermoResult with all thermodynamic quantities
@@ -221,7 +221,7 @@ def baryon_thermo(
 def field_residuals(
     sigma: float, omega: float, rho: float, phi: float,
     src_sigma: float, src_omega: float, src_rho: float, src_phi: float,
-    params: SFHoParams
+    params: Parameters
 ) -> Tuple[float, float, float, float]:
     """
     Compute residuals of the meson field equations.
@@ -282,7 +282,7 @@ def field_residuals(
 
 def meson_field_thermo(
     sigma: float, omega: float, rho: float, phi: float,
-    params: SFHoParams
+    params: Parameters
 ) -> Tuple[float, float]:
     """
     Compute meson field contributions to pressure and energy density.
@@ -388,7 +388,7 @@ def meson_potentials(mu_C, mu_S, omega, rho, params):
     Args:
         mu_C, mu_S: conserved-charge potentials (MeV)
         omega, rho: the vector mean fields (MeV)
-        params: SFHoParams, for the couplings
+        params: Parameters, for the couplings
 
     Returns:
         (mu_pi_plus, mu_K_plus, mu_K0) in MeV
@@ -423,7 +423,7 @@ def thermo_from_mu(
     sigma: float, omega: float, rho: float, phi: float,
     T: float,
     particles: List[Particle],
-    params: SFHoParams,
+    params: Parameters,
     include_pseudoscalar_mesons: bool = False
 ) -> PhaseThermo:
     """
@@ -514,7 +514,7 @@ def get_residual_vector(
     T: float,
     mu_B: float, mu_C: float, mu_S: float,
     particles: List[Particle],
-    params: SFHoParams
+    params: Parameters
 ) -> np.ndarray:
     """
     Compute residual vector for self-consistent field solver.

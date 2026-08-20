@@ -32,7 +32,7 @@ from scipy.optimize import brentq, root
 from eos.general.physics_constants import hc, hc3
 from eos.sfho.species import SpeciesFlags
 from eos.sfho.parameters import (
-    SFHoParams, get_sfho_nucleonic, get_sfhoy_fortin, 
+    Parameters, get_sfho_nucleonic, get_sfhoy_fortin, 
     get_sfhoy_star_fortin, get_sfho_2fam_phi, get_sfho_2fam,
     SU6_RATIOS, SQRT2, _get_base_sfho
 )
@@ -47,7 +47,7 @@ N_SAT = 0.158  # fm^-3, saturation density
 # =============================================================================
 # COMPUTE SATURATION FIELDS
 # =============================================================================
-def compute_saturation_fields(params: Optional[SFHoParams] = None, 
+def compute_saturation_fields(params: Optional[Parameters] = None, 
                                n_B: float = N_SAT, 
                                Y_C: float = 0.5,
                                T: float = 0.01) -> Tuple[float, float, float, float]:
@@ -81,7 +81,7 @@ def compute_saturation_fields(params: Optional[SFHoParams] = None,
 # =============================================================================
 # COMPUTE HYPERON POTENTIAL DEPTHS
 # =============================================================================
-def compute_hyperon_potentials(params: SFHoParams, 
+def compute_hyperon_potentials(params: Parameters, 
                                 sigma: float = None, 
                                 omega: float = None) -> Dict[str, float]:
     """
@@ -247,7 +247,7 @@ def create_custom_parametrization(
     x_rho_delta: float = 1.0,
     # Name
     name: str = "Custom"
-) -> SFHoParams:
+) -> Parameters:
     """
     Create custom parametrization from target hyperon potential depths.
 
@@ -287,7 +287,7 @@ def create_custom_parametrization(
         name: Name for the parametrization
         
     Returns:
-        SFHoParams with computed couplings
+        Parameters with computed couplings
     """
     # Get base SFHo parameters
     p = _get_base_sfho()
@@ -556,7 +556,7 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
             because this closure predicts rather than imposes them.
 
     Returns:
-        (SFHoParams, InversionStatus). Non-convergence is a RETURN VALUE
+        (Parameters, InversionStatus). Non-convergence is a RETURN VALUE
         (CLAUDE.md section 6): a sampler walks into unrepresentable targets
         constantly and must be able to score one and move on, so a solve that
         misses its gate comes back with `ok=False` and `None` for the
@@ -708,7 +708,7 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
 
 
 def from_nmp(par_base=None, return_status=False, **nmp):
-    """Nuclear-matter parameters -> an `SFHoParams` carrying those couplings.
+    """Nuclear-matter parameters -> an `Parameters` carrying those couplings.
 
     The convenience face of `invert_nmp`: same arguments, returns the
     parameters alone unless `return_status`. Raises when the inversion did not

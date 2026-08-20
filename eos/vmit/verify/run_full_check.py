@@ -22,7 +22,7 @@ import numpy as np
 from eos.general.basis import quark_charges, charge_potentials_from_quarks
 from eos.general.physics_constants import hc, hc3
 from eos.vmit import (
-    RESIDUAL_TOL, SpeciesFlags, VMITParams, eos_point, eos_response,
+    RESIDUAL_TOL, SpeciesFlags, Parameters, eos_point, eos_response,
     compute_quark_thermo, compute_vector_field, get_vmit_default,
     solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
     solve_vmit_trapped_neutrinos,
@@ -192,7 +192,7 @@ def _check_free_gas_limit(par, grid, T):
     solved state must equal the Fermi integrals evaluated at the physical
     potentials themselves.
     """
-    free = VMITParams(name="free", m_u=par.m_u, m_d=par.m_d, m_s=par.m_s,
+    free = Parameters(name="free", m_u=par.m_u, m_d=par.m_d, m_s=par.m_s,
                       a=0.0, B4=0.0)
     worst = 0.0
     for n_B in grid:

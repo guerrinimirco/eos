@@ -10,7 +10,7 @@ the mode and the species flags. See `vmit.tex` for the physics and
 `eos.mixed` for the hybrid hadron-quark construction this is the quark half
 of.
 """
-from eos.vmit.parameters import VMITParams, get_vmit_default, get_vmit_custom
+from eos.vmit.parameters import Parameters, get_vmit_default, get_vmit_custom
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.thermodynamics import (
     QuarkThermo, VMITThermo, QuarkMuDensity,
@@ -22,7 +22,7 @@ from eos.vmit.thermodynamics import (
     compute_vmit_thermo_from_mu_n,
     compute_quark_matter_thermo_from_n, compute_quark_matter_thermo_from_mu,
 )
-from eos.vmit.eos import (
+from eos.vmit.solver import (
     VMITEOSResult, RESIDUAL_TOL, scaled_residual_max, solve_system,
     solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
     solve_vmit_trapped_neutrinos, result_to_guess,
@@ -39,7 +39,7 @@ from eos.vmit.api import (
 from eos.general.table_io import save_table, load_table, export_csv
 
 __all__ = [
-    "VMITParams", "get_vmit_default", "get_vmit_custom", "SpeciesFlags",
+    "Parameters", "get_vmit_default", "get_vmit_custom", "SpeciesFlags",
     "QuarkThermo", "VMITThermo", "QuarkMuDensity",
     "compute_quark_thermo", "compute_quark_density",
     "compute_vector_field", "compute_vector_pressure", "compute_vector_energy",

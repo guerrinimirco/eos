@@ -23,7 +23,7 @@ times in silence.
 from dataclasses import dataclass
 
 from eos.general.tabulate import temperature_at_entropy
-from eos.vmit.eos import VMITEOSResult
+from eos.vmit.solver import VMITEOSResult
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.table import (
     MODE_FRACTIONS, TableSpec, build_table, solve_at,
@@ -35,7 +35,7 @@ class PointResult:
     """One eos_point outcome: a convergence status the caller can test.
 
     `ok` is judged on the largest scaled equilibrium residual (see
-    `eos.vmit.eos.scaled_residual_max`); when it is False, `point` is None and
+    `eos.vmit.solver.scaled_residual_max`); when it is False, `point` is None and
     `message` says what the residual reached.
     """
     ok: bool
@@ -68,7 +68,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
 
     Parameters
     ----------
-    par : VMITParams
+    par : Parameters
         The model parameters -- always an argument, never module state.
     mode : str
         One of the keys of `eos.vmit.table.MODE_FRACTIONS`.

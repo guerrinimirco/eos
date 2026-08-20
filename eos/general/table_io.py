@@ -29,7 +29,7 @@ import numpy as np
 def _flatten_meta(meta):
     """Metadata dict -> flat {str: scalar-or-array} that HDF5 attrs accept.
 
-    Dataclasses (Parametrization, SpeciesFlags, VMITParams) are expanded field
+    Dataclasses (Parametrization, SpeciesFlags, Parameters) are expanded field
     by field under a prefix; anything else is stringified as a last resort so a
     table is never rejected for carrying an unexpected note.
     """
@@ -82,7 +82,7 @@ def save_table(rows, path, meta=None, windows=None):
     """Write long-format `rows` to an HDF5 file at `path`.
 
     meta    : dict of anything describing the run — pass the Parametrization,
-              SpeciesFlags, VMITParams, mode name and eta.
+              SpeciesFlags, Parameters, mode name and eta.
     windows : the {axis key: MixedWindow} dict `build_mixed_table` returns; the
               onset/offset densities are stored as a table of their own so the
               phase boundaries survive without re-solving.

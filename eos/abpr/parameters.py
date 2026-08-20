@@ -17,7 +17,7 @@ perturbative correction, the strange current mass, and the pairing gap.
 
 B is carried as its fourth root B^(1/4) in MeV, the form it is quoted in;
 `B` returns B itself in MeV^4 -- the same unit, for the same attribute, as
-`eos.alphabag.Parameters.B` and `eos.vmit.VMITParams.B` -- so a set cannot
+`eos.alphabag.Parameters.B` and `eos.vmit.Parameters.B` -- so a set cannot
 carry a B and a B4 that disagree, and the single division by (hbar c)^3
 happens where the pressure is assembled.
 

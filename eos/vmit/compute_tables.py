@@ -2,7 +2,7 @@
 
 `VMITTableSettings` + `compute_vmit_table` are the first-generation interface:
 one object carrying the grid, the mode and the printing options, returning a
-dict keyed by the grid point. New code should use `eos.vmit.eos_table` (or
+dict keyed by the grid point. New code should use `eos.vmit.solver_table` (or
 `eos.vmit.table.build_table`), which takes the repository's mode names and
 reports through the progress callback every model shares.
 
@@ -15,8 +15,8 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
-from eos.vmit.eos import VMITEOSResult
-from eos.vmit.parameters import VMITParams, get_vmit_default
+from eos.vmit.solver import VMITEOSResult
+from eos.vmit.parameters import Parameters, get_vmit_default
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.table import TableSpec, build_table
 
@@ -44,7 +44,7 @@ class VMITTableSettings:
     equilibrium: 'beta_eq', 'fixed_yc', 'fixed_yc_ys' or 'trapped_neutrinos'.
     """
     # Model parameters
-    params: Optional[VMITParams] = None  # None = use default
+    params: Optional[Parameters] = None  # None = use default
 
     # Equilibrium type
     equilibrium: str = 'beta_eq'
@@ -114,7 +114,7 @@ def compute_vmit_table(settings: VMITTableSettings) -> Dict[Tuple, List[VMITEOSR
 def save_vmit_results(
     all_results: Dict[Tuple, List[VMITEOSResult]],
     settings: VMITTableSettings,
-    params: VMITParams,
+    params: Parameters,
     eq_type: str
 ):
     """Write the solved lines out in the legacy column layout."""

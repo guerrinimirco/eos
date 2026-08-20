@@ -21,7 +21,7 @@ is in `table.py`; the spec API (eos_point / eos_table) is in `api.py`. See
 `vmit.tex` for the physics.
 
 Usage:
-    from eos.vmit.eos import solve_vmit_beta_eq
+    from eos.vmit.solver import solve_vmit_beta_eq
     result = solve_vmit_beta_eq(n_B=0.32, T=50.0)
     print(result.converged, result.P_total)
 """
@@ -29,7 +29,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional
 
-from eos.vmit.parameters import VMITParams, get_vmit_default
+from eos.vmit.parameters import Parameters, get_vmit_default
 from eos.vmit.thermodynamics import (
     compute_quark_densities_for_solver, compute_vmit_thermo_from_mu_n, G_QUARK,
 )
@@ -104,7 +104,7 @@ class VMITEOSResult:
 # =============================================================================
 # INITIAL GUESS GENERATION
 # =============================================================================
-def get_default_guess_beta_eq(n_B: float, T: float, params: VMITParams) -> np.ndarray:
+def get_default_guess_beta_eq(n_B: float, T: float, params: Parameters) -> np.ndarray:
     """Generate initial guess for beta equilibrium: [μ_u, μ_d, μ_s, μ_e, n_u, n_d, n_s]."""
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
@@ -136,7 +136,7 @@ def get_default_guess_beta_eq(n_B: float, T: float, params: VMITParams) -> np.nd
 
 
 def get_default_guess_fixed_yc(n_B: float, Y_C: float, T: float, 
-                                params: VMITParams,
+                                params: Parameters,
                                 include_electrons: bool = True) -> np.ndarray:
     """
     Generate initial guess for fixed Y_C.
@@ -176,7 +176,7 @@ def get_default_guess_fixed_yc(n_B: float, Y_C: float, T: float,
 
 
 def get_default_guess_fixed_yc_ys(n_B: float, Y_C: float, Y_S: float, T: float,
-                                    params: VMITParams,
+                                    params: Parameters,
                                     include_electrons: bool = True) -> np.ndarray:
     """
     Generate initial guess for fixed Y_C AND Y_S.
@@ -224,7 +224,7 @@ def get_default_guess_fixed_yc_ys(n_B: float, Y_C: float, Y_S: float, T: float,
 
 
 def get_default_guess_trapped_neutrinos(n_B: float, Y_L: float, T: float,
-                                          params: VMITParams) -> np.ndarray:
+                                          params: Parameters) -> np.ndarray:
     """Generate initial guess for trapped neutrinos: [μ_u, μ_d, μ_s, μ_e, μ_ν, n_u, n_d, n_s]."""
     guess_beta = get_default_guess_beta_eq(n_B, T, params)
     mu_nu_est = 10.0
@@ -236,7 +236,7 @@ def get_default_guess_trapped_neutrinos(n_B: float, Y_L: float, T: float,
 # SOLVER: BETA EQUILIBRIUM
 # =============================================================================
 def solve_vmit_beta_eq(
-    n_B: float, T: float, params: VMITParams = None,
+    n_B: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
 ) -> VMITEOSResult:
@@ -335,7 +335,7 @@ def solve_vmit_beta_eq(
 # SOLVER: FIXED Y_C
 # =============================================================================
 def solve_vmit_fixed_yc(
-    n_B: float, Y_C: float, T: float, params: VMITParams = None,
+    n_B: float, Y_C: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     include_electrons: bool = True,
     initial_guess: Optional[np.ndarray] = None
@@ -464,7 +464,7 @@ def solve_vmit_fixed_yc(
 # SOLVER: FIXED Y_C AND Y_S
 # =============================================================================
 def solve_vmit_fixed_yc_ys(
-    n_B: float, Y_C: float, Y_S: float, T: float, params: VMITParams = None,
+    n_B: float, Y_C: float, Y_S: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     include_electrons: bool = True,
     initial_guess: Optional[np.ndarray] = None
@@ -588,7 +588,7 @@ def solve_vmit_fixed_yc_ys(
 # SOLVER: TRAPPED NEUTRINOS
 # =============================================================================
 def solve_vmit_trapped_neutrinos(
-    n_B: float, Y_L: float, T: float, params: VMITParams = None,
+    n_B: float, Y_L: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
 ) -> VMITEOSResult:

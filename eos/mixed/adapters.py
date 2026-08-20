@@ -502,7 +502,7 @@ def _vmit_wing_solve(spec, n_B, T, params):
     row exactly reproducible by the pure model's own call at the same
     conditions, which is what test/mixed/test_hybrid_modes.py asserts.
     """
-    from eos.vmit.eos import (
+    from eos.vmit.solver import (
         solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
         solve_vmit_trapped_neutrinos,
     )
@@ -643,7 +643,7 @@ def vmit_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        from eos.vmit.eos import solve_vmit_beta_eq
+        from eos.vmit.solver import solve_vmit_beta_eq
         q = solve_vmit_beta_eq(n_B, T, params=params)
         return q.mu_B, q.mu_e, q.mu_B
 

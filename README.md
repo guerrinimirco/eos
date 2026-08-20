@@ -386,7 +386,7 @@ rows = eos_table(params, "cfl", axes={"nB": np.linspace(0.2, 1.6, 300)},
 
 `params.alpha` gives the coupling `alpha_s = pi/2 (1 - a4)` and `params.B` the
 bag constant in MeV⁴ (divide by `(ħc)³` for MeV/fm³), matching
-`eos.alphabag.Parameters` and `eos.vmit.VMITParams`. This model is the T=0
+`eos.alphabag.Parameters` and `eos.vmit.Parameters`. This model is the T=0
 analytic limit of the CFL phase of `eos.alphabag`, which carries `m_s` exactly
 where this one expands it to `O(m_s²)`; `eos/abpr/abpr.tex` states and
 measures the difference between the two.
