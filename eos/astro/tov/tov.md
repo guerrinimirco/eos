@@ -10,7 +10,11 @@ crust to the core a model produced.
 
     crust.py        building ONE table from a crust and a core
     solver.py       integrating the TOV and tidal equations, and sequences
-    solver_fast.py  the jitted variant of the same integration
+    solver_fast.py  a jitted integrator on a uniform log-P grid: four ODE
+                    variables (m, P, Y, M_b) in dimensionless r, so the Love
+                    number and the baryonic mass cost no extra passes. Its
+                    tolerances and its M_b algorithm differ from solver.py --
+                    it is a second implementation, not a compiled copy
     rotating.py     uniformly rotating sequences, Kepler limit, turning points
     rns_backend.py  writing RNS input, running it, parsing its output
 

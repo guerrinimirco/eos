@@ -159,7 +159,7 @@ row fixed (`mu_eL^H`, `mu_eL^Q` local, `mu_eG` global), with antiparticles:
 
 with `E = sqrt(k^2 + m^2)`, `f± = 1/(1 + exp((E ∓ mu)/T))`, g = 2 (g = 1 and
 m = 0 for neutrinos) — the same shared routines the phases use. The muon,
-where enabled, is transparent (`mu_mu = mu_e` within each population, and
+where enabled, is transparent (`mu_mu = mu_e - mu_nue` within each population, and
 `n_l = n_e + n_mu`). Photons: `P = pi^2 T^4/(45 hc^3)`, `eps = 3P`,
 `s = 4 pi^2 T^3/(45 hc^3)`, `mu = 0`.
 

@@ -121,10 +121,10 @@ not a per-mode solver.
 
 | mode | independent variables | extra unknowns | the charge row |
 |---|---|---|---|
-| `beta_eq_neutrinoless` | (n_B, T=0) | — | `sum_i q_i n_i = 0` |
-| `beta_eq_neutrino_trapped` | (n_B, Y_Le, T=0) | mu_nue | `sum_i q_i n_i = 0` |
-| `fixed_YC` | (n_B, Y_C, T=0) | — | `n_C = Y_C n_B` |
-| `fixed_YC_YS` | (n_B, Y_C, Y_S, T=0) | mu_S | `n_C = Y_C n_B` |
+| `beta_eq_neutrinoless` | (n_B, T) | — | `sum_i q_i n_i = 0` |
+| `beta_eq_neutrino_trapped` | (n_B, Y_Le, T) | mu_nue | `sum_i q_i n_i = 0` |
+| `fixed_YC` | (n_B, Y_C, T) | — | `n_C = Y_C n_B` |
+| `fixed_YC_YS` | (n_B, Y_C, Y_S, T) | mu_S | `n_C = Y_C n_B` |
 
 The trapped mode adds `(n_e + n_nue)/n_B = Y_Le`, and `fixed_YC_YS` adds
 `n_S = Y_S n_B`. Species potentials are the conserved-charge projection

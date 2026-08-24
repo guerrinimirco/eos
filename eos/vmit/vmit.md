@@ -65,9 +65,10 @@ a mixed phase needs per pure phase before imposing global neutrality. Photons
 are a separate flag. Entropy per baryon may replace `T` anywhere, through an
 outer 1-D solve.
 
-**Numerics.** Unknowns are `(mu_u, mu_d, mu_s, n_u, n_d, n_s)` plus `mu_e`
-where a lepton condition is present and `mu_nue` in the trapped mode — six to
-eight, solved with a Powell hybrid method. Keeping `n_q` as unknowns rather
+**Numerics.** The solver assembles the unknowns as
+`(mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s)` — `mu_e` in the fourth slot, before
+the densities, not appended after them — dropping `mu_e` where no lepton
+condition is present and adding `mu_nue` in the trapped mode, so six to eight, solved with a Powell hybrid method. Keeping `n_q` as unknowns rather
 than substituting the mean field is what keeps the residual polynomial in `V`
 instead of nesting the Fermi integrals inside it.
 
@@ -78,4 +79,4 @@ largest scaled component at 1e-10. The equations carry mixed units (densities
 dominated by whichever equation is largest and accepts states satisfying the
 others only loosely. Non-convergence is a return value, not an exception.
 
-**Not implemented** (see `docs/DEFERRED.md`): muons, `eos_response`.
+**Not implemented** (see `docs/DEFERRED.md`): muons.
