@@ -1,7 +1,7 @@
 # tov.md and tov.tex to §11 standard
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 09
 Parent: ../map.md
 
@@ -76,15 +76,34 @@ comes from `J/Omega` and both vanish.
 
 `tov.tex` still compiles.
 
-## Still open
+## Answer
 
-- **C2 — numerical parameters and their provenance.** The integrator's
-  tolerances, grid sizes and caps are not stated in either file. For `astro/tov`
-  this column means the *numerical* parameters rather than fitted physics
-  constants, and a reader reproducing a mass to three digits needs them.
-- **C8 — which rows each mode changes.** `astro/tov` has no §3 modes, so this is
-  arguably N/A, but the audit scored it Partial. Worth deciding whether the
-  crust-attachment choices (`No` / `BPS` / the three CompOSE tables /
-  `personalized`) are the equivalent, since they *do* change what is integrated.
+**C2 — numerical parameters.** Now stated in both files: `DOP853`, `rtol` 1e-10
+and `atol` 1e-12 on the reference path, `r_min` 0.001 km, `r_max` 15.0 km,
+`p_surface` 1e-10 MeV/fm^3, `P_tol` 1e-4 for identifying a first-order jump, and
+`n_grid` 2000 for the fast path's uniform ln P cells. Two carry more than a
+table row and both files say why: the reference tolerances are deliberately
+tighter than any EoS fed to them, so the *integration* is never the limiting
+error — which is what lets the reference path be what `solver_fast.py` is
+validated against (§9) — and `n_grid` is a resolution rather than a tolerance,
+so a first-order transition narrower than one cell is smoothed. That is the one
+place the two paths can legitimately disagree, and it now lives in the document
+rather than being discovered when they do.
 
-Ticket stays open on those two.
+**C8 — which rows each mode changes: N/A, and now justified rather than
+silent.** `astro/tov` is not a model, has no §3 modes and no residual, so the
+column has nothing to describe. Its nearest equivalent is the crust-attachment
+choice, which does change what is integrated — and both files now enumerate the
+four resolvable names (`BPS` and the three CompOSE tables) plus the `No` and
+`personalized` paths, where before only the `.tex` listed them.
+
+**One defect found and fixed that this ticket did not anticipate**, and it was
+mine: commit `7ff8627` moved the crust tables into the package, which made both
+documents' "large external data, neither shipped with the package nor tracked
+in git" false and their search path incomplete — and I did not update them in
+the same commit. Exactly the code/document drift the audit exists to catch,
+committed by the audit's own reader. Corrected in `ad3669c`.
+
+`tov.tex` compiles throughout.
+
+Status: resolved.

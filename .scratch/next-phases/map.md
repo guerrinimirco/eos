@@ -181,6 +181,15 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
   "continuity" candidate was dead. Solver-side residual scaling is still open
   but no longer needed for a green suite.
 
+- [tov.md and tov.tex to §11 standard](issues/34-tov-documents.md): the pair
+  described how RNS is *driven* and never what it solves. Both now carry the KEH
+  metric, the first integral and the specific enthalpy that is the only place the
+  EoS enters; the eighteen fields of `RotatingResult`; and the numerical
+  parameters that bound a computed mass. `Komatsu1989` and
+  `CookShapiroTeukolsky1994` added to `docs/eos.bib` — both documents leaned on a
+  formulation neither cited. Also corrected a staleness this session's own crust
+  commit introduced.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
