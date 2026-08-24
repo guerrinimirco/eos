@@ -24,8 +24,13 @@ rather than reinventing them.
 This ticket delivers: the knobs cell; a section per mode (§3) exercising
 `eos_point` and `eos_table` across the selected models; and the parametrisation
 section — published sets, plus NMP inversion for the models carrying `nmp.py`
-with `Q_sat`/`K_sym` reported as predictions. `zl` has no `nmp.py`; **state that
-in the notebook rather than faking it.**
+with `Q_sat`/`K_sym` reported as predictions. `zl` **does** now carry `nmp.py`
+([ticket 26](26-zl-nmp.md)) — the forward map only. Its `invert_nmp` raises,
+because six couplings against five NMPs leaves a one-parameter family with no
+published closure. So the notebook shows zl's NMPs as computed **predictions**
+alongside dd2's and sfho's, and states that zl cannot be built *from* a set of
+NMPs, with the reason. That is a more useful thing for a reader than the
+"zl has no nmp.py" the prompt anticipated.
 
 Cross-check every gap the notebook reports against `docs/DEFERRED.md` and record
 in the answer any gap that is real but unrecorded.

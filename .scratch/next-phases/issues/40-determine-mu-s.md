@@ -61,3 +61,58 @@ convention chosen for `mu_S` alone will look arbitrary beside it.
 
 Once the convention is settled the implementation becomes a task ticket; this one
 is the ruling.
+
+## Measurement — the premise above is wrong: mu_S is determined, not free
+
+`dn_S/dmu_S` at the `did` Y_S = 0 solutions, T = 30 MeV, Y_C = 0.3, computed
+through `thermo_from_mu` at the solved fields:
+
+| n_B | dn_S/dmu_S [fm^-3/MeV] | mu_S slack a 1e-10 residual admits | drift observed in the baseline |
+|---|---|---|---|
+| 0.32 | 7.8e-07 | 1.3e-04 MeV | **2.3e-05 MeV** |
+| 0.64 | 5.5e-03 | 1.8e-08 MeV | **4.1e-08 MeV** |
+
+**The observed drift is the convergence gate's slack**, to within a factor of
+about two at both densities. The gradient is small but far from zero, so the
+Jacobian is **ill-conditioned, not singular**, and `mu_S` has a true value the
+solver simply is not required to reach.
+
+Why it is non-zero, which the earlier reading missed: at T = 30 MeV the strange
+sector is not empty, it is *cancelling*. The Xi densities come out **negative** —
+net anti-Xi, since mu_S is strongly negative — so `n_S = 0` is reached by
+Lambda's +5.97e-11 against Xi0's 2 x (-3.09e-11), not by nothing being there.
+A cancellation has a gradient; an empty sector does not.
+
+*Caveat:* the derivative holds the fields and `mu_tilde_B` fixed, so it is a
+partial rather than the sensitivity along the constrained solution manifold.
+The conclusion rests on the drift magnitudes matching the implied slack, not on
+the derivative alone. Anyone implementing this should re-measure the constrained
+sensitivity first.
+
+### What this changes
+
+**None of the three candidate conventions is the right fix**, and the ticket
+title is wrong: nothing needs to be *made* determined. The fix is numerical —
+**scale the strangeness residual row** so the convergence gate is judged on
+whether `mu_S` is pinned rather than on whether `n_S` is small in absolute terms.
+A row whose conjugate density responds at 1e-06 fm^-3/MeV cannot be gated at the
+same absolute tolerance as one responding at 1e-01 and be expected to pin its
+potential equally well.
+
+That approach:
+
+- needs **no convention** and no threshold on "empty", so nothing arbitrary
+  enters the physics;
+- changes no equilibrium state — only how tightly the solver is required to
+  land, so `eps`, `P`, `mu_B` and every density are untouched;
+- **generalises to the `mu_e` sibling** at Y_C = 0 for free, where
+  `docs/DEFERRED.md` measures `dn_e/dmu_e ~ 4e-06 fm^-3 MeV^-1` — the same
+  situation with a different conjugate density;
+- is far cheaper than the per-model residual surgery the three conventions
+  implied, since `residual_scales` machinery already exists in at least `enjl`.
+
+**`docs/DEFERRED.md` needs correcting either way.** Its cross-cutting entry says
+"the residual has no gradient in that direction and the Jacobian is singular
+there". The gradient is 7.8e-07 at n_B = 0.32; the entry describes a degenerate
+system where the truth is a badly scaled one, and that misreading is what made
+three people reach for a convention.

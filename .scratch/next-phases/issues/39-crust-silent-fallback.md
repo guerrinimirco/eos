@@ -1,7 +1,7 @@
 # A missing crust table silently becomes a 0.9 km physics error
 
 Type: grilling
-Status: open
+Status: resolved
 Parent: ../map.md
 
 ## Question
@@ -50,3 +50,43 @@ have the suite say so. Note `CRUST_FILES` also names three CompOSE tables
 This belongs in `docs/STRUCTURE.md` ([ticket 21](21-phase5-structure.md)) and in
 the README's run instructions either way — a fresh clone currently produces three
 failures that look like physics.
+
+## Answer
+
+Both halves settled, in the order they mattered.
+
+**2. Where the tables live — in the package.** The premise that put them outside
+it does not hold: `BPST0.dat` is **4.8 kB**, and all three available tables come
+to 1.1 MB, well inside the 5 MB bar. They now sit in `eos/astro/tov/data/`,
+which is the **second** search root — after `$EOS_CRUST_DIR` so an explicit
+override still wins, before `<repo>/data/crust` so existing checkouts keep
+working. `pyproject.toml` ships them under `package-data`, following the pattern
+already used for the constraint contours, because every name in `CRUST_FILES` is
+a runtime option of `solver.py`'s `add_crust_table` — an installed wheel without
+them would lose the crust silently.
+
+A fresh clone now runs the crusted TOV path with no environment set up, and the
+suite stops skipping eleven crust-dependent tests it was quietly passing over.
+Commit `7ff8627`.
+
+**1. How a crust-dependent test behaves when the table is absent — it skips.**
+The fallback in both helpers is replaced by `pytest.skip` naming the missing
+table and where the tables ship. Verified both ways: 6 passed with the data
+present, 2 skipped with the message when it is hidden. This matches how
+`test/baseline/test_baseline.py` already handles its missing `.npz` files, and
+it is the option the ticket recommended — the assertion is meaningless without
+the data, so a skip says so where a silent downgrade said "your model is wrong
+by 0.9 km".
+
+The generalised form is worth keeping: the guard is now
+`if crust != "No" and not have_crust(crust)`, so it covers the three CompOSE
+tables too, not just `"BPS"`.
+
+**One caveat.** `test/` is gitignored by §11 ("kept locally, gitignored, not
+published"), so the two helper edits are **not** in git — only the data move and
+the search-path change are. Anyone reconstructing `test/` from scratch can
+reintroduce the silent fallback. Whether that is acceptable, or whether the
+guard belongs in `eos/astro/tov` where it would be tracked, is worth a thought
+during [ticket 21](21-phase5-structure.md) when the run instructions get written.
+
+Status: resolved.

@@ -22,6 +22,17 @@ repo root is the specification and overrides defaults; `docs/REFACTOR_PLAN.md`,
 `docs/REFACTOR_PROMPTS.md` and `docs/DEFERRED.md` record what the refactor
 settled and deferred.
 
+**Order of work: conformance before notebooks — but only the code half.**
+Settled after the audits. [Ticket 10](issues/10-rename-approvals.md) proposes
+renaming `Parametrization`, `solve_octet` and `from_dd2_defaults`, all three of
+which a notebook would import, so notebooks written first get rewritten; nothing
+in the conformance work depends on the notebooks, so the risk runs one way only.
+The **document** tickets (30–36) are NOT in that precedence: no notebook imports
+a `.tex`, so they run in parallel with anything.
+
+So: renames (10) and the code triage (11) → notebooks (12–19) → Phase 5/6, with
+documents alongside throughout.
+
 **This map carries execution, not only decisions.** Wayfinder's plan-don't-do
 default is deliberately overridden here: tickets 12–25 build and run things.
 
@@ -142,6 +153,25 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
   for a solver that converges at T = 10 MeV). Four are omissions rather than
   errors and were re-assigned to the pairs being rewritten (tickets 30, 32, 35, 36).
 
+- [Does zl get an nmp.py, or is its absence recorded as deferred?](issues/26-zl-nmp.md):
+  **forward map added, inverse raises.** The five published values reproduce and
+  are now pinned in `verify/`; they had been quoted in a docstring that nothing
+  checked. The symmetry energy had to be the `beta -> 0` curvature rather than
+  `did`'s full-step estimator, which carries `beta^4` contamination — a real
+  difference, now documented in both models. `invert_nmp` raises: six couplings
+  against five NMPs, no published closure condition.
+
+- [Three grouped notebooks, or one per model?](issues/02-notebook-grouping.md):
+  **grouped**, and §11 is amended. Stage 1's figures 1–5 each overlay all four
+  hadronic models on one axis, which nine per-model notebooks cannot do without
+  importing each other or sharing a helper module §11 forbids.
+
+- [A missing crust table silently becomes a 0.9 km physics error](issues/39-crust-silent-fallback.md):
+  the tables were never large — `BPST0.dat` is 4.8 kB — so they now ship in
+  `eos/astro/tov/data/` and a fresh clone has a crust with no environment set up.
+  The two TOV helpers skip with a message instead of silently dropping the crust.
+  Caveat: `test/` is gitignored, so only the data move is in git.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
@@ -182,12 +212,12 @@ In scope, not yet sharp enough to ticket:
   absolute floor. Whether the floor should exclude such quantities by name, and
   which models' baselines carry them, is the design question. Blocked on ticket
   37's ruling.
-- **Whether other tests silently degrade on missing data.**
-  [Ticket 39](issues/39-crust-silent-fallback.md) covers the two TOV helpers, but
-  `CRUST_FILES` names three CompOSE tables besides `BPST0.dat`, and §10 promises
-  the constraints module fails with a fetch message rather than a bare error.
-  Whether anything else in `test/` converts absent data into a wrong number,
-  rather than a skip, has not been swept.
+- **Whether other tests silently degrade on missing data.** Ticket 39 fixed the
+  two TOV helpers and generalised their guard to every `CRUST_FILES` name, but
+  nothing has swept the rest of `test/` for the same pattern — an absent input
+  turned into a wrong number rather than a skip. §10 promises the constraints
+  module fails with a fetch message; whether it does, and whether anything else
+  does not, is unmeasured.
 
 ## Out of scope
 
