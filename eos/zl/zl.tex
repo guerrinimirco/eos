@@ -421,16 +421,33 @@ $K_{\mathrm{sat}}$   & $250.2$ MeV  & $9 \nsat^2\, \partial_n^2 (E/A)$ \\
 $Q_{\mathrm{sat}}$   & $-352.8$ MeV & $27 \nsat^3\, \partial_n^3 (E/A)$ \\
 $E_{\mathrm{sym}}$   & $30.85$ MeV  & $\tfrac12 \partial_\delta^2 (E/A)$ \\
 $L_{\mathrm{sym}}$   & $41.26$ MeV  & $3 \nsat\, E_{\mathrm{sym}}'(\nsat)$ \\
-$K_{\mathrm{sym}}$   & $-88.86$ MeV & $9 \nsat^2\, E_{\mathrm{sym}}''(\nsat)$ \\
+$K_{\mathrm{sym}}$   & $-88.5 \pm 0.2$ MeV & $9 \nsat^2\, E_{\mathrm{sym}}''(\nsat)$ \\
 \bottomrule
 \end{tabular}
 \end{center}
 %
-No inverse map is implemented: unlike \texttt{eos.dd2} and \texttt{eos.sfho},
-whose couplings reach the nuclear-matter parameters only through a field
-solve, the ZL parameters are already close enough to them that a fit is a
-matter of six one-dimensional relations rather than of new physics, and none
-of the studies this model serves has needed one.
+$K_{\mathrm{sym}}$ is quoted to one decimal deliberately. It is a second
+density derivative of a quantity itself defined as a second derivative in
+$\delta$, and the estimate drifts with the step --- $-88.47$, $-88.42$,
+$-88.46$, $-88.60$ for $h/\nsat = 0.05, 0.02, 0.01, 0.005$ --- as round-off
+begins to dominate before truncation has finished falling. It is determined to
+about $\pm 0.2$, and a four-digit value for it claims a precision the finite
+difference does not have. $L_{\mathrm{sym}}$, one derivative lower, converges
+cleanly over the same steps.
+
+The forward map is \texttt{nmp.compute\_nmp}. \textbf{The inverse is not
+implemented and raises.} ZL carries six couplings --- $a_0, b_0, \gamma, a_1,
+b_1, \gamma_1$ --- against the five nuclear-matter parameters of the standard
+list, so imposing that list leaves a one-parameter family of solutions rather
+than a unique set. \texttt{eos.dd2} closes its isoscalar sector with the
+structural cross-constraint $f''_\sigma(1) = f''_\omega(1)$ and one shape
+coefficient held at its published value; nothing in the ZL literature does the
+equivalent, so there is no warrant for singling out a member of the family
+here. Closing it needs either a sixth imposed datum ($Q_{\mathrm{sat}}$, or an
+effective mass) or one coupling held fixed --- $\gamma_1$ is the natural
+candidate, being the least constrained by the isoscalar sector --- and until one
+is chosen the function raises saying which, rather than returning an arbitrary
+member.
 
 \section{Numerics}
 
