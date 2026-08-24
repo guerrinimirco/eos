@@ -62,6 +62,8 @@ class Parameters:
         """The published set of Constantinou et al.
 
         n_sat = 0.15951 fm^-3, E_sat = -16.00, K_sat = 250.2, E_sym = 30.85,
-        L_sym = 41.26 MeV (measured from the code at T = 0; see `zl.tex`).
+        L_sym = 41.26 MeV. All five are predictions of the couplings -- ZL
+        imposes no saturation condition -- and `nmp.compute_nmp` reproduces
+        them at T = 0, pinned by `verify/run_full_check.py`.
         """
         return cls()

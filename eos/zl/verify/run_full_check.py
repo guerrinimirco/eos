@@ -37,6 +37,7 @@ from eos.zl import (
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
     thermo_from_mu_n,
 )
+from eos.zl.nmp import compute_nmp
 
 
 @dataclass
@@ -273,6 +274,38 @@ def _check_no_strangeness(par):
                        "fixed_YC_YS raises; n_S = mu_S = 0")
 
 
+def _check_nmp(par):
+    """The forward NMP map reproduces the published Constantinou et al. set.
+
+    n_sat = 0.15951 fm^-3, E_sat = -16.00, K_sat = 250.2, E_sym = 30.85,
+    L_sym = 41.26 MeV. These are quoted in `parameters.py` and in `zl.tex`;
+    until `nmp.py` existed nothing in the repository reproduced them, so they
+    were provenance rather than a check.
+
+    Every one is a PREDICTION -- ZL imposes no saturation condition, so n_sat
+    is found from P = 0 rather than declared. The tolerances are the published
+    precision: the quoted values carry 4-5 significant figures, and the
+    computed ones agree to the last of them.
+
+    Q_sat and K_sym are computed too but not pinned: they are not in the
+    published set, and a check cannot assert a number nobody published.
+    """
+    got = compute_nmp(par)
+    want = {"n_sat": (0.15951, 5e-5), "E_sat": (-16.00, 5e-3),
+            "K_sat": (250.2, 5e-2), "E_sym": (30.85, 5e-3),
+            "L_sym": (41.26, 2e-2)}
+    worst, failed = 0.0, []
+    for name, (target, tol) in want.items():
+        delta = abs(got[name] - target)
+        worst = max(worst, delta / tol)
+        if delta > tol:
+            failed.append(f"{name}={got[name]:.5f} vs {target} (|d|={delta:.2e})")
+    passed = not failed
+    return CheckResult("nuclear-matter parameters", passed, worst,
+                       "published NMPs reproduced" if passed
+                       else "; ".join(failed))
+
+
 def run_full_check(par=None, grid=None, T=10.0):
     """Run the ZL verification suite; returns a structured report.
 
@@ -293,6 +326,7 @@ def run_full_check(par=None, grid=None, T=10.0):
     report.results.append(_check_residual_gate(par, grid, T))
     report.results.append(_check_causality(par, grid))
     report.results.append(_check_no_strangeness(par))
+    report.results.append(_check_nmp(par))
     return report
 
 

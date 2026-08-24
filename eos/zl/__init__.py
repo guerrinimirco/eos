@@ -37,6 +37,11 @@ from eos.zl.api import (
     eos_point, eos_table, eos_response, PointResult, RESPONSE_FREEZES,
 )
 
+from eos.zl.nmp import (
+    compute_nmp, energy_per_baryon, from_nmp, invert_nmp, nuclear_matter,
+    pressure, saturation_density, symmetry_energy,
+)
+
 __all__ = [
     "Parameters", "SpeciesFlags",
     "NucleonThermo", "MatterThermo", "EffectiveState", "G_NUCLEON",
@@ -50,6 +55,8 @@ __all__ = [
     "TableSpec", "TableResult", "build_table", "rows_from_result",
     "nucleon_row", "solve_at", "TableSettings", "compute_table",
     "save_results",
+    "compute_nmp", "invert_nmp", "from_nmp", "nuclear_matter",
+    "energy_per_baryon", "pressure", "saturation_density", "symmetry_energy",
     "eos_point", "eos_table", "eos_response", "PointResult",
     "RESPONSE_FREEZES",
 ]
