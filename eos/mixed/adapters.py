@@ -222,9 +222,10 @@ def hadronic_seed(par, flags, T, n_B_guess):
                           include_thermal_vectors=False)
     base = solve_beta_eq_octet(par, n_B_guess, fields_only, T=T,
                                include_photons=False, check_consistency=False)
-    x = [base.sigma, base.omega0, base.rho0]
+    fields = base.matter.fields
+    x = [fields["sigma"], fields["omega0"], fields["rho0"]]
     if flags.phi_field and flags.hyperons:
-        x.append(base.phi0 if base.phi0 != 0.0 else -1.0e-3)
+        x.append(fields["phi0"] if fields["phi0"] != 0.0 else -1.0e-3)
     x.append(n_B_guess * hc3)
     return x
 
@@ -581,7 +582,8 @@ def dd2_phase(par, flags):
         base = solve_beta_eq_octet(par, n_B, seed_flags, T=T,
                                    include_photons=False,
                                    check_consistency=False)
-        return base.mu_B - base.Sigma_R, base.mu_e, base.mu_B
+        m = base.matter
+        return m.mu_B - m.Sigma_R, base.leptons.mu_e, m.mu_B
 
     def wing_sweep(spec, n_B_grid, T):
         # The pure DD2 wing at the spec's own equilibrium, warm-started with
@@ -712,7 +714,7 @@ def sfho_phase(par, flags):
         p = _sfho_beta(par, n_B, flags, T=T)
         if not p.converged:
             raise RuntimeError(f"sfho cold start failed at n_B={n_B}")
-        return p.mu_B, p.mu_e, p.mu_B
+        return p.matter.mu_B, p.leptons.mu_e, p.matter.mu_B
 
     def _wing_point(spec, n_B, T):
         # ponytail: cold start per point; sfho's density-scaled default guess
@@ -1181,6 +1183,167 @@ def _internal_vector(st, par, pattern):
         vector += [st.mu_3, st.mu_8]
     if has_vector(par):
         vector.append(st.Sigma_V)
+    return np.array(vector, dtype=float)
+
+
+def ccdm_phase(par, flags=None, branches=None, patterns=None):
+    """The chiral colour-dielectric quark phase as a `Phase` (physical slot).
+
+    Three things make this adapter different from the other quark ones here,
+    and all three are properties of the model rather than of the engine.
+
+    IT ENUMERATES TWO THINGS, NOT ONE. `eos.njl` chooses a pairing pattern by
+    pressure; this model chooses a chiral/dielectric BRANCH as well, and the
+    two cannot be chosen one after the other because which pattern survives
+    depends on the strange quark's effective mass, which is a property of the
+    branch. So the adapter walks the product and keeps the largest pressure,
+    which at fixed potentials is the stable state. The winners ride on the
+    returned block's `fields`, since a mixed table that does not say which
+    quark phase it found is not reporting its own result.
+
+    THE CONFINED BRANCH IS ENUMERATED HERE AND NOT AT FIXED DENSITY. Its
+    pressure is exactly zero -- the dielectric has closed and there are no
+    quarks -- so it is not a state a hybrid construction wants returned, but
+    it IS what the deconfined branch has to beat, and the crossing is the
+    deconfinement onset. It is therefore excluded by default and available by
+    passing `branches=('confined', ...)` to locate that onset explicitly.
+
+    COLOUR NEUTRALITY IS CLOSED INSIDE IT, exactly as in `njl_phase`: mu_3 and
+    mu_8 are not conserved charges of the mixed system -- no hadronic phase
+    has them and there is nothing across the interface for them to
+    equilibrate with -- so `eos.ccdm.thermodynamics.thermo_from_mu` solves
+    them within the pattern and the engine never learns they exist.
+
+    THE SEED CHOOSES THE ROOT, so `seed_cacheable=False` -- the ENJL rule, and
+    doubly so here: the seed picks the chiral branch as well as the gap root,
+    so a cached seed would not merely change how fast a point is reached but
+    which state is reached.
+
+    `frozen_thermo` is absent: CCDM exposes no thermo-at-given-densities
+    surface, so the frozen-composition responses raise for a pairing that
+    includes it (docs/DEFERRED.md).
+    """
+    from eos.ccdm.parameters import Parameters as CCDMParameters
+    from eos.ccdm.species import (
+        DEFAULT_PATTERNS, DENSITY_BRANCHES, SpeciesFlags as CCDMFlags,
+    )
+    from eos.ccdm.thermodynamics import thermo_from_mu
+    from eos.ccdm.solver import (
+        solve_beta_eq_neutrinoless as _ccdm_beta,
+        solve_beta_eq_neutrino_trapped as _ccdm_trapped,
+        solve_fixed_yc as _ccdm_yc,
+        solve_fixed_yc_ys as _ccdm_yc_ys,
+    )
+    if par is None:
+        par = CCDMParameters.default()
+    if flags is None:
+        flags = CCDMFlags()
+    if branches is None:
+        branches = DENSITY_BRANCHES
+    if patterns is None:
+        patterns = DEFAULT_PATTERNS if flags.csc else ("unpaired",)
+
+    def _block(st):
+        n = st.n_flavour / hc3
+        mu_u, mu_d, mu_s = quark_potentials(st.mu_B, st.mu_C, st.mu_S)
+        fields = {"branch": st.branch, "pattern": st.pattern,
+                  "phi_bar": st.phi_bar, "chi_diel": st.chi,
+                  "sigma": st.sigma, "zeta": st.zeta, "omega_0": st.omega_0,
+                  "Sigma_R": st.Sigma_R, "Sigma_V": st.Sigma_V,
+                  "M_u": st.M_star[0], "M_d": st.M_star[1],
+                  "M_s": st.M_star[2],
+                  # reported as magnitudes: the sign of each gap is a gauge
+                  # (see `eos.ccdm.solver.point_from_state`)
+                  "Delta_1": abs(st.Delta[0]), "Delta_2": abs(st.Delta[1]),
+                  "Delta_3": abs(st.Delta[2]),
+                  "mu_3": st.mu_3, "mu_8": st.mu_8}
+        return PhaseThermo(
+            T=st.T, mu_B=st.mu_B, mu_C=st.mu_C, mu_S=st.mu_S, fields=fields,
+            densities={"u": n[0], "d": n[1], "s": n[2]},
+            mu_i={"u": mu_u, "d": mu_d, "s": mu_s},
+            mu_eff_i={"u": mu_u - st.Sigma_V, "d": mu_d - st.Sigma_V,
+                      "s": mu_s - st.Sigma_V},
+            m_eff_i={"u": st.M_star[0], "d": st.M_star[1],
+                     "s": st.M_star[2]},
+            n_B=st.n_B_fm, n_C=st.n_C_fm, n_S=st.n_S_fm,
+            P=st.P_fm, eps=st.eps_fm, s=st.s_fm,
+            mu_dot_n=st.mu_dot_n / hc3)
+
+    def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
+               return_state=False):
+        seeds = dict(x0) if isinstance(x0, dict) else {}
+        best = best_state = None
+        for branch in branches:
+            for pattern in patterns:
+                st, ok, _ = thermo_from_mu(
+                    par, mu, mu_C, mu_S, T, branch=branch, pattern=pattern,
+                    x0=seeds.get((branch, pattern)))
+                if not ok:
+                    continue
+                if best is None or st.P > best.P:
+                    best = st
+                    best_state = {(branch, pattern):
+                                  _ccdm_internal_vector(st, par, pattern)}
+        if best is None:
+            raise RuntimeError(
+                f"eos.ccdm: no branch/pattern converged at mu_B={mu:g}, "
+                f"mu_C={mu_C:g}, mu_S={mu_S:g}, T={T:g} MeV")
+        th = _block(best)
+        return (th, best_state) if return_state else th
+
+    def cold_start(n_B, T):
+        p = _ccdm_beta(n_B, T, par=par, flags=flags, branches=branches,
+                       patterns=patterns)
+        if not p.converged:
+            raise RuntimeError(f"eos.ccdm cold start failed at n_B={n_B}")
+        return p.mu_B, p.mu_e, p.mu_B
+
+    def _wing_point(spec, n_B, T):
+        kw = dict(par=par, flags=flags, branches=branches, patterns=patterns)
+        if spec.C is Regime.NOT_CONSERVED:
+            if spec.L_e is Regime.GLOBAL:
+                return _ccdm_trapped(n_B, spec.targets["Y_Le"], T, **kw)
+            return _ccdm_beta(n_B, T, **kw)
+        if spec.S is Regime.GLOBAL:
+            return _ccdm_yc_ys(n_B, spec.targets["Y_C"], spec.targets["Y_S"],
+                               T, leptons=spec.yc_leptons, **kw)
+        return _ccdm_yc(n_B, spec.targets["Y_C"], T,
+                        leptons=spec.yc_leptons, **kw)
+
+    def wing_sweep(spec, n_B_grid, T):
+        out = []
+        for n in n_B_grid:
+            try:
+                p = _wing_point(spec, float(n), T)
+            except Exception:
+                continue
+            if p.converged:
+                out.append((p.n_B, p.P_total, p.e_total))
+        return out
+
+    return Phase(name="CCDM", thermo=thermo, potential_kind="physical",
+                 seed_cacheable=False, cold_start=cold_start,
+                 wing_sweep=wing_sweep)
+
+
+def _ccdm_internal_vector(st, par, pattern):
+    """The internal unknown vector of a solved CCDM state, for a warm start.
+
+    The layout is `eos.ccdm.thermodynamics.internal_unknowns`, rebuilt from
+    the state rather than carried out of the solve, so the adapter stays a
+    pure function of its arguments -- the mixed residual is finite-differenced,
+    and an adapter that remembered its previous trial point would corrupt the
+    Jacobian.
+    """
+    from eos.ccdm.couplings import has_vector
+    from eos.ccdm.species import pattern_mask
+    mask = pattern_mask(pattern)
+    vector = [st.Phi, st.sigma, st.zeta]
+    if has_vector(par):
+        vector.append(st.Sigma_V)
+    vector += [st.Delta[eta] for eta in range(3) if mask[eta]]
+    if any(mask):
+        vector += [st.mu_3, st.mu_8]
     return np.array(vector, dtype=float)
 
 

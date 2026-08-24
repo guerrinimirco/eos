@@ -1412,6 +1412,107 @@ a reason that has nothing to do with seeding.
   seed, which is what the specification asks for and what would make the
   branch reliable across a whole table rather than at the points checked.
 
+### ccdm
+- **A note on where this model's integrals came from.** `eos.ccdm` does not
+  implement its own Fermi integrals: the split-panel Gauss-Legendre ideal gas
+  it shares with `eos.njl` was lifted into `eos.general.fermi_gauss` when this
+  model was written, and the pattern declarations into `eos.general.pairing`,
+  so that neither model carries a copy (CLAUDE.md section 7). Both moves are
+  bit-exact no-ops for NJL -- `test/baseline/njl.npz` reproduces at
+  rtol = 1e-10 across them. `test/general/test_fermi_gauss.py` is the
+  validation against JEL that section 7 requires of an alternative
+  implementation.
+
+- **The `fixed_YC_YS` mode at Y_S = 0 does not converge**, and the cause is
+  the cross-cutting degeneracy of this document's first entry rather than
+  anything specific to this model: once M*_s rises above mu*_s the strange
+  density is identically zero at T = 0, the strangeness row is satisfied for a
+  whole RANGE of mu_S, and that column of the Jacobian vanishes. The solve
+  stalls on the threshold with mu_S wherever its path reached. `eos.njl` shows
+  the same thing at n_B = 2.0 fm^-3. Seeding mu_S on the strangeness-
+  SUPPRESSING side (`solver.default_guess`) shortens the path to the
+  degeneracy but cannot close it; closing it means deciding what the API says
+  when a conserved charge is carried by no populated species, which is the
+  decision that cross-cutting entry is waiting on. Non-convergence is a return
+  value, so a sampler can score the point and move on.
+
+- **The onset DENSITY is not located by this model, only by `eos.mixed`.**
+  The deconfined branch's pressure crosses zero very close to where the branch
+  itself terminates -- the crossing moves from about 1.34 to 1.38 fm^-3
+  between B_g^(1/4) = 150 and 190 MeV -- so a grid scan for the crossing finds
+  one parameter point's onset and falls off the end of the branch for the
+  other. `verify/check_glue_scale_stiffens` therefore tests the robust
+  statement of the same physics (a larger B_g costs pressure at fixed density)
+  and section 6.5 of the specification says the same thing: locate transitions
+  by root-finding on pressure differences, never by an argmin over a scan
+  grid. That root-finding lives in `eos.mixed.boundaries`.
+
+- **The dilaton gradient and finite-size terms are absent.** This is a bulk,
+  homogeneous mean field, so surface tension, curvature and the finite-size
+  physics of a strangelet or of a mixed-phase droplet are outside it. The
+  Lagrangian carries (d phi)^2 and the model does not; anything that needs a
+  droplet needs it added.
+
+- **The de Carvalho contact coupling h(phi) is NOT used for G_D**, and that is
+  a decision rather than an omission (section 10 of
+  docs/ccdm_implementation.md). Their construction is sound and is *why*
+  L_pair is a legitimate leading term rather than an ad hoc addition -- write
+  the confining field as chi_bar + delta chi, integrate out delta chi at
+  Gaussian order, and a contact interaction of range 1/M_chi falls out, an
+  inverse glue mass the model already carries. Translated into this model's
+  variables the coupling costs no new parameter (phi_0 cancels identically).
+  But what it predicts is h/G_D^Fierz ~ 3e-4 in the deconfined branch and
+  ~1e4 in the confined one: negligible where the quarks are light and enormous
+  where they are heavy, which removes pairing from the deconfined phase where
+  a star's core lives and would condense a diquark in the confining vacuum.
+  It carries q = 4 at p = 1, violating the q <= p criterion. What is shipped
+  instead is the mildest dielectric dressing, G_D -> G_D/chi^q with
+  q in {0, 1} as a declared discrete choice.
+
+- **g_s, gbar_omega and n_c are not pinned by the specification.** g_q = 3.0
+  IS -- its section 10 table quotes M*_(u,d) = 826 MeV at phi_bar = 0.90 and
+  1531 MeV at 0.95 in the confined branch, and both invert to 3.00 -- and
+  B_g^(1/4) = 150 with m_sigma = 550 are its stated baseline. The other three
+  are shipped at documented mid-prior values (3.0, 4.0, 1.0 fm^-3) and
+  `parameters.py` says so rather than presenting them as measurements. G_D was
+  calibrated in this session to the specification's 20-150 MeV gap window.
+  A real calibration against neutron-star data is the work.
+
+  Note one consequence of the shipped n_c = 1.0 fm^-3: the vector interaction
+  energy W = (1/2) m_omega^2 omega_0^2 PEAKS at n_B = n_c and falls beyond it,
+  so Sigma_V changes sign there and is -118 MeV at n_B = 1.5 fm^-3, putting
+  -532 MeV/fm^3 into P. That is a property of the specification's coupling
+  form, not of the implementation, but it means the shipped point sits right
+  on the turnover and a calibration should move n_c rather than inherit it.
+
+- **`eos_response` implements only the `equilibrium` freeze.** The composition
+  freezes (held Y_i, held Y_C, held Delta, held fields) and the susceptibility
+  matrix chi_ab = dn_a/dmu_b are not wired; holding a composition needs the
+  species fractions carried through the solve as constraints, and holding the
+  gaps or the fields needs them fixed against their own equations. Asking for
+  one raises. `eos_response` DOES return `branch_changed`, because this model
+  has a first-order transition and there is no way to see from a sound speed
+  alone that its stencil straddled one.
+
+- **The muon lepton family is not a conserved charge here.**
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) only; Y_Lmu raises. The muon
+  SPECIES is available through `SpeciesFlags(muons=True)`, and in this model's
+  deconfined matter it is never populated anyway: three-flavour quark matter is
+  nearly charge neutral by itself, so mu_e comes out around 47 MeV at
+  n_B = 1.5 fm^-3 against m_mu = 105.7. The same gap as in `eos.njl`.
+
+- **`ccdm_phase` has no `frozen_thermo`**, so the frozen-composition responses
+  raise for any pairing that includes it -- the same gap as `njl_phase` and
+  `alphabag_phase`, and for the same reason: the model exposes no
+  thermo-at-given-densities surface.
+
+- **No `backends/`.** The reference NumPy path is the only one. A paired solve
+  diagonalises an 18x18 matrix at every quadrature node and the branch times
+  in `test/mixed/test_ccdm_pair.py` show where that lands; if paired hybrid
+  tables are actually wanted, that is the thing to profile first. Nothing has
+  been profiled yet, so nothing is written (CLAUDE.md section 6: performance
+  work comes after correctness).
+
 ### general
 - Most of the thermal meson gas is missing from `general/particles.py`, so it
   cannot be summed as species. `pi+`, `pi-`, `pi0`, `K+`, `K-`, `K0` and `eta`
