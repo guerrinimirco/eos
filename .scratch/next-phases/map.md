@@ -202,9 +202,30 @@ against this file, not against the earlier `pytest_before*.txt`.
   formulation neither cited. Also corrected a staleness this session's own crust
   commit introduced.
 
+- [What goes from notebooks/, and what is lost with it](issues/03-stage0-removals.md):
+  **fifteen files removed, one 46 MB folder held, one defect found.** The five
+  `_usage` pairs carried zero stored outputs, so nothing reachable was lost;
+  `notebook_api.py` went as a three-part removal (module + its test + the now-empty
+  `_EXEMPT_FILES` entry), closing **three** stale `DEFERRED.md` references and the
+  last model-to-model import edge. `notebooks/eos_tables_DD2vMIT/` is **held, not
+  deleted**: it is gitignored with 0 files tracked, so the map's lifted deletion
+  gate does not cover it and no replacement is guaranteed until
+  [ticket 05](issues/05-notebook-coverage.md) rules on `mixed`. Separately, commit
+  `d9f8eec` **broke the JSON of all three notebooks it touched** — two were being
+  deleted anyway, the third is on the KEEP list, split to
+  [ticket 41](issues/41-corrupt-notebooks.md).
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
+
+- **The 46 MB of `notebooks/eos_tables_DD2vMIT/`.** [Ticket 03](issues/03-stage0-removals.md)
+  removed everything that produced it but held the folder itself: it is gitignored
+  with zero files tracked, so deletion is permanent, and it holds the 32 computed
+  mixed-phase tables and the 42 published figures. What becomes of it — regenerated
+  by a replacement notebook, promoted into `output/public/`, or deleted — is not
+  decidable until [ticket 05](issues/05-notebook-coverage.md) rules whether `mixed`
+  gets a notebook at all.
 
 - **Notebooks for what the three do not cover.** `mixed`, `zlvmit`, `astro/tov`
   (including the RNS rotating backend) and `astro/gmode` have no usage notebook,

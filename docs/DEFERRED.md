@@ -93,10 +93,9 @@ the table this repository points it at, and a name saying otherwise inside
 `general/` was misleading.
 
 The `dd2 -> sfho` edge is gone with it; `dd2/verify/compose.py` and
-`sfho/verify/compose.py` both read from `general/`. ONE dd2 -> sfho import
-survives, `dd2/notebook_api.py` reaching for `eos.sfho.table`, and it is not
-worth fixing separately: that file is slated for deletion in the dd2 entry
-above, and the edge dies with it.
+`sfho/verify/compose.py` both read from `general/`. The last dd2 -> sfho
+import was `dd2/notebook_api.py` reaching for `eos.sfho.table`; that file has
+now been deleted, so no model-to-model edge remains.
 
 ### astro/gmode is expensive, not hung
 
@@ -141,7 +140,7 @@ to `test/<model>/`:
     eos/did/verify/tov.py   ->  the same split, and the Table VIII comparison
                                 (DID 2.245 / 11.99, DIDY 2.196 / 11.99) is now
                                 test/did/test_did_tov.py, marked `slow`
-    eos/dd2/notebook_api.py     still imports astro, and dies with the file
+    eos/dd2/notebook_api.py     imported astro; deleted, so the edge is gone
 
 `eos/mixed/hybrid.py` and `eos/mixed/scan.py` KEEP their imports, as the one
 named exception in section 1. `mixed` is a composite engine, not a model: it
@@ -163,44 +162,23 @@ paper-reproduction check is no longer inside the distributed package.
 
 ### Three notebook import lines are dead, one per rename that passed them by
 
-The renames of this session updated every call site in `eos/` and `test/` and
-deliberately did not touch the notebooks, which are their own session. Three
-import lines therefore name modules that no longer exist, and the notebook
-does not run until the line is changed. Each is a one-line fix, and each has
-to be made in the `.py` AND the `.ipynb` of the pair, which is what makes them
-a notebook-session job rather than a rename's loose end:
-
-    notebooks/DD2vMIT_general1oPT   from eos.vmit.eos import ...
-                                        -> eos.vmit.solver
-                                    from eos.dd2.verify.tov import
-                                        build_core_table, N_TRANSITION
-                                        -> eos.dd2.table
-    notebooks/DID_usage             from eos.did.verify.tov import mass_radius
-                                        -> test/did/did_tov_sequence.py, which
-                                        is not importable from a notebook, so
-                                        this one is a rewrite: build the table
-                                        with `eos.did.table.build_core_table`
-                                        and drive `eos.astro.tov` from the
-                                        notebook, which is what a notebook is
-                                        allowed to do
-                                    (the surrounding prose names
-                                        `eos.did.verify.tov` too)
-
-Checked and NOT affected: the dd2/sfho shared-record conversion breaks no
-notebook. `DD2vMIT_general1oPT`'s `q.Y_e` is a vMIT result, `DID_usage`'s
-`point.sigma` and `p.Y_e` are DID's own flat record, and `CCDM_usage`'s
-`st.Sigma_R` is ccdm's -- none of the three models converted.
+RESOLVED by deletion, not by fixing. The renames of this session updated every
+call site in `eos/` and `test/` and deliberately did not touch the notebooks;
+three import lines were left naming modules that no longer exist
+(`notebooks/DD2vMIT_general1oPT` reaching for `eos.vmit.eos` and
+`eos.dd2.verify.tov`, `notebooks/DID_usage` for `eos.did.verify.tov`). Both
+notebooks have since been removed under Stage 0, so no dead import survives.
+The replacement notebooks are written against the public API and cannot
+reproduce this class of breakage: they import `eos_point` / `eos_table` /
+`eos_response`, never a model's internals.
 
 ### One notebook still sets rcParams
 
-`notebooks/ENJL_usage.py` sets `figure.dpi` and `figure.figsize` directly. It
-is a per-notebook display preference rather than house style, and the file is
-jupytext-paired, so changing it means changing the .ipynb in the same edit.
-Left for the notebook rework, which rewrites both halves anyway. Every module
-in `eos/` and in `nucleation/` now goes through
-`eos.general.figure_style`.
-
----
+RESOLVED by deletion. `notebooks/ENJL_usage.py` set `figure.dpi` and
+`figure.figsize` directly rather than going through
+`eos.general.figure_style`; the file has since been removed under Stage 0.
+Every module in `eos/` and in `nucleation/` goes through `figure_style`, and
+CLAUDE.md section 10 binds the replacement notebooks to the same rule.
 
 ### The shared records are adopted by dd2 and sfho; the other models are not
 
@@ -296,9 +274,11 @@ names mandatory and their existence conditional. Two renames are done
 `thermodynamics.py`). The rest are outstanding, each belonging in its model's
 own session where the baseline and `test_imports.py` are already being run:
 
-    dd2       delete notebook_api.py -- the last one outstanding. The records
-              are the shared `eos.general.state` ones (above). The rest of
-              dd2's layout is now CLAUDE.md §5: physics/{thermo, fields,
+    dd2       DONE: notebook_api.py deleted, with its smoke test and the
+              `_EXEMPT_FILES` entry in test_imports.py that recorded it as a
+              violation. Its only importer was notebooks/DD2_usage, removed in
+              the same change. The records are the shared `eos.general.state`
+              ones (above). The rest of dd2's layout is now CLAUDE.md §5: physics/{thermo, fields,
               mesons} and the non-residual half of physics/octet became
               thermodynamics.py; octet_residual, assemble_octet and
               physics/residual.py became solver.py; physics/ became backends/
@@ -1183,13 +1163,14 @@ a reason that has nothing to do with seeding.
   species sums and the residual, a few lines, and no caller has wanted it.
   Note also that `hyperons=True` here means the Lambda alone; Sigma and Xi are
   not in the model, since the paper does not carry them.
-- **The notebook and the figure script do not run from a fresh clone.**
-  `notebooks/ENJL_usage.py` (and its jupytext-paired .ipynb) and
-  `plot/enjl_paper_figures.py` both `sys.path.insert` into `test/enjl` and
-  import `PARAMETER_SETS`, `load_reference`, `solved_rows`, `bad_rows` and
+- **The figure script does not run from a fresh clone.**
+  `plot/enjl_paper_figures.py` does `sys.path.insert` into `test/enjl` and
+  imports `PARAMETER_SETS`, `load_reference`, `solved_rows`, `bad_rows` and
   `baryon_potential` from `test/enjl/reference`. `test/` is gitignored, so a
-  fresh clone has neither the loader nor the five `.dat` files, and both
-  scripts fail at import. Fixing it means deciding where the author's Maple
+  fresh clone has neither the loader nor the five `.dat` files, and the script
+  fails at import. (`notebooks/ENJL_usage.py` shared this and was removed under
+  Stage 0; the replacement enjl notebook must not reintroduce the reach into
+  `test/`, which is exactly what this entry has to settle first.) Fixing it means deciding where the author's Maple
   output lives when it is not in `test/`: the loader is ~200 lines and the
   tables are 770 kB, so tracking them is cheap by the 5 MB rule, but whether
   a third party's data ships in this repository at all is not a decision the
@@ -1211,9 +1192,8 @@ a reason that has nothing to do with seeding.
   would make it agree with the engine by construction and destroy the only
   independent oracle there is. It shares the fresh-clone problem above, since
   it reads the same `.dat` files.
-- `notebooks/ENJL_usage.py` still sets `figure.dpi` and `figure.figsize`
-  directly (see the cross-cutting entry above); it is a per-notebook display
-  preference and is left for the notebook rework.
+- `notebooks/ENJL_usage.py` set `figure.dpi` and `figure.figsize` directly;
+  removed under Stage 0, so this is closed (see the cross-cutting entry above).
 - **The `fq0.7_B0` deconfined branch is not a root of this residual, and the
   window at n_b = 5.5757/5.6010 therefore cannot be constructed.** Measured,
   not inferred. Two causes, the second fatal:
