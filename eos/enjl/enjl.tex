@@ -544,7 +544,7 @@ physics decision and not a refactor.
 
 \subsection{Chemical potentials}
 
-With $\nu_i = \sqrt{\kF_i^2 + M_i^2}$ the kinetic (effective) potential of
+With $\nu_i = \sqrt{k_{F,i}^2 + M_i^2}$ the kinetic (effective) potential of
 Sec.~\ref{sec:kinetic},
 %
 \begin{align}
@@ -554,7 +554,7 @@ Sec.~\ref{sec:kinetic},
 \mu_q &= \nu_q + f_q\,\big(g_\omega\omega + \tau_q\, g_\rho\rho\big)
          + \SR_q , &&q = u, d, s ,
 \label{eq:muq}\\
-\mu_\ell &= \nu_\ell = \sqrt{\kF_\ell^2 + m_\ell^2} ,
+\mu_\ell &= \nu_\ell = \sqrt{k_{F,\ell}^2 + m_\ell^2} ,
          &&\ell = e, \mu .
 \label{eq:mul}
 \end{align}
@@ -840,7 +840,7 @@ The unknown vector has ten components,
 \begin{equation}
 \mathbf{x} \;=\; \big(\,
   M_u,\; M_d,\; M_s,\;
-  \mu_b,\; \mu_e,\;
+  \mu_b,\; \muC,\;
   \nB^{Q},\;
   g_\omega\omega,\; g_\rho\rho,\;
   \SR_b,\; \SR_q \,\big)
@@ -954,9 +954,9 @@ of those statements is temperature-independent as an \emph{equation}.
 
 What changes is the map from $\nu_i$ to the densities that fill those rows.
 At $T = 0$, Eq.~\eqref{eq:forward} continues
-$\kF_i = \sqrt{\nu_i^2 - M_i^2}$ for $\nu_i > M_i$ and $0$ otherwise, and
+$k_{F,i} = \sqrt{\nu_i^2 - M_i^2}$ for $\nu_i > M_i$ and $0$ otherwise, and
 then $n_i$ and $n^s_i$ come from the closed forms
-Eqs.~\eqref{eq:nmed}--\eqref{eq:nsmed}. At $T > 0$ there is no $\kF_i$: $n_i$
+Eqs.~\eqref{eq:nmed}--\eqref{eq:nsmed}. At $T > 0$ there is no $k_{F,i}$: $n_i$
 and $n^s_i$ come from Eqs.~\eqref{eq:nmedT}--\eqref{eq:nsmedT} evaluated at
 $\nu_i$ directly, and a $\nu_i$ below $M_i$ is a thermally populated state
 rather than an empty one. This is the \emph{forward} direction, potentials to
@@ -965,12 +965,12 @@ densities, so it costs no more than the integral itself.
 \paragraph{The one direction that inverts, and where it sits.}
 \texttt{thermo\_from\_n} (Sec.~\ref{sec:fixedcomp}) goes the other way: the
 densities are given and the $\nu_i$ they correspond to are wanted. At $T = 0$
-that is algebra, $\kF_i$ from Eq.~\eqref{eq:nmed} inverted and then
-$\nu_i = \sqrt{\kF_i^2 + M_i^2}$. At $T > 0$ it is a genuine numerical
+that is algebra, $k_{F,i}$ from Eq.~\eqref{eq:nmed} inverted and then
+$\nu_i = \sqrt{k_{F,i}^2 + M_i^2}$. At $T > 0$ it is a genuine numerical
 inversion of Eq.~\eqref{eq:nmedT}, done by the shared
 \texttt{eos.general.fermi\_integrals.invert\_fermi\_density}.
 
-Where that inversion sits is the structural part. $\kF_i$ depends only on
+Where that inversion sits is the structural part. $k_{F,i}$ depends only on
 $(n_i, g_i)$, so at $T = 0$ it is computed once, \emph{outside} the gap
 iteration. Its $T > 0$ counterpart $\nu_i$ depends on the \emph{mass}, and
 the three constituent masses are exactly what the gap equation solves for ---
@@ -1046,12 +1046,12 @@ where it comes from:
 field & symbol & from \\
 \midrule
 \texttt{n}          & $n_i$, all eight species & the request \\
-\texttt{kF}         & $\kF_i$ & Eq.~\eqref{eq:nmed} inverted \\
+\texttt{kF}         & $k_{F,i}$ & Eq.~\eqref{eq:nmed} inverted \\
 \texttt{M\_q}       & $M_u, M_d, M_s$ & the gap equation, Eq.~\eqref{eq:gap} \\
 \texttt{M\_b}       & $M_p, M_n, M_\Lambda$ & Eq.~\eqref{eq:baryonmass} \\
 \texttt{nu}         & $\nu_i$, all eight --- the PRIMARY kinetic quantity
                     & Eq.~\eqref{eq:forward} \\
-\texttt{kF}         & $\kF_i$, the $T = 0$ derived view of $\nu_i$
+\texttt{kF}         & $k_{F,i}$, the $T = 0$ derived view of $\nu_i$
                     & $\sqrt{\nu_i^2 - M_i^2}$ \\
 \texttt{n\_s}       & $n^s_i$, all six strongly interacting species
                     & Eqs.~\eqref{eq:nsmed}, \eqref{eq:nsmedT},
@@ -1096,7 +1096,7 @@ Sec.~\ref{sec:numerics} has not yet settled.
 
 A table swept by \texttt{build\_table} is a \emph{continuation}: it follows one
 branch and keeps following it past a first-order transition, into the
-metastable region beyond, so it may violate $\dd P/\dd\nB \ge 0$. That is real
+metastable region beyond, so it may violate $\mathrm{d} P/\mathrm{d}\nB \ge 0$. That is real
 physics --- mechanical instability inside a coexistence region --- and mapping
 it is what a branch sweep is for. What a structure solver must be handed is the
 other object, the stable equation of state, and this section states how it is
@@ -1186,7 +1186,7 @@ Applied at $\muB^{\text{co}}$ and $P^{\text{co}}$ this makes $\varepsilon$
 \emph{linear} in $\nB$ across the plateau automatically, which is what
 Eq.~\eqref{eq:plateau} asserts --- the two statements agree identically, and
 the slope of the plateau in the $(\nB, \varepsilon)$ plane \emph{is}
-$\muB^{\text{co}}$. It also means $c_s^2 = \dd P/\dd\varepsilon = 0$ there
+$\muB^{\text{co}}$. It also means $c_s^2 = \mathrm{d} P/\mathrm{d}\varepsilon = 0$ there
 exactly.
 
 \subsection{Which branch outside a window}

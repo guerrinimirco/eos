@@ -334,7 +334,7 @@ is~\cite{Frohaug2025}
 \end{split}
 \label{eq:omega}
 \end{equation}
-with $E^*_{ki} = \sqrt{k^2 + \meff{i}^2}$, $d_i$ the spin degeneracy, and
+with $E^*_{ki} = \sqrt{k^2 + {\meff{i}}^2}$, $d_i$ the spin degeneracy, and
 $P = -\Omega/V$. The two rearrangement self-energies are what make this
 consistent when the couplings depend on the state:
 \begin{align}
@@ -454,25 +454,25 @@ the quantities the model needs are
   \label{eq:s}
 \end{align}
 At $T = 0$ the antiparticle term vanishes, $f_i$ becomes a step at the Fermi
-momentum $k_{Fi} = \sqrt{\nu_i^2 - \meff{i}^{\,2}}$ (and the species is absent
+momentum $k_{Fi} = \sqrt{\nu_i^2 - {\meff{i}}^{\,2}}$ (and the species is absent
 where $\nu_i \le \meff{i}$), and the integrals are elementary:
 \begin{align}
   n_i &= \frac{d_i k_{Fi}^3}{6\pi^2} , \qquad
   n^s_i = \frac{d_i \meff{i}}{4\pi^2}
           \left[ k_{Fi}E^*_{Fi}
-                 - \meff{i}^{\,2}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
+                 - {\meff{i}}^{\,2}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
   \label{eq:nT0} \\
   \epsilon^{\rm kin}_i &= \frac{d_i}{16\pi^2}
-          \left[ k_{Fi}E^*_{Fi}\big(2k_{Fi}^2 + \meff{i}^{\,2}\big)
-                 - \meff{i}^{\,4}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
+          \left[ k_{Fi}E^*_{Fi}\big(2k_{Fi}^2 + {\meff{i}}^{\,2}\big)
+                 - {\meff{i}}^{\,4}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
   \label{eq:epsT0} \\
   P^{\rm kin}_i &= \frac{d_i}{48\pi^2}
-          \left[ k_{Fi}E^*_{Fi}\big(2k_{Fi}^2 - 3\meff{i}^{\,2}\big)
-                 + 3\meff{i}^{\,4}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
+          \left[ k_{Fi}E^*_{Fi}\big(2k_{Fi}^2 - 3{\meff{i}}^{\,2}\big)
+                 + 3{\meff{i}}^{\,4}\ln\frac{k_{Fi}+E^*_{Fi}}{\meff{i}} \right] ,
   \qquad s_i = 0 ,
   \label{eq:PT0}
 \end{align}
-with $E^*_{Fi} = \sqrt{k_{Fi}^2 + \meff{i}^{\,2}}$. At $T > 0$ the integrals
+with $E^*_{Fi} = \sqrt{k_{Fi}^2 + {\meff{i}}^{\,2}}$. At $T > 0$ the integrals
 are evaluated with the Johns--Ellis--Lattimer approximation~\cite{JohnsEllisLattimer1996}
 in \texttt{eos.general.fermi\_integrals}, which is the repository's single home
 for them; the model implements none of its own. Two identities are used rather
