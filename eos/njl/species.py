@@ -20,8 +20,8 @@ two rows, and a point carries the pairing pattern it was solved in.
 from dataclasses import dataclass
 
 #: The spin degeneracy of one colour-flavour mode, re-exported from
-#: `eos.general.fermi_gauss` where the ideal-gas integrals that use it live.
-from eos.general.fermi_gauss import DEGENERACY  # noqa: F401
+#: `eos.general.fermi_integrals` where the ideal-gas integrals live.
+from eos.general.fermi_integrals import DEGENERACY  # noqa: F401
 from eos.general.pairing import (
     CHARGE, COLOURS, DEFAULT_PATTERNS, FLAVOURS, FLAVOUR_OF_MODE, MODES,
     N_MODES, PATTERNS, STRANGENESS, pattern_mask, pattern_seed,

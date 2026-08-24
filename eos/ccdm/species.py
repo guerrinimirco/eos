@@ -38,7 +38,7 @@ eta-mixed phase of `eos.mixed`) resolves it.
 """
 from dataclasses import dataclass
 
-from eos.general.fermi_gauss import DEGENERACY  # noqa: F401
+from eos.general.fermi_integrals import DEGENERACY  # noqa: F401
 from eos.general.pairing import (
     CHARGE, COLOURS, DEFAULT_PATTERNS, FLAVOURS, FLAVOUR_OF_MODE, MODES,
     N_MODES, PATTERNS, STRANGENESS, pattern_mask, pattern_seed,

@@ -83,6 +83,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from eos.general.fermi_integrals import (
+    NODES_PER_PANEL, THERMAL_COLLAR, panel_nodes,
+)
+
 #: The three light flavours and the three colours, in the order every array
 #: here is indexed by.
 FLAVOURS = ("u", "d", "s")
@@ -270,18 +274,13 @@ def twosc_dispersion(E_u, E_d, mu_u, mu_d, Delta):
 # =============================================================================
 # QUADRATURE
 # =============================================================================
-#: Gauss-Legendre nodes per panel. The panels do the work here, not the node
-#: count: at T = 30 MeV, splitting at the nine Fermi momenta with 100 nodes
-#: per panel reaches a relative error of 3e-14 where a single panel with 800
-#: nodes reaches only 2e-7.
-NODES_PER_PANEL = 24
-
-#: How wide a thermal collar to place around each Fermi momentum, in units of
-#: T. The Fermi function has fallen to e^-25 at the edge of it.
-THERMAL_COLLAR = 25.0
-
-#: Two breakpoints closer than this fraction of the cutoff are one breakpoint.
-_BREAK_TOL = 1.0e-9
+# The panel-split rule itself is `eos.general.fermi_integrals.panel_nodes`,
+# imported at the top rather than repeated here: a cut Fermi integral has the
+# same two problems wherever it appears -- the integrand kinks at each Fermi
+# momentum, and one panel cannot resolve a kink however many nodes it is given
+# -- and the Fermi integrals of this repository have one home (CLAUDE.md
+# section 7). What belongs to PAIRING is which momenta to break at, which is
+# `pair_nodes` below.
 
 
 def pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel=NODES_PER_PANEL):
@@ -302,33 +301,6 @@ def pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel=NODES_PER_PANEL):
     inside = np.abs(mu_star) > M_star
     kF = np.sqrt(np.maximum(mu_star[inside] ** 2 - M_star[inside] ** 2, 0.0))
     return panel_nodes(kF, T, k_max, nodes_per_panel)
-
-
-def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL):
-    """(k, w): a panel-split Gauss-Legendre rule on [0, k_max] [MeV].
-
-    The general helper `pair_nodes` and the models' own medium integrals share,
-    since a cut Fermi integral has the same two problems wherever it appears:
-    the integrand kinks at each Fermi momentum, and one panel cannot resolve a
-    kink however many nodes it is given. Breakpoints go at each momentum in
-    `fermi_momenta` and, at T > 0, at +- 25 T around each.
-    """
-    breaks = [0.0, k_max]
-    for k_F in np.atleast_1d(fermi_momenta):
-        breaks.append(float(k_F))
-        if T > 0.0:
-            breaks.append(float(k_F) - THERMAL_COLLAR * T)
-            breaks.append(float(k_F) + THERMAL_COLLAR * T)
-
-    edges = np.unique(np.clip(np.asarray(breaks, dtype=float), 0.0, k_max))
-    edges = edges[np.concatenate(([True], np.diff(edges) > _BREAK_TOL * k_max))]
-
-    x, wx = np.polynomial.legendre.leggauss(nodes_per_panel)
-    lo, hi = edges[:-1, None], edges[1:, None]
-    half = 0.5 * (hi - lo)
-    k = (0.5 * (lo + hi) + half * x[None, :]).ravel()
-    w = (half * wx[None, :]).ravel()
-    return k, w
 
 
 # =============================================================================

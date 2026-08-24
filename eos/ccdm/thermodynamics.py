@@ -33,7 +33,7 @@ What is specific to THIS model, and what each mistake costs
     there, and no such root exists;
 
   * CONFINEMENT IS A PINNING, NOT A SMOOTH SUPPRESSION. At T = 0 a mode with
-    M* >= mu* contributes identically zero, and `eos.general.fermi_gauss`
+    M* >= mu* contributes identically zero, and `eos.general.fermi_integrals`
     returns exactly zero rather than a small number. That IS the confinement
     mechanism -- as phi_bar -> 1 the dielectric closes, M* diverges and the
     quarks leave the medium -- and smoothing it destroys the first-order
@@ -85,7 +85,7 @@ from eos.ccdm.couplings import (
     vector_self_energy,
 )
 from eos.ccdm.species import pattern_mask
-from eos.general.fermi_gauss import kinetic_thermo, unbounded_k_max
+from eos.general.fermi_integrals import kinetic_thermo, unbounded_k_max
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
     mode_potentials, pair_block,
@@ -112,7 +112,7 @@ PHI_CEIL = 1.0 - 1.0e-13
 #: e^-60 ~ 1e-26, so this is exact to well inside double precision; it exists
 #: because the confined branch drives M* to 1e15 MeV, where integrating is not
 #: wrong, merely pointless. AT T = 0 THE TEST IS EXACT AND IS
-#: `eos.general.fermi_gauss`'s, not a threshold at all.
+#: `eos.general.fermi_integrals`'s, not a threshold at all.
 ABSENT_WIDTHS = 60.0
 
 
@@ -241,7 +241,7 @@ def mode_thermo(mu_star, M_star, T):
     """One colour-flavour mode's medium integrals [natural units].
 
     An UNREGULARISED relativistic ideal gas: the upper limit is the numerical
-    one of `eos.general.fermi_gauss.unbounded_k_max`, chosen so the integrand
+    one of `eos.general.fermi_integrals.unbounded_k_max`, chosen so the integrand
     has died, and not a parameter of the model.
 
     A mode too heavy for its own potential is ABSENT. At T = 0 that test is

@@ -29,8 +29,8 @@ quietly:
     limit -- which is true at T = 0 below the cutoff and false everywhere else.
     The k^4/E form is 10% low at T = 30 MeV and 40% low at T = 50 MeV. Both
     forms and the closed-form difference between them are
-    `eos.general.fermi_gauss`, which is where the cut ideal gas lives now that
-    the colour-dielectric model needs the same integrals (CLAUDE.md section 7);
+    `eos.general.fermi_integrals`, the fourth method in the one home the Fermi
+    integrals of this repository have (CLAUDE.md section 7);
   * the medium integral is not a spectator. At T = 0 unpaired it is
     self-limiting at k_F, but at T > 0, and in ANY paired phase, the Fermi
     surface is smeared and the cutoff enters. That is why lambda = Lambda_UV/
@@ -54,7 +54,9 @@ import math
 
 import numpy as np
 
-from eos.general.fermi_gauss import ModeThermo, kinetic_thermo, surface_term
+from eos.general.fermi_integrals import (
+    ModeThermo, kinetic_thermo, surface_term,
+)
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
     mode_potentials, pair_block, pattern_mask,

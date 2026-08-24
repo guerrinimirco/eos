@@ -62,8 +62,9 @@ The pairing machinery itself is NOT here: the gap matrix, the
 Bogoliubov-de Gennes problem, the pairing correction to Omega and the
 Hellmann-Feynman gap kernels are `eos.general.pairing`, shared with the NJL
 model, because the pairing sector of the two is the same sector (CLAUDE.md
-section 7). The ideal-gas integrals are `eos.general.fermi_gauss` for the same
-reason.
+section 7). The ideal-gas integrals are `eos.general.fermi_integrals` for the
+same reason -- the split-panel method there, in natural units, not the
+fm-based JEL one the hadronic models call.
 
 Conventions are this repository's: strangeness S = +1 per s quark, C the
 charge of strongly interacting matter only, natural units (MeV powers)
