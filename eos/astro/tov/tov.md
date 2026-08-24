@@ -120,13 +120,22 @@ Three join modes, differing precisely in how they avoid that:
                   Maxwell condition — and tanh-blend eps(P) across it; sharp as
                   delta_P -> 0.
 
-Crust tables are large external data, not shipped and not in git. Resolved by
-name against an explicit path, then each directory of $EOS_CRUST_DIR (a SEARCH
-PATH — the BPS file and the CompOSE tree do not live together), then
-<repo>/data/crust. A missing table raises naming the file, every directory
-tried and the variable. `have_crust(name)` is the predicate to call before
-falling back: falling back to no crust moves M_max by ~1%, so it is visible at
-the call site rather than silent.
+Crust tables SHIP WITH THE PACKAGE, in eos/astro/tov/data/. They were once
+treated as large external data; they are not — BPST0.dat is 4.8 kB and all
+three come to 1.1 MB — and a fresh clone that had to fetch them ran the crusted
+path without a crust, which costs most of a km in R_1.4 rather than raising.
+
+Resolved by name — `BPS`, `compose_sfho_nYCT`, `compose_sfho_nT0_beta`,
+`compose_sfho_nYLS_trap` — against an explicit path, then each directory of
+$EOS_CRUST_DIR (a SEARCH PATH: the BPS file and the CompOSE tree need not live
+together), then the shipped eos/astro/tov/data/, then <repo>/data/crust for
+checkouts that put them there. The environment variable is FIRST so an explicit
+override always wins.
+
+A name that cannot be resolved raises naming the file, every directory tried
+and the variable that adds one. `have_crust(name)` is the predicate to call
+before falling back: falling back to no crust moves M_max by ~1% and R_1.4 by
+far more, so the decision is visible at the call site rather than silent.
 
 ## Numerical parameters
 

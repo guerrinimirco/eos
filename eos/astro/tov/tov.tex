@@ -350,13 +350,21 @@ precisely in how they avoid this.
 Rows with non-finite $P$, $\varepsilon$ or $\nB$, and rows below
 $\nB = 10^{-8}\;\mathrm{fm^{-3}}$, are dropped before any of this.
 
-\paragraph{Where the tables come from.} Crust tables are large external data,
-neither shipped with the package nor tracked in git. They are resolved by name
+\paragraph{Where the tables come from.} The crust tables \emph{ship with the
+package}, in \texttt{eos/astro/tov/data/}. They were once treated as large
+external data to be fetched; they are not --- \texttt{BPST0.dat} is 4.8\,kB and
+all three together 1.1\,MB --- and the arrangement cost more than it saved, since
+a checkout without them ran the crusted path with no crust, which moves
+$R_{1.4}$ by most of a kilometre instead of raising.
+
+They are resolved by name
 --- \texttt{BPS}, \texttt{compose\_sfho\_nYCT},
 \texttt{compose\_sfho\_nT0\_beta}, \texttt{compose\_sfho\_nYLS\_trap} --- against
 an explicit path, then each directory of \texttt{\$EOS\_CRUST\_DIR} (a search
-path, several directories separated by the platform's path separator), then
-\texttt{<repo>/data/crust}. A name that cannot be resolved raises with the
+path, several directories separated by the platform's path separator), then the
+shipped \texttt{eos/astro/tov/data/}, then \texttt{<repo>/data/crust} for
+checkouts that keep them there. The environment variable comes first, so an
+explicit override always wins. A name that cannot be resolved raises with the
 file, every directory tried and the variable that adds one. \texttt{have\_crust}
 is the predicate a caller uses before falling back: falling back to no crust
 moves $M_{\max}$ by about 1\%, so the decision is made visible rather than
