@@ -180,11 +180,11 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
 def _hadronic_tov(par, flags, n_ec=120, tov_parallel=True):
     """(M_max, R_Mmax, R_1p4) of the PURE hadronic branch, no quarks.
 
-    Reuses `eos.dd2.verify.tov.build_core_table` for the cold beta-equilibrium
+    Reuses `eos.dd2.table.build_core_table` for the cold beta-equilibrium
     core and runs the Numba TOV backend over it. nan on failure — a branch that
     will not integrate is a finding about the parameters.
     """
-    from eos.dd2.verify.tov import build_core_table, N_TRANSITION
+    from eos.dd2.table import build_core_table, N_TRANSITION
     from eos.astro.tov.crust import have_crust
     from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
     import os

@@ -40,9 +40,11 @@ reports rather than prints.
                          sequence, and the published c_s^2 peak near 4 n_0.
  13. Residual gate       every state solved here is inside the tolerance the
                          model claims to accept at.
- 14. Stellar structure   M_max and R_1.4 against Table VIII, through
-                         `eos.astro.tov`. Off by default (two TOV sequences take
-                         about forty seconds); `--tov` switches it on.
+
+The stellar-structure comparison against Table VIII -- M_max and R_1.4 --
+is NOT one of these: it runs a TOV sequence, so it imports `eos.astro`, which
+CLAUDE.md section 1 does not allow a model to do. It is
+`test/did/test_did_tov.py`.
 
 Run as `python -m eos.did.verify.run_full_check`.
 """
@@ -396,35 +398,6 @@ def check_causality(par, tol=0.0):
                        f"(paper: 0.71 at 0.66)")
 
 
-def check_tov(par, tol_mass=0.02, tol_radius=0.25):
-    """Table VIII: M_max and R_1.4 through the repository's TOV solver.
-
-    Loose gates, and loosely for a stated reason: the published numbers use
-    the paper's own nuclear-statistical-equilibrium crust, which this
-    repository does not carry, and the BPS crust attached here differs from it
-    below 0.08 fm^-3. That moves R_1.4 by around a tenth of a km and M_max by
-    a few thousandths -- a crust difference, not a core disagreement.
-
-    Not part of `run_all` by default: two TOV sequences take about 40 seconds
-    against one second for everything else. Pass include_tov=True.
-    """
-    from eos.did.verify.tov import mass_radius
-
-    published = {"DID": (2.245, 11.99), "DIDY": (2.196, 11.99)}
-    worst = 0.0
-    detail = []
-    for label, flags in (("DID", SpeciesFlags(muons=False)),
-                         ("DIDY", SpeciesFlags(hyperons=True, muons=False))):
-        out = mass_radius(par, flags)
-        M_pub, R_pub = published[label]
-        errors = ((abs(out["M_max"] - M_pub) / tol_mass, f"{label} M_max"),
-                  (abs(out["R_1p4"] - R_pub) / tol_radius, f"{label} R_1.4"))
-        worst = max(worst, max(error for error, _name in errors))
-        detail.append(f"{label} {out['M_max']:.3f}/{out['R_1p4']:.2f}")
-    return CheckResult("tov", worst <= 1.0, worst,
-                       f"{', '.join(detail)} (paper 2.245/11.99, 2.196/11.99)")
-
-
 def check_residual_gate(par, states):
     """Every state solved here is inside the tolerance the model accepts at."""
     worst, where = 0.0, ""
@@ -438,11 +411,14 @@ def check_residual_gate(par, states):
                        f"worst {where}, gate {RESIDUAL_TOL:.0e}")
 
 
-def run_all(par=None, include_tov=False):
+def run_all(par=None):
     """Run every check and return the report.
 
-    `include_tov` adds the stellar-structure comparison, which is two TOV
-    sequences and takes about forty seconds; everything else takes one.
+    The comparison against Table VIII of arXiv:2511.15646 -- M_max and R_1.4
+    through a TOV sequence -- is NOT here: it imports `eos.astro`, which
+    CLAUDE.md section 1 does not allow a model to do. It is
+    `test/did/tov_sequence.py` plus `test/did/test_did_tov.py`, and the
+    model's own half of that contract, `build_core_table`, is `eos.did.table`.
     """
     par = par if par is not None else Parameters.default()
     states = _states(par)
@@ -462,12 +438,9 @@ def run_all(par=None, include_tov=False):
         check_causality(par),
         check_residual_gate(par, states),
     ]
-    if include_tov:
-        report.results.append(check_tov(par))
+
     return report
 
 
 if __name__ == "__main__":
-    import sys
-
-    print(run_all(include_tov="--tov" in sys.argv))
+    print(run_all())

@@ -17,7 +17,8 @@ import numpy as np
 from scipy.optimize import brentq
 
 from eos.dd2.species import SpeciesFlags, hadronic_charges
-from eos.dd2.solver import solve_octet, sweep_octet
+from eos.general.state import EOSTable_for_TOV
+from eos.dd2.solver import solve_octet, sweep_octet, sweep_beta_eq_octet
 
 
 #: Equilibrium mode -> the `solve_octet` configuration it means. The fixed
@@ -297,6 +298,37 @@ def rows_from_result(result):
                 row["SnB"] = tv
             out.append(row)
     return out
+
+
+# =============================================================================
+# THE CORE TABLE A STRUCTURE SOLVER INTEGRATES
+# =============================================================================
+# `EOSTable_for_TOV` is the contract between a model and `eos.astro` and lives
+# in `eos.general.state`, which both layers may import (CLAUDE.md section 1);
+# building one is the model's side of it, so it belongs here rather than in a
+# verify suite. Running the sequence over it does not: that is astro's, and
+# the callers that want M(R) reach for `eos.astro.tov` themselves.
+
+#: Crust–core transition density [fm^-3] (BPS table tops out at 0.08).
+N_TRANSITION = 0.08
+
+
+def build_core_table(par, flags, n_lo=0.05, n_hi=1.25, n_points=150):
+    """
+    Cold (T=0) beta-equilibrium core EoS as an EOSTable_for_TOV. Uses a
+    geometric density grid and warm-started continuation through the onsets.
+    """
+    grid = np.geomspace(n_lo, n_hi, n_points)
+    # stop_at_boundary: a Δ model may hit scalar collapse (m*->0) before n_hi;
+    # take the valid prefix as the core EoS.
+    points = sweep_beta_eq_octet(par, grid, flags, T=0.0,
+                                 include_photons=False, stop_at_boundary=True)
+    P = np.array([p.P for p in points])
+    eps = np.array([p.eps for p in points])
+    nB = np.array([p.n_B for p in points])
+    # TOV interpolation needs a monotone-increasing P grid.
+    order = np.argsort(P)
+    return EOSTable_for_TOV(P=P[order], epsilon=eps[order], nB=nB[order])
 
 
 if __name__ == "__main__":

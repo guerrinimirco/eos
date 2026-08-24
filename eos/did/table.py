@@ -25,10 +25,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from eos.general.modes import beta_eq_neutrinoless
+from eos.general.state import EOSTable_for_TOV
 from eos.general.tabulate import TEMPERATURE_AXES, lines_from_axes, sweep_lines
 from eos.did.parameters import Parameters
 from eos.did.solver import (
-    EoSPoint, MODE_FRACTIONS, mode_spec, solve_mode, warm_start,
+    EoSPoint, MODE_FRACTIONS, mode_spec, solve_beta_eq_neutrinoless,
+    solve_mode, warm_start,
 )
 from eos.did.species import SpeciesFlags
 
@@ -183,3 +186,38 @@ def rows_from_result(result):
                 row.setdefault(key, value)
             out.append(row)
     return out
+
+
+# =============================================================================
+# THE CORE TABLE A STRUCTURE SOLVER INTEGRATES
+# =============================================================================
+# `EOSTable_for_TOV` is the contract between a model and `eos.astro` and lives
+# in `eos.general.state`, which both layers may import (CLAUDE.md section 1);
+# building one is the model's side of it. Running the sequence over it is
+# astro's, and lives in `test/did/did_tov_sequence.py`.
+
+#: Crust-core transition density [fm^-3] (the BPS table tops out at 0.08).
+N_TRANSITION = 0.08
+
+
+def build_core_table(par, flags, n_lo=0.05, n_hi=1.4, n_points=200):
+    """The cold beta-equilibrium core EoS as an `EOSTable_for_TOV`.
+
+    A geometric density grid swept with a warm start, which is what carries
+    the solve through the hyperon onsets; a density the solver cannot reach is
+    dropped rather than ending the sweep.
+    """
+    spec = beta_eq_neutrinoless()
+    P, eps, n_B, x0 = [], [], [], None
+    for n in np.geomspace(n_lo, n_hi, n_points):
+        point = solve_beta_eq_neutrinoless(par, float(n), flags, T=0.0, x0=x0)
+        if not point.converged:
+            x0 = None
+            continue
+        P.append(point.P)
+        eps.append(point.eps)
+        n_B.append(point.n_B)
+        x0 = warm_start(point, spec)
+    P, eps, n_B = np.array(P), np.array(eps), np.array(n_B)
+    order = np.argsort(P)          # TOV interpolation needs P increasing
+    return EOSTable_for_TOV(P=P[order], epsilon=eps[order], nB=n_B[order])

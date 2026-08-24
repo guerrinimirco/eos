@@ -26,7 +26,16 @@ Inside the package the layers are strict:
   only through that surface.
 - `astro/` (`tov` — including the rotating/RNS backend — and `gmode`)
   consumes tables and arrays produced by models and engines; it never imports
-  model internals, and no model imports `astro/`.
+  model internals, and **no model imports `astro/`** — not in its solver, not
+  in its `table.py`, and not in its `verify/` suite. A model's side of the
+  contract is producing an `EOSTable_for_TOV` (which lives in `general/`, the
+  layer both may import); running a sequence over one is astro's side, so a
+  model's M–R check is a test, in `test/<model>/`, never a `verify/` entry.
+  The **composite engine is the one exception**, and a named one: `mixed/`
+  scans parameter space and its result columns ARE M_max and R_1.4, so
+  `mixed/hybrid.py` and `mixed/scan.py` import `eos.astro.tov`. The engine
+  sits directly below `astro/` in the order above and couples to nothing else
+  downstream; a model does not get the same latitude.
 - `eos/zlvmit/` is first-generation legacy code kept for its published
   results. It follows these conventions where cheap and is exempt from the
   uniform API; new hybrid work goes through `eos/mixed`.

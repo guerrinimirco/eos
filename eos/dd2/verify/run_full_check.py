@@ -22,7 +22,6 @@ from eos.dd2 import (
     Parametrization, SpeciesFlags, solve_snm, solve_beta_eq_octet, solve_octet,
 )
 from eos.dd2.responses import sound_speed_eq, thermal_index
-from eos.dd2.verify.tov import mass_radius
 
 
 @dataclass
@@ -76,13 +75,6 @@ def _check_identities(par, flags, grid):
                      abs(-p.matter.mu_C - p.leptons.mu_e) / p.matter.mu_B)
     return CheckResult("thermo identities", worst < 1e-8, worst,
                        "HVH + beta residual over grid")
-
-
-def _check_tov(par, flags):
-    r = mass_radius(par, flags)
-    return CheckResult("TOV M_max>=2", r["M_max"] >= 2.0,
-                       max(0.0, 2.0 - r["M_max"]),
-                       f"M_max={r['M_max']:.3f} R_1.4={r['R_1p4']:.2f}km")
 
 
 def _check_responses(par, flags, grid):
@@ -139,10 +131,16 @@ def _check_compose(par):
     return CheckResult("CompOSE HS(DD2)", m < 1e-3, m, "nucleonic T=1 Yq=0.5")
 
 
-def run_full_check(par=None, flags=None, grid=None, include_tov=True):
+def run_full_check(par=None, flags=None, grid=None):
     """
     Run the DD2 verification suite. Returns a FullCheckReport (structured
     pass/fail + max error per check).
+
+    The M_max >= 2 M_sun check is NOT here: running a stellar sequence means
+    importing `eos.astro`, which CLAUDE.md section 1 does not allow a model to
+    do. It is `test/dd2/dd2_tov_sequence.py` plus `test/dd2/test_dd2_m4_tov.py`,
+    and the model's own half of that contract -- `build_core_table`, returning
+    an `EOSTable_for_TOV` -- is `eos.dd2.table`.
     """
     par = par or Parametrization.from_dd2_defaults()
     flags = flags or SpeciesFlags(hyperons=False, phi_field=False)
@@ -155,8 +153,6 @@ def run_full_check(par=None, flags=None, grid=None, include_tov=True):
     report.results.append(_check_coeff_cross(par, flags, grid))
     report.results.append(_check_backend_parity(par, flags, grid))
     report.results.append(_check_compose(par))
-    if include_tov:
-        report.results.append(_check_tov(par, flags))
     return report
 
 

@@ -296,7 +296,7 @@ def prepare_rotating_eos(eos: Union[str, EOSTable_for_TOV],
         if crust_mode == "attach" and crust_kwargs.get("n_transition") is None:
             # add_crust's 'attach' mode has no default transition density, so
             # join at the top of the crust table -- the same convention as
-            # eos/dd2/verify/tov.py, whose N_TRANSITION = 0.08 is where BPS
+            # eos/dd2/table.py, whose N_TRANSITION = 0.08 is where BPS
             # ends.
             crust_kwargs["n_transition"] = float(np.max(crust_table.nB))
         eos = add_crust(eos, crust_name=crust, mode=crust_mode, **crust_kwargs)

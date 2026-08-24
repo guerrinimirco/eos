@@ -119,34 +119,47 @@ The five crust-dependent tests now skip when no crust table is configured,
 rather than erroring, for the same reason the rotating ones do: a fresh clone
 carries no external data and must still produce a green suite.
 
-### Five models still import `eos.astro`, which section 1 forbids
+### The astro imports are resolved: the rule is tightened, `eos/mixed` named
 
-CLAUDE.md section 1 says plainly that no model imports `astro/`. Five do:
+CLAUDE.md section 1 said no model imports `astro/`, and five files did. They
+are gone, and the rule now says what it means rather than leaving the reader
+to guess whether a `verify/` suite counted.
 
-    eos/dd2/verify/tov.py        compute_tov_sequence, find_mmax_precise,
-    eos/did/verify/tov.py        generate_ec_logspace, have_crust
-    eos/mixed/hybrid.py
-    eos/mixed/scan.py
-    eos/dd2/notebook_api.py
+What each of them actually was, which is what made the answer easy: two
+separable things in one file. `build_core_table` (dd2 and did alike) turns a
+cold beta-equilibrium sweep into an `EOSTable_for_TOV` and imports NOTHING
+from astro -- it is the model's half of the contract, and that record lives in
+`eos.general.state` precisely so both layers may hold it. `mass_radius` runs
+the sequence. The first moved to the model's own `table.py`; the second moved
+to `test/<model>/`:
 
-Two OTHER edges were removed in the astro/tov session and are the reason this
-entry can be written narrowly: `eos/mixed/hybrid.py` and
-`eos/zlvmit/table_reader.py` imported only `EOSTable_for_TOV`, and that record
-is now `eos.general.state.EOSTable_for_TOV` -- the contract between the models
-that PRODUCE a table and the astro layer that CONSUMES one, living in the
-layer both may import.
+    eos/dd2/verify/tov.py   ->  build_core_table, N_TRANSITION in
+                                eos/dd2/table.py
+                                mass_radius in test/dd2/dd2_tov_sequence.py,
+                                the M_max >= 2 check now
+                                test/dd2/test_dd2_m10.py
+    eos/did/verify/tov.py   ->  the same split, and the Table VIII comparison
+                                (DID 2.245 / 11.99, DIDY 2.196 / 11.99) is now
+                                test/did/test_did_tov.py, marked `slow`
+    eos/dd2/notebook_api.py     still imports astro, and dies with the file
 
-What is left is different in kind: these five do not want a record, they want
-to RUN a TOV sequence -- a verify suite computing M-R for the model it checks,
-or a convenience wrapper handing a hybrid table straight to the solver. That
-is a model reaching downstream, and no relocation fixes it; either the rule
-admits an exception for `verify/` suites and named convenience wrappers, or
-those callers move up into `astro/` (or into `test/`, which is where a
-model's M-R check arguably belongs). It is a decision about the rule, not a
-refactor, which is why it is recorded rather than done.
+`eos/mixed/hybrid.py` and `eos/mixed/scan.py` KEEP their imports, as the one
+named exception in section 1. `mixed` is a composite engine, not a model: it
+sits directly below `astro/` in the layering order and couples to nothing else
+downstream, and `scan.py`'s result columns ARE M_max and R_1.4 -- taking TOV
+out of it removes the point of the scan rather than fixing a layering problem.
 
-`dd2/notebook_api.py` is on the list only until it is deleted, which the dd2
-entry above already schedules; its edge dies with the file.
+`test/test_imports.py` enforces the tightened rule with
+`test_no_model_imports_astro`, which has no `verify/` carve-out. The blanket
+`verify/` exemption survives only for the model-to-model half (enjl's verify
+suite reaches into `eos.mixed` to check its own coexistences), and the stale
+`sfho/compose_loader.py` entry is gone with the file it named.
+
+What the models lost: `eos.dd2.verify.run_full_check` no longer reports
+`TOV M_max>=2` and `eos.did.verify.run_all` no longer takes `include_tov`.
+Both checks still run, as tests. That is the cost of the rule and it was taken
+deliberately: `test/` is gitignored and unpublished, so the DID
+paper-reproduction check is no longer inside the distributed package.
 
 ### One notebook still sets rcParams
 
