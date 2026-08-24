@@ -192,6 +192,37 @@ requested shape. Lowering r_ratio spins the star up to mass-shedding, where the
 equatorial surface velocity equals the orbital velocity of a free particle;
 that is the Kepler limit and it ends the sequence.
 
+### What a rotating model returns
+
+`RotatingResult`, not a row of the static sequence. Units are the ones RNS
+reports:
+
+    e_c            central energy density        MeV/fm^3
+    r_ratio        r_p / r_e                     1 is non-rotating
+    M              gravitational mass            M_sun
+    M_0            rest mass                     M_sun, RNS's own m_B = 1.66e-24 g
+    R_e            circumferential eq. radius    km
+    r_e, r_p       coordinate radii              km, r_p = r_e * r_ratio
+    Omega          angular velocity              rad/s
+    freq           spin frequency                Hz
+    Omega_K,       mass-shedding rate at the     rad/s, Hz
+      freq_K         equator FOR THIS MODEL
+    J              angular momentum              dimensionless, cJ/(G M_sun^2)
+    I              moment of inertia             10^45 g cm^2; NaN when non-rotating
+    T_over_W       T/|W|                         rotational / grav. binding energy
+    Phi_2          mass quadrupole moment        10^42 g cm^2
+    Z_p            polar redshift
+    Z_f, Z_b       forward, backward eq. redshift
+
+Two are easy to misread. `Omega_K` is the mass-shedding rate OF THIS MODEL, not
+the Kepler frequency of the sequence — a slowly rotating star reports the Omega
+at which *it* would shed, which is not where the sequence ends. And `I` is NaN
+rather than zero at r_ratio = 1, because it comes from J/Omega and both vanish.
+
+A non-converged model carries NaN in every physical field, `converged = False`
+and a `note` saying why, rather than raising (CLAUDE.md §6: non-convergence is a
+return value, and a sweep must survive its bad points).
+
 ### Driving the external code
 
 Four RNS properties shape the interface, each a constraint the caller cannot

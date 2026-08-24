@@ -521,6 +521,46 @@ field & quantity & where it comes from \\
 requested; the tidal integration roughly doubles the cost of a point, so it is
 optional rather than always on.
 
+A rotating model returns more, and a different object --- \texttt{RotatingResult}
+rather than a row of the static sequence. Every field is parsed from RNS output,
+so the units are the ones RNS reports rather than the ones used above:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+field & quantity & unit / note \\
+\midrule
+\texttt{e\_c}      & $\varepsilon_c$                    & MeV\,fm$^{-3}$ \\
+\texttt{r\_ratio}  & $r_p/r_e$                          & 1 is non-rotating \\
+\texttt{M}         & gravitational mass                  & $\Msun$ \\
+\texttt{M\_0}      & rest mass                          & $\Msun$, RNS's own $m_B = 1.66\times10^{-24}$\,g \\
+\texttt{R\_e}      & circumferential equatorial radius   & km \\
+\texttt{r\_e}, \texttt{r\_p} & coordinate radii         & km; $r_p = r_e\,r_{\rm ratio}$ \\
+\texttt{Omega}     & $\Omega$                            & rad\,s$^{-1}$ \\
+\texttt{freq}      & spin frequency                      & Hz \\
+\texttt{Omega\_K}, \texttt{freq\_K} & mass-shedding rate at the equator \emph{for this model} & rad\,s$^{-1}$, Hz \\
+\texttt{J}         & angular momentum                    & dimensionless, $cJ/(G\Msun^2)$ \\
+\texttt{I}         & moment of inertia                   & $10^{45}$\,g\,cm$^2$; NaN when non-rotating, where it is undefined \\
+\texttt{T\_over\_W} & $T/|W|$                            & rotational over gravitational binding energy \\
+\texttt{Phi\_2}    & mass quadrupole moment              & $10^{42}$\,g\,cm$^2$ \\
+\texttt{Z\_p}      & polar redshift                      & \\
+\texttt{Z\_f}, \texttt{Z\_b} & forward, backward equatorial redshift & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Two of these are easy to misread. \texttt{Omega\_K} is the mass-shedding rate
+\emph{of the model in hand}, not the Kepler frequency of the sequence: a slowly
+rotating star reports the $\Omega$ at which \emph{it} would shed, which is not
+where the sequence terminates. And \texttt{I} is NaN rather than zero at
+$r_{\rm ratio} = 1$, because it is obtained as $J/\Omega$ and both vanish.
+
+A non-converged model carries NaN in every physical field, \texttt{converged =
+False} and a \texttt{note} saying why, rather than raising --- CLAUDE.md
+section 6's rule that non-convergence is a return value, applied to a sweep that
+must survive its individual bad points.
+
 \bibliographystyle{apsrev4-2}
 \bibliography{../../../docs/eos}
 
