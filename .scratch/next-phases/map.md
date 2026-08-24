@@ -172,6 +172,15 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
   The two TOV helpers skip with a message instead of silently dropping the crust.
   Caveat: `test/` is gitignored, so only the data move is in git.
 
+- [Make mu_S determined when the strange sector is empty](issues/40-determine-mu-s.md):
+  the cause was neither the ticket's nor DEFERRED's reading. **The baseline
+  generator already drops `mu_S` where `n_S = 0` but keeps `mu_i`/`mu_eff_i`,
+  which carry it linearly through `S_i`** — so the free number stayed frozen
+  under six other names. Exclusion completed, `did` and `sfho` regenerated,
+  `dd2` untouched. `mu_S` also diverges as `T ln 10` per decade of `Y_S`, so the
+  "continuity" candidate was dead. Solver-side residual scaling is still open
+  but no longer needed for a green suite.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
@@ -212,6 +221,18 @@ In scope, not yet sharp enough to ticket:
   absolute floor. Whether the floor should exclude such quantities by name, and
   which models' baselines carry them, is the design question. Blocked on ticket
   37's ruling.
+- **Several real fixes now live outside version control.** `.gitignore:75`
+  excludes `/test/` entirely (§11), so ticket 39's helper skip and ticket 40's
+  completed baseline exclusion exist only in a working copy — anyone
+  reconstructing `test/` reintroduces both bugs. Whether some of that logic
+  belongs in `eos/` where it would be tracked, or whether the layout rule should
+  bend, is worth settling during [ticket 21](issues/21-phase5-structure.md).
+- **Scaling the strangeness residual.** Ticket 40 measured that a 1e-10 gate
+  admits 0.079 MeV of `mu_S` — three orders of magnitude looser than the
+  baseline's tolerance implied — and the `mu_e` sibling at Y_C = 0 shares it.
+  That is solver conditioning, not a baseline question, and it is no longer
+  urgent now the suite is green. What scaling to use, and whether it touches
+  `general/` or each solver, is unsharp.
 - **Whether other tests silently degrade on missing data.** Ticket 39 fixed the
   two TOV helpers and generalised their guard to every `CRUST_FILES` name, but
   nothing has swept the rest of `test/` for the same pattern — an absent input

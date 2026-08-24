@@ -1,7 +1,7 @@
 # Make mu_S determined when the strange sector is empty
 
 Type: grilling
-Status: open
+Status: resolved
 Parent: ../map.md
 
 ## Question
@@ -172,3 +172,58 @@ in `fixed_YC_YS` lines at Y_S = 0 in `test/baseline/`**. Those two together
 close the failing test without touching physics. The second is not a tolerance
 loosening in §12's sense: it removes a quantity that is not reproducible in
 principle from a regression net, rather than widening a tolerance on one that is.
+
+## Resolution — the baseline was freezing mu_S under six other names
+
+The failing test had a cause neither the ticket nor `docs/DEFERRED.md` had
+identified: **`test/baseline/generate_baseline.py` already drops `mu_S` where
+`n_S = 0`**, with a documented rationale ("freezing it would assert something
+the physics never fixed") — **but keeps `mu_i` and `mu_eff_i`**, which carry
+`mu_S` linearly through `mu_i = B_i mu_B + C_i mu_C + S_i mu_S`. So the same
+free number stayed frozen under six other names, and that is exactly what
+mismatched.
+
+The exclusion is now completed: where `mu_S` is dropped, the `S != 0` species
+potentials go with it. Nucleons (S = 0) stay, and so does every density, `eps`,
+`P` and `mu_B`.
+
+**One trap caught by sweeping all twelve models before regenerating anything.**
+The first version keyed only on `n_S ~ 0` and dropped 234 keys across `dd2`,
+`did` and `sfho` — including their **beta-equilibrium** lines. That was wrong:
+in beta equilibrium strangeness is not conserved, so `mu_S = 0` is *imposed*
+rather than solved (verified: exactly 0.0 at n_B = 0.04 and 0.16 with hyperons),
+and the hyperon potentials there are perfectly determined. The discriminator is
+a **non-zero `mu_S` beside a zero `n_S`** — the signature of a free unknown that
+stopped where its path ran out. With that condition:
+
+| model | keys dropped | numeric mismatch |
+|---|---|---|
+| dd2 | **0** | 0 |
+| did | **12** — exactly the 12 that were failing | 0 |
+| sfho | 24 — its `ycys` lines, equally undetermined, currently passing by luck | 0 |
+| the other nine | 0 | 0 |
+
+`did` and `sfho` regenerated, per `test_baseline.py`'s own instruction to
+regenerate only the affected models: `did` 4491 -> 4479 keys, `sfho`
+3111 -> 3087. Nothing else touched.
+
+**Not a tolerance loosening (§12).** No tolerance moved. A quantity that is not
+reproducible in principle was removed from a regression net, applying a decision
+the generator had already made and documented but not applied consistently.
+
+**Caveat: none of this is in git.** `.gitignore:75` excludes `/test/` entirely
+(§11: "kept locally, gitignored, not published"), so `generate_baseline.py` and
+the `.npz` files live only in this working copy. Anyone reconstructing `test/`
+reintroduces the incomplete exclusion. The same applies to
+[ticket 39](39-crust-silent-fallback.md)'s helper fix. Worth raising during
+[ticket 21](21-phase5-structure.md): several real fixes now live outside version
+control, which is a consequence of the layout rule rather than of any of them.
+
+**Still open, and now clearly separate:** whether to scale the strangeness
+residual so `mu_S` is genuinely pinned. It is no longer needed to make the suite
+green, but the measurement stands — a 1e-10 gate admits 0.079 MeV of `mu_S`, so
+the potential is three orders of magnitude looser than the baseline's tolerance
+implied. That is a solver-conditioning question, not a baseline one, and the
+`mu_e` sibling at Y_C = 0 shares it.
+
+Status: resolved.
