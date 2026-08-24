@@ -24,5 +24,11 @@ include = ["eos*"]
 [tool.setuptools.package-data]
 "eos.general.constraints" = ["data/*.csv", "data/*.npz"]
 
+# Ship the crust and CompOSE outer-layer tables too. Every name in
+# eos.astro.tov.crust.CRUST_FILES is a runtime option of solver.py's
+# add_crust_table, so an installed wheel without them silently loses the crust
+# -- which costs most of a kilometre in R_1.4 rather than raising.
+"eos.astro.tov" = ["data/*.dat"]
+
 [tool.pytest.ini_options]
 markers = ["slow: long-running (excluded with -m 'not slow')"]

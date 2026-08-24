@@ -62,14 +62,22 @@ CRUST_DIR_ENV = "EOS_CRUST_DIR"
 def crust_search_path():
     """Directories searched for crust tables, in order.
 
-    ``$EOS_CRUST_DIR`` first, then ``<repo>/data/crust``. Nothing here reads
-    the filesystem; it is the list of places `crust_path` will try.
+    ``$EOS_CRUST_DIR`` first, so a caller can always override; then the tables
+    shipped beside this module in ``eos/astro/tov/data``; then
+    ``<repo>/data/crust``, kept for checkouts that put them there. Nothing here
+    reads the filesystem; it is the list of places `crust_path` will try.
+
+    The shipped tables are small enough to live in the package (BPST0.dat is
+    under 5 kB), so a fresh clone runs the crusted TOV path with no environment
+    set up. That matters because the callers that fall back to no crust move
+    R_1.4 by most of a kilometre when they do.
     """
     roots = []
     env = os.environ.get(CRUST_DIR_ENV, "")
     for entry in env.split(os.pathsep):
         if entry:
             roots.append(Path(entry).expanduser())
+    roots.append(Path(__file__).resolve().parent / "data")
     roots.append(REPO_ROOT / "data" / "crust")
     return roots
 
