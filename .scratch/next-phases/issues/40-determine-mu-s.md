@@ -116,3 +116,59 @@ That approach:
 there". The gradient is 7.8e-07 at n_B = 0.32; the entry describes a degenerate
 system where the truth is a badly scaled one, and that misreading is what made
 three people reach for a convention.
+
+## Constrained sensitivity — corrects the section above, and kills one option
+
+The measurement above held the fields and `mu_tilde_B` fixed, which the ticket
+flagged as a partial rather than the sensitivity along the solution manifold.
+Measured properly — by solving at small non-zero `Y_S`, so every other unknown
+relaxes and every other row stays satisfied — `did`, Y_C = 0.3, T = 30 MeV:
+
+| n_B | Y_S | mu_S [MeV] | n_S | eps | P |
+|---|---|---|---|---|---|
+| 0.32 | 0 | **−515.324** | 1.6e-16 | 308.02317 | 18.352643 |
+| 0.32 | 1e-6 | −261.439 | 3.2e-07 | 308.02322 | 18.352626 |
+| 0.32 | 1e-5 | −192.360 | 3.2e-06 | 308.02363 | 18.352474 |
+| 0.32 | 1e-4 | −123.268 | 3.2e-05 | 308.02780 | 18.350960 |
+
+**Two corrections to what is written above.**
+
+1. **The constrained `dn_S/dmu_S` is 1.26e-09 fm^-3/MeV at n_B = 0.32** (3.04e-09
+   at 0.64), roughly 600x smaller than the partial derivative. So a 1e-10
+   residual admits **0.079 MeV** of `mu_S`, not 1.3e-04. The observed baseline
+   drift of 2.3e-05 MeV is therefore **far smaller than the gate permits** — the
+   claim above that "the observed drift is the gate's slack" is wrong. The
+   solver happens to land tightly; nothing requires it to. The quantity is
+   looser than the baseline's rtol = 1e-10 implies by about three orders of
+   magnitude, which strengthens rather than weakens the case for scaling that
+   row.
+
+2. **`mu_S` diverges logarithmically as Y_S -> 0+.** The steps are 69 MeV per
+   decade of Y_S, which is `T ln 10` at T = 30 MeV — the Boltzmann tail. So
+   `mu_S -> -inf`, the limit does not exist, and **the "continuity in Y_S"
+   candidate convention is dead**: there is nothing to take a limit of. The
+   finite −515.32 returned at Y_S = 0 is not on that branch at all; it comes
+   from the particle/antiparticle cancellation (the Xi densities are negative,
+   net anti-Xi), which is a different solution of the same row.
+
+`eps` and `P` move in the fifth and sixth digit across the whole Y_S range,
+confirming that none of this is physically consequential — which is exactly why
+it should not be pinned at rtol = 1e-10 in a regression baseline.
+
+### Where this leaves the three candidates
+
+- **Continuity in Y_S** — dead, per above.
+- **`mu_S = 0` when the sector is empty** — still viable, but note it would be a
+  discontinuity of ~515 MeV against the Y_S -> 0+ branch, so the threshold is
+  not cosmetic.
+- **Minimum-norm / damped step** — still viable and now the most attractive: it
+  needs no threshold and no special case, and with the true sensitivity at
+  1e-09 the damping term dominates the singular direction cleanly.
+
+**Recommended, and cheaper than all three:** scale the strangeness row by the
+conjugate density's own responsiveness so the gate measures `mu_S`'s
+determination, and — separately — **stop pinning `mu_eff_i` for S != 0 species
+in `fixed_YC_YS` lines at Y_S = 0 in `test/baseline/`**. Those two together
+close the failing test without touching physics. The second is not a tolerance
+loosening in §12's sense: it removes a quantity that is not reproducible in
+principle from a regression net, rather than widening a tolerance on one that is.
