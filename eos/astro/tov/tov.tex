@@ -384,7 +384,79 @@ is drawn.
 
 Rotating models are not computed here. They are computed by
 RNS~\cite{StergioulasFriedman1995}, a third-party Fortran code driven as a
-subprocess; this module writes its input, runs it and parses its output. The
+subprocess; this module writes its input, runs it and parses its output. What
+RNS solves is stated first, because a reader cannot check the columns this
+module parses without knowing what they are columns of.
+
+\subsection{The formulation RNS solves}
+\label{sec:rnsform}
+
+A uniformly rotating, axisymmetric, stationary perfect fluid in the
+quasi-isotropic gauge of Komatsu, Eriguchi and
+Hachisu~\cite{Komatsu1989}, in the form Cook, Shapiro and
+Teukolsky~\cite{CookShapiroTeukolsky1994} put it and RNS implements:
+%
+\begin{equation}
+ds^2 = -e^{\gamma+\rho}\,dt^2 + e^{2\alpha}\big(dr^2 + r^2 d\theta^2\big)
+       + e^{\gamma-\rho} r^2\sin^2\!\theta\,\big(d\phi - \omega\,dt\big)^2 ,
+\label{eq:kehmetric}
+\end{equation}
+%
+with the four potentials $\gamma$, $\rho$, $\alpha$ and $\omega$ functions of
+$(r,\theta)$ alone. The stress tensor is that of a perfect fluid,
+$T^{\mu\nu} = (\varepsilon + P)u^\mu u^\nu + P g^{\mu\nu}$, and the rotation is
+uniform: the angular velocity $\Omega = u^\phi/u^t$ is one number, not a
+profile. $\omega(r,\theta)$ is the frame-dragging rate and is \emph{not} the
+same quantity.
+
+Three of the four potentials satisfy elliptic equations which KEH converts to
+integral equations with the flat-space Green's functions and solves by
+iteration; $\alpha$ then follows by quadrature along a ray. That iteration is
+what the accuracy and relaxation parameters of the retry ladder below control.
+
+The matter side is one equation. For a barotrope the Euler equation integrates
+to a first integral over the whole star,
+%
+\begin{equation}
+H(r,\theta) + \tfrac12\big(\gamma + \rho\big)
+  - \tfrac12\ln\!\big(1 - v^2\big) = \text{const} ,
+\qquad
+v = \big(\Omega - \omega\big)\,r\sin\theta\;e^{-\rho} ,
+\label{eq:bernoulli}
+\end{equation}
+%
+where $v$ is the fluid's proper velocity measured by a zero-angular-momentum
+observer and
+%
+\begin{equation}
+H(P) = \int_0^{P}\frac{dP'}{\varepsilon(P') + P'}
+\label{eq:enthalpy}
+\end{equation}
+%
+is the specific enthalpy. Eq.~\eqref{eq:enthalpy} is the only place the
+equation of state enters, which is why the table handed to RNS carries an
+enthalpy column at all, and why this module integrates it on a refined grid
+rather than on the table's own rows (Sec.~\ref{sec:rnsinterface}).
+
+A model is specified by two numbers: the central energy density
+$\varepsilon_c$ and the axis ratio
+%
+\begin{equation}
+r_{\rm ratio} = \frac{r_p}{r_e} ,
+\end{equation}
+%
+the ratio of the polar to the equatorial \emph{coordinate} radius, with
+$r_{\rm ratio} = 1$ the non-rotating star. $\Omega$ is an output, not an input:
+the solver finds the rotation rate that makes Eq.~\eqref{eq:bernoulli} hold for
+the requested shape. Decreasing $r_{\rm ratio}$ spins the star up until
+mass-shedding, where the fluid velocity at the equatorial surface equals the
+orbital velocity of a free particle there; that is the Kepler limit, and it
+terminates the sequence.
+
+\subsection{Driving the external code}
+\label{sec:rnsinterface}
+
+The
 binary is located from an explicit argument, then \texttt{\$RNS\_BIN}, then
 \texttt{PATH}, then \texttt{<repo>/external/rns}.
 

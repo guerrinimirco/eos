@@ -145,6 +145,55 @@ Computed by RNS (Stergioulas & Friedman 1995), third-party Fortran run as a
 subprocess. Binary from an explicit argument, then $RNS_BIN, then PATH, then
 <repo>/external/rns.
 
+### What RNS solves
+
+Stated here because the columns this module writes and parses cannot be checked
+without it. A uniformly rotating, axisymmetric, stationary perfect fluid in the
+quasi-isotropic gauge of Komatsu, Eriguchi & Hachisu (1989), in the form Cook,
+Shapiro & Teukolsky (1994) put it:
+
+    ds^2 = -e^(gamma+rho) dt^2 + e^(2 alpha) (dr^2 + r^2 dtheta^2)
+           + e^(gamma-rho) r^2 sin^2(theta) (dphi - omega dt)^2
+
+with gamma, rho, alpha, omega functions of (r, theta). Rotation is UNIFORM:
+Omega = u^phi/u^t is one number, not a profile. omega(r, theta) is the
+frame-dragging rate and is a different quantity — the two are easy to confuse
+in the output.
+
+Three potentials satisfy elliptic equations, which KEH turns into integral
+equations with flat-space Green's functions and iterates; alpha follows by
+quadrature. That iteration is what the accuracy and relaxation numbers in the
+retry ladder below control.
+
+The matter side is one equation. For a barotrope the Euler equation has a first
+integral over the whole star,
+
+    H(r, theta) + (1/2)(gamma + rho) - (1/2) ln(1 - v^2) = const
+    v = (Omega - omega) r sin(theta) e^(-rho)
+
+with v the fluid's proper velocity as seen by a zero-angular-momentum observer,
+and H the specific enthalpy
+
+    H(P) = integral_0^P dP' / (eps(P') + P')
+
+That integral is the ONLY place the equation of state enters, which is why the
+table handed to RNS carries an enthalpy column, and why `_specific_enthalpy`
+integrates it on 16003 points uniform in ln P rather than on the table's own
+rows: 1/(eps+P) falls by orders of magnitude between adjacent rows of a
+log-spaced table, and a 1% error in H moves the masses by ~1%.
+
+A model is two numbers: the central energy density eps_c and the axis ratio
+
+    r_ratio = r_p / r_e        (polar / equatorial COORDINATE radius)
+
+with r_ratio = 1 the non-rotating star. Omega is an OUTPUT, not an input — the
+solver finds the rotation rate for which the first integral holds at the
+requested shape. Lowering r_ratio spins the star up to mass-shedding, where the
+equatorial surface velocity equals the orbital velocity of a free particle;
+that is the Kepler limit and it ends the sequence.
+
+### Driving the external code
+
 Four RNS properties shape the interface, each a constraint the caller cannot
 see:
 
