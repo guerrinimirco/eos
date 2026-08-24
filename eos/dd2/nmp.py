@@ -115,7 +115,8 @@ def _dirac_mass(point):
     them; where the mode splits them, the isospin average is what the
     nuclear-matter parameters mean by m*.
     """
-    return 0.5 * (point.m_eff("n") + point.m_eff("p"))
+    m_eff = point.matter.m_eff_i
+    return 0.5 * (m_eff["n"] + m_eff["p"])
 
 
 def esym(par, n_B):

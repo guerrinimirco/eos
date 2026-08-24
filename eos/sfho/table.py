@@ -137,13 +137,13 @@ def hadronic_row(r: EoSPoint) -> Dict[str, Any]:
     row = dict(n_B=n_B, T=r.T, chi=0.0, phase="H",
                P=r.P, eps=r.eps, s=r.s,
                S_per_B=r.entropy_per_baryon,
-               mu_B=r.mu_B, Y_C=r.Y_C, Y_S=r.Y_S,
-               mu_e=r.mu_e, mu_S=r.mu_S, mu_nue=r.mu_nue,
-               Y_e=r.n_e / n_B, **{"Y_mu-": 0.0})
-    for name, n in r.composition:
+               mu_B=r.matter.mu_B, Y_C=r.matter.Y_C, Y_S=r.matter.Y_S,
+               mu_e=r.leptons.mu_e, mu_S=r.matter.mu_S, mu_nue=r.leptons.mu_nue,
+               Y_e=r.leptons.densities['e-'] / n_B, **{"Y_mu-": 0.0})
+    for name, n in r.matter.densities.items():
         row[f"Y_{name}"] = n / n_B
-    if r.n_nu:
-        row["Y_nue"] = r.n_nu / n_B
+    if r.leptons.densities['nu_e']:
+        row["Y_nue"] = r.leptons.densities['nu_e'] / n_B
     return row
 
 
@@ -577,10 +577,33 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[EoSPoint]]:
 #: differ because the column names are a FORMAT ON DISK -- the published
 #: 2fam PNS tables carry these headers and are read back by `load_eos_table`
 #: -- while the record now uses the repository's names (P, eps, s).
-_COLUMN_ATTR = {
-    'P_total': 'P', 'e_total': 'eps', 's_total': 's',
-    'f_total': 'free_energy_density',
-}
+def _column_value(r, col):
+    """One `.dat` column read off a solved point.
+
+    The column names are the published 2fam PNS table's and are flat, while
+    the record is nested (`eos.general.state`), so this is the one place the
+    two spellings meet. It is written as an explicit map rather than a
+    `getattr` fallback because a column the record no longer answers to must
+    raise here, not silently be written as a zero into a published table.
+    """
+    if col in ('sigma', 'omega', 'rho', 'phi'):
+        return r.matter.fields[col]
+    if col in ('mu_B', 'mu_C', 'mu_S', 'Y_C', 'Y_S'):
+        return getattr(r.matter, col)
+    if col in ('mu_e', 'mu_nue'):
+        return getattr(r.leptons, col)
+    # Only the mode that HOLDS a lepton fraction reports one; beta
+    # equilibrium leaves the column at zero, as it always has.
+    if col == 'Y_Le':
+        return r.conditions.get('Y_Le', 0.0)
+    if col == 'S':
+        return r.entropy_per_baryon
+    if col == 'n_C':
+        return r.matter.n_C
+    if col == 'n_e':
+        return r.leptons.densities['e-']
+    return getattr(r, {'P_total': 'P', 'e_total': 'eps', 's_total': 's',
+                       'f_total': 'free_energy_density'}.get(col, col))
 
 
 def save_results(all_results: Dict[Tuple, List[EoSPoint]], 
@@ -644,18 +667,8 @@ def save_results(all_results: Dict[Tuple, List[EoSPoint]],
                     for col in all_columns:
                         if col in param_dict:
                             val = param_dict[col]
-                        elif col == 'Y_C':
-                            val = r.Y_C
-                        elif col == 'Y_S':
-                            val = r.Y_S
-                        elif col == 'Y_Le':
-                            val = getattr(r, 'Y_Le', 0.0)
-                        elif col == 'mu_e':
-                            val = getattr(r, 'mu_e', 0.0)
-                        elif col == 'mu_C':
-                            val = r.mu_C
                         else:
-                            val = getattr(r, _COLUMN_ATTR.get(col, col), 0.0)
+                            val = _column_value(r, col)
                         if val is None:
                             val = 0.0
                         if isinstance(val, bool):
@@ -672,18 +685,15 @@ def results_to_arrays(results: List[EoSPoint]) -> Dict[str, np.ndarray]:
         'n_B', 'T', 'P_total', 'e_total', 's_total', 'f_total',
         'sigma', 'omega', 'rho', 'phi', 'mu_B', 'mu_C', 'mu_S', 'mu_nue', 'mu_e',
         'Y_C', 'Y_S', 'n_C', 'n_e', 'error'
-    ]   # keyed by COLUMN name; see _COLUMN_ATTR
+    ]   # keyed by COLUMN name; see _column_value
     arrays = {}
     
     # Filter to converged only
     converged_results = [r for r in results if r.converged]
     
     for attr in attrs:
-        vals = []
-        for r in converged_results:
-            val = getattr(r, _COLUMN_ATTR.get(attr, attr), np.nan)
-            vals.append(val if val is not None else np.nan)
-        arrays[attr] = np.array(vals)
+        arrays[attr] = np.array([_column_value(r, attr)
+                                 for r in converged_results])
     
     arrays['converged'] = np.array([r.converged for r in results])
     

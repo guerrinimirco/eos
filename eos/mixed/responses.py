@@ -217,7 +217,7 @@ def sound_speed_frozen_hadronic(par, flags, point, rel_dn=1e-3, leptons=True):
     n_B = point.n_B
     if n_B <= 0.0:
         return float("nan")
-    Y_C, Y_S, T = point.Y_C, point.Y_S, point.T
+    Y_C, Y_S, T = point.matter.Y_C, point.matter.Y_S, point.T
     x0 = octet_warm_start(point, flags.phi_field and flags.hyperons,
                           has_muS=flags.has_strange_baryons)
 

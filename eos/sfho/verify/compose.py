@@ -121,7 +121,8 @@ def engine_point(par, n_B, Y_C, T, flags):
     """
     point = solve_fixed_yc(par, n_B, Y_C, flags, T=T, leptons=True)
     return dict(P=point.P, eps=point.eps, s_per_B=point.entropy_per_baryon,
-                mu_B=point.mu_B, mu_C=point.mu_C, converged=point.converged)
+                mu_B=point.matter.mu_B, mu_C=point.matter.mu_C,
+                converged=point.converged)
 
 
 def compare_slice(par, flags, compose_dir=SFHO_COMPOSE, name="SFHO",

@@ -42,7 +42,7 @@ the boundary via hc^3. All assembled quantities are evaluated from one
 consistent set of densities, so the Hugenholtz–Van Hove identity
 eps + P - T s = sum_i mu_i n_i holds to round-off and is asserted.
 """
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import NamedTuple
 
 from scipy.optimize import brentq, root
@@ -51,6 +51,7 @@ from eos.general.physics_constants import hc3
 from eos.general.particles import Electron, Muon, Neutron, Proton
 from eos.general.thermodynamics_leptons import photon_thermo
 from eos.general.basis import species_potential
+from eos.general.state import EoSPoint, LeptonThermo, PhaseThermo
 from eos.general.modes import (
     Conservation, ModeSpec, electron_potential, muon_potential,
     strangeness_potential,
@@ -81,104 +82,6 @@ HVH_RTOL = 1.0e-8
 
 #: Post-solve gate on the (dimensionless) equilibrium residuals.
 RESIDUAL_TOL = 1.0e-10
-
-
-@dataclass(frozen=True)
-class EoSPoint:
-    """One solved thermodynamic state.
-
-    Every baryon is carried the same way. The three per-species tuples --
-    `composition`, `mu_eff_i`, `m_eff_i` -- run over EVERY active baryon, so a
-    Lambda is read exactly as a neutron is, through `.n("Lambda")`,
-    `.mu_eff("Lambda")`, `.m_eff("Lambda")`. Neither mu_eff_i nor m_eff_i is
-    recoverable from the rest of the record -- they need the mean fields and
-    the per-species coupling ratios -- which is why they are carried rather
-    than recomputed by every consumer.
-
-    The potentials are CLAUDE.md section 2's conserved-charge basis. Species
-    potentials are derived from it, mu_i = B_i mu_B + C_i mu_C + S_i mu_S, so
-    the neutron potential is `mu_B` and mu_p - mu_n is `mu_C`; both are
-    available per species through `.mu("n")`.
-    """
-    n_B: float          # fm^-3
-    T: float            # MeV
-    sigma: float        # MeV
-    omega0: float       # MeV
-    rho0: float         # MeV
-    Sigma_R: float      # MeV (rearrangement self-energy)
-    mu_B: float         # MeV
-    mu_C: float         # MeV (mu_p - mu_n; beta equilibrium is mu_C + mu_e = 0)
-    eps: float          # MeV/fm^3 (total, incl. leptons/photons when present)
-    P: float            # MeV/fm^3 (total, incl. leptons/photons when present)
-    s: float            # fm^-3 (total entropy density)
-    hvh_rel: float      # (eps + P - T s - sum mu_i n_i)/eps, diagnostics
-    n_e: float = 0.0    # fm^-3 (net)
-    n_mu: float = 0.0   # fm^-3 (net)
-    mu_e: float = 0.0   # MeV
-    mu_S: float = 0.0   # MeV (strangeness potential; 0 unless strangeness fixed)
-    mu_nue: float = 0.0  # MeV (electron-neutrino potential; 0 unless trapped)
-    n_nu: float = 0.0   # fm^-3 (net electron-neutrino density; trapped only)
-    phi0: float = 0.0   # MeV (hidden-strange vector; 0 without hyperons)
-    #: Per active baryon, as ((name, value), ...) so the record stays frozen.
-    composition: tuple = ()   # n_i [fm^-3]
-    mu_eff_i: tuple = ()      # mu_i - Sigma0_i [MeV]
-    m_eff_i: tuple = ()       # Dirac effective mass m*_i [MeV]
-    #: max_j |mu*_j| / m_j over the thermal meson gas, 0 without it. At 1 the
-    #: gas Bose-condenses and the solve refuses the point; carried so a caller
-    #: can see how close a converged state sits to that boundary. `eos.sfho`
-    #: carries the same field (see `eos.general.thermal_mesons`).
-    condensation: float = 0.0
-    #: The TOTAL non-leptonic charge and strangeness fractions of the state --
-    #: baryons PLUS any thermal meson gas, which carries both. They are what
-    #: the fixed-Y_C / fixed-Y_S conditions are stated in terms of, so a state
-    #: re-solved at these fractions reproduces this one. Summing
-    #: `composition` instead gives the BARYON fractions, which at T > 0 with a
-    #: pion gas differ by 10-20 percent.
-    Y_C: float = 0.0
-    Y_S: float = 0.0
-
-    @property
-    def composition_map(self):
-        return dict(self.composition)
-
-    def n(self, name):
-        """Density n_i [fm^-3] of baryon `name` (0 if not active)."""
-        return self.composition_map.get(name, 0.0)
-
-    def Y(self, name):
-        """Population fraction n_i / n_B of baryon `name` (0 if absent)."""
-        return self.n(name) / self.n_B
-
-    def mu_eff(self, name):
-        """Effective (kinetic) potential mu_eff_i [MeV] of baryon `name`."""
-        return dict(self.mu_eff_i)[name]
-
-    def m_eff(self, name):
-        """Effective (Dirac) mass m*_i [MeV] of baryon `name`."""
-        return dict(self.m_eff_i)[name]
-
-    def mu(self, name):
-        """Full chemical potential mu_i [MeV] of baryon `name`.
-
-        Derived from the conserved-charge basis, never stored: section 2's
-        mu_i = B_i mu_B + C_i mu_C + S_i mu_S.
-        """
-        return species_potential(name, self.mu_B, self.mu_C, self.mu_S)
-
-    @property
-    def Y_e(self):
-        """Electron fraction n_e / n_B."""
-        return self.n_e / self.n_B
-
-    @property
-    def Y_mu(self):
-        """Muon fraction n_mu / n_B."""
-        return self.n_mu / self.n_B
-
-    @property
-    def free_energy_density(self):
-        """F = eps - T s [MeV/fm^3]."""
-        return self.eps - self.T * self.s
 
 
 def _nucleon_mu_effs(n_n, n_p, ms_n, ms_p, T):
@@ -251,17 +154,30 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
             f"|{hvh_rel:.2e}| > {HVH_RTOL:.0e} — a Sigma^R term is missing "
             f"or inconsistent")
 
-    return EoSPoint(
-        n_B=float(nB_nat / hc3), T=T,
-        sigma=float(sigma), omega0=float(omega0), rho0=float(rho0),
+    # Fixing (n_n, n_p) at a given n_B IS fixing the charge fraction, with no
+    # leptons: it is `fixed_YC` asked in densities rather than in Y_C.
+    n_B_fm = float(nB_nat / hc3)
+    densities = {"n": float(nn_nat / hc3), "p": float(np_nat / hc3)}
+    mu_B, mu_C = float(mu_n), float(mu_p - mu_n)
+    matter = PhaseThermo(
+        T=T, mu_B=mu_B, mu_C=mu_C, mu_S=0.0,
+        fields={"sigma": float(sigma), "omega0": float(omega0),
+                "rho0": float(rho0), "phi0": 0.0},
+        densities=densities,
+        mu_i={name: species_potential(name, mu_B, mu_C, 0.0)
+              for name in densities},
+        mu_eff_i={"n": float(mu_eff_n), "p": float(mu_eff_p)},
+        m_eff_i={"n": float(ms_n), "p": float(ms_p)},
+        n_B=n_B_fm, n_C=float(np_nat / hc3), n_S=0.0,
+        P=float(P_nat / hc3), eps=float(eps_nat / hc3), s=float(s_nat / hc3),
+        mu_dot_n=float((mu_n * nn_nat + mu_p * np_nat) / hc3),
         Sigma_R=float(Sig_R),
-        mu_B=float(mu_n), mu_C=float(mu_p - mu_n),
-        eps=float(eps_nat / hc3), P=float(P_nat / hc3),
-        s=float(s_nat / hc3), hvh_rel=float(hvh_rel),
-        composition=(("n", float(nn_nat / hc3)), ("p", float(np_nat / hc3))),
-        mu_eff_i=(("n", float(mu_eff_n)), ("p", float(mu_eff_p))),
-        m_eff_i=(("n", float(ms_n)), ("p", float(ms_p))),
-        Y_C=float(np_nat / nB_nat), Y_S=0.0,
+    )
+    return EoSPoint(
+        mode="fixed_YC", n_B=n_B_fm, T=T,
+        conditions={"Y_C": float(np_nat / nB_nat)},
+        matter=matter, leptons=None,
+        P=matter.P, eps=matter.eps, s=matter.s,
     )
 
 
@@ -284,7 +200,9 @@ def solve_snm_t0(par, n_B, check_consistency=True):
 
 def beta_warm_start(point):
     """Warm-start vector [sigma, rho0, mu_eff_n, mu_C] from a solved EoSPoint."""
-    return [point.sigma, point.rho0, point.mu_eff("n"), -point.mu_e]
+    m = point.matter
+    return [m.fields["sigma"], m.fields["rho0"], m.mu_eff_i["n"],
+            -point.leptons.mu_e]
 
 
 def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
@@ -293,7 +211,8 @@ def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
     fixed-composition point at Y_p: only the charge closure is off.
     """
     base = solve_composition(par, (1.0 - Y_p) * n_B, Y_p * n_B, T=T)
-    return [base.sigma, base.rho0, base.mu_eff("n"), -base.mu_C]
+    m = base.matter
+    return [m.fields["sigma"], m.fields["rho0"], m.mu_eff_i["n"], -m.mu_C]
 
 
 class BetaCtx(NamedTuple):
@@ -417,10 +336,9 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
     eps_nat = base.eps * hc3 + ee + emu + eph
     P_nat = base.P * hc3 + Pe + Pmu + Pph
     s_nat = base.s * hc3 + se + smu + sph
-    rhs = (base.mu("n") * base.n("n") + base.mu("p") * base.n("p")) * hc3 \
-        + mu_e * (ne_nat + nmu_nat)
+    rhs = base.matter.mu_dot_n * hc3 + mu_e * (ne_nat + nmu_nat)
     hvh_rel = (eps_nat + P_nat - T * s_nat - rhs) / eps_nat
-    beta_res = -base.mu_C - mu_e
+    beta_res = -base.matter.mu_C - mu_e
     if check_consistency:
         if abs(hvh_rel) > HVH_RTOL:
             raise ValueError(
@@ -431,11 +349,16 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
                 f"beta-equilibrium condition violated at n_B={n_B}, T={T}: "
                 f"mu_n - mu_p - mu_e = {beta_res:.2e} MeV")
 
+    leptons = LeptonThermo(
+        mu_e=float(mu_e), mu_mu=float(mu_e),
+        densities={"e-": float(ne_nat / hc3), "mu-": float(nmu_nat / hc3)},
+        P=float((Pe + Pmu) / hc3), eps=float((ee + emu) / hc3),
+        s=float((se + smu) / hc3),
+        mu_dot_n=float(mu_e * (ne_nat + nmu_nat) / hc3),
+    )
     return replace(
-        base,
-        eps=float(eps_nat / hc3), P=float(P_nat / hc3),
-        s=float(s_nat / hc3), hvh_rel=float(hvh_rel),
-        n_e=float(ne_nat / hc3), n_mu=float(nmu_nat / hc3), mu_e=float(mu_e),
+        base, mode="beta_eq_neutrinoless", conditions={}, leptons=leptons,
+        eps=float(eps_nat / hc3), P=float(P_nat / hc3), s=float(s_nat / hc3),
     )
 
 
@@ -469,9 +392,11 @@ def octet_warm_start(point, has_phi, has_muS=False, has_muL=False):
     mu_C is recovered as mu_p - mu_n (robust in trapped mode, where
     mu_e = mu_nue - mu_C so -mu_e no longer equals mu_C).
     """
-    return _octet_x0((point.sigma, point.omega0, point.rho0, point.phi0,
-                      point.mu_B - point.Sigma_R, point.mu_C,
-                      point.mu_S, point.mu_nue),
+    m = point.matter
+    mu_nue = point.leptons.mu_nue if point.leptons is not None else 0.0
+    return _octet_x0((m.fields["sigma"], m.fields["omega0"], m.fields["rho0"],
+                      m.fields["phi0"], m.mu_B - m.Sigma_R, m.mu_C,
+                      m.mu_S, mu_nue),
                      has_phi, has_muS, has_muL)
 
 
@@ -484,8 +409,9 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
     base = solve_beta_eq(par, n_B, T=T, include_muons=flags.muons,
                          include_photons=False, check_consistency=False)
     has_phi = flags.phi_field and flags.hyperons
-    return _octet_x0((base.sigma, base.omega0, base.rho0, -1e-3,
-                      base.mu_B - base.Sigma_R, base.mu_C, 0.0, 0.0),
+    m = base.matter
+    return _octet_x0((m.fields["sigma"], m.fields["omega0"], m.fields["rho0"],
+                      -1e-3, m.mu_B - m.Sigma_R, m.mu_C, 0.0, 0.0),
                      has_phi, has_muS, has_muL)
 
 
@@ -713,6 +639,7 @@ def assemble_octet(x, ctx, spec):
         # fixed-Y_C leptonless: charged matter (the CompOSE Y_q slicing, and
         # what a mixed-phase construction needs per pure phase).
         mu_e = electron_potential(mu_C)
+        mu_mu = mu_e
         ne = Pe = ee = se = nmu = Pmu = emu = smu = 0.0
         lepton_dot_n = 0.0
 
@@ -724,19 +651,33 @@ def assemble_octet(x, ctx, spec):
     # baryon chemical-potential sum: mu_i = mu_B + Q_i mu_C + S_i mu_S
     mu_dot_n = mu_B * n_tot + mu_C * charge_had + mu_S * strangeness
 
+    # The same numbers again, split by sector. The totals above keep their
+    # summation order exactly as it was, so the split adds quantities rather
+    # than recomputing them: `eps`, `P` and `s` are matter plus leptons, and
+    # `solve_octet` adds photons (totals only) and the thermal meson gas
+    # (which is part of the phase, so it goes to both).
+    eps_matter = eps_b + eps_fields
+    P_matter = P_b + P_fields + ctx.nB_nat * Sig_R
+    s_matter = s_b
+
     return dict(
         sigma=sigma, omega0=omega0, rho0=rho0, phi0=phi0,
         mu_eff_i=mu_eff_i, m_eff_i=m_eff_i,
-        Sigma_R=Sig_R, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
+        Sigma_R=Sig_R, mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, mu_mu=mu_mu,
         mu_e=mu_e, mu_nue=mu_nue,
         eps=eps, P=P, s=s, n_tot=n_tot,
         n_e=ne, n_mu=nmu, n_nue=nnue,
+        n_C=charge_tot, n_S=strangeness_tot,
         Y_C=charge_tot / ctx.nB_nat, Y_S=strangeness_tot / ctx.nB_nat,
         Y_C_baryons=charge_had / ctx.nB_nat,
         Y_S_baryons=strangeness / ctx.nB_nat,
         Y_Le=(ne + nnue) / ctx.nB_nat,
         densities=densities,
         mu_dot_n=mu_dot_n + lepton_dot_n,
+        eps_matter=eps_matter, P_matter=P_matter, s_matter=s_matter,
+        mu_dot_n_matter=mu_dot_n,
+        eps_leptons=ee + emu + enue, P_leptons=Pe + Pmu + Pnue,
+        s_leptons=se + smu + snue, mu_dot_n_leptons=lepton_dot_n,
     )
 
 
@@ -814,6 +755,8 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
 
     st = assemble_octet(sol.x, ctx, spec)
     if include_photons and T > 0.0:
+        # Photons carry no conserved charge and belong to no phase: they are
+        # added to the totals and nowhere else.
         ph = photon_thermo(T)
         st["eps"] += ph.e * hc3
         st["P"] += ph.P * hc3
@@ -830,6 +773,12 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
         st["P"] += mg["P"] * hc3
         st["s"] += mg["s"] * hc3
         st["mu_dot_n"] += mg["mu_dot_n"] * hc3
+        # The gas IS part of the phase (CLAUDE.md section 2), so it joins the
+        # matter block as well as the totals.
+        st["eps_matter"] += mg["e"] * hc3
+        st["P_matter"] += mg["P"] * hc3
+        st["s_matter"] += mg["s"] * hc3
+        st["mu_dot_n_matter"] += mg["mu_dot_n"] * hc3
         condensation = mg["condensation"]
         # Bose-Einstein condensation is not implemented. Past mu*_j = m_j the
         # excited states saturate -- correctly, that IS the critical density --
@@ -863,18 +812,37 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                     f"beta-equilibrium condition violated at n_B={n_B}, "
                     f"T={T}: mu_n - mu_p - (mu_e - mu_nue) = {beta_res:.2e} MeV")
 
+    matter = PhaseThermo(
+        T=T, mu_B=st["mu_B"], mu_C=st["mu_C"], mu_S=st["mu_S"],
+        fields={"sigma": st["sigma"], "omega0": st["omega0"],
+                "rho0": st["rho0"], "phi0": st["phi0"]},
+        densities=dict(st["densities"]),
+        mu_i={name: species_potential(name, st["mu_B"], st["mu_C"], st["mu_S"])
+              for name in st["densities"]},
+        mu_eff_i=dict(st["mu_eff_i"]), m_eff_i=dict(st["m_eff_i"]),
+        n_B=n_B, n_C=st["n_C"] / hc3, n_S=st["n_S"] / hc3,
+        P=st["P_matter"] / hc3, eps=st["eps_matter"] / hc3,
+        s=st["s_matter"] / hc3, mu_dot_n=st["mu_dot_n_matter"] / hc3,
+        Sigma_R=st["Sigma_R"], condensation=condensation,
+    )
+    leptons = LeptonThermo(
+        mu_e=st["mu_e"], mu_mu=st["mu_mu"], mu_nue=st["mu_nue"],
+        densities={"e-": st["n_e"] / hc3, "mu-": st["n_mu"] / hc3,
+                   "nu_e": st["n_nue"] / hc3},
+        P=st["P_leptons"] / hc3, eps=st["eps_leptons"] / hc3,
+        s=st["s_leptons"] / hc3, mu_dot_n=st["mu_dot_n_leptons"] / hc3,
+    )
+    conditions = {}
+    if spec.is_fixed("C"):
+        conditions["Y_C"] = st["Y_C"]
+    if spec.is_fixed("S"):
+        conditions["Y_S"] = st["Y_S"]
+    if spec.is_fixed("L_e"):
+        conditions["Y_Le"] = st["Y_Le"]
     return EoSPoint(
-        n_B=n_B, T=T,
-        sigma=st["sigma"], omega0=st["omega0"], rho0=st["rho0"],
-        phi0=st["phi0"], Sigma_R=st["Sigma_R"],
-        mu_B=st["mu_B"], mu_C=st["mu_C"], mu_S=st["mu_S"],
-        eps=st["eps"] / hc3, P=st["P"] / hc3, s=st["s"] / hc3,
-        hvh_rel=float(hvh_rel), n_e=st["n_e"] / hc3, n_mu=st["n_mu"] / hc3,
-        mu_e=st["mu_e"], mu_nue=st["mu_nue"], n_nu=st["n_nue"] / hc3,
-        composition=tuple(sorted(st["densities"].items())),
-        mu_eff_i=tuple(sorted(st["mu_eff_i"].items())),
-        m_eff_i=tuple(sorted(st["m_eff_i"].items())),
-        Y_C=st["Y_C"], Y_S=st["Y_S"], condensation=condensation,
+        mode=spec.name, n_B=n_B, T=T, conditions=conditions,
+        matter=matter, leptons=leptons,
+        P=st["P"] / hc3, eps=st["eps"] / hc3, s=st["s"] / hc3,
     )
 
 

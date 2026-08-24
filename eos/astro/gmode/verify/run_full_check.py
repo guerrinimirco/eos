@@ -128,7 +128,7 @@ def _dd2_inputs(par, flags, n_lo=0.08, n_hi=1.2, n_points=110):
     P = np.array([p.P for p in pts])
     eps = np.array([p.eps for p in pts])
     n_B = np.array([p.n_B for p in pts])
-    Y_p = np.array([p.Y("p") for p in pts])
+    Y_p = np.array([p.matter.Y("p") for p in pts])
     c_eq = np.array([sound_speed_eq(par, n, flags, T=0.0) for n in n_B])
     c_ad = np.array([cs2_frozen_nucleonic(par, n, y, muons=flags.muons)
                      for n, y in zip(n_B, Y_p)])
@@ -201,7 +201,7 @@ def _check_rates(par, flags):
     cross = []
     for f in (1.0, 2.0, 3.0, 5.0):
         n_B = f * 0.16
-        Y_p = solve_beta_eq_octet(par, n_B, flags, T=1.0).Y("p")
+        Y_p = solve_beta_eq_octet(par, n_B, flags, T=1.0).matter.Y("p")
         cross.append(brentq(
             lambda T: equilibration_rate(par, n_B, Y_p, T) - omega, 0.5, 20.0))
     spread = max(cross) - min(cross)

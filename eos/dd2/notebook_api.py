@@ -107,12 +107,12 @@ def plot_composition(par, flags=NUCLEONIC, grid=None, T=0.0, y_floor=1e-4):
 
     # collect all baryon species that ever appear, plus leptons
     series = {}
-    for name in {n for p in pts for n, _ in p.composition}:
-        y = np.array([p.Y(name) for p in pts])
+    for name in {n for p in pts for n in p.matter.densities}:
+        y = np.array([p.matter.Y(name) for p in pts])
         if y.max() > y_floor:
             series[name] = y
-    for lep, attr in (("e", "Y_e"), ("mu", "Y_mu")):
-        y = np.array([getattr(p, attr) for p in pts])
+    for lep, key in (("e", "e-"), ("mu", "mu-")):
+        y = np.array([p.leptons.densities[key] / p.n_B for p in pts])
         if y.max() > y_floor:
             series[lep] = y
 
@@ -172,7 +172,7 @@ def plot_sound_speed(par, flags=NUCLEONIC, grid=None, T=0.0):
         # truncate the curve there instead of raising.
         try:
             Y_p = solve_beta_eq_octet(par, float(n), flags, T=T,
-                                      include_photons=False).Y("p")
+                                      include_photons=False).matter.Y("p")
             c_ad = sound_speed_adiabatic(par, float(n), Y_p, T=T)
             c_eq = sound_speed_eq(par, float(n), flags, T=T)
         except RuntimeError:
@@ -205,7 +205,7 @@ def _heat_capacity_P(par, n_B, flags, T, cv_vol, rel_dn=1e-3, dT=1e-2):
     # responses_jac ever grows one.
     """
     Y_p = solve_beta_eq_octet(par, n_B, flags, T=T,
-                              include_photons=False).Y("p")
+                              include_photons=False).matter.Y("p")
     P = lambda n, t: solve_composition(par, (1 - Y_p) * n, Y_p * n, T=t).P
     dP_dT = (P(n_B, T + dT) - P(n_B, T - dT)) / (2 * dT)
     dP_dn = (P(n_B * (1 + rel_dn), T) - P(n_B * (1 - rel_dn), T)) \

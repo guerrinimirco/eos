@@ -53,8 +53,8 @@ see also:
 - Guerrini, PhD Thesis (2026)
 """
 import numpy as np
-from dataclasses import dataclass, field, replace
-from typing import Optional, List, Dict, NamedTuple
+from dataclasses import replace
+from typing import Optional, List, NamedTuple
 from scipy.optimize import root
 
 from eos.general.particles import (
@@ -63,7 +63,7 @@ from eos.general.particles import (
     DeltaPP, DeltaP, Delta0, DeltaM
 )
 from eos.general import modes
-from eos.general.basis import species_potential
+from eos.general.state import EoSPoint, LeptonThermo
 from eos.general.modes import (
     ModeSpec, electron_potential, strangeness_potential
 )
@@ -109,122 +109,6 @@ N_NEUTRINO_FLAVOURS = 3.0
 # =============================================================================
 # THE RECORD ONE SOLVE RETURNS
 # =============================================================================
-@dataclass(frozen=True)
-class EoSPoint:
-    """One solved thermodynamic state.
-
-    The same record `eos.dd2.solver` returns, with SFHo's own four mean fields
-    in place of DD2's three plus its rearrangement term (SFHo's couplings are
-    constants, so there is no Sigma^R to carry).
-
-    Every baryon is carried the same way. The three per-species tuples --
-    `composition`, `mu_eff_i`, `m_eff_i` -- run over EVERY active baryon, so a
-    Lambda is read exactly as a neutron is, through `.n("Lambda")`,
-    `.mu_eff("Lambda")`, `.m_eff("Lambda")`. Neither mu_eff_i nor m_eff_i is
-    recoverable from the rest of the record -- they need the mean fields and
-    the per-species couplings -- which is why they are carried rather than
-    recomputed by every consumer.
-
-    The potentials are CLAUDE.md section 2's conserved-charge basis. Species
-    potentials are derived from it, mu_i = B_i mu_B + C_i mu_C + S_i mu_S, so
-    the neutron potential is `mu_B` and mu_p - mu_n is `mu_C`; both are
-    available per species through `.mu("n")`.
-
-    `converged` and `error` are on the record rather than raised, because
-    SFHo reports non-convergence as a return value at every layer (CLAUDE.md
-    section 6) -- the table sweep reads them point by point.
-    """
-    n_B: float          # fm^-3
-    T: float            # MeV
-    sigma: float        # MeV
-    omega: float        # MeV
-    rho: float          # MeV
-    phi: float          # MeV (hidden-strange vector; 0 without hyperons)
-    mu_B: float         # MeV
-    mu_C: float         # MeV (mu_p - mu_n; beta equilibrium is mu_C + mu_e = 0)
-    eps: float          # MeV/fm^3 (total, incl. leptons/photons when present)
-    P: float            # MeV/fm^3 (total, incl. leptons/photons when present)
-    s: float            # fm^-3 (total entropy density)
-    hvh_rel: float      # (eps + P - T s - sum mu_i n_i)/eps, diagnostics
-    mu_S: float = 0.0   # MeV (strangeness potential; 0 unless strangeness fixed)
-    mu_e: float = 0.0   # MeV
-    mu_nue: float = 0.0  # MeV (electron-neutrino potential; 0 unless trapped)
-    n_e: float = 0.0    # fm^-3 (net)
-    n_mu: float = 0.0   # fm^-3 (net; SFHo does not wire the muon family)
-    n_nu: float = 0.0   # fm^-3 (net electron-neutrino density; trapped only)
-    n_C: float = 0.0    # fm^-3, TOTAL non-leptonic charge, meson gas included
-    n_S: float = 0.0    # fm^-3, TOTAL strangeness, +1 per s quark
-    #: Per active baryon, as ((name, value), ...) so the record stays frozen.
-    composition: tuple = ()   # n_i [fm^-3]
-    mu_eff_i: tuple = ()      # mu_i - Sigma0_i [MeV]
-    m_eff_i: tuple = ()       # Dirac effective mass m*_i [MeV]
-    #: The TOTAL non-leptonic charge and strangeness fractions of the state --
-    #: baryons PLUS any thermal meson gas, which carries both. They are what
-    #: the fixed-Y_C / fixed-Y_S conditions are stated in terms of, so a state
-    #: re-solved at these fractions reproduces this one. Summing
-    #: `composition` instead gives the BARYON fractions, which at T > 0 with a
-    #: pion gas differ by 10-20 percent.
-    Y_C: float = 0.0
-    Y_S: float = 0.0
-    #: The trapped electron lepton fraction the mode imposed, 0 otherwise.
-    Y_Le: float = 0.0
-    #: max_j |mu*_j| / m_j over the thermal meson gas, 0 without it. At 1 the
-    #: gas Bose-condenses and the ideal-gas expressions stop describing it, so
-    #: `solve` refuses such a point; carried because a caller that wants to
-    #: know HOW close a converged point sits to the boundary can only get it
-    #: from here (see `eos.general.thermal_mesons`).
-    condensation: float = 0.0
-    #: The phase-by-phase pressure split, for figures that decompose it.
-    P_hadrons: float = 0.0
-    P_leptons: float = 0.0
-    P_photons: float = 0.0
-    converged: bool = False
-    error: float = 0.0
-
-    @property
-    def composition_map(self):
-        return dict(self.composition)
-
-    def n(self, name):
-        """Density n_i [fm^-3] of baryon `name` (0 if not active)."""
-        return self.composition_map.get(name, 0.0)
-
-    def Y(self, name):
-        """Population fraction n_i / n_B of baryon `name` (0 if absent)."""
-        return self.n(name) / self.n_B if self.n_B else 0.0
-
-    def mu_eff(self, name):
-        """Effective (kinetic) potential mu_eff_i [MeV] of baryon `name`."""
-        return dict(self.mu_eff_i)[name]
-
-    def m_eff(self, name):
-        """Effective (Dirac) mass m*_i [MeV] of baryon `name`."""
-        return dict(self.m_eff_i)[name]
-
-    def mu(self, name):
-        """Full chemical potential mu_i [MeV] of baryon `name`.
-
-        Derived from the conserved-charge basis, never stored: section 2's
-        mu_i = B_i mu_B + C_i mu_C + S_i mu_S.
-        """
-        return species_potential(name, self.mu_B, self.mu_C, self.mu_S)
-
-    @property
-    def Y_e(self):
-        """Electron fraction n_e / n_B."""
-        return self.n_e / self.n_B if self.n_B else 0.0
-
-    @property
-    def entropy_per_baryon(self):
-        """S/A = s / n_B, the axis an isentrope is drawn along."""
-        return self.s / self.n_B if self.n_B else 0.0
-
-    @property
-    def free_energy_density(self):
-        """F = eps - T s [MeV/fm^3]."""
-        return self.eps - self.T * self.s
-
-
 # =============================================================================
 # INITIAL GUESSES
 # =============================================================================
@@ -593,6 +477,7 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
     P_total, e_total, s_total = matter.P, matter.eps, matter.s
     mu_dot_n = matter.mu_dot_n
     mu_e = n_e = n_nu = P_leptons = 0.0
+    eps_leptons = s_leptons = 0.0
 
     lep = _lepton_sector(spec, mu_C, mu_nue, T)
     if lep is not None:
@@ -604,10 +489,14 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
         P_total += lep.electrons.P
         e_total += lep.electrons.e
         s_total += lep.electrons.s
+        eps_leptons = lep.electrons.e
+        s_leptons = lep.electrons.s
         if lep.neutrinos is not None:
             P_total += lep.neutrinos.P
             e_total += lep.neutrinos.e
             s_total += lep.neutrinos.s
+            eps_leptons += lep.neutrinos.e
+            s_leptons += lep.neutrinos.s
     elif spec.leptons:
         # Fixed Y_C with neutralizing leptons: n_C is already determined, so
         # mu_e is whatever gives n_e = n_C. A caller may seed it by appending
@@ -621,12 +510,12 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
         P_total += e.P
         e_total += e.e
         s_total += e.s
-    mu_dot_n += mu_e * n_e + mu_nue * n_nu
+        eps_leptons, s_leptons = e.e, e.s
+    lepton_dot_n = mu_e * n_e + mu_nue * n_nu
+    mu_dot_n += lepton_dot_n
 
-    P_photons = 0.0
     if sys.photons:
         gamma = photon_thermo(T)
-        P_photons = gamma.P
         P_total += gamma.P
         e_total += gamma.e
         s_total += gamma.s
@@ -641,24 +530,22 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
     # than echoed from the targets, so a point that did not converge does not
     # claim the fraction it was asked for. Y_Le has no such reading: the
     # lepton content is not part of the matter block.
+    leptons = LeptonThermo(
+        mu_e=mu_e, mu_mu=mu_e, mu_nue=mu_nue,
+        densities={"e-": n_e, "mu-": 0.0, "nu_e": n_nu},
+        P=P_leptons, eps=eps_leptons, s=s_leptons, mu_dot_n=lepton_dot_n,
+    )
+    conditions = {}
+    if spec.is_fixed("C"):
+        conditions["Y_C"] = matter.Y_C
+    if spec.is_fixed("S"):
+        conditions["Y_S"] = matter.Y_S
+    if spec.is_fixed("L_e"):
+        conditions["Y_Le"] = spec.targets["Y_Le"]
     return EoSPoint(
-        n_B=sys.n_B, T=T,
-        sigma=sigma, omega=omega, rho=rho, phi=phi,
-        mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, mu_e=mu_e, mu_nue=mu_nue,
+        mode=spec.name, n_B=sys.n_B, T=T, conditions=conditions,
+        matter=matter, leptons=leptons,
         eps=e_total, P=P_total, s=s_total,
-        hvh_rel=((e_total + P_total - T * s_total - mu_dot_n) / e_total
-                 if e_total else 0.0),
-        n_e=n_e, n_nu=n_nu, n_C=matter.n_C, n_S=matter.n_S,
-        composition=tuple(matter.densities.items()),
-        mu_eff_i=tuple(matter.mu_eff_i.items()),
-        m_eff_i=tuple(matter.m_eff_i.items()),
-        Y_C=matter.Y_C, Y_S=matter.Y_S,
-        Y_Le=spec.targets["Y_Le"] if spec.is_fixed("L_e") else 0.0,
-        P_hadrons=matter.P, P_leptons=P_leptons, P_photons=P_photons,
-        # Read off the matter block rather than recomputed: `thermo_from_mu`
-        # already evaluated the gas, and one quantity computed twice is one
-        # quantity that can disagree with itself.
-        condensation=matter.condensation,
     )
 
 
@@ -729,7 +616,7 @@ def solve(sys: System, x0=None) -> EoSPoint:
     # said as a return value. Only the CONVERGED state is tested; an iterate
     # that passes through condensation on its way somewhere legitimate is not
     # the solver's problem.
-    if point.converged and point.condensation >= 1.0:
+    if point.converged and point.matter.condensation >= 1.0:
         point = replace(point, converged=False)
     return point
 
@@ -946,12 +833,13 @@ def warm_start(result: EoSPoint, spec: ModeSpec,
         spec: the mode being swept — it decides which potentials are unknowns
         isentropic: True when T is an unknown rather than an input
     """
-    x = [result.sigma, result.omega, result.rho, result.phi,
-         result.mu_B, result.mu_C]
+    m = result.matter
+    x = [m.fields["sigma"], m.fields["omega"], m.fields["rho"],
+         m.fields["phi"], m.mu_B, m.mu_C]
     if spec.is_fixed("S"):
-        x.append(result.mu_S)
+        x.append(m.mu_S)
     if spec.is_fixed("L_e"):
-        x.append(result.mu_nue)
+        x.append(result.leptons.mu_nue)
     if isentropic:
         x.append(result.T)
     return np.array(x)
@@ -973,20 +861,21 @@ if __name__ == "__main__":
 
     r = solve_beta_eq_neutrinoless(par, n_B, nucleons, T=T)
     print("\nbeta eq, nucleons        "
-          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P:.2f}")
+          f"converged={r.converged}  Y_C={r.matter.Y_C:.4f}  P={r.P:.2f}")
     r = solve_beta_eq_neutrinoless(par, 0.32, hyperons, T=T)
     print("beta eq, +hyperons       "
-          f"converged={r.converged}  Y_C={r.Y_C:.4f}  Y_S={r.Y_S:.4f}")
+          f"converged={r.converged}  Y_C={r.matter.Y_C:.4f}  Y_S={r.matter.Y_S:.4f}")
     r = solve_fixed_yc(par, n_B, 0.3, nucleons, T=T)
     print("fixed Y_C = 0.3          "
-          f"converged={r.converged}  Y_C={r.Y_C:.4f}  P={r.P:.2f}")
+          f"converged={r.converged}  Y_C={r.matter.Y_C:.4f}  P={r.P:.2f}")
     r = solve_fixed_yc_ys(get_sfhoy_fortin(), 0.32, 0.4, 0.1,
                           hyperons, T=T)
     print("fixed Y_C, Y_S           "
-          f"converged={r.converged}  Y_S={r.Y_S:.4f}  mu_S={r.mu_S:.2f}")
+          f"converged={r.converged}  Y_S={r.matter.Y_S:.4f}  mu_S={r.matter.mu_S:.2f}")
     r = solve_beta_eq_neutrino_trapped(par, n_B, 0.4, nucleons, T=50.0)
     print("trapped, Y_Le = 0.4      "
-          f"converged={r.converged}  mu_nue={r.mu_nue:.2f}  n_nu={r.n_nu:.3e}")
+          f"converged={r.converged}  mu_nue={r.leptons.mu_nue:.2f}  "
+          f"n_nu={r.leptons.densities['nu_e']:.3e}")
     r = solve_isentropic_beta_eq(par, n_B, 1.0, nucleons)
     print("isentropic, S/A = 1      "
           f"converged={r.converged}  T={r.T:.3f} MeV  P={r.P:.2f}")

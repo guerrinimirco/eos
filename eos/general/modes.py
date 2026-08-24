@@ -117,6 +117,26 @@ class ModeSpec:
     def is_fixed(self, charge):
         return getattr(self, charge) is Conservation.FIXED
 
+    @property
+    def name(self):
+        """The mode's name, built from which charges it holds.
+
+        The four names of CLAUDE.md section 3, plus the two combinations the
+        named factories below do not have a word for: strangeness held with
+        the charge equilibrated (`fixed_YS`), and that on top of a trapped
+        lepton family. `leptons` is deliberately not in the name -- section 3
+        makes it an orthogonal flag on the fixed-fraction modes, so
+        `fixed_YC` asked with and without neutralizing leptons is one mode
+        asked two ways, not two modes.
+        """
+        if self.is_fixed("C"):
+            return "fixed_YC_YS" if self.is_fixed("S") else "fixed_YC"
+        if self.is_fixed("L_e"):
+            base = "beta_eq_neutrino_trapped"
+        else:
+            base = "beta_eq_neutrinoless"
+        return f"{base}_fixed_YS" if self.is_fixed("S") else base
+
 
 # =============================================================================
 # THE NAMED MODES  (CLAUDE.md section 3)

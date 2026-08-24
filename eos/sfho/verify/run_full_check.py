@@ -103,14 +103,17 @@ def euler_residual(par, result, flags):
     """
     mu_dot_n = 0.0
     for p in active_baryons(flags):
-        n = result.n(p.name)
-        mu = (p.baryon_no * result.mu_B + p.charge * result.mu_C
-              + p.strangeness * result.mu_S)
+        n = result.matter.densities.get(p.name, 0.0)
+        mu = (p.baryon_no * result.matter.mu_B + p.charge * result.matter.mu_C
+              + p.strangeness * result.matter.mu_S)
         mu_dot_n += mu * n
-    mu_dot_n += result.mu_e * result.n_e + result.mu_nue * result.n_nu
+    lep = result.leptons
+    mu_dot_n += (lep.mu_e * lep.densities["e-"]
+                 + lep.mu_nue * lep.densities["nu_e"])
     if flags.thermal_mesons:
-        gas = thermal_meson_thermo(result.T, result.mu_C, result.mu_S,
-                                   result.omega, result.rho, par)
+        m = result.matter
+        gas = thermal_meson_thermo(result.T, m.mu_C, m.mu_S,
+                                   m.fields["omega"], m.fields["rho"], par)
         mu_dot_n += gas["mu_dot_n"]
     if result.eps == 0.0:
         return 0.0
@@ -396,7 +399,7 @@ def _check_susceptibilities(hyp, n_B=0.8, T=10.0, rel=1e-4):
     if not base.converged:
         return CheckResult("chi_ab vs dmu/dn", False, 1.0,
                            f"no beta-eq state at n_B={n_B:g}")
-    charges = [n_B, base.n_C, base.n_S]
+    charges = [n_B, base.matter.n_C, base.matter.n_S]
     dmu_dn = np.zeros((3, 3))
     for b in range(3):
         step = rel * max(abs(charges[b]), 1e-3)
@@ -410,7 +413,8 @@ def _check_susceptibilities(hyp, n_B=0.8, T=10.0, rel=1e-4):
             if not point.converged:
                 return CheckResult("chi_ab vs dmu/dn", False, 1.0,
                                    "perturbed fixed-Y_C-Y_S solve failed")
-            ends.append(np.array([point.mu_B, point.mu_C, point.mu_S]))
+            m = point.matter
+            ends.append(np.array([m.mu_B, m.mu_C, m.mu_S]))
         dmu_dn[:, b] = (ends[0] - ends[1]) / (2.0 * step)
     chi = susceptibilities(hyp, n_B, flags, T=T)
     err = float(np.max(np.abs(chi @ dmu_dn - np.eye(3))))

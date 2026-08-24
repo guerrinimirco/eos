@@ -112,10 +112,11 @@ def susceptibilities(par, n_B, flags, T=0.0):
     # rows; the Y_C/Y_S targets don't enter the (pointwise) Jacobian.
     held = mode_spec(charge_mode="fixed", strange_mode="fixed")
     ctx = build_matter_ctx(par, n_B, flags, T=T)
-    x = [p.sigma, p.omega0, p.rho0]
+    m = p.matter
+    x = [m.fields["sigma"], m.fields["omega0"], m.fields["rho0"]]
     if has_phi:
-        x.append(p.phi0)
-    x += [p.mu_B - p.Sigma_R, p.mu_C, 0.0]
+        x.append(m.fields["phi0"])
+    x += [m.mu_B - m.Sigma_R, m.mu_C, 0.0]
     J = np.array(octet_jacobian(np.array(x), ctx, held))
 
     n_f = 3 + int(has_phi)

@@ -78,16 +78,18 @@ def hadronic_row(p, flags):
     hyperons switched on those differ.
     """
     n_B = p.n_B
-    _, n_C, n_S = hadronic_charges(flags, p.composition_map)
+    lep = p.leptons
+    _, n_C, n_S = hadronic_charges(flags, p.matter.densities)
     row = dict(n_B=n_B, T=p.T, chi=0.0, phase="H", P=p.P, eps=p.eps, s=p.s,
-               S_per_B=(p.s / n_B if n_B else 0.0), mu_B=p.mu_B,
+               S_per_B=(p.s / n_B if n_B else 0.0), mu_B=p.matter.mu_B,
                Y_C=n_C / n_B, Y_S=n_S / n_B,
-               mu_e=p.mu_e, mu_S=p.mu_S, mu_nue=p.mu_nue,
-               Y_e=p.n_e / n_B, **{"Y_mu-": p.n_mu / n_B})
-    for name, n in p.composition_map.items():
+               mu_e=lep.mu_e, mu_S=p.matter.mu_S, mu_nue=lep.mu_nue,
+               Y_e=lep.densities["e-"] / n_B,
+               **{"Y_mu-": lep.densities["mu-"] / n_B})
+    for name, n in p.matter.densities.items():
         row[f"Y_{name}"] = n / n_B
-    if p.n_nu:
-        row["Y_nue"] = p.n_nu / n_B
+    if lep.densities["nu_e"]:
+        row["Y_nue"] = lep.densities["nu_e"] / n_B
     return row
 
 

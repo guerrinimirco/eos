@@ -75,7 +75,8 @@ def compute_saturation_fields(params: Optional[Parameters] = None,
     if not result.converged:
         raise RuntimeError(f"Failed to converge at n_B={n_B}, Y_C={Y_C}, T={T}")
     
-    return result.sigma, result.omega, result.rho, result.phi
+    fields = result.matter.fields
+    return (fields["sigma"], fields["omega"], fields["rho"], fields["phi"])
 
 
 # =============================================================================
@@ -173,8 +174,8 @@ def esym(par, n_B):
     """
     point = _snm(par, n_B)
     k_F = hc * (3.0 * np.pi**2 * n_B / 2.0) ** (1.0 / 3.0)
-    E_F = np.sqrt(k_F**2 + point.m_eff("n")**2)
-    A = par.compute_A(point.sigma, point.omega)
+    E_F = np.sqrt(k_F**2 + point.matter.m_eff_i["n"]**2)
+    A = par.compute_A(point.matter.fields["sigma"], point.matter.fields["omega"])
     kinetic = k_F**2 / (6.0 * E_F)
     potential = n_B * hc3 * par.g_rho_N**2 / (8.0 * (par.m_rho**2 + 2.0 * A))
     return kinetic + potential
@@ -218,7 +219,7 @@ def compute_nmp(par, h=1e-3, n_lo=0.12, n_hi=0.20):
     return {
         "n_sat": n_sat,
         "E_sat": EA(n_sat),
-        "m_eff_ratio": at_sat.m_eff("n") / m_N,
+        "m_eff_ratio": at_sat.matter.m_eff_i["n"] / m_N,
         "K_sat": 9.0 * n_sat**2 * d2,
         "Q_sat": 27.0 * n_sat**3 * d3,
         "E_sym": esym(par, n_sat),
@@ -503,7 +504,7 @@ def _isoscalar_quantities(par, n_sat, h=1e-3):
     d2 = (EA(n_sat + h) - 2.0 * EA(n_sat) + EA(n_sat - h)) / h ** 2
     m_N = 0.5 * (par.m_n + par.m_p)
     return dict(P=at.P, E_sat=at.eps / n_sat - m_N,
-                m_ratio=at.m_eff("n") / m_N, K_sat=9.0 * n_sat ** 2 * d2)
+                m_ratio=at.matter.m_eff_i["n"] / m_N, K_sat=9.0 * n_sat ** 2 * d2)
 
 
 def _restart_loop(residual, seed, first, n_restarts, gate):
@@ -631,7 +632,7 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
     iso_only = _trial_par(base, g_sigma, g_omega, b, c)
     at_sat = _snm(iso_only, n_sat)
     k_F = hc * (3.0 * np.pi ** 2 * n_sat / 2.0) ** (1.0 / 3.0)
-    kinetic = k_F ** 2 / (6.0 * np.sqrt(k_F ** 2 + at_sat.m_eff("n") ** 2))
+    kinetic = k_F ** 2 / (6.0 * np.sqrt(k_F ** 2 + at_sat.matter.m_eff_i["n"] ** 2))
     if nmp["E_sym"] <= kinetic:
         raise ValueError(
             f"NMP inversion infeasible: E_sym = {nmp['E_sym']} at or below "
@@ -671,7 +672,9 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
     par.name = f"{getattr(base, 'name', 'SFHo')}_from_nmp"
 
     at_final = _snm(par, n_sat)
-    cross = 2.0 * par.compute_A(at_final.sigma, at_final.omega) / par.m_rho ** 2
+    fields = at_final.matter.fields
+    cross = (2.0 * par.compute_A(fields["sigma"], fields["omega"])
+             / par.m_rho ** 2)
     if abs(cross) >= CROSS_COUPLING_LIMIT:
         # A converged root on the runaway branch. It reproduces the targets --
         # forward-checking it agrees -- so this is not a solver failure but a

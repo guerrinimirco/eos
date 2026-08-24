@@ -263,8 +263,10 @@ class EoSPoint(_PicklableFrozenMaps):
     friends are the phase alone.
 
     Non-convergence is a value here, not an exception (CLAUDE.md section 6):
-    `converged` is judged on `residual`, the largest scaled equilibrium
-    residual, so a sampler can score a bad point and move on.
+    `converged` is judged on `error`, the largest scaled equilibrium residual,
+    so a sampler can score a bad point and move on. `error` rather than
+    `residual` because that is what alphabag, did, enjl, njl and sfho already
+    call it -- one name per job (section 13).
     """
     mode: str
     n_B: float                          # fm^-3
@@ -278,7 +280,7 @@ class EoSPoint(_PicklableFrozenMaps):
     eps: float                          # MeV/fm^3, TOTAL
     s: float                            # fm^-3, TOTAL
     converged: bool = True
-    residual: float = 0.0
+    error: float = 0.0
 
     _MAP_FIELDS = ("conditions",)
 
@@ -289,6 +291,22 @@ class EoSPoint(_PicklableFrozenMaps):
     def entropy_per_baryon(self):
         """S/A = s / n_B, the axis an isentrope is drawn along."""
         return self.s / self.n_B if self.n_B else 0.0
+
+    def euler_residual(self):
+        """(eps + P - T s - sum_i mu_i n_i) / eps, over the TOTALS.
+
+        `PhaseThermo.euler_residual` is the same identity for the matter
+        alone; this one adds the leptons, and holds with photons included
+        because a mu = 0 gas satisfies eps + P = T s by itself and so enters
+        both sides equally. CLAUDE.md section 8 requires about 1e-8 relative,
+        and `verify/` is where that is enforced.
+        """
+        if self.eps == 0.0:
+            return 0.0
+        mu_dot_n = self.matter.mu_dot_n
+        if self.leptons is not None:
+            mu_dot_n += self.leptons.mu_dot_n
+        return (self.eps + self.P - self.T * self.s - mu_dot_n) / self.eps
 
     @property
     def free_energy_density(self):

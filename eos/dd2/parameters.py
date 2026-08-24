@@ -244,7 +244,8 @@ class Parametrization:
         for name, su6 in SU6_HYPERON.items():
             x_sigma = scalar_ratio_from_potential(
                 U_map[_POTENTIAL_KEY[name]], su6["x_omega"], Gs_sat, Gw_sat,
-                sat.sigma, sat.omega0, sat.Sigma_R)
+                sat.matter.fields["sigma"], sat.matter.fields["omega0"],
+                sat.matter.Sigma_R)
             rows.append((name, DD2Y_HYPERON[name]["mass"], x_sigma,
                          su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
         return replace(base, hyperon_couplings=tuple(rows))
@@ -274,7 +275,8 @@ class Parametrization:
         sat = solve_snm(base, base.n_sat)
         Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
         x_Delta_sigma = scalar_ratio_from_potential(
-            U_Delta, x_wD, Gs_sat, Gw_sat, sat.sigma, sat.omega0, sat.Sigma_R)
+            U_Delta, x_wD, Gs_sat, Gw_sat, sat.matter.fields["sigma"],
+            sat.matter.fields["omega0"], sat.matter.Sigma_R)
         return replace(base, x_Delta_sigma=x_Delta_sigma,
                        x_Delta_omega=x_wD, x_Delta_rho=x_rD)
 

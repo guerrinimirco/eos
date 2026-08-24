@@ -89,7 +89,7 @@ def engine_point(par, n_B, Y_q, T, include_electrons=True, flags=None):
         ph = photon_thermo(T)
         P, eps, s = P + ph.P, eps + ph.e, s + ph.s
     return dict(P=P, eps=eps, s_per_B=s / n_B,
-                mu_B=base.mu_B, mu_C=base.mu_C)
+                mu_B=base.matter.mu_B, mu_C=base.matter.mu_C)
 
 
 def compare_slice(par, compose_dir=DD2_COMPOSE, T=5.0, Y_q=0.5,
@@ -178,7 +178,7 @@ def compare_ns(points, ns_path=DD2Y_NS, nB_min=0.2, nB_max=1.2):
     myN = np.array([p.n_B for p in points])
     myP = np.array([p.P for p in points])
     myE = np.array([p.eps for p in points])
-    myM = np.array([p.mu_B for p in points])
+    myM = np.array([p.matter.mu_B for p in points])
     eP = np.abs(np.interp(n_B[m], myN, myP) / P[m] - 1.0)
     eE = np.abs(np.interp(n_B[m], myN, myE) / eps[m] - 1.0)
     eM = np.abs(np.interp(n_B[m], myN, myM) / mu_B[m] - 1.0)

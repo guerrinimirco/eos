@@ -159,46 +159,51 @@ in `eos/` and in `nucleation/` now goes through
 
 ---
 
-### `state.EoSPoint` and `LeptonThermo` are written but adopted by nobody
+### The shared records are adopted by dd2 and sfho; the other models are not
 
-`eos/general/state.py` holds the records every model is meant to hand back —
+`eos/general/state.py` holds the records every model is meant to hand back --
 `PhaseThermo` (matter only: the model's own fields under its own names, EVERY
 active species' density, mu_i, mu_eff_i and m_eff_i per species, the conserved
 charges, P, eps, s), `LeptonThermo` (all four potentials explicit, so a
 transparent muon family is a visible assumption rather than a hidden
-`mu_mu = -mu_C`), and `EoSPoint` (what a mode returns). `eos/general/modes.py`
-holds `ModeSpec`, the mode as one choice per conserved charge.
+`mu_mu = -mu_C`), and `EoSPoint` (what a mode returns: the conditions, the
+nested `matter` and `leptons` blocks, and the TOTALS on top). `eos/general/
+modes.py` holds `ModeSpec`, the mode as one choice per conserved charge, whose
+`name` property is where the section 3 mode name comes from.
 
-Where this actually stands: `PhaseThermo` is adopted by dd2 and sfho, whose
-`thermodynamics.py` both return it, and `ModeSpec` by dd2, sfho and mixed.
-`EoSPoint` and `LeptonThermo` are adopted by NOBODY — dd2's solver returns a
-flat `EoSPoint` of its own, and sfho now returns the same flat record, field
-for field, because two models returning one shape is worth more than one model
-leading the way to a third. (`eos/mixed`'s second `PhaseThermo` is gone: the
-engine and its adapters now consume `eos.general.state.PhaseThermo` directly,
-and dd2's block crosses the phase-adapter surface without re-packaging.)
-zl is a third: its solver returns a flat
-`EoSPoint` too, carrying (n_p, n_n) rather than a composition map, because a
-two-species model has nothing to iterate over. It is a smaller record than
-dd2's and sfho's, not a different convention, and it converges with them when
-the shared record is adopted.
+Where this stands: dd2 and sfho return `EoSPoint` with `matter` a
+`PhaseThermo` and `leptons` a `LeptonThermo`, and `eos/mixed` consumes
+`PhaseThermo` across the phase-adapter surface. Still on flat records of their
+own: zl, vmit, alphabag, abpr, enjl, did and njl. Each conversion changes what
+`eos_point` returns and so lands in its own commit with its baseline re-run --
+except that, as with dd2 and sfho, two models whose records are the same shape
+should convert together rather than leave two conventions standing.
 
-Converting to the shared `EoSPoint` is therefore ONE commit across dd2 and
-sfho together, not a per-model step: doing it in either alone puts two record
-shapes in the repository at the same time, which is the single thing section
-13 exists to prevent. What it buys is the nesting — `point.matter` as a
-`PhaseThermo` and `point.leptons` as a `LeptonThermo`, with the totals on top —
-and it costs both models' baselines a key rename. What it must keep is
-`converged` / `error` on the record: sfho reports non-convergence as a return
-value at every layer, and its table sweep reads the flag point by point, while
-dd2 raises and wraps at `api.py`. `LeptonThermo` also has no home in dd2 or
-sfho until the muon family is wired.
+What the dd2/sfho conversion cost and what it did not: every one of the 2784
+dd2 baseline quantities and 2117 sfho quantities that survives the rename is
+BIT-IDENTICAL, and the key names are what moved (`sigma` ->
+`matter.fields.sigma`, `n_e` -> `leptons.densities.e-`, and so on). Two
+quantities left the baseline rather than moving, both benign:
 
-The rest of this entry is the design the flat records already implement.
+- dd2's `mu_S` at 90 points. `generate_baseline.row` drops mu_S where no
+  strange species is populated, and dd2's flat record carried no `n_S` field
+  for the rule to read, so the rule had never fired for dd2. All 102 stored
+  values were exactly 0.0.
+- sfho's `Y_Le` at 67 points, where the mode does not hold a lepton fraction.
+  The flat record carried a default 0.0; `conditions` carries the fraction
+  only when the mode fixes it. All 67 were exactly 0.0, and the three genuine
+  ones (Y_Le = 0.4) survive as `conditions.Y_Le`.
 
-What each model has to supply is decided by ONE question — what its internal
-self-consistent solution is — because the rest of the state is (chemical
-potentials, T) in every model:
+`Y_C`, `Y_S` and the Euler residual are no longer stored fields: the first two
+are properties of `PhaseThermo` over the recorded `n_C`, `n_S` and `n_B`, and
+`hvh_rel` is `EoSPoint.euler_residual()`. sfho's `P_hadrons` / `P_leptons` /
+`P_photons` split is `matter.P`, `leptons.P` and the remainder; nothing read
+it. `LeptonThermo` still has no muon family in sfho -- `mu-` is present and
+zero, which is what the model implements.
+
+What each model still on a flat record has to supply is decided by ONE
+question -- what its internal self-consistent solution is -- because the rest
+of the state is (chemical potentials, T) in every model:
 
     dd2, sfho          meson mean fields sigma, omega0, rho0, (phi0);
                        n_i derived
@@ -211,19 +216,19 @@ potentials, T) in every model:
 vmit and zl are the two that look different and are not: both carry densities
 in the *unknown vector* because that keeps the residual polynomial rather than
 nesting Fermi integrals inside it. That is a conditioning choice of the
-solver, not a statement about the state — physically vmit's state is still
+solver, not a statement about the state -- physically vmit's state is still
 (mu_q, V, T). So `fields` holds whatever the model solves for, under the
 model's own names, and is empty where there is nothing to solve.
 
 Three things the records fix that the remaining models get wrong in the same
-way, so they are worth doing together rather than one model at a time. dd2 is
-converted on all three and is the worked example:
+way, so they are worth doing together rather than one model at a time. dd2 and
+sfho are converted on all three and are the worked examples:
 
 - **nucleons are privileged over hyperons.** Every model's kinetics computes
   mu_eff and m* for each active species and then keeps only n and p. Neither
   is recoverable from the record afterwards (they need the fields and the
   per-species coupling ratios), so g-modes and the response functions recompute
-  them. `m_eff` is even singular although m*_i differs per species — in DD2Y
+  them. `m_eff` is even singular although m*_i differs per species -- in DD2Y
   at n_B = 0.6 the neutron sits at 192 MeV while Lambda is at 652 and Xi- at
   1083, so the single number was the neutron's and the rest were discarded.
 - **the mode is welded into the state.** dd2 carried eight mode fields on its
@@ -231,14 +236,11 @@ converted on all three and is the worked example:
   same with their own vocabularies, which is why no two of them accept a mode
   the same way.
 - **the non-leptonic charge is called `mu_Q` in some models and `mu_C` in
-  others.** §2 says C. dd2 is converted; the rest are not. Storing mu_C rather
-  than recovering it as mu_p - mu_n is also the numerically better choice, and
-  measurably so: those are two ~1300 MeV numbers differing by ~100 MeV, so the
-  subtraction costs about two digits, and removing it from dd2's warm start
-  took its backend parity from 3.0e-14 to 8.9e-16.
-
-Each model's conversion lands in its own commit with its baseline re-run,
-since the records change what `eos_point` returns.
+  others.** Section 2 says C. Storing mu_C rather than recovering it as
+  mu_p - mu_n is also the numerically better choice, and measurably so: those
+  are two ~1300 MeV numbers differing by ~100 MeV, so the subtraction costs
+  about two digits, and removing it from dd2's warm start took its backend
+  parity from 3.0e-14 to 8.9e-16.
 
 ---
 
@@ -251,7 +253,8 @@ names mandatory and their existence conditional. Two renames are done
 `thermodynamics.py`). The rest are outstanding, each belonging in its model's
 own session where the baseline and `test_imports.py` are already being run:
 
-    dd2       delete notebook_api.py -- the last one outstanding. The rest of
+    dd2       delete notebook_api.py -- the last one outstanding. The records
+              are the shared `eos.general.state` ones (above). The rest of
               dd2's layout is now CLAUDE.md §5: physics/{thermo, fields,
               mesons} and the non-residual half of physics/octet became
               thermodynamics.py; octet_residual, assemble_octet and
@@ -266,8 +269,10 @@ own session where the baseline and `test_imports.py` are already being run:
               thermodynamics_hadrons.py -> thermodynamics.py, and species.py
               and api.py added. `result_to_guess(result, eq_type)` is
               `warm_start(result, spec)`, reading the mode declaration rather
-              than a string. `SFHoParams` is `Parameters`. What is left is the
-              records (above).
+              than a string. `SFHoParams` is `Parameters`, and the records
+              are the shared `eos.general.state` ones (above). What is left is
+              `get_sfho_default()`, which carries the model name where
+              section 13 asks for `Parameters.default()`.
     vmit      DONE: eos.py -> solver.py, and `VMITParams` is `Parameters`.
               `get_vmit_default()` / `get_vmit_custom()` still carry the model
               name where section 13 asks for `Parameters.default()` /

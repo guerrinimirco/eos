@@ -59,10 +59,11 @@ def susceptibilities(par, n_B, flags, T=0.0, spec=None):
             f"no converged state to differentiate at n_B={n_B:g} fm^-3, "
             f"T={T:g} MeV (residual {state.error:.3e})")
 
-    held = modes.fixed_YC_YS(state.Y_C, state.Y_S)
+    held = modes.fixed_YC_YS(state.matter.Y_C, state.matter.Y_S)
     sys = _system(par, flags, held, n_B, T=T)
-    x = np.array([state.sigma, state.omega, state.rho, state.phi,
-                  state.mu_B, state.mu_C, state.mu_S])
+    m = state.matter
+    x = np.array([m.fields["sigma"], m.fields["omega"], m.fields["rho"],
+                  m.fields["phi"], m.mu_B, m.mu_C, m.mu_S])
     J = residual_jacobian(x, sys)
 
     fields = slice(0, 4)
