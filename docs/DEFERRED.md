@@ -296,11 +296,16 @@ own session where the baseline and `test_imports.py` are already being run:
               are the shared `eos.general.state` ones (above). What is left is
               `get_sfho_default()`, which carries the model name where
               section 13 asks for `Parameters.default()`.
-    vmit      DONE: eos.py -> solver.py, and `VMITParams` is `Parameters`.
-              `get_vmit_default()` / `get_vmit_custom()` still carry the model
-              name where section 13 asks for `Parameters.default()` /
-              `Parameters.named()`; zl and abpr have converted, vmit and sfho
-              have not.
+    vmit      PARTIAL, and this entry undercounted it badly. The file moves
+              are done (eos.py -> solver.py) and `VMITParams` is `Parameters`,
+              but BELOW `Parameters` the package was never converted at all:
+              the entry named two functions and there are ~23. Fourteen
+              `compute_*` names that carry nothing (section 13 rule 3), two
+              records repeating the package (`VMITEOSResult`, `VMITThermo`),
+              and seven section-13 vocabulary names including all four
+              `solve_vmit_*` entry points. Measured by the ticket-07 sweep,
+              which found vmit the worst package in the repository. zl and abpr
+              have converted; vmit and sfho have not.
     zl        DONE: eos.py -> solver.py, compute_tables.py -> table.py,
               thermodynamics_nucleons.py -> thermodynamics.py, and species.py
               and api.py added. `ZLParams` is `Parameters` and
@@ -440,6 +445,17 @@ the notebooks -- see the notebook entry below.
 the first-generation settings-object interface, kept because the ZLvMIT
 notebook drives vMIT through it, and it now sits beside `table.py` as a shim
 over the shared driver rather than being renamed to it.
+
+**The exception covers its three symbols too**, which it previously did not
+say: `VMITTableSettings`, `compute_vmit_table` and `save_vmit_results` each
+repeat the package and so break section 13 rule 1, independently of where the
+module lives -- the parallel `zl` names were converted to `TableSettings` /
+`compute_table` / `save_results` and these were not. They are FROZEN rather
+than renamed: their only consumer is `notebooks/ZLvMIT_hybrid.ipynb`, which
+CLAUDE.md section 5 exempts as legacy and which the current map rules out of
+scope, so renaming them buys nothing and touches a notebook kept for published
+results. The previous state -- a documented exception on the file, an
+undocumented one on the symbols -- was the actual defect.
 
 `eos/mixed` is a composite engine and takes the shorter list of CLAUDE.md §5 —
 `adapters.py`, `api.py`, `responses.py`, `verify/`, `mixed.tex` — plus the

@@ -215,6 +215,19 @@ against this file, not against the earlier `pytest_before*.txt`.
   deleted anyway, the third is on the KEEP list, split to
   [ticket 41](issues/41-corrupt-notebooks.md).
 
+- [Approve or reject the proposed public renames](issues/10-rename-approvals.md):
+  **the gate is passed** — 46 of 58 approved, 3 frozen, 1 deferred, 5 split out as
+  not-renames, 3 ruled keep. The fact that made it cheap: **not one of the 58
+  touches a `nucleation` call site**, so Phase 6 is not exposed and the whole
+  ~550-site radius is `eos/` + `test/` (over half of it in gitignored files).
+  Application graduated to per-package tickets [42](issues/42-rename-internal.md),
+  [43](issues/43-rename-vmit.md), [44](issues/44-rename-dd2.md),
+  [45](issues/45-rename-sfho.md), with the five behaviour changes at
+  [46](issues/46-api-changes.md). Frozen: vmit's three legacy table symbols, whose
+  only consumer is the out-of-scope and currently-unopenable ZLvMIT notebook.
+  Also corrected `DEFERRED.md`'s vmit entry, which claimed DONE while naming 2 of
+  ~23 unconverted names.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
@@ -244,11 +257,15 @@ In scope, not yet sharp enough to ticket:
 - **What the 56 failing docstrings cost to fix.** Ticket 07 lists them but rewriting
   a docstring into the model document's notation requires that document to be
   settled first — so this waits on the document audit and the `.tex`/`.md` ruling.
-  Whether it is one ticket per model or one sweep is not decidable yet.
+  Whether it is one ticket per model or one sweep is not decidable yet. Now also
+  entangled with the renames: tickets 42–45 rewrite the very signatures those
+  docstrings describe, so the sweep is cheapest immediately AFTER them, not before.
 - **The 6 mis-ordered files and the 9 dense comprehensions.** Reordering
   `eos/dd2/solver.py` and `eos/sfho/thermodynamics.py` is the serious half and
   touches solver internals, so it may need its own gate; the rest is cosmetic.
-  Which of the two it is depends on the rename ruling landing first.
+  The rename ruling has now landed (ticket 10), and both serious files are ones
+  tickets 44 and 45 rewrite anyway — so the open question narrows to whether the
+  reorder rides along with those renames or is gated separately from them.
 - **The 21 remaining (a)-class fixes.** Ticket 08 located each with file:line and
   several are one-liners, but they cannot be cut into tickets until
   [ticket 11](issues/11-conformance-triage.md) rules which are fixes and which are

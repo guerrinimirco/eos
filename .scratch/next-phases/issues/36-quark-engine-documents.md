@@ -58,3 +58,18 @@ documents give the *code* names `ms` and `Delta` in the parameter table where
 the mathematics wants `m_s` and `Delta_0`. §13's rule that a name says what it
 is applies to the documents too — a reader reproducing the model from the page
 should not have to know the identifier.
+
+## Added by ticket 10 (rename approvals)
+
+**Name the phase-adapter surface while writing `mixed.tex`.** Ticket 07 found the
+same job under two names: `thermo_at_potentials` (dd2, sfho, did) against
+`thermo_from_mu` (the other seven models). §13's vocabulary lists
+`thermo_from_mu`, 7–3 in its favour — but dd2, sfho and did are not drifting,
+they carry BOTH, at two layers: `thermo_from_mu` low, `thermo_at_potentials` on
+the phase-adapter surface (`did/thermodynamics.py:358` against `:542`).
+
+[Ticket 10](10-rename-approvals.md) deferred it here rather than renaming
+blindly, because the upper layer wants a name that names the §5 contract —
+"(baryon potential, mu_C, mu_S, T) -> a `PhaseThermo` block" — and picking that
+name while `mixed.tex` is still being written risks naming it twice. Settle the
+name in the document, then rename the three models to match.
