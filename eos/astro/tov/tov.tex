@@ -496,6 +496,49 @@ the stability boundary is the turning point $\partial M/\partial \varepsilon_c
 implementation takes the \emph{first} stationary point, which is the one that
 bounds the stable branch.
 
+\section{Numerical parameters}
+\label{sec:numerics}
+
+None of these is physics; all of them set how far a computed mass can be
+trusted, so a reader reproducing a number to three digits needs them stated
+rather than read off the source.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+parameter & value & what it controls \\
+\midrule
+integrator & \texttt{DOP853} & explicit Runge--Kutta of order 8 \\
+\texttt{rtol}, \texttt{atol} & $10^{-10}$, $10^{-12}$ & the reference path
+  (\texttt{solver.py}) \\
+\texttt{r\_min} & $0.001$ & km; the series start, avoiding $r = 0$ \\
+\texttt{r\_max} & $15.0$ & km; the bracket the surface event must fall in \\
+\texttt{p\_surface} & $10^{-10}$ & MeV\,fm$^{-3}$; the pressure defining the
+  surface \\
+\texttt{P\_tol} & $10^{-4}$ & relative; the window that identifies a
+  first-order jump \\
+\texttt{n\_grid} & $2000$ & the fast path's uniform $\ln P$ cells
+  (\texttt{solver\_fast.py}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+The surface is located by an event on $P - p_{\rm surface}$ rather than by
+integrating to a fixed radius, so a star that ends before $r_{\rm max}$ is not
+padded and one that does not end within it is reported as unterminated rather
+than truncated silently.
+
+Two numbers deserve a word. The tolerances of the reference path are far
+tighter than the accuracy of any equation of state fed to it; they are set so
+that the \emph{integration} is never the limiting error, which is what makes
+the reference path usable as the thing \texttt{solver\_fast.py} is validated
+against (CLAUDE.md~\S9). And \texttt{n\_grid} is a resolution rather than a
+tolerance: the fast path interpolates on cells of width
+$(\ln P_{\max} - \ln P_{\min})/n_{\rm grid}$, so a first-order transition
+narrower than one cell is smoothed, which is the one place the two paths can
+legitimately disagree.
+
 \section{What a solved star returns}
 \label{sec:returns}
 

@@ -128,6 +128,31 @@ tried and the variable. `have_crust(name)` is the predicate to call before
 falling back: falling back to no crust moves M_max by ~1%, so it is visible at
 the call site rather than silent.
 
+## Numerical parameters
+
+None of these is physics; all of them set how far a computed mass can be
+trusted.
+
+    integrator      DOP853          explicit Runge-Kutta, order 8
+    rtol, atol      1e-10, 1e-12    the reference path (solver.py)
+    r_min           0.001 km        series start, avoiding r = 0
+    r_max           15.0 km         bracket the surface event must fall in
+    p_surface       1e-10           MeV/fm^3, the pressure defining the surface
+    P_tol           1e-4            relative; window identifying a 1st-order jump
+    n_grid          2000            the fast path's uniform ln P cells
+
+The surface is an EVENT on P - p_surface, not an integration to fixed radius: a
+star ending before r_max is not padded, and one that does not end within it is
+reported as unterminated rather than silently truncated.
+
+Two deserve a word. The reference tolerances are far tighter than the accuracy
+of any EoS fed to them — set so the INTEGRATION is never the limiting error,
+which is what lets the reference path serve as what solver_fast.py is validated
+against (§9). And n_grid is a resolution, not a tolerance: the fast path
+interpolates on cells of width (lnP_max - lnP_min)/n_grid, so a first-order
+transition narrower than one cell is smoothed. That is the one place the two
+paths can legitimately disagree.
+
 ## Sequences
 
 One integration per central energy density; columns
