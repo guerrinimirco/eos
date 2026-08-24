@@ -1441,6 +1441,38 @@ a reason that has nothing to do with seeding.
   decision that cross-cutting entry is waiting on. Non-convergence is a return
   value, so a sampler can score the point and move on.
 
+- **`ccdm_phase` RAISES below the quark onset, and a mixed solve whose path
+  wanders there stalls.** The confined branch is excluded from the adapter's
+  default enumeration because its pressure is identically zero -- it is the
+  vacuum, and in a hybrid construction the hadronic phase is what occupies
+  that side of the transition. The consequence is that below the onset the
+  adapter has nothing to return and raises, so the mixed engine meets an
+  exception rather than a smooth boundary; since the mixed residual is
+  finite-differenced, the Jacobian is then undefined and the solve reports
+  "not making good progress".
+
+  Measured on DID+CCDM at T = 30 MeV, beta equilibrium: the CCDM phase
+  converges at no enumerated branch for mu_B below about 1400 MeV, and the
+  mixed solve consequently fails for n_B in roughly 1.3-1.8 fm^-3 while
+  succeeding at 0.9, 1.1 and 2.0. The WINDOW still locates correctly
+  (0.711 -> 2.189 fm^-3 at T = 30 against 0.711 -> 2.261 at T = 0), because
+  the probe only needs points where the solve succeeds. At T = 0 the same
+  band solves, which is why `test/mixed/test_ccdm_pair.py` can use the window
+  midpoint there and picks points either side of the band at T = 30.
+
+  Restricting to a single branch does NOT fix it -- tried, and it does not --
+  so this is the domain boundary itself, not the branch-choice discontinuity
+  it first looked like.
+
+  Closing it means deciding what a quark adapter should return below its own
+  onset. Returning the confined vacuum (n_B = 0, P = 0) would make the
+  adapter total and let the engine push back up, at the risk of the solver
+  settling on spurious chi -> 0 states; raising, as now, keeps every returned
+  block a real deconfined state. The other quark adapters here never face the
+  choice because they have no confinement and so no domain boundary. This is
+  the first adapter that does, and the decision wants more thought than a
+  session that was adding a model.
+
 - **The onset DENSITY is not located by this model, only by `eos.mixed`.**
   The deconfined branch's pressure crosses zero very close to where the branch
   itself terminates -- the crossing moves from about 1.34 to 1.38 fm^-3
