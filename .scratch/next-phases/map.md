@@ -83,6 +83,18 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 - `eos/general/constraints/__init__.py:403` defines `overlay(ax, plane, ...)`.
 - `docs/STRUCTURE.md` does not exist; CLAUDE.md §10 and §11 both reference it.
 
+## Suite status
+
+**1660 passed, 15 skipped, 0 failed** (`pytest test/ -q`, `EOS_CRUST_DIR`
+UNSET — a plain checkout, no environment setup), recorded in
+`output/_audit/pytest_final.txt`.
+
+The session began at 4 failures on a bare checkout, against an inherited note
+claiming 12. None of the four was a physics defect: three were the BPS crust
+table not being on the search path, and the fourth was the regression baseline
+freezing an undetermined `mu_S` under six derived names. Compare later work
+against this file, not against the earlier `pytest_before*.txt`.
+
 ## Decisions so far
 
 <!-- one line per closed ticket: gist + link -->
