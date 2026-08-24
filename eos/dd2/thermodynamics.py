@@ -30,7 +30,6 @@ couplings is what keeps the residual smooth.
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.optimize import brentq
 
 from eos.general.particles import Electron, Muon
 from eos.general.physics_constants import hc3
@@ -418,39 +417,6 @@ def meson_charges_nat(ctx, mu_C, mu_S, omega0, rho0):
         include_pseudoscalars=ctx.include_pseudoscalars,
         include_thermal_vectors=ctx.include_thermal_vectors)
     return n_C * hc3, n_S * hc3
-
-
-def neutralizing_leptons(target_nat, m_e, m_mu, include_muons, T):
-    """Leptons at the potential that neutralises a given charge density.
-
-    Populates e (and mu, if enabled) so that n_e + n_mu = `target_nat`, the
-    non-leptonic charge in natural units. Muons are in leptonic equilibrium at
-    mu_mu = mu_e, so a single potential closes it. Since leptons do not source
-    the mean fields this is exact after the fact.
-
-    Model-independent: only masses and the temperature enter, so this belongs
-    in `eos.general` and is recorded in docs/DEFERRED.md as owing that move.
-
-    Returns (mu_e, (n,P,eps,s)_e, (n,P,eps,s)_mu), all natural units.
-    """
-    zero = (0.0, 0.0, 0.0, 0.0)
-    if target_nat <= 0.0:                   # no positive charge to neutralize
-        return 0.0, zero, zero
-
-    def f(mu):
-        ne = kinetic_thermo(mu, m_e, 2.0, T)[0]
-        nmu = kinetic_thermo(mu, m_mu, 2.0, T)[0] if include_muons else 0.0
-        return ne + nmu - target_nat
-
-    hi = 200.0
-    while f(hi) < 0.0:
-        hi *= 2.0
-    mu_e = brentq(f, 0.0, hi, xtol=1e-10)
-    ne, Pe, ee, se, _ = kinetic_thermo(mu_e, m_e, 2.0, T)
-    if include_muons:
-        nmu, Pmu, emu, smu, _ = kinetic_thermo(mu_e, m_mu, 2.0, T)
-        return mu_e, (ne, Pe, ee, se), (nmu, Pmu, emu, smu)
-    return mu_e, (ne, Pe, ee, se), zero
 
 
 # =============================================================================

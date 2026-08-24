@@ -45,21 +45,6 @@ is carried by no populated species. Options: report the potential as undefined
 have the mode raise. Until then `test/baseline` does not freeze mu_S where n_S
 is zero, or mu_e where n_e is zero, because there is nothing there to freeze.
 
-### `neutralizing_leptons` now has a home, and two models still carry copies
-
-`eos/general/thermodynamics_leptons.py` gained `neutralizing_leptons(n_charge,
-T, include_muons)` — the electrons and muons at the single potential that
-neutralizes a given non-leptonic charge, which is what a `fixed_YC` mode with
-leptons needs after its solve. It is model-independent (masses and T are all
-that enter), which is why it moved there, and `eos/did` uses it.
-
-`eos/dd2/thermodynamics.py` and `eos/sfho` still carry their own versions;
-dd2's docstring already recorded that it owed the move. Migrating them is a
-two-line change each, but it is a change to solved numbers at the last bits
-(a different brentq bracket walks to a different final digit), so it belongs
-with a session that regenerates those baselines deliberately rather than with
-a session that adds a model.
-
 ### The pure-Python integral fallback is not a bit-exact reference
 
 `general/fermi_integrals.py` and `general/bose_integrals.py` define their
@@ -1109,14 +1094,6 @@ a reason that has nothing to do with seeding.
   does NOT carry a muon-neutrino family: `Y_Lmu` is not accepted, so the muon
   family stays transparent (mu_mu = mu_e - mu_nue). Adding it is one more
   unknown and one more row, and nothing has asked for it.
-- The neutralizing leptons of a held-Y_C mode are found by a local bracketed
-  1-D solve, `solver.neutralizing_leptons`. That is the THIRD copy of this
-  idea in the repository -- `dd2/physics/octet.py::_yc_neutralizing_leptons`
-  is the first and `eos/mixed` imports it out of dd2's kernels -- and the
-  cross-cutting entry above already says it belongs in
-  `general/thermodynamics_leptons.py`. Whoever moves it should absorb all
-  three; this one is written against the shared Fermi integrals, so the move
-  is a deletion here rather than a rewrite.
 - Cold starts stop converging around 0.5 fm^-3 in EVERY mode, not just beta
   equilibrium; a table warm-starts, which is how the model is used. Measured
   on a 0.2-0.8 fm^-3 grid: all four modes converge cold at 0.2 and 0.4 and
@@ -1450,13 +1427,6 @@ a reason that has nothing to do with seeding.
   K+ = u sbar has S = -1 and K0bar = dbar s has S = +1. The check that the
   entries are right is that summing C_i n_i over the gas reproduces
   `thermal_meson_charges`.
-- `_yc_neutralizing_leptons` — the electron/muon gas at the chemical potential
-  that neutralises a given charge density — lives in `dd2/physics/octet.py`
-  but is fully model-independent: its arguments are (target charge, m_e, m_mu,
-  include_muons, T) and no model parameter enters. CLAUDE.md §7 makes lepton
-  thermodynamics a `general/` responsibility, and `eos/mixed/coefficients.py`
-  already imports it out of dd2's kernels to build its own lepton block. It
-  belongs in `general/thermodynamics_leptons.py`.
 
 ### mixed
 - Capability gaps of the shipped pairings, each a loud NotImplementedError

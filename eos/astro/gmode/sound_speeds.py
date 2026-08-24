@@ -91,8 +91,6 @@ P and eps in MeV/fm^3, T in MeV. Sound speeds are dimensionless (units of c),
 import numpy as np
 from dataclasses import replace
 
-from eos.general.physics_constants import hc3
-from eos.general.particles import Electron, Muon
 from eos.mixed.responses import sound_speed_eq, sound_speed_frozen
 
 ISOBARIC = "isobaric"
@@ -149,7 +147,7 @@ def cs2_frozen_nucleonic(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3,
     compressed faster than the Urca processes can convert neutrons to protons.
     """
     from eos.dd2.solver import solve_composition
-    from eos.dd2.thermodynamics import neutralizing_leptons
+    from eos.general.thermodynamics_leptons import neutralizing_leptons
 
     def state(scale):
         n = n_B * scale
@@ -158,9 +156,9 @@ def cs2_frozen_nucleonic(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3,
         P, eps = pt.P, pt.eps
         if leptons:
             _mu_e, e_blk, mu_blk = neutralizing_leptons(
-                n_p * hc3, Electron.mass, Muon.mass, muons, T)
-            P += (e_blk[1] + mu_blk[1]) / hc3
-            eps += (e_blk[2] + mu_blk[2]) / hc3
+                n_p, T, include_muons=muons)
+            P += e_blk.P + mu_blk.P
+            eps += e_blk.e + mu_blk.e
         return P, eps
 
     P_lo, e_lo = state(1.0 - rel_dn)

@@ -18,7 +18,7 @@ References:
 - Mathematica notebook SFHO_HypDelMes_new.nb
 """
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from eos.general.particles import Particle, Electron, Muon, Neutrino
 from eos.general.fermi_integrals import solve_fermi_jel
@@ -301,7 +301,8 @@ if __name__ == "__main__":
 # THE NEUTRALIZING LEPTON SECTOR
 # =============================================================================
 def neutralizing_leptons(n_charge: float, T: float, include_muons: bool = False,
-                         mu_max: float = 1.0e4):
+                         mu_max: float = 1.0e4,
+                         m_e: float = None, m_mu: float = None):
     """Leptons at the single potential that neutralizes `n_charge` [fm^-3].
 
     A fixed-Y_C mode with leptons=True asks for electrons (and muons, if the
@@ -313,6 +314,11 @@ def neutralizing_leptons(n_charge: float, T: float, include_muons: bool = False,
 
     Model-independent: only the lepton masses and the temperature enter, which
     is why this lives here rather than in each model (CLAUDE.md section 7).
+    `m_e` and `m_mu` override the masses of `eos.general.particles` for a model
+    that carries its own in its parameter dataclass, which section 7 allows and
+    `eos.enjl` does (m_e = 0.511, m_mu = 105.66 against 0.510999 and 105.6584).
+    Without the override such a model would use one electron mass in its
+    beta-equilibrium sector and another here.
 
     Returns (mu_e, electrons, muons) with the two blocks as `ThermoResult`;
     the muon block is all zeros when muons are off. A non-positive charge
@@ -324,10 +330,13 @@ def neutralizing_leptons(n_charge: float, T: float, include_muons: bool = False,
 
     from scipy.optimize import brentq
 
+    electron = Electron if m_e is None else replace(Electron, mass=m_e)
+    muon = Muon if m_mu is None else replace(Muon, mass=m_mu)
+
     def net(mu):
-        n = electron_thermo(mu, T).n
+        n = lepton_thermo(mu, T, electron).n
         if include_muons:
-            n += muon_thermo(mu, T).n
+            n += lepton_thermo(mu, T, muon).n
         return n - n_charge
 
     hi = 200.0
@@ -338,5 +347,5 @@ def neutralizing_leptons(n_charge: float, T: float, include_muons: bool = False,
                 f"no lepton potential below {mu_max} MeV neutralizes "
                 f"n_C = {n_charge} fm^-3 at T = {T} MeV")
     mu_e = brentq(net, 0.0, hi, xtol=1e-10)
-    muons = muon_thermo(mu_e, T) if include_muons else empty
-    return mu_e, electron_thermo(mu_e, T), muons
+    muons = lepton_thermo(mu_e, T, muon) if include_muons else empty
+    return mu_e, lepton_thermo(mu_e, T, electron), muons

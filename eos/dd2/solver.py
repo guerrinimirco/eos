@@ -60,8 +60,9 @@ from eos.dd2.thermodynamics import kF_from_n, kinetic_thermo
 from eos.dd2.thermodynamics import vector_fields, rearrangement, field_eps_P
 from eos.dd2.thermodynamics import (
     G_NU, baryon_kinetics, build_matter_ctx, meson_charges_nat,
-    neutralizing_leptons, thermal_meson_thermo,
+    thermal_meson_thermo,
 )
+from eos.general.thermodynamics_leptons import neutralizing_leptons
 try:
     from eos.dd2.backends.jacobian import octet_jacobian
     from eos.dd2.backends.kernel_numba import (
@@ -696,8 +697,16 @@ def assemble_octet(x, ctx, spec):
     elif spec.leptons:
         # fixed-Y_C with neutralizing leptons: mu_mu = mu_e and n_e + n_mu is
         # the non-leptonic charge, so the total is electrically neutral.
-        mu_e, (ne, Pe, ee, se), (nmu, Pmu, emu, smu) = neutralizing_leptons(
-            charge_tot, ctx.m_e, ctx.m_mu, ctx.include_muons, ctx.T)
+        # `neutralizing_leptons` is fm-based, as every shared boundary is;
+        # this assembly is in natural units, so the charge goes in divided and
+        # the blocks come back multiplied.
+        mu_e, e_blk, mu_blk = neutralizing_leptons(
+            charge_tot / hc3, ctx.T, include_muons=ctx.include_muons,
+            m_e=ctx.m_e, m_mu=ctx.m_mu)
+        ne, Pe, ee, se = (e_blk.n * hc3, e_blk.P * hc3,
+                          e_blk.e * hc3, e_blk.s * hc3)
+        nmu, Pmu, emu, smu = (mu_blk.n * hc3, mu_blk.P * hc3,
+                              mu_blk.e * hc3, mu_blk.s * hc3)
         mu_mu = mu_e
         lepton_dot_n = mu_e * (ne + nmu)
     else:

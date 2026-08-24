@@ -81,9 +81,9 @@ import numpy as np
 from scipy.special import zeta
 
 from eos.general.physics_constants import hc, hc3
-from eos.general.particles import Electron, Muon
+from eos.general.particles import Electron
 from eos.dd2.solver import solve_composition
-from eos.dd2.thermodynamics import neutralizing_leptons
+from eos.general.thermodynamics_leptons import neutralizing_leptons
 
 #: Fermi coupling squared times the Cabibbo factor, G_F^2 cos^2(theta_c)
 #: [MeV^-4]. Alford and Harris (2018), text below their Eq. (8).
@@ -175,8 +175,7 @@ def susceptibility_A(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3):
     def mu_delta(n_n):
         n_p = n_B - n_n
         pt = solve_composition(par, n_n, n_p, T=T, check_consistency=False)
-        mu_e, _e, _m = neutralizing_leptons(
-            n_p * hc3, Electron.mass, Muon.mass, muons, T)
+        mu_e, _e, _m = neutralizing_leptons(n_p, T, include_muons=muons)
         return -pt.mu_C - mu_e
 
     n_n0 = (1.0 - Y_p) * n_B
@@ -205,8 +204,7 @@ def equilibration_rate(par, n_B, Y_p, T, muons=True, processes="both",
     n_p = Y_p * n_B
     n_n = n_B - n_p
     pt = solve_composition(par, n_n, n_p, T=T, check_consistency=False)
-    mu_e, _e, _m = neutralizing_leptons(
-        n_p * hc3, Electron.mass, Muon.mass, muons, T)
+    mu_e, _e, _m = neutralizing_leptons(n_p, T, include_muons=muons)
 
     p_Fn, p_Fp = _fermi_momentum(n_n), _fermi_momentum(n_p)
     p_Fe = np.sqrt(max(mu_e**2 - Electron.mass**2, 0.0))

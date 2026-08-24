@@ -32,7 +32,7 @@ once.
 from dataclasses import dataclass
 import math
 
-from scipy.optimize import brentq, least_squares
+from scipy.optimize import least_squares
 
 from eos.enjl.parameters import Parameters
 from eos.enjl.species import (
@@ -42,7 +42,7 @@ from eos.enjl.species import (
 )
 from eos.enjl.thermodynamics import (
     EoSPoint, _baryon_scalar_densities, baryon_masses,
-    effective_scalar_densities, kinetic_state, kinetic_thermo, mean_fields,
+    effective_scalar_densities, kinetic_state, mean_fields,
     quark_masses_from_gap, thermo_from_n,
 )
 from eos.general.modes import (
@@ -51,6 +51,7 @@ from eos.general.modes import (
 )
 from eos.general.physics_constants import hc3
 from eos.general.solve import RESIDUAL_TOL, scaled_residual_max
+from eos.general.thermodynamics_leptons import neutralizing_leptons
 from eos.general.tabulate import temperature_at_entropy
 
 #: The four modes of CLAUDE.md section 3, as the factories that declare them.
@@ -437,48 +438,6 @@ def _scaled_residual(x, par, spec, n_B, T=0.0):
 # The neutralizing leptons of a held-charge mode
 # --------------------------------------------------------------------------
 
-def neutralizing_leptons(n_C, par, T=0.0):
-    """(mu_e, n_e, n_mu) of the gas that neutralizes a charge density n_C.
-
-    Where Y_C is held, the leptons enter no equation of the solve: n_C is
-    already pinned by the charge row, so the electrons and muons that make the
-    total system neutral follow from it afterwards. With transparent matter
-    (mu_mu = mu_e) the condition n_e + n_mu = n_C is monotone in mu_e at any
-    temperature, so it is a bracketed 1-D root.
-
-    The bracket's lower end is the one thing temperature moves. At T = 0 an
-    electron gas needs mu_e >= m_e to exist at all, so the bracket starts
-    there; at T > 0 the gas is populated for any mu_e and the NET density
-    (electrons minus positrons) vanishes at mu_e = 0, which is where the
-    bracket then starts.
-
-    Returns zeros for n_C <= 0. At T = 0 that is exact -- a negatively charged
-    or neutral strongly interacting phase needs no leptons and there are no
-    positrons. At T > 0 a phase with n_C < 0 would be neutralized by a net
-    positron gas at mu_e < 0; no mode of this model asks for a negative Y_C,
-    and the case is refused rather than answered wrongly.
-
-    Natural units in and out; n_C and the densities in MeV^3, mu_e in MeV.
-    """
-    if n_C <= 0.0:
-        return 0.0, 0.0, 0.0
-
-    def n_lepton(mu, m, sp):
-        return kinetic_thermo(mu, m, DEGENERACY[sp], 0.0, T)[0]
-
-    def excess(mu):
-        return (n_lepton(mu, par.m_e, "e")
-                + n_lepton(mu, par.m_mu, "mu") - n_C)
-
-    hi = 100.0
-    while excess(hi) < 0.0 and hi < 1.0e5:
-        hi *= 2.0
-    lo = par.m_e if T == 0.0 else 0.0
-    mu_e = brentq(excess, lo, hi, xtol=1e-12, rtol=1e-14)
-    return (mu_e, n_lepton(mu_e, par.m_e, "e"),
-            n_lepton(mu_e, par.m_mu, "mu"))
-
-
 # --------------------------------------------------------------------------
 # The solve
 # --------------------------------------------------------------------------
@@ -622,7 +581,12 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
     # they are added now, from the charge density the solve pinned.
     if spec.is_fixed("C") and spec.leptons:
         n_C = sum(CHARGE[sp] * n[sp] for sp in SPECIES if sp not in LEPTONS)
-        mu_e, n["e"], n["mu"] = neutralizing_leptons(n_C, par, T)
+        # The shared solve is fm-based; this assembly is in natural units, and
+        # ENJL carries its own lepton masses (section 7), so it hands them over
+        # rather than letting the general values silently replace them.
+        mu_e, e_blk, mu_blk = neutralizing_leptons(
+            n_C / hc3, T, include_muons=True, m_e=par.m_e, m_mu=par.m_mu)
+        n["e"], n["mu"] = e_blk.n * hc3, mu_blk.n * hc3
     elif spec.is_fixed("C"):
         mu_e = 0.0
     else:
