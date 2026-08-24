@@ -161,6 +161,36 @@ Both checks still run, as tests. That is the cost of the rule and it was taken
 deliberately: `test/` is gitignored and unpublished, so the DID
 paper-reproduction check is no longer inside the distributed package.
 
+### Three notebook import lines are dead, one per rename that passed them by
+
+The renames of this session updated every call site in `eos/` and `test/` and
+deliberately did not touch the notebooks, which are their own session. Three
+import lines therefore name modules that no longer exist, and the notebook
+does not run until the line is changed. Each is a one-line fix, and each has
+to be made in the `.py` AND the `.ipynb` of the pair, which is what makes them
+a notebook-session job rather than a rename's loose end:
+
+    notebooks/DD2vMIT_general1oPT   from eos.vmit.eos import ...
+                                        -> eos.vmit.solver
+                                    from eos.dd2.verify.tov import
+                                        build_core_table, N_TRANSITION
+                                        -> eos.dd2.table
+    notebooks/DID_usage             from eos.did.verify.tov import mass_radius
+                                        -> test/did/did_tov_sequence.py, which
+                                        is not importable from a notebook, so
+                                        this one is a rewrite: build the table
+                                        with `eos.did.table.build_core_table`
+                                        and drive `eos.astro.tov` from the
+                                        notebook, which is what a notebook is
+                                        allowed to do
+                                    (the surrounding prose names
+                                        `eos.did.verify.tov` too)
+
+Checked and NOT affected: the dd2/sfho shared-record conversion breaks no
+notebook. `DD2vMIT_general1oPT`'s `q.Y_e` is a vMIT result, `DID_usage`'s
+`point.sigma` and `p.Y_e` are DID's own flat record, and `CCDM_usage`'s
+`st.Sigma_R` is ccdm's -- none of the three models converted.
+
 ### One notebook still sets rcParams
 
 `notebooks/ENJL_usage.py` sets `figure.dpi` and `figure.figsize` directly. It
@@ -423,11 +453,8 @@ module keeps the name `nmp.py` once it holds potential inversions too. About
 ninety call sites use these as classmethods, so the move belongs with the
 `Parametrization` -> `Parameters` rename, which touches the same lines.
 
-`vmit/eos.py` is now `vmit/solver.py`. Its importers moved with it, EXCEPT
-the notebook pair `notebooks/DD2vMIT_general1oPT.{py,ipynb}`, whose
-`from eos.vmit.eos import ...` line is now dead: that notebook is part of the
-notebook rework and was deliberately left untouched, so it does not run until
-that session updates the import to `eos.vmit.solver`.
+`vmit/eos.py` is now `vmit/solver.py`, and every importer moved with it except
+the notebooks -- see the notebook entry below.
 
 `vmit/compute_tables.py` is the one deliberate exception to the scheme: it is
 the first-generation settings-object interface, kept because the ZLvMIT
