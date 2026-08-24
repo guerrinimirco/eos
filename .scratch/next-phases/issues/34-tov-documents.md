@@ -43,3 +43,48 @@ Per-document gaps are named in
 [document-audit.md](../research/document-audit.md). The code decides wherever a
 document and the source disagree; report any disagreement rather than silently
 following one.
+
+## Progress — the rotation gap closed, the pair not yet at 5/10 -> full
+
+Two of the audit's four failing columns are now closed in **both** files.
+
+**C1 / C3 — the formulation.** Both documents described how RNS is *driven* and
+never what it solves. They now carry the Komatsu–Eriguchi–Hachisu
+quasi-isotropic metric in the Cook–Shapiro–Teukolsky form RNS implements, the
+four potentials with which three are elliptic, the statement that rotation is
+uniform (`Omega` is one number) and that `omega(r,theta)` is the frame-dragging
+rate rather than the same quantity, the relativistic first integral
+
+    H + (1/2)(gamma + rho) - (1/2) ln(1 - v^2) = const,
+    v = (Omega - omega) r sin(theta) e^(-rho),
+
+and the specific enthalpy `H(P) = int dP'/(eps + P')` that carries it. That last
+is the only place the EoS enters, which is why the RNS table has an enthalpy
+column and why `_specific_enthalpy` integrates on 16003 points uniform in ln P —
+so the interface details the documents already had now read as consequences
+rather than trivia.
+
+`Komatsu1989` and `CookShapiroTeukolsky1994` added to `docs/eos.bib`: both
+documents leaned on a formulation neither cited, and neither entry existed.
+
+**C6 — returned quantities.** Both files listed the static returns and said
+nothing about `RotatingResult`, which is a different object with eighteen fields
+in RNS's units. Now tabulated in both, with the two easy misreadings called out:
+`Omega_K` is the mass-shedding rate *of the model in hand*, not the sequence's
+Kepler frequency; and `I` is NaN rather than zero at `r_ratio = 1` because it
+comes from `J/Omega` and both vanish.
+
+`tov.tex` still compiles.
+
+## Still open
+
+- **C2 — numerical parameters and their provenance.** The integrator's
+  tolerances, grid sizes and caps are not stated in either file. For `astro/tov`
+  this column means the *numerical* parameters rather than fitted physics
+  constants, and a reader reproducing a mass to three digits needs them.
+- **C8 — which rows each mode changes.** `astro/tov` has no §3 modes, so this is
+  arguably N/A, but the audit scored it Partial. Worth deciding whether the
+  crust-attachment choices (`No` / `BPS` / the three CompOSE tables /
+  `personalized`) are the equivalent, since they *do* change what is integrated.
+
+Ticket stays open on those two.
