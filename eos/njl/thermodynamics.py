@@ -27,7 +27,10 @@ quietly:
   * P COMES FROM THE LOGARITHM FORM. The two standard pressure integrals differ
     by a surface term that vanishes only when the integrand does at the upper
     limit -- which is true at T = 0 below the cutoff and false everywhere else.
-    The k^4/E form is 10% low at T = 30 MeV and 40% low at T = 50 MeV;
+    The k^4/E form is 10% low at T = 30 MeV and 40% low at T = 50 MeV. Both
+    forms and the closed-form difference between them are
+    `eos.general.fermi_gauss`, which is where the cut ideal gas lives now that
+    the colour-dielectric model needs the same integrals (CLAUDE.md section 7);
   * the medium integral is not a spectator. At T = 0 unpaired it is
     self-limiting at k_F, but at T > 0, and in ANY paired phase, the Fermi
     surface is smeared and the cutoff enters. That is why lambda = Lambda_UV/
@@ -51,14 +54,15 @@ import math
 
 import numpy as np
 
+from eos.general.fermi_gauss import ModeThermo, kinetic_thermo, surface_term
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
-    mode_potentials, pair_block, panel_nodes,
+    mode_potentials, pair_block, pattern_mask,
 )
 from eos.general.physics_constants import hc3
 from eos.general.solve import solve_system
 from eos.njl.couplings import vector_energy, vector_self_energy
-from eos.njl.species import DEGENERACY, DEGENERACY_SEA, pattern_mask
+from eos.njl.species import DEGENERACY_SEA
 
 _PI2 = math.pi ** 2
 
@@ -72,118 +76,6 @@ MASS_DAMPING = 0.3
 #: Iteration bound and residual gate of the vacuum fixed point [MeV].
 MAX_VACUUM_ITER = 4000
 VACUUM_TOL = 1.0e-12
-
-
-# =============================================================================
-# ONE MODE AS A CUT FERMI GAS
-# =============================================================================
-@dataclass(frozen=True)
-class ModeThermo:
-    """One colour-flavour mode's medium integrals, all from one quadrature pass.
-
-    n and rho_s in MeV^3, eps and P in MeV^4, s in MeV^3. Antiparticles
-    SUBTRACT in n and ADD in rho_s, eps and P. `P_k4` is the second standard
-    pressure form, carried only as a diagnostic: `P` is the logarithm form and
-    is the one every assembly uses.
-    """
-    n: float
-    rho_s: float
-    eps: float
-    P: float
-    s: float
-    P_k4: float
-
-
-def _occupation(x, T):
-    """f = 1/(1 + e^(x/T)), written through tanh so it cannot overflow."""
-    if T <= 0.0:
-        return np.where(x < 0.0, 1.0, np.where(x > 0.0, 0.0, 0.5))
-    return 0.5 * (1.0 - np.tanh(0.5 * x / T))
-
-
-def _log_term(x, T):
-    """T ln(1 + e^(-x/T)), and its T -> 0 limit max(-x, 0)."""
-    if T <= 0.0:
-        return np.maximum(-x, 0.0)
-    return T * np.logaddexp(0.0, -x / T)
-
-
-def _entropy_integrand(E, mu, T):
-    """The entropy per state, summed over particles and antiparticles.
-
-        s = sum_(+-) [ (x_+-/T) f_+- + ln(1 + e^(-x_+-/T)) ] ,  x_+- = E -+ mu
-
-    Integrated rather than taken from the single-mode Euler relation
-    s = (eps + P - mu n)/T. The two are equal exactly -- the identity holds
-    integrand by integrand, so it survives the cutoff -- but the Euler route
-    is a difference of three numbers of order 1e9 divided by T, and in a cold
-    nearly-degenerate gas, where s is genuinely of order 1e-8 of them, the
-    cancellation eats every significant digit. Integrating costs one more
-    array in the same pass and leaves the Euler relation available as a CHECK
-    rather than spending it as a definition.
-    """
-    if T <= 0.0:
-        return np.zeros_like(E)
-    out = np.zeros_like(E)
-    for x in (E - mu, E + mu):
-        z = x / T
-        out = out + z * _occupation(x, T) + np.logaddexp(0.0, -z)
-    return out
-
-
-def kinetic_thermo(mu, m, T, k_max, g=DEGENERACY, quadrature=None):
-    """One mode as an ideal gas cut at `k_max` [MeV].
-
-        n     = (g/2 pi^2) int dk k^2       (f+ - f-)
-        rho_s = (g/2 pi^2) int dk k^2 (m/E) (f+ + f-)
-        eps   = (g/2 pi^2) int dk k^2  E    (f+ + f-)
-        P     = (g/2 pi^2) int dk k^2 T[ln(1 + e^-(E-mu)/T) + ln(1 + e^-(E+mu)/T)]
-
-    with E = sqrt(k^2 + m^2) and f-+ the Fermi functions at E -+ mu. The
-    entropy comes from the Euler relation of the single mode,
-    s = (eps + P - mu n)/T, which is exact and free rather than a sixth
-    integrand; it is identically zero at T = 0.
-
-    P is the LOGARITHM form. Against the k^4/E form it differs by the surface
-    term `surface_term` below, which is 0.1% of P at (m, mu, T) = (100, 500,
-    20) MeV, 10.5% at (40, 590, 30) and 39.9% at (140, 700, 50). At T = 0 with
-    k_F < k_max the two agree, which is exactly why the error hides until a
-    table is built at finite temperature.
-    """
-    if quadrature is None:
-        k_F = math.sqrt(mu ** 2 - m ** 2) if abs(mu) > abs(m) else 0.0
-        quadrature = panel_nodes([k_F] if k_F > 0.0 else [], T, k_max)
-    k, w = quadrature
-
-    E = np.sqrt(k ** 2 + m ** 2)
-    f_p = _occupation(E - mu, T)
-    f_m = _occupation(E + mu, T)
-    weight = w * k ** 2
-    pref = g / (2.0 * _PI2)
-
-    n = pref * float(np.sum(weight * (f_p - f_m)))
-    rho_s = pref * float(np.sum(weight * (m / E) * (f_p + f_m)))
-    eps = pref * float(np.sum(weight * E * (f_p + f_m)))
-    P = pref * float(np.sum(weight * (_log_term(E - mu, T)
-                                      + _log_term(E + mu, T))))
-    P_k4 = (g / (6.0 * _PI2)) * float(np.sum(w * k ** 4 / E * (f_p + f_m)))
-    s = pref * float(np.sum(weight * _entropy_integrand(E, mu, T)))
-    return ModeThermo(n=n, rho_s=rho_s, eps=eps, P=P, s=s, P_k4=P_k4)
-
-
-def surface_term(mu, m, T, k_max, g=DEGENERACY):
-    """P_log - P_k4 in closed form [MeV^4].
-
-        (g/6 pi^2) k_max^3 T [ ln(1 + e^-(E_max - mu)/T)
-                             + ln(1 + e^-(E_max + mu)/T) ]
-
-    the boundary term of the integration by parts that turns one pressure
-    integral into the other. It does not vanish when the integral is cut, and
-    it is not small.
-    """
-    E_max = math.sqrt(k_max ** 2 + m ** 2)
-    both = _log_term(np.array(E_max - mu), T) + _log_term(np.array(E_max + mu), T)
-    return (g / (6.0 * _PI2)) * k_max ** 3 * float(both)
 
 
 # =============================================================================

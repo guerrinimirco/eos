@@ -19,8 +19,12 @@ two rows, and a point carries the pairing pattern it was solved in.
 """
 from dataclasses import dataclass
 
+#: The spin degeneracy of one colour-flavour mode, re-exported from
+#: `eos.general.fermi_gauss` where the ideal-gas integrals that use it live.
+from eos.general.fermi_gauss import DEGENERACY  # noqa: F401
 from eos.general.pairing import (
-    CHARGE, COLOURS, FLAVOURS, FLAVOUR_OF_MODE, MODES, N_MODES, STRANGENESS,
+    CHARGE, COLOURS, DEFAULT_PATTERNS, FLAVOURS, FLAVOUR_OF_MODE, MODES,
+    N_MODES, PATTERNS, STRANGENESS, pattern_mask, pattern_seed,
 )
 
 #: Density-dictionary keys for the nine modes, in MODES order: 'u_r', 'u_g',
@@ -28,11 +32,6 @@ from eos.general.pairing import (
 #: when the colour resolution matters; the flavour totals 'u', 'd', 's' are
 #: what the conserved-charge sums of `eos.general.basis` understand.
 MODE_NAMES = tuple(f"{f}_{a}" for f, a in MODES)
-
-#: Spin degeneracy of one colour-flavour mode. Colour is resolved mode by
-#: mode, so it is NOT in here: the familiar g = 6 of a quark flavour is this
-#: 2 times the three colours summed explicitly.
-DEGENERACY = 2.0
 
 #: Spin times colour, the degeneracy of the Dirac sea integral of one flavour.
 DEGENERACY_SEA = 6.0
@@ -96,52 +95,8 @@ class SpeciesFlags:
                     f"eos.njl -- {why}")
 
 
-# =============================================================================
-# THE PAIRING PATTERNS
-# =============================================================================
-# Which of the three gaps a pattern makes free, and where a solve of it starts.
-# A pattern is a DECLARATION, like a mode: it does not add code, it says which
-# unknowns exist. The gap equation has three roots at any mismatch -- zero, a
-# barrier maximum and the physical BCS root -- so which root a solve lands on
-# is decided by the seed, and the seeds below are what make the enumeration an
-# enumeration rather than one solve repeated.
-#
-# The mask says which Delta_eta are unknowns; the seed is in units of the gap
-# scale the caller supplies. Recall that Delta_1 pairs d with s, Delta_2 pairs
-# u with s and Delta_3 pairs u with d, so 2SC -- the pattern that survives a
-# large strange-quark mass -- is the one with Delta_3 alone.
-#
-# 'free' carries the same freedom as CFL and differs only in seeding: started
-# asymmetrically it can converge on uSC, dSC or an unequal-gap state that none
-# of the named seeds would have found. That is the point of enumerating seeds
-# rather than patterns.
-
-PATTERNS = {
-    "unpaired": ((False, False, False), (0.0, 0.0, 0.0)),
-    "2SC":      ((False, False, True),  (0.0, 0.0, 1.0)),
-    "uSC":      ((False, True, True),   (0.0, 0.6, 1.0)),
-    "dSC":      ((True, False, True),   (0.6, 0.0, 1.0)),
-    "CFL":      ((True, True, True),    (1.0, 1.0, 1.0)),
-    "free":     ((True, True, True),    (0.3, 0.6, 1.0)),
-}
-
-#: The patterns enumerated by default when `csc` is on, in the order they are
-#: tried. Omega decides between them; the order only decides which of two
-#: exactly degenerate answers is reported.
-DEFAULT_PATTERNS = ("unpaired", "2SC", "CFL", "free")
-
-
-def pattern_mask(pattern):
-    """Which of (Delta_1, Delta_2, Delta_3) this pattern makes unknowns."""
-    if pattern not in PATTERNS:
-        raise ValueError(f"unknown pairing pattern {pattern!r}; eos.njl "
-                         f"enumerates {sorted(PATTERNS)}")
-    return PATTERNS[pattern][0]
-
-
-def pattern_seed(pattern, scale):
-    """The starting gaps of this pattern [MeV], at a gap scale of `scale`."""
-    if pattern not in PATTERNS:
-        raise ValueError(f"unknown pairing pattern {pattern!r}; eos.njl "
-                         f"enumerates {sorted(PATTERNS)}")
-    return tuple(scale * s for s in PATTERNS[pattern][1])
+#: The pairing patterns and their seeds are `eos.general.pairing`'s, re-exported
+#: here so that `eos.njl.species` remains the one place a caller asks this
+#: model what degrees of freedom it has. Which gaps a named pattern makes free
+#: is a property of the gap matrix, shared with the colour-dielectric model,
+#: not of the Lagrangian that supplies G_D (CLAUDE.md section 7).
