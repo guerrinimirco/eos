@@ -28,11 +28,42 @@ the same API conventions, the same docstring standard, dead code removed); move
 matching `eos`; improve `nucleation/README.md` to the standard of the new `eos`
 README with examples actually run.
 
-**One breakage already measured** ([ticket 07](07-naming-sweep.md)): `nucleation`
-imports `eos.tov.solver` in five files, and `eos/eos/tov/` does not exist — it is
-`eos/astro/tov`. Those imports are broken today, before any Phase 5 change. The
-same ticket verified that `nucleation` touches none of the 58 proposed `eos`
-renames, so the import path is the drift that matters, not the vocabulary.
+**The breakage is much wider than one module, and it is all pre-existing.**
+Measured against `eos` at HEAD by importing every target `nucleation` names —
+**five of its `eos` modules do not exist and two more are missing the name it
+asks for**:
+
+| `nucleation` imports | today |
+|---|---|
+| `eos.tov.solver` (5 files + a notebook) | gone — it is `eos.astro.tov.solver` |
+| `eos.alphabag.eos` | gone — §5 forbids the module name `eos.py` outright |
+| `eos.alphabag.thermodynamics_quarks` (2 files) | gone — §5 forbids the sector suffix in a one-sector model package |
+| `eos.alphabag.compute_tables` | gone |
+| `eos.sfho.compute_tables` (3 files + a notebook) | gone — it is `eos.sfho.table` |
+| `eos.alphabag.parameters.get_alphabag_custom` (4 files) | module ok, name gone |
+| `eos.sfho.parameters.create_custom_parametrization` (2 files) | module ok, name moved to `eos.sfho.nmp` (§5 puts an NMP-inverting constructor there) |
+
+Everything `nucleation` takes from `eos.general` still resolves — constants,
+lepton thermodynamics, `figure_style`, and both `constraints` and the older
+`observational_constraints` path. So the damage is entirely in the model and
+astro packages, and every one of those breaks is a Phase 3/4 module MOVE, not a
+Phase 5 rename: **`nucleation` cannot import `eos` today, before this map
+touches anything.**
+
+Two consequences for the brief:
+
+- The Phase 6 pass is not "fix what Phase 5 broke" — it is a port across the
+  refactor's module layout, and it must be scoped as one. `nucleation`'s own
+  test suite cannot have been green since Phase 3.
+- [Ticket 07](07-naming-sweep.md)'s finding that `nucleation` touches none of
+  the 58 proposed renames still holds and is still what keeps Phase 5 cheap.
+  But `nucleation/composition.py:45-51` imports four
+  `compute_alphabag_*_thermo_from_mu` / `compute_cfl_*_thermo_from_mu` names,
+  which break §13 rules 1 and 3 (`compute_` prefix, package name repeated) and
+  are NOT among the 58. Whether Phase 6 renames them — and so whether
+  `alphabag` gets the same treatment `vmit`, `dd2` and `sfho` got — is a
+  decision this brief owes. `eos/alphabag/thermodynamics.py:345` already
+  defines `thermo_from_mu`, so the package holds both spellings.
 
 Resolved when the corrected Phase 6 brief is written out and the user has agreed
 to it. **Creating or pushing a remote stays out of scope** regardless.

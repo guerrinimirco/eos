@@ -1,4 +1,4 @@
-# Rename did's phase-adapter surface to thermo_from_mu
+# Rename did's and dd2's phase-adapter surface to thermo_from_mu
 
 Type: task
 Status: open
@@ -14,11 +14,33 @@ phase's own internal self-consistency — is **`thermo_from_mu`** in every model
 and a lower evaluation layer that additionally takes the solved mean fields is
 **`thermo_from_fields`**.
 
-`dd2` and `sfho` carry that ruling under tickets
-[44](44-rename-dd2.md) and [45](45-rename-sfho.md). `did` is the third model
-with the split, and [ticket 42](42-rename-internal.md) — which covered
-`eos/mixed` and `eos/did` — closed before the name was settled, so it has no
-ticket.
+`sfho` carries that ruling under [ticket 45](45-rename-sfho.md). `did` is the
+third model with the split, and [ticket 42](42-rename-internal.md) — which
+covered `eos/mixed` and `eos/did` — closed before the name was settled, so it
+has no ticket.
+
+**dd2's half is also still open, and belongs here.** Ticket 44 carried the same
+"Added by ticket 36" instruction and its list of 19 renames does not include
+this one: `eos/dd2/thermodynamics.py:571` is still `thermo_at_potentials`, with
+no `thermo_from_mu` in the package at all. Found while working ticket 45.
+dd2 is the easy case the ticket-44 text already described — one name, no lower
+layer to re-spell — but its call sites reach further than did's:
+
+    eos/dd2/thermodynamics.py:17, 571      the def and its module docstring
+    eos/mixed/adapters.py:52, 243, 280     a BARE module-level import, not an
+                                           alias like the sfho and did ones
+    eos/sfho/thermodynamics.py:566         a cross-reference in a docstring
+    eos/enjl/thermodynamics.py:741         the same
+    test/dd2/test_thermodynamics.py        4 sites
+    docs/REFACTOR_PLAN.md:288              names it in prose
+    docs/DEFERRED.md:769                   names it in prose
+
+The bare import at `adapters.py:52` is the one to watch: once dd2's surface is
+`thermo_from_mu`, that file will hold a module-level `thermo_from_mu` beside two
+function-local aliased imports of the same name from sfho and did — shape 3 of
+the three-shape collision check, which is exactly what broke
+`test/mixed/test_hybrid_modes.py` under ticket 44. Alias it (`_dd2_at_mu`)
+like its five neighbours.
 
 `did/thermodynamics.py:542` is `thermo_at_potentials`, the surface;
 `did/thermodynamics.py:358` is `thermo_from_mu(par, flags, fields,
