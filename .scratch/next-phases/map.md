@@ -899,6 +899,8 @@ against this file, not against the earlier `pytest_before*.txt`.
   calling convention (`dd2.invert_nmp(nmp)` positional, `sfho.invert_nmp(**nmp)`
   keyword), with `sfho.from_nmp` raising `RuntimeError` where `invert_nmp`
   returns a status.
+  The first of the four is now [ticket 66](issues/66-did-condensation-message.md);
+  the other three are naming rows and are Stage 7 report material.
   Environment: `nbconvert 7.17.1` installed into python.org 3.14 — jupytext's
   executor, which this ticket's done-when names; `pyproject.toml` untouched. And
   `timeout python3` runs under Rosetta and dies on numpy's arm64 extensions.
