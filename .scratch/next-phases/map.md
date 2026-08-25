@@ -350,6 +350,31 @@ against this file, not against the earlier `pytest_before*.txt`.
   applied by tickets [44](issues/44-rename-dd2.md), [45](issues/45-rename-sfho.md)
   and the new [48](issues/48-rename-did-surface.md), not here.
 
+- [Sort every failing conformance row into fix-code, fix-CLAUDE.md, or defer](issues/11-conformance-triage.md):
+  all 41 rows ruled — **23 (a), 12 (b), 10 (c)** — but the first result was that
+  **six had already been discharged** by tickets 03, 26, 28 and 43 since the audit
+  was written, and finding 6 was not dd2's bug under another name: `eos/mixed` has
+  no `species.py` at all, which is why it is [ticket 29](issues/29-mixed-species-flags.md)
+  and not a one-liner. The (a) work is cut **by what gate the change needs, not by
+  model or by section** — what decides whether two fixes share a session is
+  whether they can move a number: [49](issues/49-nonconvergence-return.md) the
+  seven §6 boundary raises, [50](issues/50-mechanical-fixes.md) the eight fixes
+  that move nothing, [51](issues/51-verify-invariants.md) the four missing
+  `verify/` invariants, [52](issues/52-general-t0-integrals.md) the `general/` T=0
+  promotion under a golden-reference gate,
+  [53](issues/53-gmode-contract.md) the gmode composition contract,
+  [54](issues/54-signature-corrections.md) the public-signature corrections. The
+  (b) rows are one CLAUDE.md diff on [22](issues/22-phase5-claudemd.md); the (c)
+  rows are [55](issues/55-deferred-ledger.md). Four rulings the code decided:
+  **`general/fermi_integrals.py` exports no public T = 0 entry point at all**, so
+  dd2 re-deriving the Fermi gas is a missing door in `general/` and the fix lands
+  there, not in dd2; §4's own wording settles the `thermal_neutrinos`-plus-trapped
+  split five models disagree on (the three that succeed are right); `Y_p` stays in
+  dd2's signature because it is a freeze target, not a condition; and a failed
+  `eos_response` returns the full dict with `converged=False` and NaN, so no
+  caller needs a second code path. Six of the 23 (a) fixes can move a number and
+  each names its §12 check.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
@@ -366,10 +391,6 @@ In scope, not yet sharp enough to ticket:
   (including the RNS rotating backend) and `astro/gmode` have no usage notebook,
   and `docs/REFACTOR_PLAN.md:110` once planned per-model notebooks for several of
   them. Ticket 05 sharpens this; whatever survives becomes tickets.
-- **Golden-reference re-verification after code fixes.** Any (a)-class fix from
-  the conformance triage may move numbers. Whether that needs its own
-  verification pass, and against which of the §12 references, depends on what the
-  triage actually rules.
 - **`output/public/` curation.** §11 makes it the one tracked output folder. The
   new notebooks will produce tables with standardised names; which of them belong
   in the tracked folder is not decidable until the tables exist.
@@ -388,11 +409,6 @@ In scope, not yet sharp enough to ticket:
   The rename ruling has now landed (ticket 10), and both serious files are ones
   tickets 44 and 45 rewrite anyway — so the open question narrows to whether the
   reorder rides along with those renames or is gated separately from them.
-- **The 21 remaining (a)-class fixes.** Ticket 08 located each with file:line and
-  several are one-liners, but they cannot be cut into tickets until
-  [ticket 11](issues/11-conformance-triage.md) rules which are fixes and which are
-  CLAUDE.md corrections. Whether they group by model or by section is a question
-  for after that ruling.
 - **Whether an underdetermined potential belongs in a frozen baseline at all.**
   [Ticket 37](issues/37-did-failures.md) has now measured `did`'s case exactly —
   one `Delta mu_S` of 2.32e-05 MeV propagating into each hyperon as `S_i x

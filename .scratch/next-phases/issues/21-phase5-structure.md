@@ -27,3 +27,18 @@ Two additions on top of the Phase 5 text:
 
 Acceptance asks that a physicist find the function computing a given quantity in
 under a minute from this document. Judge the draft against that.
+
+## Carried in from ticket 11
+
+[Ticket 11](11-conformance-triage.md) ruled finding 31: **`general/` earns a
+`verify/` suite.** It is the single home of the Fermi/Bose integrals (§7), the
+conserved-charge basis maps (§2) and the thermal meson gas — what every model's
+correctness rests on — and the JEL-vs-pure-Python fallback parity gap is already
+ledgered as untested (`docs/DEFERRED.md:48-62`, "no parity test currently pins
+the two together"). Seven files in `test/general/` cover it, but `test/` is
+gitignored, so a fresh clone can check none of it.
+
+§5's `verify/` list is extended by [ticket 22](22-phase5-claudemd.md); building
+the suite is this ticket's, alongside `docs/STRUCTURE.md`. The JEL parity check is
+the obvious first entry — §7 makes JEL the validated implementation that is never
+removed and requires every alternative to be validated against it.
