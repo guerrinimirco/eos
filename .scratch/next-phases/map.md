@@ -96,10 +96,17 @@ by running them against a detached worktree at HEAD carrying the pre-rename
   three shapes are a tolerance asserting below the documented stencil noise; the
   third is real — the default 5x5 closure lands in the spurious basin
   `nmp.py:70` describes, Q_sat 117.49 against 169.00.
-- **8 — round-off drift in `test/baseline/`** for quantities the generator's own
-  docstring calls round-off (`ccdm`'s `field_residual`, `sfho`'s `mu_S` at
-  Y_S = 0, the tov sequences, `vmit`'s `n_e` at Y_C = 0 straddling the 1e-12 gate
-  at 1.7e-13 against a stored 3.0e-12).
+- **8 — `test/baseline/`, and NOT all one cause.** `ccdm`'s `field_residual`
+  and the tov sequences are round-off drift. `sfho`'s `mu_S` and `vmit`'s
+  `n_e` are [ticket 56](issues/56-baseline-gate-units.md): the generator's
+  absolutely-scaled gates. `vmit`'s is a genuine flakiness band (`n_e` at
+  Y_C = 0 straddling 1e-12 at 1.7e-13 against a stored 3.0e-12). `sfho`'s
+  additionally has a solver story — its three `fixed_YC_YS` rows all target
+  Y_S = 0 and close to n_S = 2.4921e-09, 3.9248e-16, 3.0107e-16, so the
+  n = 0.16 row converged SEVEN ORDERS less tightly than its own siblings and
+  that, not a different physical case, is what put it the wrong side of a gate
+  that classified the other two correctly. It belongs with "scaling the
+  strangeness residual" below as much as with the generator.
 
 **A ticket reporting "0 added failures" means 14, unchanged.** Compare against
 `output/_audit/pytest_before_with_crust.txt`. Both causes are Stage 7 report
@@ -337,9 +344,11 @@ against this file, not against the earlier `pytest_before*.txt`.
   three shapes are a tolerance asserting below the documented stencil noise;
   the third is real — the default 5x5 closure lands in the spurious basin
   `nmp.py:70` describes, Q_sat 117.49 against 169.00. Also
-  **round-off drift in `test/baseline/`**
-  for quantities the generator's own docstring calls round-off (`ccdm`'s
-  `field_residual`, `sfho`'s `mu_S` at Y_S = 0, the tov sequences, and vmit's
+  **`test/baseline/` drift — but not all one cause** (`ccdm`'s
+  `field_residual` and the tov sequences are round-off; `sfho`'s `mu_S` and
+  vmit's `n_e` are [ticket 56](issues/56-baseline-gate-units.md), and sfho's
+  is a convergence outlier rather than drift — see the Suite status block; and
+  vmit's
   `n_e` at Y_C = 0 straddling the 1e-12 gate at 1.7e-13 against a stored
   3.0e-12). Both are Stage 7 report material, not diffs.
 
