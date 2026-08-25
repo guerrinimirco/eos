@@ -447,6 +447,25 @@ against this file, not against the earlier `pytest_before*.txt`.
   tighter, same model and mode** — which ties this to the map's open
   "Scaling the strangeness residual" question rather than to the gate alone.
 
+- [Apply the approved renames — eos/dd2](issues/44-rename-dd2.md): 17 renames +
+  1 fold across 74 files, **0 added failures, `test/baseline/` unmoved, every §12
+  golden reference intact** — dd2/verify's SNM(0.16) golden point at 1.40e-05,
+  CompOSE HS(DD2) at 2.83e-05, backend parity at 4.40e-14, and ticket 47's NMP
+  floor reproducing bit-identically, which is the one area already known
+  unstable. **The ticket's proposed merge of the two warm starts was wrong and
+  the ticket was right to ask**: `beta_warm_start` returns a fixed 4-vector for
+  the nucleon-only solver, `octet_warm_start` a variable-length one carrying
+  omega0, phi0, mu_S and mu_nue — so the octet path took the §13 name `warm_start`
+  and the reduced path became `nucleon_warm_start`, with `default_beta_guess`
+  following it so the pair stays a pair. `sweep_beta_eq_octet` DID fold, being a
+  pure pass-through. **A third collision shape surfaced, invisible to tickets 42
+  and 43's check**: once two models take the same §3 names,
+  `test/mixed/test_hybrid_modes.py` imports `solve_fixed_yc` from BOTH dd2 and
+  vmit at module level and the second silently wins — it raised `TypeError` only
+  because the signatures differ. The extended checker is at
+  `shadowcheck.py`; [ticket 45](issues/45-rename-sfho.md) makes sfho the third
+  model onto those words and must sweep the whole tree, not just its own names.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
