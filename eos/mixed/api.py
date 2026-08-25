@@ -101,7 +101,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
 
     Parameters
     ----------
-    par : dd2 Parametrization
+    par : dd2 Parameters
         The hadronic parameters -- always an argument, never module state.
         None with `phases`, whose two Phase objects then carry both models'
         parameters (CLAUDE.md section 5).

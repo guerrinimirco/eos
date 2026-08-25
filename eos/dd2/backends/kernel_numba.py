@@ -2,11 +2,11 @@
 backends/kernel_numba.py
 ====================
 Numba-jitted T=0 octet residual and analytic Jacobian — the eos_fast hot path
-. Mirrors octet_residual / octet_jacobian
+. Mirrors residual / residual_jacobian
 exactly at T=0, where the kinetic thermodynamics are closed form and jittable.
 
 T>0 is NOT jitted: the kinetic densities come from the scipy JEL integrals,
-which Numba cannot trace (report D3). solve_octet therefore routes T=0 through
+which Numba cannot trace (report D3). solve therefore routes T=0 through
 these kernels and falls back to the NumPy analytic path at T>0. Correctness is
 guarded by backend parity (kernel_numba vs octet.py) in the M9 gate.
 
@@ -108,7 +108,7 @@ def meson_sources_t0(spec, sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S,
 
 @njit(cache=True)
 def residual_t0_jit(x, spec, params, flags):
-    """T=0 octet residual (mirrors octet.octet_residual)."""
+    """T=0 octet residual (mirrors octet.residual)."""
     Gs_N, Gw_N, Gr_N = params[0], params[1], params[2]
     m_s2, m_w2, m_r2, m_p2 = params[3], params[4], params[5], params[6]
     nB_nat, mbar, m_e, m_mu = params[7], params[8], params[9], params[10]
@@ -179,7 +179,7 @@ def residual_t0_jit(x, spec, params, flags):
 
 @njit(cache=True)
 def jacobian_t0_jit(x, spec, params, flags):
-    """T=0 analytic Jacobian dR/dx (mirrors jacobian.octet_jacobian)."""
+    """T=0 analytic Jacobian dR/dx (mirrors jacobian.residual_jacobian)."""
     Gs_N, Gw_N, Gr_N = params[0], params[1], params[2]
     m_s2, m_w2, m_r2, m_p2 = params[3], params[4], params[5], params[6]
     nB_nat, mbar, m_e, m_mu = params[7], params[8], params[9], params[10]

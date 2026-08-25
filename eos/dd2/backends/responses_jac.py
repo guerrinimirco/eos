@@ -8,7 +8,7 @@ oracle it is validated against.
 Two Jacobian products:
 
 - **Susceptibilities** chi_ab = dn_a/dmu_b (a,b in B,C,S) — the CompOSE
-  second-derivative block — are read straight off octet_jacobian via the
+  second-derivative block — are read straight off residual_jacobian via the
   field-response identity chi = dn/dmu|_F - (dn/dF)(dG/dF)^-1(dG/dmu).
 
 - **c_s^2, C_V, C_P** come from Jacobian *tangent* sensitivities along the
@@ -24,10 +24,10 @@ from eos.general.physics_constants import hc3
 from eos.general.modes import beta_eq_neutrinoless
 from eos.dd2.thermodynamics import build_matter_ctx
 from eos.dd2.solver import (
-    assemble_octet, mode_spec, octet_residual, octet_warm_start,
-    solve_beta_eq_octet,
+    assemble, mode_spec, residual, warm_start,
+    solve_beta_eq_neutrinoless,
 )
-from eos.dd2.backends.jacobian import octet_jacobian
+from eos.dd2.backends.jacobian import residual_jacobian
 
 #: Every quantity here is taken along the beta-equilibrium sequence.
 _BETA = beta_eq_neutrinoless()
@@ -35,20 +35,20 @@ _BETA = beta_eq_neutrinoless()
 
 def _state(par, n_B, flags, T):
     """Converged beta-eq point, its unknown vector x0, ctx and Jacobian."""
-    p = solve_beta_eq_octet(par, n_B, flags, T=T, include_photons=False)
+    p = solve_beta_eq_neutrinoless(par, n_B, flags, T=T, include_photons=False)
     has_phi = flags.phi_field and flags.hyperons
-    x0 = np.array(octet_warm_start(p, has_phi, False, False))
+    x0 = np.array(warm_start(p, has_phi, False, False))
     ctx0 = build_matter_ctx(par, n_B, flags, T=T)
-    J = np.array(octet_jacobian(x0, ctx0, _BETA))
+    J = np.array(residual_jacobian(x0, ctx0, _BETA))
     return p, x0, ctx0, J, has_phi
 
 
 def _tangent(x0, J, ctx_pert):
     """One Newton step from x0 toward the perturbed-ctx root, then assemble.
     Returns (P, eps, s) in fm-based units (MeV/fm^3, MeV/fm^3, fm^-3)."""
-    R = np.array(octet_residual(x0, ctx_pert, _BETA))
+    R = np.array(residual(x0, ctx_pert, _BETA))
     dx = np.linalg.solve(J, -R)
-    st = assemble_octet(x0 + dx, ctx_pert, _BETA)
+    st = assemble(x0 + dx, ctx_pert, _BETA)
     return st["P"] / hc3, st["eps"] / hc3, st["s"] / hc3
 
 
@@ -102,11 +102,11 @@ SUSCEPT_LABELS = ("B", "C", "S")
 def susceptibilities(par, n_B, flags, T=0.0):
     """
     Charge susceptibility matrix chi_ab = dn_a/dmu_b [MeV^2, natural units],
-    a,b in (B, C, S), from octet_jacobian's field-response block. Symmetric
+    a,b in (B, C, S), from residual_jacobian's field-response block. Symmetric
     (chi = -d^2 Omega / dmu_a dmu_b). Evaluated at the beta-eq state (mu_S = 0).
     Returns a 3x3 numpy array in SUSCEPT_LABELS order.
     """
-    p = solve_beta_eq_octet(par, n_B, flags, T=T, include_photons=False)
+    p = solve_beta_eq_neutrinoless(par, n_B, flags, T=T, include_photons=False)
     has_phi = flags.phi_field and flags.hyperons
     # fixed+fixed ctx exposes the mu_S column and the hadronic charge/strange
     # rows; the Y_C/Y_S targets don't enter the (pointwise) Jacobian.
@@ -117,7 +117,7 @@ def susceptibilities(par, n_B, flags, T=0.0):
     if has_phi:
         x.append(m.fields["phi0"])
     x += [m.mu_B - m.Sigma_R, m.mu_C, 0.0]
-    J = np.array(octet_jacobian(np.array(x), ctx, held))
+    J = np.array(residual_jacobian(np.array(x), ctx, held))
 
     n_f = 3 + int(has_phi)
     field_cols = list(range(n_f))
@@ -136,8 +136,8 @@ def susceptibilities(par, n_B, flags, T=0.0):
 
 
 if __name__ == "__main__":
-    from eos.dd2 import Parametrization, SpeciesFlags
-    par = Parametrization.from_dd2y_defaults()
+    from eos.dd2 import Parameters, SpeciesFlags
+    par = Parameters.named("DD2Y")
     flags = SpeciesFlags(hyperons=True, phi_field=True)
     for n in (0.16, 0.4, 0.8):
         cs2 = sound_speed_eq(par, n, flags)

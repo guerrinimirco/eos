@@ -48,10 +48,10 @@ The three entry points every model in this repository exposes, with `eta` and
 the quark parameters added because a hybrid equation of state has a transition
 and two models in it:
 
-    from eos.dd2 import Parametrization, SpeciesFlags
+    from eos.dd2 import Parameters, SpeciesFlags
     from eos.mixed import eos_point, eos_table, eos_response
 
-    par = Parametrization.from_dd2_defaults()
+    par = Parameters.default()
     flags = SpeciesFlags(hyperons=True, deltas=True, muons=True)
 
     state = eos_point(par, "beta_eq_neutrinoless", flags,

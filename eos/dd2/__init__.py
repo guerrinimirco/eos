@@ -7,21 +7,22 @@ Which degrees of freedom are active is declared explicitly through
 `SpeciesFlags`; the equilibrium condition is chosen through the mode names in
 `table.py`. See `eos.mixed` for the hybrid hadron-quark extension.
 """
-from eos.dd2.parameters import Parametrization
+from eos.dd2.parameters import Parameters
 from eos.dd2.species import (
     SpeciesFlags, active_baryons, hadronic_qn, hadronic_charges,
 )
 from eos.dd2.solver import (
-    EoSPoint, beta_warm_start, octet_warm_start,
+    EoSPoint, nucleon_warm_start, warm_start,
     solve_beta_eq, solve_beta_eq_t0,
-    solve_octet, solve_beta_eq_octet, solve_fixed_yc_octet, solve_yl_octet,
+    solve, solve_beta_eq_neutrinoless, solve_fixed_yc,
+    solve_beta_eq_neutrino_trapped,
     solve_hadronic,
-    sweep_beta_eq_octet, sweep_octet,
+    sweep,
     solve_composition, solve_composition_t0,
     solve_snm, solve_snm_t0,
 )
 from eos.dd2.table import (
-    TableSpec, TableResult, build_table, solve_octet_at_entropy,
+    TableSpec, TableResult, build_table, solve_at_entropy,
     MODES, MODE_FRACTIONS, hadronic_row, rows_from_result,
 )
 from eos.general.table_io import save_table, load_table, export_csv
@@ -43,16 +44,16 @@ from eos.dd2.api import (
 )
 
 __all__ = [
-    "Parametrization", "SpeciesFlags", "active_baryons",
+    "Parameters", "SpeciesFlags", "active_baryons",
     "hadronic_qn", "hadronic_charges",
     "invert_nmp", "from_nmp", "InversionStatus",
-    "EoSPoint", "beta_warm_start", "octet_warm_start",
+    "EoSPoint", "nucleon_warm_start", "warm_start",
     "solve_beta_eq", "solve_beta_eq_t0",
-    "solve_octet", "solve_beta_eq_octet", "solve_fixed_yc_octet",
-    "solve_yl_octet", "solve_hadronic", "sweep_beta_eq_octet", "sweep_octet",
+    "solve", "solve_beta_eq_neutrinoless", "solve_fixed_yc",
+    "solve_beta_eq_neutrino_trapped", "solve_hadronic", "sweep",
     "solve_composition", "solve_composition_t0",
     "solve_snm", "solve_snm_t0",
-    "TableSpec", "TableResult", "build_table", "solve_octet_at_entropy",
+    "TableSpec", "TableResult", "build_table", "solve_at_entropy",
     "MODES", "MODE_FRACTIONS", "hadronic_row", "rows_from_result",
     "save_table", "load_table", "export_csv",
     "compute_nmp", "energy_per_baryon", "esym",

@@ -50,7 +50,7 @@ from eos.general.physics_constants import hc, hc3
 from eos.general.basis import quark_charges, quark_potentials
 from eos.general.state import PhaseThermo
 from eos.dd2.thermodynamics import thermo_at_potentials
-from eos.dd2.solver import solve_beta_eq_octet, solve_octet, sweep_octet
+from eos.dd2.solver import solve_beta_eq_neutrinoless, solve, sweep
 from eos.mixed.charges import Regime
 from eos.vmit.parameters import Parameters as VMITParameters
 from eos.vmit.thermodynamics import (
@@ -221,7 +221,7 @@ def hadronic_seed(par, flags, T, n_B_guess):
     """
     fields_only = replace(flags, include_pseudoscalars=False,
                           include_thermal_vectors=False)
-    base = solve_beta_eq_octet(par, n_B_guess, fields_only, T=T,
+    base = solve_beta_eq_neutrinoless(par, n_B_guess, fields_only, T=T,
                                include_photons=False, check_consistency=False)
     fields = base.matter.fields
     x = [fields["sigma"], fields["omega0"], fields["rho0"]]
@@ -251,7 +251,7 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
     `mu_B = mu_tilde_B + Sigma^R` restored at assembly.
 
     If the species flags enable a thermal meson gas, it is added at the
-    converged potentials and fields exactly as `eos/dd2/solver.solve_octet`
+    converged potentials and fields exactly as `eos/dd2/solver.solve`
     does: an additive ideal Bose gas contributing P, eps, s and its own
     mu*_j n_j to the chemical-potential sum.
 
@@ -471,11 +471,11 @@ def enjl_phase_thermo(point, mu_B, mu_C, mu_S):
 
 
 def _dd2_wing_kwargs(spec, flags):
-    """`sweep_octet` mode arguments for the DD2 wing, from the spec.
+    """`sweep` mode arguments for the DD2 wing, from the spec.
 
     The dispatch reads the spec's regimes, not a mode name, so any regime
     combination the window can solve gets a consistent wing. Beta equilibrium
-    reduces to exactly the call `sweep_beta_eq_octet` makes.
+    reduces to exactly the call `sweep` makes.
     """
     if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
         kw = dict(charge_mode="neutral")
@@ -505,20 +505,22 @@ def _vmit_wing_solve(spec, n_B, T, params):
     conditions, which is what test/mixed/test_hybrid_modes.py asserts.
     """
     from eos.vmit.solver import (
-        solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
-        solve_beta_eq_neutrino_trapped,
+        solve_beta_eq_neutrinoless as _vmit_beta,
+        solve_fixed_yc as _vmit_yc,
+        solve_fixed_yc_ys as _vmit_yc_ys,
+        solve_beta_eq_neutrino_trapped as _vmit_trapped,
     )
     if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
         if spec.L_e is Regime.GLOBAL:
-            return solve_beta_eq_neutrino_trapped(n_B, spec.targets["Y_Le"],
-                                                  T, params=params)
-        return solve_beta_eq_neutrinoless(n_B, T, params=params)
+            return _vmit_trapped(n_B, spec.targets["Y_Le"], T,
+                                 params=params)
+        return _vmit_beta(n_B, T, params=params)
     if spec.S is Regime.GLOBAL:
-        return solve_fixed_yc_ys(n_B, spec.targets["Y_C"],
-                                 spec.targets["Y_S"], T, params=params,
-                                 include_electrons=spec.yc_leptons)
-    return solve_fixed_yc(n_B, spec.targets["Y_C"], T, params=params,
-                          include_electrons=spec.yc_leptons)
+        return _vmit_yc_ys(n_B, spec.targets["Y_C"],
+                           spec.targets["Y_S"], T, params=params,
+                           include_electrons=spec.yc_leptons)
+    return _vmit_yc(n_B, spec.targets["Y_C"], T, params=params,
+                    include_electrons=spec.yc_leptons)
 
 
 
@@ -531,7 +533,7 @@ def _dd2_frozen_block(par, flags, n_B, Y_C, Y_S, T, x0=None):
     # strange_mode='fixed' only when strangeness can actually vary; for
     # nucleonic matter it would add an inert unknown to the solve.
     strange = "fixed" if flags.has_strange_baryons else "eq"
-    p = solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="fixed", Y_C=Y_C,
+    p = solve(par, n_B, flags, T=T, x0=x0, charge_mode="fixed", Y_C=Y_C,
                     strange_mode=strange, Y_S=Y_S, yc_leptons=False,
                     include_photons=False, check_consistency=False)
     return p.P, p.eps, Y_C * n_B
@@ -578,7 +580,7 @@ def dd2_phase(par, flags):
         # off for the same reason `hadronic_seed` switches it off.
         seed_flags = replace(flags, include_pseudoscalars=False,
                              include_thermal_vectors=False)
-        base = solve_beta_eq_octet(par, n_B, seed_flags, T=T,
+        base = solve_beta_eq_neutrinoless(par, n_B, seed_flags, T=T,
                                    include_photons=False,
                                    check_consistency=False)
         m = base.matter
@@ -590,7 +592,7 @@ def dd2_phase(par, flags):
         # ends the sweep rather than raising.
         kw = _dd2_wing_kwargs(spec, flags)
         return [(p.n_B, p.P, p.eps)
-                for p in sweep_octet(par, n_B_grid, flags, T=T,
+                for p in sweep(par, n_B_grid, flags, T=T,
                                      stop_at_boundary=True, **kw)]
 
     def frozen_thermo(th, scale, T, mu_slot=None):
@@ -644,8 +646,8 @@ def vmit_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        from eos.vmit.solver import solve_beta_eq_neutrinoless
-        q = solve_beta_eq_neutrinoless(n_B, T, params=params)
+        from eos.vmit.solver import solve_beta_eq_neutrinoless as _vmit_beta
+        q = _vmit_beta(n_B, T, params=params)
         return q.mu_B, q.mu_e, q.mu_B
 
     def wing_sweep(spec, n_B_grid, T):
@@ -775,10 +777,10 @@ def did_seed(par, flags, T, n_B_guess):
     gas sources none of the field equations, so it changes nothing here except
     whether the seed can be built at all.
     """
-    from eos.did.solver import solve_beta_eq_neutrinoless
+    from eos.did.solver import solve_beta_eq_neutrinoless as _did_beta
 
     seed_flags = replace(flags, thermal_mesons=False)
-    point = solve_beta_eq_neutrinoless(par, n_B_guess, seed_flags, T=T)
+    point = _did_beta(par, n_B_guess, seed_flags, T=T)
     if not point.converged:
         raise RuntimeError(
             f"DID seed failed at n_B={n_B_guess}, T={T} "

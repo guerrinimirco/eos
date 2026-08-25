@@ -30,7 +30,8 @@ class SpeciesFlags:
     include_thermal_vectors: bool = False  # thermal ρ,ω,K*,φ Bose gas (M7)
 
     def __post_init__(self):
-        # neutrinos are wired (M6 trapped Y_Le mode; use solve_yl_octet).
+        # neutrinos are wired (M6 trapped Y_Le mode; use
+        # solve_beta_eq_neutrino_trapped).
         if self.sigma_star:
             raise NotImplementedError(
                 "SpeciesFlags: sigma_star (hidden-strange scalar) is not wired")

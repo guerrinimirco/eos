@@ -187,7 +187,7 @@ def equilibration_rate(par, n_B, Y_p, T, muons=True, processes="both",
                        rel_dn=1e-3):
     """Beta-equilibration rate gamma = lambda * A, in s^-1.
 
-    par       : DD2 `Parametrization`
+    par       : DD2 `Parameters`
     n_B       : baryon density [fm^-3]
     Y_p       : proton fraction of the equilibrium state
     T         : temperature [MeV]

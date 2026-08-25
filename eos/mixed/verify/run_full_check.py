@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from eos.dd2 import Parametrization, SpeciesFlags
+from eos.dd2 import Parameters, SpeciesFlags
 from eos.vmit.parameters import Parameters as VMITParameters
 from eos.mixed import beta_eq_neutrinoless, fixed_YC, fixed_YC_YS
 from eos.general.modes import Conservation, ModeSpec
@@ -239,7 +239,7 @@ def _check_tov(par, flags, vp, grid):
 def run_full_check(par=None, flags=None, vmit_params=None, grid=None,
                    include_tov=True):
     """Run the mixed-phase verification suite. Returns a FullCheckReport()."""
-    par = par or Parametrization.from_dd2_defaults()
+    par = par or Parameters.default()
     flags = flags or SpeciesFlags(hyperons=False, muons=False)
     vp = vmit_params or VMITParameters.default()
     # window sweep grid (default vMIT: mixed window ~0.44-1.0); wing for causality.

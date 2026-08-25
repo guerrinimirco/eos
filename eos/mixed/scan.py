@@ -71,8 +71,8 @@ import time
 import numpy as np
 
 from eos.dd2.nmp import from_nmp
-from eos.dd2.parameters import Parametrization
-from eos.dd2.solver import sweep_beta_eq_octet
+from eos.dd2.parameters import Parameters
+from eos.dd2.solver import sweep
 from eos.vmit.parameters import get_vmit_custom
 from eos.mixed.charges import beta_eq_neutrinoless
 from eos.mixed.boundaries import locate_window
@@ -139,7 +139,7 @@ def _sector_columns(sector, flags):
 
 def build_parametrization(nmp, flags, hyperon_potentials=None,
                           U_Delta=DEFAULT_U_DELTA, x_wD=1.0, x_rD=1.0):
-    """Nuclear-matter parameters to a `Parametrization` with the strange and
+    """Nuclear-matter parameters to a `Parameters` with the strange and
     resonant sectors attached, as `flags` requires.
 
     `from_nmp` inverts the NUCLEON sector only — it carries no hyperon
@@ -166,10 +166,10 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
         return None, "inversion_failed", status.message
     try:
         if flags.hyperons:
-            par = Parametrization.from_hyperon_potentials(
+            par = Parameters.from_hyperon_potentials(
                 base=par, **sector["hyperon_potentials"])
         if flags.deltas:
-            par = Parametrization.from_delta_potential(
+            par = Parameters.from_delta_potential(
                 U_Delta=sector["U_Delta"], x_wD=sector["x_wD"],
                 x_rD=sector["x_rD"], base=par)
     except Exception as exc:
@@ -260,7 +260,7 @@ def scan_hadronic_point(nmp, flags, n_B_grid, hyperon_potentials=None,
     row.update(inversion_ok=1.0, sectors_ok=1.0)
 
     try:
-        pts = sweep_beta_eq_octet(par, grid, flags, T=0.0,
+        pts = sweep(par, grid, flags, T=0.0,
                                   include_photons=False,
                                   stop_at_boundary=True)
     except Exception as exc:
@@ -596,11 +596,11 @@ def grid_samples(**axes):
 if __name__ == "__main__":
     # Smallest runnable check: a representable sample finds a window, and an
     # unrepresentable one is reported rather than raising.
-    from eos.dd2 import SpeciesFlags, compute_nmp, Parametrization as P
+    from eos.dd2 import SpeciesFlags, compute_nmp, Parameters as P
 
     flags = SpeciesFlags(hyperons=False, phi_field=False, muons=False)
     grid = np.linspace(0.05, 1.6, 120)
-    good = compute_nmp(P.from_dd2_defaults())
+    good = compute_nmp(P.default())
     bad = dict(good, K_sat=1.0e4)               # not representable in DD-RMF
 
     rows = scan_parameters([good, bad], grid_samples(B4=180.0), flags, grid,

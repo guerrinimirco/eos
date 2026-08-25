@@ -65,7 +65,7 @@ c^2 in units of the speed of light.
 """
 import numpy as np
 
-from eos.dd2.solver import octet_warm_start
+from eos.dd2.solver import warm_start
 from eos.general.thermodynamics_leptons import neutralizing_leptons
 from eos.mixed.adapters import (
     _dd2_frozen_block, _vmit_frozen_block, default_pair,
@@ -143,7 +143,7 @@ def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
                        leptons=True, phases=None, muons=None):
     """Frozen-composition c_ad^2 = dP/deps at the state `result`.
 
-    par, flags   : the DD2 `Parametrization` and `SpeciesFlags` the state was
+    par, flags   : the DD2 `Parameters` and `SpeciesFlags` the state was
                    solved with
     result       : a `Result` from `solve` — pure phases included,
                    chi = 0 and chi = 1 are handled and give the pure-phase
@@ -218,7 +218,7 @@ def sound_speed_frozen_hadronic(par, flags, point, rel_dn=1e-3, leptons=True):
     if n_B <= 0.0:
         return float("nan")
     Y_C, Y_S, T = point.matter.Y_C, point.matter.Y_S, point.T
-    x0 = octet_warm_start(point, flags.phi_field and flags.hyperons,
+    x0 = warm_start(point, flags.phi_field and flags.hyperons,
                           has_muS=flags.has_strange_baryons)
 
     def at(scale):

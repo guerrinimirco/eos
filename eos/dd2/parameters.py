@@ -4,7 +4,8 @@ parametrization.py
 DD2 parametrization container and construction routes.
 
 Routes implemented:
-    from_dd2_defaults()   — published DD2 table (Typel et al. 2010, Tables II–III)
+    default()             — published DD2 table (Typel et al. 2010,
+                            Tables II–III)
     from_microscopic(...) — user-supplied coefficients; dependent a_i, d_i derived
                             from the internal constraints when omitted
 
@@ -32,7 +33,7 @@ INGEST_TOL = 2.0e-6
 
 
 @dataclass(frozen=True)
-class Parametrization:
+class Parameters:
     n_sat: float                 # fm^-3 (also the coupling reference density)
     m_n: float                   # MeV
     m_p: float                   # MeV
@@ -94,7 +95,7 @@ class Parametrization:
                      "gamma_sigma", "gamma_omega", "gamma_rho",
                      "c_sigma", "c_omega"):
             if getattr(self, name) <= 0.0:
-                raise ValueError(f"Parametrization: {name} must be > 0, "
+                raise ValueError(f"Parameters: {name} must be > 0, "
                                  f"got {getattr(self, name)}")
         for meson in ("sigma", "omega"):
             a = getattr(self, f"a_{meson}")
@@ -104,12 +105,12 @@ class Parametrization:
             err_f1 = abs(rational_f(1.0, a, b, c, d) - 1.0)
             if err_f1 > INGEST_TOL:
                 raise ValueError(
-                    f"Parametrization: f_{meson}(1) = 1 violated by {err_f1:.2e} "
+                    f"Parameters: f_{meson}(1) = 1 violated by {err_f1:.2e} "
                     f"(constraint: a_{meson} is dependent on b, c, d)")
             err_d = abs(d - derived_d(c))
             if err_d > INGEST_TOL:
                 raise ValueError(
-                    f"Parametrization: d_{meson} = 1/sqrt(3 c_{meson}) violated "
+                    f"Parameters: d_{meson} = 1/sqrt(3 c_{meson}) violated "
                     f"by {err_d:.2e} (constraint: f_{meson}''(0) = 0)")
 
     # ------------------------------------------------------------- properties
@@ -150,7 +151,7 @@ class Parametrization:
 
     # ----------------------------------------------------------- constructors
     @classmethod
-    def from_dd2_defaults(cls):
+    def default(cls):
         """Published DD2 table, transcribed verbatim."""
         return cls(
             n_sat=0.149065,
@@ -175,7 +176,7 @@ class Parametrization:
         Masses default to the DD2 values.
         """
         if c_sigma <= 0.0 or c_omega <= 0.0:
-            raise ValueError("Parametrization: c_sigma and c_omega must be > 0 "
+            raise ValueError("Parameters: c_sigma and c_omega must be > 0 "
                              f"(got {c_sigma}, {c_omega})")
         if d_sigma is None:
             d_sigma = float(derived_d(c_sigma))
@@ -196,7 +197,21 @@ class Parametrization:
         )
 
     @classmethod
-    def from_dd2y_defaults(cls):
+    def named(cls, name):
+        """A published set by name.
+
+        'DD2' is the nucleon table `default()` returns; 'DD2Y' adds the
+        hyperon octet. They are different parameterisations, not one set read
+        through different species flags, so both are listed here.
+        """
+        known = {"DD2": cls.default, "DD2Y": cls._dd2y}
+        if name not in known:
+            raise KeyError(f"unknown DD2 parameter set {name!r}; "
+                           f"available: {sorted(known)}")
+        return known[name]()
+
+    @classmethod
+    def _dd2y(cls):
         """
         DD2Y (Marques et al. 2017; Fortin et al. 2017 Table 1): DD2 nucleon
         sector + hyperon octet with the published R-couplings hardcoded (report
@@ -213,7 +228,7 @@ class Parametrization:
             dd2y = DD2Y_HYPERON[name]
             rows.append((name, dd2y["mass"], dd2y["R_sigma"],
                          su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
-        return replace(cls.from_dd2_defaults(),
+        return replace(cls.default(),
                        hyperon_couplings=tuple(rows))
 
     @classmethod
@@ -226,7 +241,7 @@ class Parametrization:
         (U_Xi = -18) and the route for non-DD2Y potentials. Hyperon masses
         default to the DD2Y (Marques) values.
 
-        base: an existing Parametrization to attach the hyperon sector to (e.g.
+        base: an existing Parameters to attach the hyperon sector to (e.g.
         an NMP-inverted nucleon par, so NMP + hyperons compose); defaults to
         nucleonic DD2. The scalar inversion re-solves SNM on ``base``, so it
         adapts to that par's nucleon couplings automatically.
@@ -234,7 +249,7 @@ class Parametrization:
         from dataclasses import replace
         from eos.dd2.solver import solve_snm  # local import breaks the cycle
 
-        base = replace(base if base is not None else cls.from_dd2_defaults(),
+        base = replace(base if base is not None else cls.default(),
                        U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
         sat = solve_snm(base, base.n_sat)
         Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
@@ -261,7 +276,7 @@ class Parametrization:
             U_Δ = -x_Δσ Γ_σN σ̄ + x_Δω Γ_ωN ω0 + Σ^R      (all at n_sat)
 
         for a chosen Δ potential (literature U_Δ ∈ [-100, -50] MeV, default -50)
-        and vector ratios x_wD, x_rD. base: an existing Parametrization to attach
+        and vector ratios x_wD, x_rD. base: an existing Parameters to attach
         the Δ sector to (e.g. a DD2Y octet); defaults to nucleonic DD2.
         """
         from dataclasses import replace
@@ -271,7 +286,7 @@ class Parametrization:
             raise ValueError(
                 f"U_Delta = {U_Delta} MeV outside the literature range "
                 f"[-100, -50]; pass an explicit value in range or widen it")
-        base = base or cls.from_dd2_defaults()
+        base = base or cls.default()
         sat = solve_snm(base, base.n_sat)
         Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
         x_Delta_sigma = scalar_ratio_from_potential(
@@ -282,7 +297,7 @@ class Parametrization:
 
 def _check_dd2_defaults():
     """Standalone ingest check, mirrors the M0 gate."""
-    p = Parametrization.from_dd2_defaults()
+    p = Parameters.default()
     for meson in ("sigma", "omega"):
         a, b, c, d = (getattr(p, f"{k}_{meson}") for k in "abcd")
         print(f"{meson}: |f(1)-1| = {abs(rational_f(1.0, a, b, c, d) - 1.0):.2e}, "

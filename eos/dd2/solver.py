@@ -33,7 +33,7 @@ makes the warm starts work.
 
 Nucleon-mass convention: by default the uniform-matter kernel uses the
 AVERAGE nucleon mass (m_n + m_p)/2 for both species, so m_n and m_p enter only
-through that average. `Parametrization.nucleon_mass_mode` selects the
+through that average. `Parameters.nucleon_mass_mode` selects the
 per-species alternative.
 
 User-facing units: densities fm^-3, fields/potentials MeV, eps/P MeV/fm^3,
@@ -65,7 +65,7 @@ from eos.dd2.thermodynamics import (
 )
 from eos.general.thermodynamics_leptons import neutralizing_leptons
 try:
-    from eos.dd2.backends.jacobian import octet_jacobian
+    from eos.dd2.backends.jacobian import residual_jacobian
     from eos.dd2.backends.kernel_numba import (
         residual_t0_jit, jacobian_t0_jit, build_numba_arrays, _NUMBA_OK,
     )
@@ -73,7 +73,7 @@ except ImportError:
     # `backends/` is optional: CLAUDE.md section 5 defines it by the property
     # that deleting it changes no number, only the speed. Without it every
     # solve takes the finite-difference reference path below.
-    octet_jacobian = build_numba_arrays = None
+    residual_jacobian = build_numba_arrays = None
     residual_t0_jit = jacobian_t0_jit = None
     _NUMBA_OK = False
 
@@ -198,14 +198,14 @@ def solve_snm_t0(par, n_B, check_consistency=True):
     return solve_snm(par, n_B, T=0.0, check_consistency=check_consistency)
 
 
-def beta_warm_start(point):
+def nucleon_warm_start(point):
     """Warm-start vector [sigma, rho0, mu_eff_n, mu_C] from a solved EoSPoint."""
     m = point.matter
     return [m.fields["sigma"], m.fields["rho0"], m.mu_eff_i["n"],
             -point.leptons.mu_e]
 
 
-def default_beta_guess(par, n_B, T=0.0, Y_p=0.05):
+def default_nucleon_guess(par, n_B, T=0.0, Y_p=0.05):
     """
     Starting vector [sigma, rho0, mu_eff_n, mu_C] from an exactly solved
     fixed-composition point at Y_p: only the charge closure is off.
@@ -290,13 +290,13 @@ def solve_beta_eq(par, n_B, T=0.0, x0=None, include_muons=True,
     charge neutrality). Photons contribute at T > 0 when include_photons.
 
     x0: optional warm-start vector [sigma, rho0, mu_eff_n, mu_C], e.g. from
-    beta_warm_start() of a neighbouring solution. Falls back to the default
+    nucleon_warm_start() of a neighbouring solution. Falls back to the default
     guess if the warm start stalls; raises RuntimeError on non-convergence
     — no silent failures.
     """
     ctx = make_beta_ctx(par, n_B, T=T, include_muons=include_muons)
     guesses = [x0] if x0 is not None else []
-    guesses.append(default_beta_guess(par, n_B, T=T))
+    guesses.append(default_nucleon_guess(par, n_B, T=T))
     sol = None
     for guess in guesses:
         sol = root(beta_eq_residual, guess, args=(ctx,), method="hybr",
@@ -372,7 +372,7 @@ def solve_beta_eq_t0(par, n_B, x0=None, include_muons=True,
 # =============================================================================
 # OCTET: the general solve over all active baryons
 # =============================================================================
-def _octet_x0(fields, has_phi, has_muS, has_muL=False):
+def _x0(fields, has_phi, has_muS, has_muL=False):
     """Pack [sigma, omega0, rho0, (phi0), muB~, muC, (muS), (muL)]."""
     sigma, omega0, rho0, phi0, mutB, muC, muS, muL = fields
     x = [sigma, omega0, rho0]
@@ -386,7 +386,7 @@ def _octet_x0(fields, has_phi, has_muS, has_muL=False):
     return x
 
 
-def octet_warm_start(point, has_phi, has_muS=False, has_muL=False):
+def warm_start(point, has_phi, has_muS=False, has_muL=False):
     """Unknown vector from a solved octet EoSPoint (for sweep continuation).
 
     mu_C is recovered as mu_p - mu_n (robust in trapped mode, where
@@ -394,13 +394,13 @@ def octet_warm_start(point, has_phi, has_muS=False, has_muL=False):
     """
     m = point.matter
     mu_nue = point.leptons.mu_nue if point.leptons is not None else 0.0
-    return _octet_x0((m.fields["sigma"], m.fields["omega0"], m.fields["rho0"],
+    return _x0((m.fields["sigma"], m.fields["omega0"], m.fields["rho0"],
                       m.fields["phi0"], m.mu_B - m.Sigma_R, m.mu_C,
                       m.mu_S, mu_nue),
                      has_phi, has_muS, has_muL)
 
 
-def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
+def default_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
     """
     Seed the octet solve from the nucleon beta-eq solution (hyperons start at
     zero population and switch on as density rises). phi0 seeded slightly
@@ -410,7 +410,7 @@ def default_octet_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
                          include_photons=False, check_consistency=False)
     has_phi = flags.phi_field and flags.hyperons
     m = base.matter
-    return _octet_x0((m.fields["sigma"], m.fields["omega0"], m.fields["rho0"],
+    return _x0((m.fields["sigma"], m.fields["omega0"], m.fields["rho0"],
                       -1e-3, m.mu_B - m.Sigma_R, m.mu_C, 0.0, 0.0),
                      has_phi, has_muS, has_muL)
 
@@ -420,7 +420,7 @@ def mode_spec(charge_mode="neutral", Y_C=0.0, strange_mode="eq", Y_S=0.0,
     """dd2's keyword vocabulary as the shared mode declaration.
 
     The keywords predate `eos.general.modes` and are what every caller of
-    `solve_octet` still writes; this is the one place they turn into a
+    `solve` still writes; this is the one place they turn into a
     `ModeSpec`, so the residual and the assembly branch on the declaration
     rather than on strings.
 
@@ -454,7 +454,7 @@ def mode_spec(charge_mode="neutral", Y_C=0.0, strange_mode="eq", Y_S=0.0,
     )
 
 
-def octet_unknowns(ctx, spec):
+def n_unknowns(ctx, spec):
     """How many unknowns the octet vector carries in this mode.
 
         x = [sigma, omega0, rho0, (phi0), mu_tilde_B, mu_C, (mu_S), (mu_nue)]
@@ -475,7 +475,7 @@ def octet_unknowns(ctx, spec):
 
 
 def _unpack(x, ctx, spec):
-    """Read the unknown vector in the order `octet_unknowns` documents."""
+    """Read the unknown vector in the order `n_unknowns` documents."""
     sigma, omega0, rho0 = x[0], x[1], x[2]
     i = 3
     phi0 = x[i] if ctx.has_phi else 0.0
@@ -488,7 +488,7 @@ def _unpack(x, ctx, spec):
     return sigma, omega0, rho0, phi0, mu_tilde_B, mu_C, mu_S, mu_nue
 
 
-def octet_residual(x, ctx, spec):
+def residual(x, ctx, spec):
     """Dimensionless residual of the octet system in the mode `spec` declares.
 
     Three families of row, in this order: the meson field equations, always all
@@ -502,7 +502,7 @@ def octet_residual(x, ctx, spec):
     kin = baryon_kinetics(ctx, sigma, omega0, rho0, phi0,
                           mu_tilde_B, mu_C, mu_S)
     if kin is None:
-        return [1.0e6] * octet_unknowns(ctx, spec)
+        return [1.0e6] * n_unknowns(ctx, spec)
 
     src_s = src_w = src_r = src_phi = 0.0
     n_tot = charge = strangeness = 0.0
@@ -551,7 +551,7 @@ def octet_residual(x, ctx, spec):
     return res
 
 
-def assemble_octet(x, ctx, spec):
+def assemble(x, ctx, spec):
     """
     Full thermodynamic state from a converged unknown vector. Returns a dict
     in natural units plus per-species densities (fm^-3) for onset detection.
@@ -597,7 +597,7 @@ def assemble_octet(x, ctx, spec):
     eps_fields = 0.5 * (s2 + w2 + r2 + p2)
     P_fields = 0.5 * (-s2 + w2 + r2 + p2)
 
-    # Thermal meson charge/strangeness, matching octet_residual. `charge_tot`
+    # Thermal meson charge/strangeness, matching residual. `charge_tot`
     # is the total NON-leptonic charge (baryons + mesons) and is what
     # neutrality, Y_C and Y_S are stated in terms of; `charge_had` stays
     # baryons-only because mu_dot_n below is the baryon mu_i n_i sum -- the
@@ -654,7 +654,7 @@ def assemble_octet(x, ctx, spec):
     # The same numbers again, split by sector. The totals above keep their
     # summation order exactly as it was, so the split adds quantities rather
     # than recomputing them: `eps`, `P` and `s` are matter plus leptons, and
-    # `solve_octet` adds photons (totals only) and the thermal meson gas
+    # `solve` adds photons (totals only) and the thermal meson gas
     # (which is part of the phase, so it goes to both).
     eps_matter = eps_b + eps_fields
     P_matter = P_b + P_fields + ctx.nB_nat * Sig_R
@@ -684,7 +684,7 @@ def assemble_octet(x, ctx, spec):
 def _residual_and_jacobian(ctx, spec, T, analytic_jac):
     """The (residual, Jacobian) pair the octet solve should use.
 
-    The reference pair is `octet_residual` with no Jacobian, so MINPACK builds
+    The reference pair is `residual` with no Jacobian, so MINPACK builds
     a forward difference: plain NumPy/SciPy, and the oracle the accelerated
     pair is judged against (CLAUDE.md section 9).
 
@@ -694,17 +694,17 @@ def _residual_and_jacobian(ctx, spec, T, analytic_jac):
     NumPy one. Both live in `backends/`, which section 5 makes optional, so a
     missing directory lands on the reference pair rather than raising.
     """
-    if not analytic_jac or octet_jacobian is None:
-        return octet_residual, None
+    if not analytic_jac or residual_jacobian is None:
+        return residual, None
     if T == 0.0 and _NUMBA_OK:
         arrays = build_numba_arrays(ctx, spec)
         return (lambda xx, *_a: residual_t0_jit(xx, *arrays),
                 lambda xx, *_a: jacobian_t0_jit(xx, *arrays))
     # T > 0: the JEL integrals do not jit, so the residual stays NumPy.
-    return octet_residual, octet_jacobian
+    return residual, residual_jacobian
 
 
-def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
+def solve(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
                 Y_Le=0.0, yc_leptons=False, include_photons=True,
                 check_consistency=True, analytic_jac=True):
@@ -732,12 +732,12 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     # Lazy guess sequence: try the warm start x0 first and only build the
     # (expensive, un-jitted beta-eq) default guess if x0 is missing or its solve
     # doesn't converge. In a warm-started sweep the fallback is never evaluated,
-    # which is the hot-path win — default_octet_guess otherwise dominated the
+    # which is the hot-path win — default_guess otherwise dominated the
     # jitted solve (~0.9 -> ~0.3 ms/pt at T=0, fixed-Y_C).
     def _guesses():
         if x0 is not None:
             yield x0
-        yield default_octet_guess(par, n_B, flags, T=T, has_muS=has_muS,
+        yield default_guess(par, n_B, flags, T=T, has_muS=has_muS,
                                   has_muL=has_muL)
     res_fn, jac_fn = _residual_and_jacobian(ctx, spec, T, analytic_jac)
     sol = None
@@ -753,7 +753,7 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
             f"(charge={charge_mode}, strange={strange_mode}): {sol.message} "
             f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
 
-    st = assemble_octet(sol.x, ctx, spec)
+    st = assemble(sol.x, ctx, spec)
     if include_photons and T > 0.0:
         # Photons carry no conserved charge and belong to no phase: they are
         # added to the totals and nowhere else.
@@ -846,15 +846,15 @@ def solve_octet(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     )
 
 
-def solve_beta_eq_octet(par, n_B, flags, T=0.0, x0=None,
+def solve_beta_eq_neutrinoless(par, n_B, flags, T=0.0, x0=None,
                         include_photons=True, check_consistency=True,
                         analytic_jac=True):
     """
     Beta-equilibrium matter with the full active baryon set (
-    mode 1; mu_S = mu_nue = 0, charge neutrality). Thin wrapper over solve_octet.
+    mode 1; mu_S = mu_nue = 0, charge neutrality). Thin wrapper over solve.
     Reduces to the nucleon problem when flags.hyperons is False.
     """
-    return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
+    return solve(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
                        include_photons=include_photons,
                        check_consistency=check_consistency,
                        analytic_jac=analytic_jac)
@@ -874,18 +874,18 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
             Y_C=0.3 for 'fixed_YC' or Y_Le=0.4 for the trapped mode. Which
             keys each mode needs is `eos.dd2.MODE_FRACTIONS`.
 
-    A thin dispatcher over `solve_octet`, which implements every mode; this
+    A thin dispatcher over `solve`, which implements every mode; this
     only turns the mode name into its argument set. Returns an `EoSPoint`.
     """
     from eos.dd2.table import _mode_kwargs
-    return solve_octet(par, n_B, flags, T=T, x0=x0,
+    return solve(par, n_B, flags, T=T, x0=x0,
                        analytic_jac=analytic_jac,
                        check_consistency=check_consistency,
                        include_photons=include_photons,
                        **_mode_kwargs(mode, fracs))
 
 
-def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
+def solve_fixed_yc(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
                          leptons=False, include_photons=True,
                          check_consistency=True):
     """
@@ -902,13 +902,13 @@ def solve_fixed_yc_octet(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
     composing with either flavor.
     """
     strange_mode = "fixed" if Y_S is not None else "eq"
-    return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="fixed",
+    return solve(par, n_B, flags, T=T, x0=x0, charge_mode="fixed",
                        Y_C=Y_C, strange_mode=strange_mode, Y_S=(Y_S or 0.0),
                        yc_leptons=leptons, include_photons=include_photons,
                        check_consistency=check_consistency)
 
 
-def solve_yl_octet(par, n_B, Y_Le, flags, T=0.0, x0=None,
+def solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, flags, T=0.0, x0=None,
                    include_photons=True, check_consistency=True):
     """
     Neutrino-trapped matter at fixed electron lepton fraction
@@ -917,46 +917,23 @@ def solve_yl_octet(par, n_B, Y_Le, flags, T=0.0, x0=None,
     family stays transparent. Requires SpeciesFlags(neutrinos=True).
     """
     if not flags.neutrinos:
-        raise ValueError("solve_yl_octet requires SpeciesFlags(neutrinos=True)")
-    return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
+        raise ValueError("solve_beta_eq_neutrino_trapped requires "
+                         "SpeciesFlags(neutrinos=True)")
+    return solve(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
                        lepton_mode="trapped", Y_Le=Y_Le,
                        include_photons=include_photons,
                        check_consistency=check_consistency)
 
 
-def sweep_beta_eq_octet(par, n_B_grid, flags, T=0.0, include_photons=True,
-                        max_bisect=6, stop_at_boundary=False,
-                        analytic_jac=True, max_skip=3):
-    """
-    Warm-started density sweep with step-bisection continuation.
-    Each point seeds the next; through a sharp onset where the warm start
-    would jump branches, the step to the next density is bisected (recursively,
-    up to max_bisect levels) so the predictor stays in the corrector's basin.
-
-    A Δ-matter model can hit a scalar-collapse feasibility boundary (m* -> 0)
-    at high density. With stop_at_boundary=True the sweep returns
-    the valid prefix instead of raising once every sub-step past the boundary
-    has failed; otherwise it raises (no silent truncation by default).
-
-    `max_skip` decides how many *consecutive* misses that prefix tolerates, so
-    an isolated failed density is a hole rather than the end of the branch —
-    see `sweep_octet`, which documents why the two must be told apart.
-
-    Returns a list of EoSPoint in n_B_grid order.
-    """
-    return sweep_octet(par, n_B_grid, flags, T=T, include_photons=include_photons,
-                       max_bisect=max_bisect, stop_at_boundary=stop_at_boundary,
-                       analytic_jac=analytic_jac, max_skip=max_skip)
-
-
-def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
+def sweep(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_Le=0.0,
                 yc_leptons=False, include_photons=True, max_bisect=6,
                 stop_at_boundary=False, analytic_jac=True, max_skip=3):
     """
     Warm-started density sweep for any octet mode, with the same
     step-bisection continuation and scalar-collapse boundary handling as the
-    beta-eq sweep. See solve_octet for the mode arguments. analytic_jac selects
+    beta-equilibrium case, which is what the default arguments select. See
+    solve for the mode arguments. analytic_jac selects
     the eos_fast (exact-Jacobian) backend, on by default; False is the
     finite-difference reference path.
 
@@ -979,7 +956,7 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
     has_muL = (lepton_mode == "trapped")
 
     def solve_from(n_B, x0):
-        return solve_octet(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
+        return solve(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
                            Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
                            lepton_mode=lepton_mode, Y_Le=Y_Le, yc_leptons=yc_leptons,
                            include_photons=include_photons,
@@ -994,7 +971,7 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
             n_mid = 0.5 * (n_prev + n_target)
             p_mid = step(n_prev, n_mid, x0, depth + 1)
             return step(n_mid, n_target,
-                        octet_warm_start(p_mid, has_phi, has_muS, has_muL),
+                        warm_start(p_mid, has_phi, has_muS, has_muL),
                         depth + 1)
 
     points, x0, n_prev, misses = [], None, None, 0
@@ -1010,6 +987,6 @@ def sweep_octet(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
             continue                   # one miss: a hole, not the end
         misses = 0
         points.append(p)
-        x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
+        x0 = warm_start(p, has_phi, has_muS, has_muL)
         n_prev = n_B
     return points

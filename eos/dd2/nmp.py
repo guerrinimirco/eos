@@ -17,7 +17,7 @@ THE INVERSE MAP
 ---------------
 
 The forward map (nmp.compute_nmp) extracts {n_sat, E_sat, m*/m, K_sat, Q_sat,
-K_sym, E_sym, L_sym} from a Parametrization. This inverts it.
+K_sym, E_sym, L_sym} from a Parameters. This inverts it.
 
 The imposed set is {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}:
 
@@ -93,7 +93,7 @@ from scipy.optimize import brentq, root
 
 from eos.general.physics_constants import hc3
 from eos.dd2.couplings import rational_d2f, derived_a, derived_d
-from eos.dd2.parameters import Parametrization
+from eos.dd2.parameters import Parameters
 from eos.dd2.thermodynamics import kF_from_n
 from eos.dd2.solver import solve_snm, solve_snm_t0
 
@@ -210,8 +210,8 @@ def _f2_at1(b, c):
 
 
 def _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma, Grho=3.0, a_rho=0.5):
-    """Build a Parametrization from free isoscalar params (a,d derived)."""
-    return Parametrization.from_microscopic(
+    """Build a Parameters from free isoscalar params (a,d derived)."""
+    return Parameters.from_microscopic(
         n_sat=n_sat, gamma_sigma=Gs, b_sigma=bS, c_sigma=cS,
         gamma_omega=Gw, b_omega=bW, c_omega=cW,
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
@@ -268,7 +268,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
     """Recover DD2 couplings from a target NMP dict.
 
     nmp needs {n_sat, E_sat, m_eff_ratio, K_sat, E_sym, L_sym}; "Q_sat" is
-    consumed only when it is imposed. Returns (Parametrization,
+    consumed only when it is imposed. Returns (Parameters,
     InversionStatus). Raises ValueError only on a hard infeasibility — m*/m
     outside the physical window, or E_sym below the kinetic symmetry energy
     at a CONVERGED isoscalar solution. A soft failure (the isoscalar solve
@@ -307,7 +307,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
             f"NMP inversion infeasible: m*/m = {nmp['m_eff_ratio']} outside the "
             f"physical (0.35, 0.95) window (scalar collapse / no DD2-form fit)")
 
-    ref = Parametrization.from_dd2_defaults()
+    ref = Parameters.default()
     pinned_value = getattr(ref, PINNED_COEFF)
     if seed is None:
         # DD2-class NMPs sit near the published couplings, and the residual
@@ -399,7 +399,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
     Grho = float(np.sqrt(rho_term * 2.0 * par_iso.m_rho ** 2 / n_nat))
 
     def Lsym_of_arho(a_rho):
-        p = Parametrization.from_microscopic(
+        p = Parameters.from_microscopic(
             n_sat=n_sat, gamma_sigma=Gs, b_sigma=bS, c_sigma=cS,
             gamma_omega=Gw, b_omega=bW, c_omega=cW,
             gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
@@ -411,7 +411,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
                    xtol=1e-10)
     isov_res = abs(Lsym_of_arho(a_rho) - nmp["L_sym"])
 
-    par = Parametrization.from_microscopic(
+    par = Parameters.from_microscopic(
         n_sat=n_sat, gamma_sigma=Gs, b_sigma=bS, c_sigma=cS,
         gamma_omega=Gw, b_omega=bW, c_omega=cW,
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)

@@ -19,7 +19,7 @@ import os
 import numpy as np
 
 from eos.dd2 import (
-    Parametrization, SpeciesFlags, solve_snm, solve_beta_eq_octet, solve_octet,
+    Parameters, SpeciesFlags, solve_snm, solve_beta_eq_neutrinoless, solve,
 )
 from eos.dd2.responses import sound_speed_eq, thermal_index
 
@@ -70,7 +70,7 @@ def _check_golden(par):
 def _check_identities(par, flags, grid):
     worst = 0.0
     for n_B in grid:
-        p = solve_beta_eq_octet(par, n_B, flags)
+        p = solve_beta_eq_neutrinoless(par, n_B, flags)
         worst = max(worst, abs(p.euler_residual()),
                      abs(-p.matter.mu_C - p.leptons.mu_e) / p.matter.mu_B)
     return CheckResult("thermo identities", worst < 1e-8, worst,
@@ -110,8 +110,8 @@ def _check_backend_parity(par, flags, grid):
     §3.7 check 4). Same math, different derivative path — agree to ~round-off."""
     worst = 0.0
     for n_B in grid:
-        a = solve_octet(par, n_B, flags, include_photons=False, analytic_jac=True)
-        r = solve_octet(par, n_B, flags, include_photons=False, analytic_jac=False)
+        a = solve(par, n_B, flags, include_photons=False, analytic_jac=True)
+        r = solve(par, n_B, flags, include_photons=False, analytic_jac=False)
         for va, vr in ((a.eps, r.eps), (a.P, r.P),
                        (a.matter.mu_B, r.matter.mu_B),
                        (a.matter.fields["sigma"], r.matter.fields["sigma"]),
@@ -142,7 +142,7 @@ def run_full_check(par=None, flags=None, grid=None):
     and the model's own half of that contract -- `build_core_table`, returning
     an `EOSTable_for_TOV` -- is `eos.dd2.table`.
     """
-    par = par or Parametrization.from_dd2_defaults()
+    par = par or Parameters.default()
     flags = flags or SpeciesFlags(hyperons=False, phi_field=False)
     grid = np.array(grid) if grid is not None else np.array([0.1, 0.16, 0.3, 0.5])
 

@@ -36,9 +36,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from eos.dd2 import Parametrization, SpeciesFlags
+from eos.dd2 import Parameters, SpeciesFlags
 from eos.dd2.responses import sound_speed_eq
-from eos.dd2.solver import sweep_beta_eq_octet, solve_beta_eq_octet
+from eos.dd2.solver import sweep, solve_beta_eq_neutrinoless
 from eos.general.state import EOSTable_for_TOV
 from eos.astro.tov.solver import solve_tov_single, _create_interpolators
 from eos.astro.gmode.background import build_background, with_crust
@@ -123,7 +123,7 @@ def _check_null_test():
 
 def _dd2_inputs(par, flags, n_lo=0.08, n_hi=1.2, n_points=110):
     grid = np.geomspace(n_lo, n_hi, n_points)
-    pts = sweep_beta_eq_octet(par, grid, flags, T=0.0, include_photons=False,
+    pts = sweep(par, grid, flags, T=0.0, include_photons=False,
                               stop_at_boundary=True)
     P = np.array([p.P for p in pts])
     eps = np.array([p.eps for p in pts])
@@ -201,7 +201,7 @@ def _check_rates(par, flags):
     cross = []
     for f in (1.0, 2.0, 3.0, 5.0):
         n_B = f * 0.16
-        Y_p = solve_beta_eq_octet(par, n_B, flags, T=1.0).matter.Y("p")
+        Y_p = solve_beta_eq_neutrinoless(par, n_B, flags, T=1.0).matter.Y("p")
         cross.append(brentq(
             lambda T: equilibration_rate(par, n_B, Y_p, T) - omega, 0.5, 20.0))
     spread = max(cross) - min(cross)
@@ -213,7 +213,7 @@ def _check_rates(par, flags):
 
 def run_full_check(par=None, flags=None, include_dd2=True):
     """Run the g-mode verification suite. Returns a FullCheckReport."""
-    par = par or Parametrization.from_dd2_defaults()
+    par = par or Parameters.default()
     flags = flags or SpeciesFlags(muons=True)
 
     report = FullCheckReport()

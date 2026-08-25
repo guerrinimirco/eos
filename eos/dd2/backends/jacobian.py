@@ -102,18 +102,18 @@ def _columns(ctx, spec):
     return c
 
 
-def octet_jacobian(x, ctx, spec):
+def residual_jacobian(x, ctx, spec):
     """
-    Analytic dR/dx of octet_residual (dense, n_unknowns x n_unknowns).
+    Analytic dR/dx of residual (dense, n_unknowns x n_unknowns).
 
-    Row/column order matches octet_residual / _unpack. Returns np.eye as a
+    Row/column order matches residual / _unpack. Returns np.eye as a
     benign fallback when x is outside the physical domain (m*<=0), where the
     residual itself returns its 1e6 sentinel and MINPACK damps the step.
     """
-    from eos.dd2.solver import _unpack, octet_unknowns
+    from eos.dd2.solver import _unpack, n_unknowns
     from eos.dd2.thermodynamics import baryon_kinetics as _baryon_kinetics
 
-    n = octet_unknowns(ctx, spec)
+    n = n_unknowns(ctx, spec)
     sigma, omega0, rho0, phi0, mutB, muC, muS, muL = _unpack(x, ctx, spec)
     kin = _baryon_kinetics(ctx, sigma, omega0, rho0, phi0, mutB, muC, muS)
     if kin is None:

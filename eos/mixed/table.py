@@ -136,7 +136,7 @@ def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
     """Mixed solve at fixed entropy per baryon S = s/n_B.
 
     An outer one-dimensional root on T, mirroring
-    `eos/dd2/table.solve_octet_at_entropy`. s(T) increases monotonically at
+    `eos/dd2/table.solve_at_entropy`. s(T) increases monotonically at
     fixed n_B so the bracket is well posed; T_hi doubles up to T_cap until the
     target is bracketed.
     """
@@ -182,7 +182,7 @@ def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
 class TableSpec:
     """One multi-axis mixed-EoS table request.
 
-    par, flags : DD2 `Parametrization` and `SpeciesFlags`
+    par, flags : DD2 `Parameters` and `SpeciesFlags`
     mode       : one of `MODE_FRACTIONS`
     axes       : {'nB': grid, exactly one of 'T'/'SnB': grid, and optionally
                  any of 'Y_C'/'Y_S'/'Y_Le': grid to sweep that fraction}

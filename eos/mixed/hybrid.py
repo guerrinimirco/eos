@@ -19,7 +19,7 @@ holds in the wings and the window alike — if Y_C is fixed, it is fixed in all
 three segments; if neutrinos are trapped at Y_Le, both wings trap them too.
 Each wing is that phase's own per-mode pure solve, carried as the
 `wing_sweep` capability of its `Phase` (`eos.mixed.adapters`): the DD2 phase
-sweeps `eos.dd2.sweep_octet` in the spec's mode, the vMIT phase its four mode
+sweeps `eos.dd2.sweep` in the spec's mode, the vMIT phase its four mode
 solvers. Only the neutrality locality — eta, local against global — is
 specific to the mixed region: a pure phase has one phase to neutralize, so
 eta has nothing to distribute. A leptonless fixed-Y_C hybrid is a charged

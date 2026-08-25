@@ -21,9 +21,9 @@ iteration counts are bounded (MINPACK hybr), so a call returns.
 """
 from dataclasses import dataclass
 
-from eos.dd2.solver import solve_octet, EoSPoint
+from eos.dd2.solver import solve, EoSPoint
 from eos.dd2.table import (
-    TableSpec, build_table, _mode_kwargs, solve_octet_at_entropy,
+    TableSpec, build_table, _mode_kwargs, solve_at_entropy,
 )
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
 
     Parameters
     ----------
-    par : Parametrization
+    par : Parameters
         The model parameters — always an argument, never module state.
     mode : str
         A key of eos.dd2.MODES.
@@ -96,10 +96,10 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
     kwargs = _mode_kwargs(mode, fr)
     try:
         if SnB is not None:
-            point = solve_octet_at_entropy(par, n_B, SnB, species, x0=x0,
+            point = solve_at_entropy(par, n_B, SnB, species, x0=x0,
                                            **kwargs)
         else:
-            point = solve_octet(par, n_B, species, T=T, x0=x0,
+            point = solve(par, n_B, species, T=T, x0=x0,
                                 analytic_jac=analytic_jac,
                                 include_photons=species.photons, **kwargs)
         return PointResult(True, "converged", point)

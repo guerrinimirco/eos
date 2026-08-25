@@ -18,10 +18,10 @@ from scipy.optimize import brentq
 
 from eos.dd2.species import SpeciesFlags, hadronic_charges
 from eos.general.state import EOSTable_for_TOV
-from eos.dd2.solver import solve_octet, sweep_octet, sweep_beta_eq_octet
+from eos.dd2.solver import solve, sweep, sweep
 
 
-#: Equilibrium mode -> the `solve_octet` configuration it means. The fixed
+#: Equilibrium mode -> the `solve` configuration it means. The fixed
 #: fractions are filled in from `TableSpec.fixed` at build time.
 #:
 #: The names say what the matter is, and they match the modes `eos.mixed`
@@ -94,7 +94,7 @@ def hadronic_row(p, flags):
     return row
 
 
-def solve_octet_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
+def solve_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
                            T_hi=80.0, T_cap=400.0, xtol=1e-5, **mode_kwargs):
     """
     Solve at fixed entropy per baryon S=s/n_B by an outer 1-D root on T
@@ -103,7 +103,7 @@ def solve_octet_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
     Returns the converged EoSPoint (at the solved T).
     """
     def point(T):
-        return solve_octet(par, n_B, flags, T=T, x0=x0,
+        return solve(par, n_B, flags, T=T, x0=x0,
                            include_photons=flags.photons, **mode_kwargs)
 
     def f(T):
@@ -218,7 +218,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
     """
     import time
 
-    from eos.dd2.solver import octet_warm_start
+    from eos.dd2.solver import warm_start
     if verbose and progress is None:
         progress = _print_progress
     nB = np.asarray(spec.axes["nB"], dtype=float)
@@ -241,10 +241,10 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
 
             def solve_at(n, x0):
                 if spec._temp_key == "T":
-                    return solve_octet(spec.parametrization, float(n), flags,
+                    return solve(spec.parametrization, float(n), flags,
                                        T=float(tv), x0=x0,
                                        include_photons=flags.photons, **mode_kw)
-                return solve_octet_at_entropy(spec.parametrization, float(n),
+                return solve_at_entropy(spec.parametrization, float(n),
                                               float(tv), flags, x0=x0,
                                               **mode_kw)
 
@@ -252,7 +252,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
             t_line = time.time()
             # Fast path: the whole line in one warm-started sweep (T axis only).
             if spec._temp_key == "T" and not skip_errors:
-                line = sweep_octet(spec.parametrization, nB, flags,
+                line = sweep(spec.parametrization, nB, flags,
                                    T=float(tv), include_photons=flags.photons,
                                    **mode_kw)
             else:
@@ -267,7 +267,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
                         x0 = None      # reset the warm start past the gap
                         continue
                     line.append(p)
-                    x0 = octet_warm_start(p, has_phi, has_muS, has_muL)
+                    x0 = warm_start(p, has_phi, has_muS, has_muL)
             points.append(line)
             if progress is not None:
                 progress(dict(mode=spec.mode, line=len(points),
@@ -323,7 +323,7 @@ def build_core_table(par, flags, n_lo=0.05, n_hi=1.25, n_points=150):
     grid = np.geomspace(n_lo, n_hi, n_points)
     # stop_at_boundary: a Δ model may hit scalar collapse (m*->0) before n_hi;
     # take the valid prefix as the core EoS.
-    points = sweep_beta_eq_octet(par, grid, flags, T=0.0,
+    points = sweep(par, grid, flags, T=0.0,
                                  include_photons=flags.photons,
                                  stop_at_boundary=True)
     P = np.array([p.P for p in points])
@@ -335,9 +335,9 @@ def build_core_table(par, flags, n_lo=0.05, n_hi=1.25, n_points=150):
 
 
 if __name__ == "__main__":
-    from eos.dd2 import Parametrization
+    from eos.dd2 import Parameters
     spec = TableSpec(
-        parametrization=Parametrization.from_dd2y_defaults(),
+        parametrization=Parameters.named("DD2Y"),
         mode="beta_eq_neutrinoless",
         axes={"nB": np.linspace(0.1, 0.8, 8), "SnB": [1.0, 2.0]},
         include=SpeciesFlags(hyperons=True, phi_field=True),

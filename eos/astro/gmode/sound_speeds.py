@@ -127,7 +127,7 @@ def cs2_frozen_nucleonic(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3,
                          leptons=True):
     """Frozen c_ad^2 of charge-neutral nucleonic matter, leptons included.
 
-    par     : DD2 `Parametrization`
+    par     : DD2 `Parameters`
     n_B     : baryon density [fm^-3]
     Y_p     : proton fraction, held fixed under the perturbation
     leptons : include the neutralising lepton gas (the default, and the
@@ -172,7 +172,7 @@ def cs2_frozen_point(par, flags, result, vmit_params=None,
                      convention=ISOBARIC, rel_dn=1e-3, leptons=True):
     """Frozen c_ad^2 at one solved mixed-phase state, under either convention.
 
-    par, flags  : the DD2 `Parametrization` and `SpeciesFlags` the state used
+    par, flags  : the DD2 `Parameters` and `SpeciesFlags` the state used
     result      : a `Result` from `eos.mixed.solve`; pure phases
                   (chi <= 0 or chi >= 1) are handled and give the pure-phase
                   value under either convention

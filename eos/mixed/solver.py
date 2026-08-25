@@ -63,7 +63,6 @@ from scipy.optimize import root
 
 from eos.general.basis import quark_potentials
 from eos.general.thermodynamics_leptons import neutrino_thermo
-from eos.dd2.solver import solve_beta_eq_octet
 from eos.mixed.charges import (
     ChargeSpec, Regime,
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
@@ -585,7 +584,7 @@ def solve(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
                 analytic_jac=False, phases=None, muons=None):
     """Solve the mixed phase at (n_B, T, eta) for the regime assignment `spec`.
 
-    par         : DD2 `Parametrization` (the DD2+vMIT front door; None with
+    par         : DD2 `Parameters` (the DD2+vMIT front door; None with
                   `phases`)
     flags       : `SpeciesFlags` — which baryons, leptons and meson gases exist
     n_B         : total baryon density [fm^-3]
@@ -743,7 +742,7 @@ def sweep(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     A cold seed only converges near the transition onset; through the window
     the previous solved density is by far the best predictor. So the sweep is
     warm-started along n_B, and when a step misses, it is bisected rather than
-    abandoned — the same continuation tactic `eos/dd2/solver.sweep_octet` uses.
+    abandoned — the same continuation tactic `eos/dd2/solver.sweep` uses.
 
     Returns a list of `Result` in grid order. Each solved point seeds the
     next; a missed step is bisected up to `max_bisect` levels, and a density
