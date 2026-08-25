@@ -67,3 +67,31 @@ too: ticket 20's +2 tests in `test/test_imports.py` moved it to 1665.
 `KeyError` when `hyperons=True` meets a nucleonic parameter set — the same file
 family, a different defect (a refusal with the wrong exception, against a flag
 that does not exist at all). Whoever runs second should read the other first.
+
+**Two documentation sites change when this lands**, both written by
+[ticket 20](20-phase5-api-readme.md) and both stating the gap as it is TODAY,
+so neither is wrong now and both go stale the moment dd2's flags move:
+
+- `README.md`, the "Species flags" section — the paragraph beginning "One
+  model does not yet carry two of the six", which names
+  `include_pseudoscalars`, `include_thermal_vectors`, and `neutrinos` as the
+  matter-composition field rather than the tau gas.
+- `eos/__init__.py`, the `#:` comment above `SPECIES_FLAGS` (commit
+  `7c5b7a9`), which says the same thing in the same words and ends "Passing
+  the six shared names to dd2 raises TypeError, which reads as the caller's
+  bug."
+
+The second is deliberately a commit of its own so it can be reverted or
+rewritten without touching the lazy-import work in `fe68f20`. If this ticket
+resolves by giving dd2 the two names, both paragraphs are deleted rather than
+edited; if it resolves by a raise that names the gap (which §4 permits for
+`thermal_neutrinos`, since the tau gas is unwired rather than misnamed), both
+are rewritten to say THAT, and `README.md`'s claim that the six names are
+carried by every model becomes true without qualification.
+
+Also: `test/test_imports.py::test_the_top_level_carries_the_mode_and_species_vocabulary`
+checks §4's six names against seven models' dataclass fields and **exempts
+`dd2` by name**, with this ticket cited in its docstring. Drop the exemption
+when this lands — that is the check that keeps the answer from drifting back.
+(`test/` is gitignored, so it is in a working copy only; see the map's
+untracked-guards bullet.)
