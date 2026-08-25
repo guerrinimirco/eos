@@ -1,7 +1,7 @@
 # ZLvMIT_hybrid.ipynb is corrupt JSON and cannot be opened
 
 Type: task
-Status: open
+Status: in progress
 Parent: ../map.md
 
 ## Question

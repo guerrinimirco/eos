@@ -1,7 +1,7 @@
 # alphabag, abpr, enjl and mixed document pairs to §11 standard
 
 Type: task
-Status: open
+Status: in progress
 Blocked by: 09
 Parent: ../map.md
 
