@@ -824,6 +824,12 @@ In scope, not yet sharp enough to ticket:
   the checkout and the absolute-vs-relative gate bug returns *and* brings the 34
   keys back with it — and `test/baseline/` is §12 ground truth, so what is
   unrecoverable here is a golden reference, not a convenience.
+  A third shape, from [ticket 20](issues/20-phase5-api-readme.md): its two
+  lazy-import tests are the ONLY check that `import eos` then `eos.dd2` works,
+  and the sweep already in `test_imports.py` cannot substitute for them —
+  every module imports whether or not the `__getattr__` hook does. So the
+  public surface [ticket 23](issues/23-phase6-respec.md) ports `nucleation`
+  onto is guarded by a file a fresh clone does not have.
 - **Scaling the strangeness residual.** Now has a second, sharper witness:
   [ticket 56](issues/56-baseline-empty-sector-gate.md) measured sfho's three
   `fixed_YC_YS` rows closing the same residual to 2.49e-09, 3.92e-16 and
