@@ -355,7 +355,8 @@ Right now SIX places set rcParams, colours or figure geometry:
 
 2. Fold plotting_info.py into figure_style.py and delete it. Strip the
    styling out of the other four call sites and have them import. After this,
-   `grep -rn "rcParams" eos/ nucleation/` returns hits in exactly one file.
+   the rcParams grep in the Acceptance criteria block returns hits in exactly
+   one file (see there for why the pattern, not the bare word).
 
 3. figure_style.py must expose, at minimum: the rcParams setter, the shared
    colour palette, figure-size presets for one-column and two-column journal
@@ -509,7 +510,14 @@ Done means all of:
   non-convergence; model objects pickle. Show this with one script that
   evaluates a model at 500 random parameter sets across a multiprocessing
   Pool, counts the non-converged ones, and finishes.
-- `grep -rn "rcParams" eos/ nucleation/` hits exactly one file.
+- `grep -rnE --include='*.py' 'rcParams\s*(\[|\.update)' eos/ nucleation/`
+  hits exactly one file, `eos/eos/general/figure_style.py`. The pattern matches
+  a subscript assignment or an `.update(...)` call — the two ways rcParams is
+  actually set — rather than the bare word, and `--include='*.py'` keeps prose
+  out. A plain `grep -rn "rcParams"` fails on a repository that satisfies §10
+  in full: it also hits comments stating that a file does *not* set rcParams
+  (`eos/zlvmit/plot_results.py`, `eos/zlvmit/table_reader.py`), so it cannot
+  tell the rule from a sentence about the rule.
 - Every README and STRUCTURE.md example executed, real output pasted.
 - No file over 5 MB newly tracked in git.
 - No new third-party dependency without asking me first.

@@ -85,13 +85,35 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
-**1648 passed, 15 skipped, 0 failed** (`pytest test/ -q`, `EOS_CRUST_DIR`
-UNSET — a plain checkout, no environment setup), measured after Stage 0 and
-recorded in `output/_audit/pytest_after_stage0.txt`. The count fell from 1660
-because [ticket 03](issues/03-stage0-removals.md) deleted
-`test/dd2/test_notebook_api.py` and its 12 tests with the module they smoke-test;
-collection fell by the same 12. **0 added failures.** The pre-Stage-0 reference
-is `output/_audit/pytest_final.txt`.
+**14 failed, 1634 passed, 15 skipped at HEAD.** Expect 14, not 0. All fourteen
+are **pre-existing and not physics regressions** — verified twice, independently,
+by running them against a detached worktree at HEAD carrying the pre-rename
+`eos/`, where the same tests fail with byte-identical messages. Two causes:
+
+- **6 — dd2's NMP inversion misses its targets**, now
+  [ticket 47](issues/47-dd2-nmp-inversion.md). Diagnosed as never having worked:
+  bit-identical at all 13 commits since `eos/dd2/nmp.py` was created. Two of the
+  three shapes are a tolerance asserting below the documented stencil noise; the
+  third is real — the default 5x5 closure lands in the spurious basin
+  `nmp.py:70` describes, Q_sat 117.49 against 169.00.
+- **8 — round-off drift in `test/baseline/`** for quantities the generator's own
+  docstring calls round-off (`ccdm`'s `field_residual`, `sfho`'s `mu_S` at
+  Y_S = 0, the tov sequences, `vmit`'s `n_e` at Y_C = 0 straddling the 1e-12 gate
+  at 1.7e-13 against a stored 3.0e-12).
+
+**A ticket reporting "0 added failures" means 14, unchanged.** Compare against
+`output/_audit/pytest_before_with_crust.txt`. Both causes are Stage 7 report
+material, not diffs.
+
+**Do not run the full suite concurrently with another session** —
+`test/dd2/test_dd2_speed.py` is a timing test and goes flaky under CPU
+contention. Coordinate with whichever session holds the suite gate.
+
+*Superseded:* the earlier "1648 passed, 15 skipped, 0 failed" measured after
+Stage 0 and recorded in `output/_audit/pytest_after_stage0.txt`. That count had
+fallen from 1660 because [ticket 03](issues/03-stage0-removals.md) deleted
+`test/dd2/test_notebook_api.py` and its 12 tests with the module they
+smoke-test. It was accurate when written and is not any more.
 
 The session began at 4 failures on a bare checkout, against an inherited note
 claiming 12. None of the four was a physics defect: three were the BPS crust
@@ -374,6 +396,31 @@ against this file, not against the earlier `pytest_before*.txt`.
   `eos_response` returns the full dict with `converged=False` and NaN, so no
   caller needs a second code path. Six of the 23 (a) fixes can move a number and
   each names its §12 check.
+
+- [Phase 5 item 5 — apply the CLAUDE.md diff](issues/22-phase5-claudemd.md): all
+  twelve (b)-class rows applied plus the two carried from tickets 02 and 09 —
+  `CLAUDE.md` +97/−17, `docs/REFACTOR_PROMPTS.md` +12, **no `eos/`, `test/` or
+  `docs/DEFERRED.md` file touched**. `ccdm` now appears in the specification at
+  all; §1's model list had three of the ten. Three rows came out differently
+  than the triage anticipated: **§3's `cfl` could not be a table row alone** —
+  §3 opens "Every model exposes the same modes", so adding a fifth implies every
+  model owes it, and the entry carries the paragraph saying why a locked phase
+  is a statement about which phase the model describes rather than a choice of
+  equilibrium condition (which then justifies §5's single-mode `mode` default,
+  so the two rows cross-link). **§4's `thermal_neutrinos` ruling needed no new
+  rule** — it follows from §4's existing "flavors NOT tracked in the matter
+  composition", so it is written as the consequence five models read two ways.
+  And **the §10 rcParams criterion took two attempts, the first wrong in the
+  finding's own way**: the audit's `rcParams\s*\[` misses `rcParams.update(base)`,
+  one of the 22 real assignments, and widening to `[\[.]` re-hits the prose
+  sentence at `zlvmit/plot_results.py:184`. Shipped as
+  `grep -rnE --include='*.py' 'rcParams\s*(\[|\.update)'`, verified across both
+  repositories: 22 hits, one file. **The (c)-class half stayed at
+  [ticket 55](issues/55-deferred-ledger.md)** rather than moving with this ticket
+  as its Question intended — `docs/DEFERRED.md` is a file the rename tickets
+  edit, and a concurrent session was live in this checkout applying
+  [ticket 44](issues/44-rename-dd2.md); `CLAUDE.md` was taken instead precisely
+  because it is disjoint from every rename.
 
 ## Not yet specified
 

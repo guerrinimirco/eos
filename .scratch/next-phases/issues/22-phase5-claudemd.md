@@ -1,7 +1,8 @@
 # Phase 5 item 5 — apply the CLAUDE.md diff
 
 Type: task
-Status: open
+Status: resolved
+Assignee: mirco (session)
 Blocked by: 02, 09, 11
 Parent: ../map.md
 
@@ -128,3 +129,90 @@ Two more, already ruled elsewhere and listed so the diff is complete: §11's
 "one usage notebook per model" is amended to the grouped notebooks
 ([ticket 02](02-notebook-grouping.md)), and §11's mandated `.tex` **stands
 unchanged** ([ticket 09](09-tex-or-md.md)).
+
+## Answer
+
+**All twelve (b)-class rows applied, plus the two carried in from tickets 02 and
+09. `CLAUDE.md` +97/−17 over 102 changed lines; `docs/REFACTOR_PROMPTS.md` +12.
+No `eos/`, `test/` or `docs/DEFERRED.md` file was touched.**
+
+### What landed where
+
+| § | change |
+|---|---|
+| §1 | model list gains `did`, `njl`, `ccdm` — it had three of the ten |
+| §1 | the **`verify/` carve-out** is written down, and scoped: a suite may import another model or the engine, nothing else in the package may, and **the astro half of the rule gets no such carve-out** |
+| §1 | `zlvmit`'s exemption widened explicitly to §11's document and §12's tests, naming `test/baseline/zlvmit.npz` as the whole of what pins it |
+| §2 | the narrow exception for a species list spanning baryons **and** quarks, with the `verify/` cross-check named as what buys it |
+| §3 | **`cfl` declared as a fifth mode**, with why it is not available to every model — a locked phase *has* no free fraction, so it is a statement about which phase the model describes, not a choice of equilibrium condition |
+| §4 | **`thermal_neutrinos` is meaningful with `beta_eq_neutrino_trapped`** and a model must not raise on it |
+| §5 | `mode` is required, with the single-mode exception (`abpr`) |
+| §5 | a **freeze target** may be a named argument of `eos_response`; `leptons` is neither condition nor freeze target and is always explicit |
+| §5 | adapter list gains `njl_phase` and `ccdm_phase` |
+| §5 | nuclear-sector list gains `did` and `zl` |
+| §5 | the `thermodynamics_<sector>.py` rule scoped to **model** packages |
+| §5 | **`general/` carries a `verify/`**, with what it checks |
+| §8 | **the delivery gate belongs to whoever builds the table** |
+| §11 | model list gains `njl`, `ccdm`; `notebooks/` reworded to grouped |
+| PROMPTS | the §10 rcParams acceptance criterion |
+
+### Three things that came out differently than the ticket anticipated
+
+**1. The §3 `cfl` row could not be a one-line table entry.** Adding `cfl` beside
+the four modes implies every model owes it, which is the opposite of true — §3
+opens "Every model exposes the same modes". So the row carries a paragraph
+saying why this one is not universal: it is not a choice of equilibrium
+condition but a statement about which phase the model describes. That paragraph
+then does double duty as the justification for §5's single-mode `mode` default,
+so the two rows are cross-linked rather than independent.
+
+**2. The §4 `thermal_neutrinos` ruling is derivable from §4's existing wording,
+which is why it is stated as a clarification and not a change.** The flag is
+defined by what it does NOT cover — "flavors NOT tracked in the matter
+composition" — so under trapping, where the e and mu families are tracked, it
+means the tau family. The document did not need a new rule, it needed the
+consequence spelled out, because five models read the same sentence two ways.
+
+**3. The rcParams criterion needed two attempts, and the first one was wrong in
+the exact way the finding describes.** The audit proposed `grep -rn
+"rcParams\s*\["`, but `figure_style.py` also sets style through
+`rcParams.update(base)`, so that pattern misses 1 of the 22 real assignments.
+Widening to `rcParams\s*[\[.]` then **re-broke the original bug**: it matches a
+prose sentence ending in "rcParams." at `eos/zlvmit/plot_results.py:184`. The
+shipped criterion is
+
+    grep -rnE --include='*.py' 'rcParams\s*(\[|\.update)' eos/ nucleation/
+
+— subscript or `.update(`, the two ways rcParams is actually set, with
+`--include='*.py'` keeping prose out. **Verified from
+`~/Desktop/Research/Python_codes` across both repositories: 22 hits, all in
+`eos/eos/general/figure_style.py`, one file.** Without `--include` it also hits
+this effort's own audit report, which quotes the pattern.
+
+### The DEFERRED.md half did NOT move with this ticket
+
+This ticket's Question says the (c)-class entries "land in `docs/DEFERRED.md`
+under this ticket too, so the two documents move together". They did not, for a
+reason found at the start of this session: **`docs/DEFERRED.md` is a file the
+rename tickets edit** — [ticket 43](43-rename-vmit.md)'s resolution rewrote its
+vmit entry, [ticket 10](10-rename-approvals.md) corrected another line of it, and
+it was last written at 09:07 today by that work. A concurrent session
+(`eos-48`) was live in this checkout applying [ticket 44](44-rename-dd2.md) while
+this ticket ran. Two sessions writing one file loses writes regardless of
+section, so the (c) entries stay at [ticket 55](55-deferred-ledger.md), to run
+once the renames are committed. `CLAUDE.md` was taken instead precisely because
+it is disjoint: neither 43 nor 44 mentions it, and it had not been written since
+Aug 24.
+
+### Suite
+
+**Not run, deliberately.** `CLAUDE.md` and `docs/REFACTOR_PROMPTS.md` are
+documentation and no test reads either — every hit of `grep -rln "CLAUDE.md"
+test/` is a docstring or comment citing a section number, and nothing opens or
+parses the file (`grep -rn "open(.*CLAUDE\|read_text().*CLAUDE\|Path(.*CLAUDE"
+test/` returns nothing). So this diff **cannot** move a number or a test.
+
+Running the suite anyway would have produced a misleading result rather than a
+reassuring one: the working tree carries `eos-48`'s in-flight dd2/mixed rename,
+so any failure count measured now belongs to that work, not to this ticket, and
+recording it here would attribute it wrongly.

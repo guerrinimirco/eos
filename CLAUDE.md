@@ -19,8 +19,9 @@ Inside the package the layers are strict:
     general/  →  models  →  composite engines  →  astro/
 
 - `general/` imports nothing else in the repo.
-- A **model** (`dd2`, `sfho`, `zl`, `vmit`, `alphabag`, `abpr`, `enjl`)
-  imports only `general/`. **No model imports another model.**
+- A **model** (`dd2`, `sfho`, `zl`, `did`, `vmit`, `alphabag`, `abpr`, `enjl`,
+  `njl`, `ccdm`) imports only `general/`. **No model imports another model.**
+  The one carve-out is a model's `verify/` suite, below.
 - A **composite engine** (`mixed/`) couples one hadronic and one quark phase
   through the *phase-adapter contract* (§5); it imports the models it couples
   only through that surface.
@@ -36,9 +37,22 @@ Inside the package the layers are strict:
   `mixed/hybrid.py` and `mixed/scan.py` import `eos.astro.tov`. The engine
   sits directly below `astro/` in the order above and couples to nothing else
   downstream; a model does not get the same latitude.
+- **A `verify/` suite may reach sideways.** The model-to-model half of the
+  rule binds importable model code, not the invariant suites: a `verify/`
+  entry checks END-TO-END invariants, and some of those genuinely span two
+  models — `abpr` checks itself against the CFL phase of `alphabag`, `enjl`
+  checks its branch pair through `eos/mixed`. A suite is not on the path an
+  inference sampler imports, which is what the layering rule protects, so the
+  carve-out costs nothing it was defending. It is exactly that narrow: the
+  suite may import another model or the composite engine; **nothing else in
+  the package may**, and the astro half of the rule has no such carve-out.
+  `test/test_imports.py` encodes the exemption rather than dropping the check.
 - `eos/zlvmit/` is first-generation legacy code kept for its published
-  results. It follows these conventions where cheap and is exempt from the
-  uniform API; new hybrid work goes through `eos/mixed`.
+  results. It is exempt from the uniform API (§5), from §11's per-model
+  document and from §12's test requirement — it is kept for results already
+  published, not brought into conformance, and `test/baseline/` freezing a
+  `zlvmit.npz` is the whole of what pins it. It follows these conventions
+  where cheap; new hybrid work goes through `eos/mixed`.
 
 Corollary: shared figure code belongs in `eos/general/figure_style.py`, the
 one home for publication styling. Do not re-declare `STANDARD_COLORS` or write
@@ -88,6 +102,13 @@ basis and the species bases — (mu_B, mu_C, mu_S) ↔ (mu_u, mu_d, mu_s),
 (n_B, n_C, n_S) from species densities — live in `general/` and are imported
 by every model. No model carries its own copy of these algebraic maps.
 
+One narrow exception: a model whose species list spans BOTH baryons and quarks
+(ENJL is the only one) may keep a local quantum-number table, because its
+species set is not the set any single shared table was written for. The table
+is a transcription, never a second convention — the model's `verify/` suite
+cross-checks every entry against `general/basis`, and that cross-check is what
+buys the exception. A model with an ordinary species list does not get it.
+
 **Naming.** The effective (kinetic) chemical potential is `mu_eff_i`
 (mu_eff_i = mu_i − Sigma0_i, i.e. mu minus the vector/rearrangement
 self-energies); the effective (Dirac) mass is `m_eff_i`. The compact symbols
@@ -108,6 +129,14 @@ Every model exposes the same modes; a mode fixes the independent variables:
 | `beta_eq_neutrino_trapped`  | (n_B, Y_Le, [Y_Lmu], T)    | beta equilibrium with trapped neutrinos; muon family optional — without it the mode takes (n_B, Y_Le, T) |
 | `fixed_YC`                  | (n_B, Y_C, T)              | fixed non-leptonic charge fraction — the simulation-table mode |
 | `fixed_YC_YS`               | (n_B, Y_C, Y_S, T)         | fixed charge and strangeness; Y_C = 0.5, Y_S = 0 is symmetric nuclear matter, for heavy-ion comparisons |
+| `cfl`                       | (n_B, T)                   | colour-flavour-locked quark matter; the locking fixes Y_C = 0 and Y_S = +1 identically, so no fraction is free to name |
+
+`cfl` is the one mode that is not available to every model, because it is not a
+choice of equilibrium condition but a statement about which phase the model
+describes: a locked phase HAS no free charge or strangeness fraction. Only the
+models whose physics is that phase expose it (`alphabag`, `abpr`), and for
+`abpr` it is the only mode there is — which is why §5 lets that model, alone,
+default its `mode` argument.
 
 One orthogonal flag applies to `fixed_YC` and `fixed_YC_YS`:
 
@@ -144,6 +173,14 @@ explicit named boolean, with identical names across all models:
 - `photons`           — contribute to eps, P and s only; carry no conserved
                         charge.
 
+**`thermal_neutrinos` is meaningful alongside `beta_eq_neutrino_trapped`**, and
+a model must not raise on the combination. The flag is defined by what it does
+NOT cover — flavors absent from the matter composition — so under trapping,
+where the e and mu families ARE tracked, it means the tau family, which is
+free-streaming and carries no lepton number the mode constrains. The two are
+orthogonal by construction: the mode says which families are trapped, the flag
+adds the ones that are not.
+
 No sector is enabled or disabled implicitly because "its coupling happens to
 be zero" — if a sector is off, its flag is False. Setting a flag a model does
 not implement RAISES; a NotImplementedError is never turned into a silent
@@ -161,10 +198,22 @@ Every model exposes the same entry points with the same signatures:
 
 `par` comes first and is never optional: model parameters are arguments (§6),
 so there is no entry point that reaches for a default set on the caller's
-behalf.
+behalf. **`mode` is likewise required**, and for the same reason: defaulting it
+picks a physics condition on the caller's behalf. The single exception is a
+model that has exactly one mode — `abpr`, which is `cfl` and nothing else (§3) —
+where there is no choice to make and no default to get wrong.
 
 `conditions` are the independent variables of the mode, named exactly
-**n_B, T, Y_C, Y_S, Y_Le, Y_Lmu**. Every public boundary is fm-based:
+**n_B, T, Y_C, Y_S, Y_Le, Y_Lmu**. A *freeze target* may also appear as a named
+argument of `eos_response` — `Y_p=` on a model whose `composition` freeze holds
+the proton fraction, say. That is not a condition and is not covered by the list
+above: a condition names an independent variable of the mode, a freeze target
+names what a second derivative holds fixed (below), and calling one by the
+other's name would be the more misleading of the two. The `leptons` flag is
+NEITHER, and is an explicit named argument, never smuggled through
+`**conditions` — it is orthogonal to the mode (§3) and routing it through the
+condition bag has only ever produced mode names §3 does not define.
+Every public boundary is fm-based:
 n in fm^-3, T and mu in MeV, eps and P in MeV/fm^3. Natural units stay inside
 the physics modules and never leak across a module boundary.
 
@@ -229,7 +278,7 @@ there), with the plain (par, flags, vmit_params) signatures remaining the
 DD2+vMIT front door. Whether a phase's slot carries the kinetic or the
 physical baryon potential is a declared property of the phase, never an
 engine assumption. Shipped adapters: DD2, SFHo, ZL, DID (hadronic), vMIT,
-alphaBag (quark), and the ENJL branch pair (two branches of one
+alphaBag, NJL, CCDM (quark), and the ENJL branch pair (two branches of one
 functional); a new pairing is a new adapter, not a new engine.
 
 **One internal shape.** Every model is laid out the same way, so a physicist
@@ -265,7 +314,11 @@ Not `eos.py`: since `api.py` holds `eos_point` and `eos_table`, a module named
 good import line. Not `thermodynamics_<sector>.py` either **unless the model
 genuinely carries two or more sectors, in which case every one of them takes
 the suffix**: a package holding exactly one suffixed file is wrong, because
-the suffix only restates the package name.
+the suffix only restates the package name. This rule is about a MODEL package,
+where the package name already says which physics it is. It does not bind
+`general/`, which is nobody's model and holds the shared thermodynamics of
+several sectors at once — `general/thermodynamics_leptons.py` names its sector
+because `eos.general.thermodynamics` alone would say nothing.
 
 **thermodynamics.py computes quantities from the state; solver.py finds the
 state.** `thermodynamics.py` takes chemical potentials, fields, T, the
@@ -288,6 +341,14 @@ equations never has to walk past a jitted kernel.
 A composite engine (§5) is not a model and does not take this list. It carries
 `adapters.py`, `api.py`, `responses.py`, `verify/` and its own `<name>.tex`,
 plus whatever subpackages its solve needs.
+
+**`general/` carries a `verify/` too.** It is not a model either, but it is the
+single home of the Fermi and Bose integrals (§7), the conserved-charge basis
+maps (§2) and the thermal meson gas — the pieces every model's correctness
+rests on, and the ones a wrong result is hardest to trace back to. Its suite
+checks those shared pieces against each other: JEL against the alternatives §7
+requires be validated against it, the basis maps against the species tables,
+the T = 0 limits against the finite-T forms as T -> 0.
 
 **Layer order inside a model.** Imports run one way only:
 
@@ -314,8 +375,8 @@ that pin it down, and the evaluation lives on the parameter object. Coupling
 multiply a density-dependent coupling. A mean field is neither: it is a
 dynamical variable and belongs to `thermodynamics.py`.
 
-**Nuclear-matter parameters.** Models with a nuclear sector (`dd2`, `sfho`)
-expose the forward map (couplings → NMPs, `compute_nmp`) and the inverse
+**Nuclear-matter parameters.** Models with a nuclear sector (`dd2`, `sfho`,
+`did`, `zl`) expose the forward map (couplings → NMPs, `compute_nmp`) and the inverse
 (NMPs → couplings, `invert_nmp` / `from_nmp`) — both in `nmp.py`, since they
 are two directions of one map and share the NMP list, its ordering and the
 residual. The inversion imposes
@@ -406,6 +467,13 @@ fastest way to catch a wrong implementation:
   reaches TOV, and the check runs before integration, returning a status
   rather than a meaningless mass.
 
+  **The gate belongs to whoever builds the table.** A unit with a `table.py`
+  that produces a table a structure solver can consume owes this check in its
+  own `verify/`; a model that builds no such table does not, and its absence
+  there is correct rather than an omission. That is the test to apply — does
+  this unit hand a table onward — not whether the check appears in some other
+  suite.
+
 ## 9. The reference/fast split
 
 Where a solver exists in two flavors, the pattern is preserved:
@@ -446,16 +514,20 @@ FileNotFoundError.
 
     eos/            the package (directory name `eos/eos/` — never renamed)
       general/      shared infrastructure (§7, §10)
-      dd2/ sfho/ zl/ did/ vmit/ alphabag/ abpr/ enjl/  one subpackage per model
+      dd2/ sfho/ zl/ did/ vmit/ alphabag/ abpr/ enjl/ njl/ ccdm/
+                    one subpackage per model
       mixed/        the composite hadron-quark engine (phase adapters, §5)
       zlvmit/       legacy first-generation hybrid (kept, exempt from §5)
       astro/
         tov/        stellar structure: TOV, tidal, crust, rotating (RNS)
         gmode/      composition g-modes
-    notebooks/      one usage notebook per model: .ipynb paired to .py via
-                    jupytext; notebooks call library functions and contain
-                    their own plotting code — there are no *notebook_api*
-                    modules
+    notebooks/      usage notebooks, GROUPED by physics rather than one per
+                    model: .ipynb paired to .py via jupytext; notebooks call
+                    library functions and contain their own plotting code —
+                    there are no *notebook_api* modules. Grouped because the
+                    figures that matter overlay several models on one axis,
+                    and per-model notebooks cannot do that without importing
+                    each other or sharing a helper module this section forbids.
     output/         generated tables and plots, per-model/per-study
                     subfolders. Gitignored, EXCEPT `output/public/`, the
                     curated tracked subfolder for tables meant to be shared
