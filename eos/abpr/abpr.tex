@@ -185,7 +185,10 @@ and expanding Eq.~\eqref{eq:massive} in $m/\mu$ gives
 Eq.~\eqref{eq:expansion}. These expressions live in
 \texttt{eos.general.fermi\_integrals} and are used by \texttt{eos/alphabag};
 \texttt{eos/abpr} does not call them, because Eq.~\eqref{eq:P} \emph{is} their
-expansion --- that is what the model is.
+expansion --- that is what the model is. The finite-temperature Fermi integrals
+are not written here because this model has no $T > 0$ branch to write them
+for; that is the \texttt{cfl} mode of \texttt{eos/alphabag}, whose document
+states them.
 
 \section{Parameters}
 \label{sec:parameters}
@@ -198,8 +201,8 @@ dataclass), never module-level constants:
 \toprule
 symbol & code & shipped value & meaning \\
 \midrule
-$\ms$      & \texttt{ms}    & $150$~MeV & strange current quark mass \\
-$\Delta$   & \texttt{Delta} & $80$~MeV  & CFL pairing gap, temperature independent here \\
+$\ms$      & \texttt{m\_s}   & $150$~MeV & strange current quark mass \\
+$\Delta_0$ & \texttt{Delta0} & $80$~MeV  & CFL pairing gap, temperature independent here \\
 $a_4$      & \texttt{a4}    & $0.7$     & pQCD factor, Eq.~\eqref{eq:a4}; $\as = 0.4712$ \\
 $B^{1/4}$  & \texttt{B4}    & $135$~MeV & bag constant; $B/\hc = 43.23$~MeV\,fm$^{-3}$ \\
 \bottomrule
@@ -207,6 +210,12 @@ $B^{1/4}$  & \texttt{B4}    & $135$~MeV & bag constant; $B/\hc = 43.23$~MeV\,fm$
 \end{center}
 
 \noindent
+The gap is written $\Delta$ in the equations above and $\Delta_0$ in this table
+for the same reason \texttt{eos/alphabag} does: $\Delta_0$ is the
+zero-temperature gap that is a parameter, $\Delta$ is its value at the
+temperature in hand, and here the two are equal because there is no
+$\Delta(T)$.
+
 The derived quantities $\as$ and $B = (B^{1/4})^4$ are properties of the
 dataclass, so they cannot drift from the numbers they are computed from.
 \texttt{Parameters.B} returns $B$ in $\mathrm{MeV^4}$ --- the same unit, for
@@ -273,6 +282,12 @@ term. The bag has cancelled out of Eq.~\eqref{eq:euler} --- its $+B/\hc$ in
 $\varepsilon$ against its $-B/\hc$ in $P$ --- which is the arithmetic
 statement of the fact that a constant vacuum pressure carries no charge and no
 entropy.
+
+There is no scalar density in this model and no identity
+$n_s = (\varepsilon - 3P)/m^*$ to state: the masses are parameters and there is
+no gap equation, so nothing plays the part $m^*$ plays in a mean-field model.
+The \texttt{n\_s} a point returns is the strange-quark number density, equal to
+$\nB$ by Eq.~\eqref{eq:locking}.
 
 The speed of sound follows from Eqs.~\eqref{eq:PAC} and \eqref{eq:eps} without
 any numerical differentiation,
@@ -631,11 +646,54 @@ field & symbol & from \\
 \end{center}
 
 \noindent
-$\texttt{eos\_response}$ adds $c_s^2$ from Eq.~\eqref{eq:cs2} in closed form.
-The heat capacities and the thermal indices of the CompOSE list are not
-defined at $T = 0$ and are not returned; the susceptibilities
-$\chi_{ab} = \partial n_a/\partial \mu_b$ are singular here, since
-Eq.~\eqref{eq:locking} leaves $n_C$ and $n_S$ with no potential to respond to.
+Unlike \texttt{eos.alphabag.CFLPoint}, this record carries no \texttt{Y\_e} and
+no \texttt{Y\_nu}: there is no lepton sector to report a fraction of.
+
+\section{The API surface}
+\label{sec:api}
+
+Three entry points, with the signatures every model in this repository carries:
+%
+\begin{verbatim}
+eos_point(par, mode="cfl", species, n_B=, T=0.0, SnB=, **conditions)
+eos_table(par, mode="cfl", species, axes=, rows=, progress=, verbose=)
+eos_response(par, mode="cfl", species, frozen="equilibrium", n_B=, T=0.0,
+             **conditions)
+\end{verbatim}
+%
+\texttt{par} comes first and is never optional. \texttt{eos\_point} returns a
+result whose \texttt{.ok} must be tested before \texttt{.point} is read; a
+request outside the phase --- a pressure below $-B$, an energy density below
+the bag --- comes back as a status, not an exception.
+
+\texttt{eos\_table} takes \texttt{axes=\{'nB': grid, 'T': [0.0]\}}, and the
+temperature axis may be omitted since $T = 0$ is the only value the model has.
+There is no warm start and no bisected continuation, and their absence is the
+physics rather than a gap: the density inverse is the closed form
+Eq.~\eqref{eq:cardano}, so no point needs its neighbour and the grid is
+evaluated by array arithmetic. Nor is there a \texttt{skip\_errors} flag: a
+request outside the phase is a property of the target, not of a solve that
+might have gone better from a different start. The \texttt{progress} callback
+is invoked once per completed line --- there is one --- with the dictionary
+every table builder in this repository reports,
+\texttt{\{mode, line, n\_lines, temp\_key, temp, fracs, n\_solved,
+n\_requested, elapsed\_s\}}, and \texttt{verbose=True} installs the built-in
+printer.
+
+\texttt{eos\_response} implements one freeze,
+\texttt{frozen="equilibrium"}, which is the only conditioning this phase
+admits: flavour locking holds the composition at every density, so ``what is
+held fixed while the derivative is taken'' has one answer and the named freezes
+of the other models (\texttt{fast}, \texttt{slow}) would expand to the same
+set. It returns \texttt{\{'cs2\_isothermal': $c_s^2$\}} from
+Eq.~\eqref{eq:cs2}, differentiated analytically rather than by a stencil. At
+$T = 0$ the isothermal and adiabatic sound speeds coincide; the returned name
+says which convention the number was computed under rather than leaving it to
+the arguments. The heat capacities $C_V$ and $C_P$, the thermal index and the
+adiabatic index are not defined at $T = 0$ and are not returned. The
+susceptibilities $\chi_{ab} = \partial n_a/\partial \mu_b$ are singular here,
+Eq.~\eqref{eq:locking} leaving $n_C$ and $n_S$ with no potential to respond to,
+and are not returned either.
 
 \section{Numerics}
 \label{sec:numerics}
