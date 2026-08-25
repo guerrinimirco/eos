@@ -1056,6 +1056,14 @@ against this file, not against the earlier `pytest_before*.txt`.
   `set_yticks`/`set_yticklabels` workaround for the same glyph hazard can now
   collapse into one `fs.log_decades` call.
 
+- [Five verify causality checks absorb a NaN and report PASS](issues/63-verify-causality-nan-silent-pass.md):
+  five local `np.isfinite` guards, **not** a shared helper — every verify suite
+  declares its own `CheckResult` and is meant to be read standalone. Measured
+  first: **three** of the five absorbed the NaN and even printed a clean c_s^2
+  range over a list containing it; `did` and `njl` already failed, but by
+  accident of NaN comparison semantics and without naming the density. All five
+  now FAIL with the density. 121 checks across **eleven** suites still pass.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:

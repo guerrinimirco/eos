@@ -396,12 +396,26 @@ def _check_residual_gate(par, grid, T):
 
 
 def _check_causality(par, grid):
-    """0 <= c_s^2 <= 1 along the cold beta-equilibrium sequence."""
+    """0 <= c_s^2 <= 1 along the cold beta-equilibrium sequence.
+
+    A grid point the response cannot reach comes back as nan rather than an
+    exception (CLAUDE.md section 6), and nan loses every comparison -- so
+    `max` would propagate the incumbent and the point would be absorbed, the
+    check passing over a grid it never evaluated. It is failed explicitly
+    instead, naming the density: a check that cannot fail is not a check.
+    That guard also makes the min/max in the message below safe, since no
+    non-finite value can reach `values`.
+    """
     worst = 0.0
     values = []
     for n_B in grid:
         cs2 = eos_response(par, "beta_eq_neutrinoless", n_B=n_B,
                            T=0.0)["cs2_eq"]
+        if not np.isfinite(cs2):
+            return CheckResult("causality", False, float("inf"),
+                               f"c_s^2 is not finite at n_B = {n_B:.3f} "
+                               f"fm^-3: the response did not converge there, "
+                               f"so this grid was not evaluated")
         values.append(cs2)
         worst = max(worst, max(0.0 - cs2, cs2 - 1.0, 0.0))
     return CheckResult("causality", worst == 0.0, worst,

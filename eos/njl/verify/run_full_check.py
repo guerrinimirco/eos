@@ -560,8 +560,20 @@ def check_sound_speed(par, tol=0.05):
     `eos.njl.couplings` carries the density-dependent forms.
     """
     flags = SpeciesFlags(csc=False)
+    densities = (1.5, 2.0)
     values = [eos_response(par, "beta_eq_neutrinoless", flags, n_B=n,
-                           T=0.0)["cs2_isothermal"] for n in (1.5, 2.0)]
+                           T=0.0)["cs2_isothermal"] for n in densities]
+    bad = [n for n, v in zip(densities, values) if not np.isfinite(v)]
+    if bad:
+        # A density the response cannot reach returns nan (CLAUDE.md section
+        # 6), and every comparison below is False against one -- which fails
+        # the check for the wrong reason and reports the nan instead of the
+        # density. Fail it here, with the address.
+        return CheckResult(
+            "sound speed", False, float("inf"),
+            f"c_s^2 is not finite at n_B = "
+            f"{', '.join(f'{n:.1f}' for n in bad)} fm^-3: the response did "
+            f"not converge there, so this sequence was not evaluated")
     passed = all(0.0 <= v <= 1.0 for v in values) and values[1] > values[0]
     return CheckResult("sound speed", passed, max(values),
                        f"c_s^2 = {values[0]:.4f}, {values[-1]:.4f} "

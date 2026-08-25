@@ -388,6 +388,17 @@ def check_causality(par, tol=0.0):
                                 n_B=float(n_B), T=0.0)
         cs2.append(response["cs2_isothermal"])
     cs2 = np.array(cs2)
+    if not np.all(np.isfinite(cs2)):
+        # nan loses every comparison, so it would reach the report as a nan
+        # `violation` and a nan peak rather than as the density that produced
+        # it. A grid point the response cannot reach is a failure with an
+        # address (CLAUDE.md sections 4 and 6).
+        bad = densities[~np.isfinite(cs2)]
+        return CheckResult(
+            "causality", False, float("inf"),
+            f"c_s^2 is not finite at n_B = "
+            f"{', '.join(f'{n:.2f}' for n in bad)} fm^-3: the response did "
+            f"not converge there, so this grid was not evaluated")
     violation = max(np.max(-cs2), np.max(cs2 - 1.0), 0.0)
     peak = float(cs2.max())
     peak_at = float(densities[int(cs2.argmax())])
