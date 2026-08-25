@@ -981,6 +981,37 @@ against this file, not against the earlier `pytest_before*.txt`.
   species flags and the couplings, not the `n_B <= 0.2` domain the ticket
   guessed at.
 
+- [notebooks/hadronic_eos — the six figure families and the TOV pass](issues/13-hadronic-figures.md):
+  **all six shipped and executing** (`77c2976`). The whole notebook — sections 1
+  to 7 — runs with **0 error outputs**, 56 cells / 30 code cells, ~45 s, verified
+  in an isolated `git archive HEAD` copy; 327 collected / 327 passed on
+  `test/general` + `test/test_imports.py` there, python.org 3.14.2 /
+  matplotlib 3.10.9. Twelve files in `output/hadronic/`.
+  **The panels ARE the sector selection** — one panel per entry of `FIG_SECTORS`,
+  all four hyperon/Delta combinations exercised, two shipped selected — and the
+  sector carries the parameter set it needs, which section 5 had already
+  established it must. §8's gate differences the delivered table before
+  integration and returns a status; all seven (model, sector) tables PASS, so
+  nothing had to be held back and nothing was repaired. M_max 1.99–2.42 M_sun.
+  `truncate_to_stable_branch` is **not** used: it re-orders to six columns and
+  drops `Lambda`, so the notebook slices at `find_mmax_precise`'s index instead.
+  **One library fix was forced** (`dfe9695`): every negative decade on every log
+  axis in the house style rendered as a hollow box — matplotlib emits log tick
+  labels as `$\mathdefault{...}$`, mathtext turns a hyphen into U+2212, and it
+  resolves `\mathdefault` through CMU Serif, which has no U+2212 glyph.
+  `mathtext.fallback`, `mathtext.default`, `mathtext.fontset` and a
+  `font.family` fallback list all fail to reach that path; ordinary mathtext
+  renders, so `figure_style.log_decades` was added beside the existing
+  protection. §10 forbids rcParams in a notebook, so the single home was the only
+  lawful place.
+  **One real unrecorded gap**: `zl` and `dd2` return the sound speed as
+  `cs2_eq` — a name for the FREEZE — where `sfho` and `did` return
+  `cs2_isothermal`. At T = 0 it is the same number; at T > 0 `cs2_eq` is exactly
+  the bare name §5 forbids. Not fixed: a public return-key rename across two
+  models.
+  The `table_path` relative-root bug is closed for this notebook at all four
+  write sites; the isolated run created no `notebooks/output/`.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
