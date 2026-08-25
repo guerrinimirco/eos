@@ -30,7 +30,8 @@ programming error a sampler would otherwise re-make a million times.
 """
 from dataclasses import dataclass
 
-from eos.general.tabulate import temperature_at_entropy
+from eos.general.tabulate import (temperature_at_entropy,
+                                  unconverged_response)
 from eos.njl.solver import EoSPoint, MODE_FRACTIONS, solve
 from eos.njl.species import SpeciesFlags
 from eos.njl.table import TableSpec, build_table
@@ -106,7 +107,13 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
             p = solve(mode, n_B, temp, par, species, x0, patterns=patterns,
                       **conditions)
             return p.s_total / p.n_B if p.n_B else 0.0
-        T = temperature_at_entropy(entropy_at, SnB)
+        try:
+            T = temperature_at_entropy(entropy_at, SnB)
+        except (RuntimeError, ValueError) as err:
+            # An entropy target the model cannot reach is a state that does
+            # not exist, not a caller error: CLAUDE.md section 6 wants it
+            # scored and stepped over, never raised.
+            return PointResult(False, str(err))
 
     point = solve(mode, n_B, T, par, species, x0, patterns=patterns,
                   **conditions)
@@ -170,6 +177,11 @@ def eos_response(par, mode="beta_eq_neutrinoless", species=None,
     bare `cs2` whose meaning would depend on the arguments (CLAUDE.md section
     5). Pass `patterns=('2SC',)` to differentiate within one pattern instead
     of across the enumeration.
+
+    Every result also carries `converged` and `reason`. A stencil point the
+    solver cannot reach is NOT an exception: the same dict comes back with
+    converged=False and nan in every quantity, so a sampler can score the
+    point and move on (CLAUDE.md section 6).
     """
     from eos.njl import responses as _fd
 
@@ -184,17 +196,26 @@ def eos_response(par, mode="beta_eq_neutrinoless", species=None,
             f"(see docs/DEFERRED.md)")
 
     kwargs = dict(patterns=patterns, **conditions)
-    out = {"cs2_isothermal": _fd.sound_speed_isothermal(
-        par, species, mode, n_B, T=T, rel_dn=rel_dn, **kwargs)}
+    names = ("cs2_isothermal", "cs2_adiabatic")
     if T > 0.0:
-        out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(
-            par, species, mode, n_B, T=T, dT=dT, rel_dn=rel_dn, **kwargs)
-        out["C_V"] = _fd.heat_capacity_V(par, species, mode, n_B, T, dT=dT,
-                                         **kwargs)
-        out["C_P"] = _fd.heat_capacity_P(par, species, mode, n_B, T, dT=dT,
-                                         rel_dn=rel_dn, **kwargs)
-        out["Gamma_th"] = _fd.thermal_index(par, species, mode, n_B, T,
-                                            **kwargs)
-    else:
-        out["cs2_adiabatic"] = out["cs2_isothermal"]
+        names += ("C_V", "C_P", "Gamma_th")
+    try:
+        out = {"cs2_isothermal": _fd.sound_speed_isothermal(
+            par, species, mode, n_B, T=T, rel_dn=rel_dn, **kwargs)}
+        if T > 0.0:
+            out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(
+                par, species, mode, n_B, T=T, dT=dT, rel_dn=rel_dn, **kwargs)
+            out["C_V"] = _fd.heat_capacity_V(par, species, mode, n_B, T, dT=dT,
+                                             **kwargs)
+            out["C_P"] = _fd.heat_capacity_P(par, species, mode, n_B, T, dT=dT,
+                                             rel_dn=rel_dn, **kwargs)
+            out["Gamma_th"] = _fd.thermal_index(par, species, mode, n_B, T,
+                                                **kwargs)
+        else:
+            out["cs2_adiabatic"] = out["cs2_isothermal"]
+    except RuntimeError as err:
+        return unconverged_response(str(err), names)
+
+    out["converged"] = True
+    out["reason"] = "converged"
     return out

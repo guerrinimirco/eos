@@ -44,7 +44,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from eos.general.tabulate import temperature_at_entropy
+from eos.general.tabulate import (temperature_at_entropy,
+                                  unconverged_response)
 from eos.dd2.species import SpeciesFlags
 from eos.mixed.responses import sound_speed_frozen
 from eos.mixed.solver import mixed_slots
@@ -324,8 +325,14 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     a composite engine which regime the point is in decides which numbers in
     the dict mean anything.
 
-    Returns a dict of the computed quantities; raises NotImplementedError,
-    naming the gap, for freezes not yet wired.
+    Returns a dict of the computed quantities, plus `converged` and `reason`.
+    A point the engine cannot solve -- the central one or either stencil
+    neighbour -- is NOT an exception: the same dict comes back with
+    converged=False and nan in every quantity, so a sampler can score the
+    point and move on (CLAUDE.md section 6). Note that a nan `cs2_eq` at
+    converged=True is a different statement: it means the point is a pure
+    phase, where the equilibrium response is that phase's own.
+    Raises NotImplementedError, naming the gap, for freezes not yet wired.
     """
     if frozen not in RESPONSE_FREEZES:
         raise NotImplementedError(
@@ -339,11 +346,21 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     spec = make_charge_spec(mode, fracs, leptons=leptons)
     slots = mixed_slots(spec, float(eta), species)
 
+    if frozen == "chi":
+        names = ("chi", "cs2_frozen")
+    elif T > 0.0:
+        names = ("chi", "cs2_eq", "C_V")
+    else:
+        names = ("chi", "cs2_eq")
+
     centre = eos_point(par, mode, species, n_B=n_B, T=T, eta=eta,
                        vmit_params=vmit_params, leptons=leptons, **conditions)
     if not centre.ok:
-        raise RuntimeError(f"eos_response could not solve its central point "
-                           f"(n_B={n_B}, T={T}, eta={eta}): {centre.message}")
+        out = unconverged_response(
+            f"eos_response could not solve its central point "
+            f"(n_B={n_B}, T={T}, eta={eta}): {centre.message}", names)
+        out["phase"] = None      # not a quantity: which regime is unknown
+        return out
 
     point = centre.point
     out = {"chi": point.chi, "phase": point.phase}
@@ -352,6 +369,8 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
         out["cs2_frozen"] = sound_speed_frozen(
             par, species, point, vmit_params=vmit_params, rel_dn=rel_dn,
             leptons=leptons, phases=phases, muons=muons)
+        out["converged"] = True
+        out["reason"] = "converged"
         return out
 
     if not point.in_mixed_phase:
@@ -360,6 +379,9 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
         out["cs2_eq"] = np.nan
         if T > 0.0:
             out["C_V"] = np.nan
+        out["converged"] = True
+        out["reason"] = ("outside the coexistence window the equilibrium "
+                         "response is the pure phase's own")
         return out
 
     # The centre point's converged potentials seed both stencil points, which
@@ -377,12 +399,22 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
         return result.point
 
     dn = rel_dn * n_B
-    lo, hi = state(n_B - dn, T), state(n_B + dn, T)
-    out["cs2_eq"] = ((hi.P - lo.P) / (hi.eps - lo.eps)
-                     if hi.eps != lo.eps else np.nan)
+    try:
+        lo, hi = state(n_B - dn, T), state(n_B + dn, T)
+        out["cs2_eq"] = ((hi.P - lo.P) / (hi.eps - lo.eps)
+                         if hi.eps != lo.eps else np.nan)
 
-    if T > 0.0:
-        dT = rel_dn * T
-        cold, hot = state(n_B, T - dT), state(n_B, T + dT)
-        out["C_V"] = T * (hot.s - cold.s) / (2.0 * dT) / n_B
+        if T > 0.0:
+            dT = rel_dn * T
+            cold, hot = state(n_B, T - dT), state(n_B, T + dT)
+            out["C_V"] = T * (hot.s - cold.s) / (2.0 * dT) / n_B
+    except RuntimeError as err:
+        # chi and the phase came from the centre point, which converged, so
+        # they are kept: only the derivatives are unreachable.
+        failed = unconverged_response(str(err), names)
+        failed["chi"], failed["phase"] = point.chi, point.phase
+        return failed
+
+    out["converged"] = True
+    out["reason"] = "converged"
     return out

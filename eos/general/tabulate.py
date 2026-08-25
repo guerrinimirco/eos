@@ -116,6 +116,25 @@ def accepted(point):
     return point is not None and getattr(point, "converged", True) is not False
 
 
+def unconverged_response(reason, quantities):
+    """The dict `eos_response` returns when it could not reach the state.
+
+    CLAUDE.md section 6: non-convergence is a return value at every public
+    boundary, never an exception. The shape returned here is the SAME one the
+    converged path returns -- `quantities` are the names that path would have
+    carried at this T and freeze -- with nan in every one of them, so a caller
+    writing `result["cs2_adiabatic"]` into an array column needs no second code
+    path and the failure propagates to a plot honestly rather than as a gap the
+    reader has to know about. `reason` carries the message the internal layer
+    raised with; internal layers may still raise, and this is where that raise
+    is turned into a status.
+    """
+    out = {name: np.nan for name in quantities}
+    out["converged"] = False
+    out["reason"] = reason
+    return out
+
+
 def print_progress(info):
     """The built-in one-line printer, installed by `verbose=True`."""
     fracs = "".join(f" {k}={v:g}" for k, v in info["fracs"].items())

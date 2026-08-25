@@ -30,7 +30,8 @@ times in silence.
 """
 from dataclasses import dataclass
 
-from eos.general.tabulate import temperature_at_entropy
+from eos.general.tabulate import (temperature_at_entropy,
+                                  unconverged_response)
 from eos.alphabag.solver import MODE_FRACTIONS
 from eos.alphabag.species import SpeciesFlags
 from eos.alphabag.table import TableSpec, build_table, solve_at
@@ -187,8 +188,11 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
         Jacobian in this repository. C_V is returned only at T > 0, where it
         is defined.
 
-    Returns a dict of the computed quantities; raises NotImplementedError,
-    naming the gap, for freezes not yet wired.
+    Returns a dict of the computed quantities, plus `converged` and `reason`.
+    A stencil point the equilibrium solver cannot reach is NOT an exception:
+    the same dict comes back with converged=False and nan in every quantity,
+    so a sampler can score the point and move on (CLAUDE.md section 6).
+    Raises NotImplementedError, naming the gap, for freezes not yet wired.
     """
     if frozen != "equilibrium":
         raise NotImplementedError(
@@ -210,11 +214,18 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
         return result.point
 
     dn = rel_step * n_B
-    lo, hi = state(n_B - dn, T), state(n_B + dn, T)
-    out = {"cs2_eq": (hi.P_total - lo.P_total) / (hi.e_total - lo.e_total)}
+    try:
+        lo, hi = state(n_B - dn, T), state(n_B + dn, T)
+        out = {"cs2_eq": (hi.P_total - lo.P_total) / (hi.e_total - lo.e_total)}
 
-    if T > 0.0:
-        dT = rel_step * T
-        cold, hot = state(n_B, T - dT), state(n_B, T + dT)
-        out["C_V"] = T * (hot.s_total - cold.s_total) / (2.0 * dT) / n_B
+        if T > 0.0:
+            dT = rel_step * T
+            cold, hot = state(n_B, T - dT), state(n_B, T + dT)
+            out["C_V"] = T * (hot.s_total - cold.s_total) / (2.0 * dT) / n_B
+    except RuntimeError as err:
+        return unconverged_response(
+            str(err), ("cs2_eq", "C_V") if T > 0.0 else ("cs2_eq",))
+
+    out["converged"] = True
+    out["reason"] = "converged"
     return out

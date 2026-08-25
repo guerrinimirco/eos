@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from eos.did.solver import EoSPoint, MODE_FRACTIONS, mode_spec, solve_mode
 from eos.did.species import SpeciesFlags
 from eos.did.table import TableSpec, build_table
+from eos.general.tabulate import unconverged_response
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,11 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     Both sound speeds are named for the thermal variable they hold, never as
     a bare `cs2` whose meaning would depend on the arguments (CLAUDE.md
     section 5).
+
+    Every result also carries `converged` and `reason`. A stencil point the
+    solver cannot reach is NOT an exception: the same dict comes back with
+    converged=False and nan in every quantity, so a sampler can score the
+    point and move on (CLAUDE.md section 6).
     """
     from eos.did import responses as _fd
 
@@ -153,15 +159,24 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
             f"fractions carried through the solve as constraints "
             f"(see docs/DEFERRED.md)")
     spec = mode_spec(mode, conditions)
-    out = {"cs2_isothermal": _fd.sound_speed_isothermal(
-        par, n_B, species, spec, T=T, rel_dn=rel_dn)}
+    names = ("cs2_isothermal", "cs2_adiabatic")
     if T > 0.0:
-        out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(
-            par, n_B, species, spec, T=T, dT=dT, rel_dn=rel_dn)
-        out["C_V"] = _fd.heat_capacity_V(par, n_B, species, spec, T, dT=dT)
-        out["C_P"] = _fd.heat_capacity_P(par, n_B, species, spec, T, dT=dT,
-                                         rel_dn=rel_dn)
-        out["Gamma_th"] = _fd.thermal_index(par, n_B, species, spec, T)
-    else:
-        out["cs2_adiabatic"] = out["cs2_isothermal"]
+        names += ("C_V", "C_P", "Gamma_th")
+    try:
+        out = {"cs2_isothermal": _fd.sound_speed_isothermal(
+            par, n_B, species, spec, T=T, rel_dn=rel_dn)}
+        if T > 0.0:
+            out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(
+                par, n_B, species, spec, T=T, dT=dT, rel_dn=rel_dn)
+            out["C_V"] = _fd.heat_capacity_V(par, n_B, species, spec, T, dT=dT)
+            out["C_P"] = _fd.heat_capacity_P(par, n_B, species, spec, T, dT=dT,
+                                             rel_dn=rel_dn)
+            out["Gamma_th"] = _fd.thermal_index(par, n_B, species, spec, T)
+        else:
+            out["cs2_adiabatic"] = out["cs2_isothermal"]
+    except RuntimeError as err:
+        return unconverged_response(str(err), names)
+
+    out["converged"] = True
+    out["reason"] = "converged"
     return out

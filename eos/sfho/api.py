@@ -26,6 +26,7 @@ References:
 """
 from dataclasses import dataclass
 
+from eos.general.tabulate import unconverged_response
 from eos.sfho.solver import EoSPoint, solve_mode
 from eos.sfho.table import MODES, TableSpec, build_table, mode_spec
 
@@ -176,8 +177,11 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
     Both sound speeds are named for the thermal condition they are taken at,
     because at T > 0 they are different numbers (CLAUDE.md section 5).
 
-    Returns a dict; raises NotImplementedError, naming the gap, for freezes
-    not yet wired.
+    Returns a dict of the computed quantities, plus `converged` and `reason`.
+    A stencil point the equilibrium solver cannot reach is NOT an exception:
+    the same dict comes back with converged=False and nan in every quantity,
+    so a sampler can score the point and move on (CLAUDE.md section 6).
+    Raises NotImplementedError, naming the gap, for freezes not yet wired.
     """
     if frozen != "equilibrium":
         raise NotImplementedError(
@@ -191,21 +195,34 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
     spec = mode_spec(mode, fracs)
 
     from eos.sfho import responses as _fd
-    out = {"cs2_isothermal": _fd.sound_speed_isothermal(par, n_B, species,
-                                                        spec, T=T)}
-    if T > 0.0:
-        out["C_V"] = _fd.heat_capacity_V(par, n_B, species, spec, T)
-        out["C_P"] = _fd.heat_capacity_P(par, n_B, species, spec, T)
-        out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(par, n_B, species,
-                                                         spec, T)
-        out["Gamma_th"] = _fd.thermal_index(par, n_B, species, spec, T)
     try:
         from eos.sfho.backends.responses_jac import susceptibilities
     except ImportError:
-        # `backends/` is optional (CLAUDE.md section 5). Everything above is
+        # `backends/` is optional (CLAUDE.md section 5). Everything else is
         # unchanged without it; only chi_ab has no reference flavour to fall
-        # back to.
-        pass
-    else:
-        out["chi"] = susceptibilities(par, n_B, species, T=T, spec=spec)
+        # back to, so it is absent from the result either way.
+        susceptibilities = None
+
+    names = ("cs2_isothermal",)
+    if T > 0.0:
+        names += ("C_V", "C_P", "cs2_adiabatic", "Gamma_th")
+    if susceptibilities is not None:
+        names += ("chi",)
+
+    try:
+        out = {"cs2_isothermal": _fd.sound_speed_isothermal(par, n_B, species,
+                                                            spec, T=T)}
+        if T > 0.0:
+            out["C_V"] = _fd.heat_capacity_V(par, n_B, species, spec, T)
+            out["C_P"] = _fd.heat_capacity_P(par, n_B, species, spec, T)
+            out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(par, n_B, species,
+                                                             spec, T)
+            out["Gamma_th"] = _fd.thermal_index(par, n_B, species, spec, T)
+        if susceptibilities is not None:
+            out["chi"] = susceptibilities(par, n_B, species, T=T, spec=spec)
+    except RuntimeError as err:
+        return unconverged_response(str(err), names)
+
+    out["converged"] = True
+    out["reason"] = "converged"
     return out

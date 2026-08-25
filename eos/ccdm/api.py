@@ -41,7 +41,8 @@ from dataclasses import dataclass
 from eos.ccdm.solver import EoSPoint, MODE_FRACTIONS, solve
 from eos.ccdm.species import SpeciesFlags
 from eos.ccdm.table import TableSpec, build_table
-from eos.general.tabulate import temperature_at_entropy
+from eos.general.tabulate import (temperature_at_entropy,
+                                  unconverged_response)
 
 
 @dataclass(frozen=True)
@@ -119,7 +120,13 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
             p = solve(mode, n_B, temp, par, species, x0, branches=branches,
                       patterns=patterns, **conditions)
             return p.s_total / p.n_B if p.n_B else 0.0
-        T = temperature_at_entropy(entropy_at, SnB)
+        try:
+            T = temperature_at_entropy(entropy_at, SnB)
+        except (RuntimeError, ValueError) as err:
+            # An entropy target the model cannot reach is a state that does
+            # not exist, not a caller error: CLAUDE.md section 6 wants it
+            # scored and stepped over, never raised.
+            return PointResult(False, str(err))
 
     point = solve(mode, n_B, T, par, species, x0, branches=branches,
                   patterns=patterns, **conditions)
@@ -193,6 +200,11 @@ def eos_response(par, mode="beta_eq_neutrinoless", species=None,
     5). `branch_changed` is returned rather than left to the caller to
     suspect: this model has a first-order transition, and there is no way to
     see from the number alone that a stencil crossed it.
+
+    Every result also carries `converged` and `reason`. A stencil point the
+    solver cannot reach is NOT an exception: the same dict comes back with
+    converged=False and nan in every quantity, so a sampler can score the
+    point and move on (CLAUDE.md section 6).
     """
     from eos.ccdm import responses as _fd
 
@@ -207,19 +219,29 @@ def eos_response(par, mode="beta_eq_neutrinoless", species=None,
             f"equations (see docs/DEFERRED.md)")
 
     kwargs = dict(branches=branches, patterns=patterns, **conditions)
-    out = {"cs2_isothermal": _fd.sound_speed_isothermal(
-        par, species, mode, n_B, T=T, rel_dn=rel_dn, **kwargs)}
-    out["branch_changed"] = _fd.branch_changed(par, species, mode, n_B, T=T,
-                                               rel_dn=rel_dn, **kwargs)
+    names = ("cs2_isothermal", "cs2_adiabatic", "branch_changed")
     if T > 0.0:
-        out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(
-            par, species, mode, n_B, T=T, dT=dT, rel_dn=rel_dn, **kwargs)
-        out["C_V"] = _fd.heat_capacity_V(par, species, mode, n_B, T, dT=dT,
-                                         **kwargs)
-        out["C_P"] = _fd.heat_capacity_P(par, species, mode, n_B, T, dT=dT,
-                                         rel_dn=rel_dn, **kwargs)
-        out["Gamma_th"] = _fd.thermal_index(par, species, mode, n_B, T,
-                                            **kwargs)
-    else:
-        out["cs2_adiabatic"] = out["cs2_isothermal"]
+        names += ("C_V", "C_P", "Gamma_th")
+    try:
+        out = {"cs2_isothermal": _fd.sound_speed_isothermal(
+            par, species, mode, n_B, T=T, rel_dn=rel_dn, **kwargs)}
+        out["branch_changed"] = _fd.branch_changed(par, species, mode, n_B,
+                                                   T=T, rel_dn=rel_dn,
+                                                   **kwargs)
+        if T > 0.0:
+            out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(
+                par, species, mode, n_B, T=T, dT=dT, rel_dn=rel_dn, **kwargs)
+            out["C_V"] = _fd.heat_capacity_V(par, species, mode, n_B, T, dT=dT,
+                                             **kwargs)
+            out["C_P"] = _fd.heat_capacity_P(par, species, mode, n_B, T, dT=dT,
+                                             rel_dn=rel_dn, **kwargs)
+            out["Gamma_th"] = _fd.thermal_index(par, species, mode, n_B, T,
+                                                **kwargs)
+        else:
+            out["cs2_adiabatic"] = out["cs2_isothermal"]
+    except RuntimeError as err:
+        return unconverged_response(str(err), names)
+
+    out["converged"] = True
+    out["reason"] = "converged"
     return out

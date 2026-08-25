@@ -34,6 +34,7 @@ from eos.abpr.solver import (
     response_at_mu, solve_cfl,
 )
 from eos.abpr.species import SpeciesFlags
+from eos.general.tabulate import unconverged_response
 
 
 @dataclass(frozen=True)
@@ -210,7 +211,7 @@ def eos_response(par, mode="cfl", species=None, frozen="equilibrium",
         freezes of the other models (`fast`, `slow`) would expand to the same
         set.
 
-    Returns {'cs2_isothermal': c_s^2} from
+    Returns {'cs2_isothermal': c_s^2, 'converged': True, 'reason': ...} from
     `eos.abpr.thermodynamics.sound_speed_squared`, differentiated
     analytically rather than by a stencil. At T = 0 the isothermal and
     adiabatic sound speeds coincide; the name says which convention the number
@@ -220,6 +221,10 @@ def eos_response(par, mode="cfl", species=None, frozen="equilibrium",
     are not defined at T = 0 and are not returned. The susceptibilities
     chi_ab = dn_a/dmu_b are singular here, flavour locking leaving n_C and n_S
     with no potential to respond to, and are not returned either.
+
+    A density the n_B inversion cannot reach is NOT an exception: the same
+    dict comes back with converged=False and nan for the sound speed, so a
+    sampler can score the point and move on (CLAUDE.md section 6).
     """
     if frozen != "equilibrium":
         raise NotImplementedError(
@@ -231,5 +236,10 @@ def eos_response(par, mode="cfl", species=None, frozen="equilibrium",
         raise ValueError("n_B is required")
     mu, converged = mu_from_nB(n_B, par)
     if not converged:
-        raise RuntimeError(f"eos_response could not invert n_B = {n_B}")
-    return response_at_mu(mu, par)
+        return unconverged_response(
+            f"eos_response could not invert n_B = {n_B} fm^-3 to a quark "
+            f"chemical potential", ("cs2_isothermal",))
+    out = response_at_mu(mu, par)
+    out["converged"] = True
+    out["reason"] = "converged"
+    return out
