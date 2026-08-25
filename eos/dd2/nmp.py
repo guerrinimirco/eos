@@ -36,11 +36,9 @@ The imposed set is {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}:
      inputs.
 
 Why c_omega is the pinned coefficient: Q_sat is carried almost entirely by
-the omega shape. Pinning c_omega anchors it — on DD2's own NMPs the round
-trip returns the published couplings unchanged and predicts Q_sat within the
-0.1 MeV stencil noise — while pinning a sigma-side coefficient lets the
-cross-constraint drag the omega shape and moves the predicted Q_sat by
-20-30 MeV.
+the omega shape. Pinning c_omega anchors it, while pinning a sigma-side
+coefficient lets the cross-constraint drag the omega shape and moves the
+predicted Q_sat by 20-30 MeV.
 
 Imposing Q_sat instead of the pin remains available (impose_Q_sat=True): the
 isoscalar system is then the 6x6 {P, E_sat, m*/m, K_sat, Q_sat, cross} over
@@ -48,12 +46,32 @@ all six couplings. When the caller does not say, the presence of "Q_sat" in
 the target dict decides — so existing callers that always supplied it keep
 the closure they were written against.
 
+The published couplings are NOT a root of the 5x5 closure
+------------------------------------------------------
 The isoscalar cross-constraint is DD2's own, and the published table obeys it
-to 2.2e-3, not exactly. The 5x5 residual therefore has a floor of that order
-at DD2-like targets (the physics rows hold the couplings at the published
-values and the cross row reports the table's own violation); ISO_GATE covers
-it. A round trip reproduces the imposed NMPs exactly; shape coefficients to
-~2e-3 in the 6x6 path.
+to 2.200718e-3, not exactly. Four of the five 5x5 rows vanish at the published
+couplings and the cross row does not, so the published point is a stationary
+point of the residual norm rather than a zero of it, and driving the cross row
+to zero costs a move in the sigma shape: b_sigma -0.025, c_sigma -0.027. Those
+are the coefficients Q_sat rides on, so the converged 5x5 solution given DD2's
+own NMPs predicts Q_sat = 117.5, not the 169.0 the forward map returns for the
+published table.
+
+That is the closure answering honestly, not a solver defect, and it is the
+price of closing the isoscalar sector with a constraint the fitted table only
+approximately obeys. Do NOT read a 5x5 round trip as a test that recovers
+published couplings: no seed recovers them, because they are not a root. The
+6x6 path (impose_Q_sat=True) does reproduce the imposed NMPs, its shape
+coefficients to ~2e-3.
+
+A caveat on what "converged" means here. Whether a Powell hybrid leaves the
+published seed at all is a property of the SciPy version: through SciPy 1.13
+`root(..., method="hybr")` returns the seed unchanged from this starting
+point, reporting the 2.2e-3 cross-row violation as its residual, while
+SciPy >= 1.17 drives the same system to 6.7e-11. ISO_GATE (2e-2) admits both,
+so it cannot by itself distinguish a converged solve from one that never
+moved; compare the recovered couplings against the seed when that distinction
+matters.
 
 What limits which NMPs invert: the seed, not the physics
 --------------------------------------------------------
@@ -168,12 +186,15 @@ def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
 # =============================================================================
 # INVERSE:  nuclear-matter parameters -> couplings
 # =============================================================================
-#: Gate on the isoscalar residual. Two floors meet here, both below it: the
+#: Gate on the isoscalar residual. Two scales meet here, both below it: the
 #: finite-difference third derivative behind Q_sat in the 6x6 path (~0.1 MeV,
 #: scaled by 1e-2 in the residual), and the published table's own 2.2e-3
 #: violation of the cross-constraint in the 5x5 path. A tighter gate would
 #: reject converged solutions for reasons that have nothing to do with
-#: whether the NMPs are representable.
+#: whether the NMPs are representable. Note the cost of the second scale: at
+#: 2e-2 the gate also admits a solve that stalled at the published seed
+#: without reducing the cross row, so ok=True is a statement about the
+#: residual and not a promise that the solver moved (module docstring).
 ISO_GATE = 2e-2
 
 #: Perturbed restarts attempted when the first isoscalar solve misses the
