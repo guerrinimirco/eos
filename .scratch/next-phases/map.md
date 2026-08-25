@@ -765,7 +765,12 @@ In scope, not yet sharp enough to ticket:
   `test/baseline/` says so loudly. A cheap real mechanism, unpriced: have the
   baseline generator stamp a fingerprint — sorted key names hashed, plus the
   generating interpreter — into the audit file's header, so a listing carries its
-  own denominator. Whether that lives in the generator (gitignored, so it would
+  own denominator. **Two stamps, not one**: a hash over the key names alone would
+  flag ticket 56's change as a mismatch, correctly, but indistinguishably from a
+  moved number — and those need opposite responses, since dropping 34
+  undetermined potentials is a fix while a changed value is a defect. So the key
+  set and the values are fingerprinted separately or the stamp answers the wrong
+  question. Whether that lives in the generator (gitignored, so it would
   be lost again) or in `eos/` is the same question as the entry below.
 
 - **Several real fixes now live outside version control.** `.gitignore:75`
@@ -775,6 +780,11 @@ In scope, not yet sharp enough to ticket:
   reintroduces all three bugs. Whether some of that logic
   belongs in `eos/` where it would be tracked, or whether the layout rule should
   bend, is worth settling during [ticket 21](issues/21-phase5-structure.md).
+  **Ticket 56 escalates this from lost logic to lost DATA**: besides the gate
+  fix, its four regenerated `.npz` files exist only in this working copy. Lose
+  the checkout and the absolute-vs-relative gate bug returns *and* brings the 34
+  keys back with it — and `test/baseline/` is §12 ground truth, so what is
+  unrecoverable here is a golden reference, not a convenience.
 - **Scaling the strangeness residual.** Now has a second, sharper witness:
   [ticket 56](issues/56-baseline-empty-sector-gate.md) measured sfho's three
   `fixed_YC_YS` rows closing the same residual to 2.49e-09, 3.92e-16 and
