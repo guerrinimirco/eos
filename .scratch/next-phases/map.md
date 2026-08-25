@@ -834,6 +834,19 @@ In scope, not yet sharp enough to ticket:
   That is solver conditioning, not a baseline question, and it is no longer
   urgent now the suite is green. What scaling to use, and whether it touches
   `general/` or each solver, is unsharp.
+
+  **A grep-able signature for the failure, found by ticket 56 and free.** In the
+  cleared sfho failure, 13 quantities moved together with **Xi's absolute shift
+  exactly twice Lambda's** (3.734e-06 against 1.867e-06). That factor is not a
+  coincidence to be checked case by case — it is `S_i`. §2 sets S = +1 per s
+  quark, so S_Lambda = 1 and S_Xi = 2, and `mu_i = B_i mu_B + C_i mu_C + S_i
+  mu_S + ...` carries ONE undetermined `Delta mu_S` into every strange species
+  in exact proportion to its strangeness. So the ratio is the diagnostic:
+  **shifts in the strangeness ratios 1 : 2 mean an undetermined potential moved;
+  anything else means the physics moved**, and the two need opposite responses.
+  It generalises past sfho to any model with a strange sector, and past `mu_S`
+  to `mu_C` and `mu_B` by the same algebra — a `C_i`-proportional shift is the
+  `mu_e`-at-Y_C = 0 sibling named above, wearing the same fingerprint.
 - **Whether other tests silently degrade on missing data.** Ticket 39 fixed the
   two TOV helpers and generalised their guard to every `CRUST_FILES` name, but
   nothing has swept the rest of `test/` for the same pattern — an absent input
