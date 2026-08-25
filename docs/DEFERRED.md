@@ -325,8 +325,16 @@ own session where the baseline and `test_imports.py` are already being run:
               thermodynamics_nucleons.py -> thermodynamics.py, and species.py
               and api.py added. `ZLParams` is `Parameters` and
               `get_zl_default()` is `Parameters.default()` -- the first model
-              to take the section 13 name; sfho and vmit have since
-              followed, so every model's parameter dataclass is `Parameters`.
+              to take the section 13 name. Every one of the ten models has
+              since followed -- sfho and vmit first, dd2 last, where the class
+              was `Parametrization` until the dd2 rename took it -- so the
+              claim "every model's parameter dataclass is `Parameters`" is now
+              true of all ten and is checkable in one line:
+              `grep -n '^class Parameters' eos/*/parameters.py` returns ten
+              hits. What sfho still owes is the CONSTRUCTOR half, not the
+              class: its five published sets are still `get_sfho*` free
+              functions rather than `Parameters.default()` /
+              `Parameters.named()`.
               `compute_zl_thermo_from_mu` is `thermo_from_mu`,
               `compute_nucleon_thermo` is `kinetic_thermo`,
               `compute_V_interaction` / `compute_P_interaction` are
@@ -727,6 +735,126 @@ The gas sources none of the four field equations and adds no unknown to either
 vector being seeded, so both seeds now switch it off: a seed must not fail for
 a reason that has nothing to do with seeding.
 
+### astro/gmode still imports model internals, at four sites
+
+The last live breach of CLAUDE.md section 1's "`astro/` ... never imports model
+internals", and the only one left now that `eos/dd2/notebook_api.py` is gone.
+The four sites:
+
+    eos/astro/gmode/rates.py:85               from eos.dd2.solver import
+                                              solve_composition   (TOP-LEVEL)
+    eos/astro/gmode/sound_speeds.py:94        from eos.mixed.responses import
+                                              sound_speed_eq, sound_speed_frozen
+    eos/astro/gmode/sound_speeds.py:149       the same dd2 import,
+                                              function-local
+    eos/astro/gmode/verify/run_full_check.py:39-41
+                                              eos.dd2 Parameters/SpeciesFlags,
+                                              eos.dd2.responses, eos.dd2.solver
+
+`rates.py:85` is top-level, so `import eos.astro.gmode` pulls DD2 in whether or
+not the caller wants a DD2 background.
+
+**This is a gap being designed out, not an accepted breach.** The import exists
+for a physics reason: a composition g-mode needs d(composition)/dn_B along the
+equilibrium sequence, and no `EOSTable_for_TOV` carries it -- which is why the
+cheap answer, naming gmode as a second section 1 exception beside `eos/mixed`,
+was rejected: the astro half of the rule was tightened BECAUSE this ambiguity
+existed, and a carve-out would make gmode DD2-only by specification when the
+physics need is general. `EOSTable_for_TOV` is the shape the contract should
+copy -- it lives in `general/`, the layer both `astro/` and the models may
+import, so producing one is the model's side and consuming it is astro's.
+
+Open with it: whether the contract carries the composition derivative or a grid
+fine enough for gmode to differentiate itself; whether it also covers the two
+sound speeds taken from `eos.mixed.responses`, or whether `eos_response` is the
+surface for those; and whether section 1's `verify/` carve-out, written for the
+model-to-model half of the rule, extends to an astro suite reaching down into a
+model at all.
+
+### Eleven deferred imports are downward, where no cycle exists
+
+Function-local imports are how this repository breaks a genuine cycle -- section
+5's layer order makes `nmp.py` -> `solver.py` one, for instance. These eleven are
+not that: each imports a module BELOW it in the same package, where a top-level
+import would work. Style drift, cheap to fix, and recorded so the next reader
+does not mistake them for cycles that must stay deferred:
+
+    eos/sfho/nmp.py:66,67          solver.solve_fixed_yc, species.SpeciesFlags
+    eos/sfho/nmp.py:138            solver.solve_fixed_yc again
+    eos/did/nmp.py:162             solver.solve_beta_eq_neutrinoless
+    eos/sfho/thermodynamics.py:583 species.active_baryons
+    eos/njl/thermodynamics.py:479  species.pattern_seed
+    eos/ccdm/thermodynamics.py:557 species.branch_seed, species.pattern_seed
+    eos/sfho/api.py:193            responses          (as `_fd`)
+    eos/did/api.py:145             responses          (as `_fd`)
+    eos/njl/api.py:174             responses          (as `_fd`)
+    eos/ccdm/api.py:197            responses          (as `_fd`)
+
+The `api.py -> responses.py` shape is four of the eleven and is the same edge
+four times: section 5 puts `responses.py` below `api.py`, so it is a plain
+top-level import in every one of them. The `dd2` sibling this list was first
+written against no longer exists -- `eos/dd2/api.py` now defers only
+`backends/responses_jac` (`:166`) and `responses` (`:178`), both inside the
+branch that selects an analytic Jacobian, which is a deliberate optional-backend
+deferral rather than drift.
+
+### Three physics-bearing module constants have no override path
+
+CLAUDE.md section 6: model parameters are arguments, never module-level
+constants. These four numbers are, and each one moves a result:
+
+    eos/mixed/adapters.py:315   _CHIRAL_SPLIT = 50.0            MeV
+    eos/mixed/adapters.py:320   _DECONFINED_BARYON_FRACTION = 1.0e-4
+    eos/astro/tov/rns_backend.py:94-95
+                                RNS_RHO_SURFACE = 7.8           g/cm^3
+                                RNS_P_SURFACE = 1.01e8          dyn/cm^2
+    eos/zlvmit/hybrid_table_generator.py:46
+                                B4 = 165.0                      MeV
+
+Deferred rather than fixed, and for a reason that is the same in all three
+cases: each is a THRESHOLD whose change moves a classification, not a coupling
+an inference run varies. `_CHIRAL_SPLIT` and `_DECONFINED_BARYON_FRACTION`
+decide which phase LABEL a converged point is given (`adapters.py:331,335`), not
+what the point is; the two RNS surface values mirror hardwired numbers in the C
+source and changing them makes the backend disagree with the code it wraps; and
+`B4` is in `eos/zlvmit/`, which section 5 exempts wholesale. Promoting a
+threshold to an argument is worth doing when something needs to vary it, and
+nothing does yet.
+
+### sfho and zl parameter dataclasses are not frozen
+
+Section 6 asks for no global mutable state and permits read-only caches keyed by
+immutable parameters. Both dataclasses pickle, so multiprocessing and MPI work
+today; neither is hashable, so neither can key such a cache.
+
+`eos/zl/parameters.py:28` is the benign half -- eight `str`/`float` fields, so
+`@dataclass(frozen=True)` is a one-word change whenever anything wants it.
+
+`eos/sfho/parameters.py:69` is the reason this is deferred and not done.
+It carries `a_coeffs: np.ndarray` (`:152`), which is unhashable whatever the
+decorator says, and a `couplings_map: Dict[str, Dict[str, float]]` (`:160`)
+that is WRITTEN AFTER CONSTRUCTION by every published set --
+`:373,389,400,425,441,452,480`. Freezing it is therefore not a decorator change
+but a rewrite of five constructors into either `dataclasses.replace()` or a real
+`__init__` that takes the couplings. `eos/enjl` shows the target shape already:
+a frozen dataclass with a `_vacuum_cache` keyed on it
+(`enjl/thermodynamics.py:404-430`).
+
+### `output/public/` does not exist yet
+
+CLAUDE.md section 11 describes it as the existing tracked subfolder of an
+otherwise-gitignored `output/`. `.gitignore:36-38` reserves it correctly --
+`output/`, then `!output/public/` and `!output/public/**` -- but `ls output/`
+returns nine entries and none of them is `public/`. Nothing is broken: an
+un-ignore rule for a path that does not exist is inert.
+
+Not created here because an empty tracked folder is not a deliverable and git
+will not carry one. The `mkdir` belongs with the first table that deserves to be
+in it, which waits on the replacement notebooks: they produce tables under
+standardised names, and WHICH of those tables are worth publishing is a curation
+decision that cannot be made before the tables exist.
+
+
 ## Per model
 
 ### dd2
@@ -990,6 +1118,19 @@ a reason that has nothing to do with seeding.
   solver failures, but nothing in the API says so; a scan over fractions
   should either filter them or the result should carry a flag.
 
+- `compute_tables.py` is a SECOND table driver beside `vmit/table.py`, outside
+  section 5's template, and its `VMITTableSettings` (`:41`) still repeats its
+  package the way section 13 rule 1 forbids. It is **frozen deliberately, not
+  missed.** The rename pass took the other two `VMIT*` symbols and stopped at
+  this one because its only consumer is `notebooks/ZLvMIT_hybrid.ipynb`, which
+  is legacy code kept for published results and out of scope for conformance --
+  renaming a symbol whose sole caller is a notebook nobody is converting buys a
+  cleaner name and a broken notebook. The two siblings in the same file,
+  `compute_vmit_table` and `save_vmit_results`, are frozen for the same reason
+  and by the same ruling. What is left over is `get_vmit_custom()`, which the
+  frozen dataclass makes redundant. Recorded so the next reader does not
+  re-derive the omission as a bug.
+
 ### alphabag
 - `eos_response` implements the freeze `equilibrium` only, and computes it by
   central differences along the mode's own sequence (c_s^2 = dP/deps at fixed
@@ -1053,6 +1194,29 @@ a reason that has nothing to do with seeding.
 - `eos_table` takes only `axes={'nB': ..., 'T': [0.0]}`: there is one
   temperature and no fraction to sweep, so a table has exactly one line. The
   entropy axis is accepted only at SnB = 0, since s = 0 identically.
+
+- **The model refuses all four of section 3's equilibrium modes, and the refusal
+  is physics rather than missing implementation.** `abpr/solver.py:47-49` sets
+  `MODE_FRACTIONS = {"cfl": ()}`; `:54-73` gives the four refusal messages; `:84`
+  raises `NotImplementedError` naming the reason. Section 3 requires that a mode
+  a model cannot support be recorded here, and this section already lists four
+  other limits without listing the largest one.
+
+  The reason is one sentence repeated four ways: colour-flavour locking has
+  already fixed the composition those modes exist to determine.
+  `beta_eq_neutrinoless` would fix mu_C through mu_C + mu_e = 0, but locking
+  leaves mu_C = 0 with no electrons to equilibrate against, so the condition has
+  no free variable; `beta_eq_neutrino_trapped` adds that the phase carries no
+  leptons of any family, so there is no Y_Le to fix; `fixed_YC` asks for a Y_C
+  the phase does not have, since Y_C = 0 identically at every density and for
+  every parameter set, and Y_C = 0 IS the `cfl` mode; and `fixed_YC_YS` has both
+  fractions as OUTPUTS of the closure, so in particular the symmetric-matter
+  slice Y_C = 0.5, Y_S = 0 that the mode exists for is not a state of deconfined
+  locked matter at all.
+
+  So this is a gap that will not be closed: it is what makes `cfl` the model's
+  only mode, and what makes `abpr` the one model section 5 lets default its
+  `mode` argument.
 
 ### zlvmit
 - `get_default_guess` calls the ZL fixed-fraction and trapped solvers
@@ -1617,6 +1781,19 @@ a reason that has nothing to do with seeding.
   entries are right is that summing C_i n_i over the gas reproduces
   `thermal_meson_charges`.
 
+- `fermi_integrals.py:518,524` holds the ONE unbounded loop in the package.
+  Section 6 requires every solver to have a bounded iteration count, and a sweep
+  of `eos/` found exactly these two `while` loops with no counter: the bracket
+  expansion inside the inverse `n -> mu` solve, which multiplies `mu_hi` by 1.5
+  until `n_hi >= n_target` and halves `mu_lo` until `n_lo <= n_target` before
+  handing the bracket to `brentq`. Recorded rather than left silent, and recorded
+  with its measurement: the growth is GEOMETRIC, so from any finite start the
+  bracket clears any representable target in a few dozen iterations and a hang is
+  practically unreachable -- which is why this has never been observed to bite. A
+  non-finite or NaN `n_target` is the shape that would spin, and the caller-facing
+  fix is a counter that returns non-convergence rather than a bound that happens
+  to be large. The change rides with the T = 0 entry-point work on the same file.
+
 ### mixed
 - Capability gaps of the shipped pairings, each a loud NotImplementedError
   naming the phase, never a silent skip: `alphabag_phase` has no
@@ -1676,6 +1853,13 @@ a reason that has nothing to do with seeding.
   on practical grids is fine; a near-endpoint eta needs a warm start from the
   eta = 0 or eta = 1 solution.
 
+- The muon lepton family is not wired into the trapped mode: `mixed/api.py:81-84`
+  raises `NotImplementedError` on a `Y_Lmu` condition, so
+  `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) only. Recorded because it is
+  the identical gap nine models already carry a ledger bullet for, and `mixed`
+  was the one unit missing it -- not a different limitation, and not evidence
+  that the engine is further along than the models it couples.
+
 ### astro/tov
 - The fast backend returns a silently wrong tidal deformability when the table
   it is handed is not monotone in pressure. On the eta = 1 hybrid table, whose
@@ -1699,3 +1883,23 @@ a reason that has nothing to do with seeding.
   from has not been chased down — the interpolation of eps(P) near the
   transition is the first suspect. `test/mixed/test_tov_backend_parity.py`
   pins the measured numbers.
+
+- **There is no `eos/astro/tov/verify/` at all.** `ls eos/astro/tov/` returns
+  `crust.py`, `rns_backend.py`, `rotating.py`, `solver.py`, `solver_fast.py`,
+  `data/`, and the document pair -- no suite. Every other unit that carries
+  physics has one, and this is the unit holding the integrator, the tidal
+  deformability, the crust attachment and the RNS backend.
+
+  What makes it more than a template gap: section 12 pins "the DD2 published
+  NMP/**TOV** values" as golden ground truth, and `test/` is gitignored, so a
+  fresh clone of the published package has NO way to check that its TOV
+  integration is right. The two gaps already ledgered just above -- the ~2 %
+  two-backend disagreement in Lambda, and the fast backend's silent wrong answer
+  on a non-monotone table -- both name numbers that were measured in `test/`, and
+  neither has a suite inside the package to be re-run from.
+
+  What the suite owes, if the section 8 gate is read for this unit: the delivered
+  table check (P non-decreasing in n_B, 0 <= c_s^2 <= 1) before integration,
+  backend parity between `solver.py` and `solver_fast.py`, the DD2 published
+  M_max and R_1.4, and a crust-attached against crust-free comparison now that
+  the tables ship in `eos/astro/tov/data/`.
