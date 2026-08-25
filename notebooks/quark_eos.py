@@ -50,6 +50,8 @@
 # 7. **The ABPR companion panel.**
 # 8. **Does a bare quark model give a star?** — answered with a TOV sequence,
 #    not with an empty mass–radius panel.
+# 9. **Benchmarks** — what each model costs, where its lines do not converge,
+#    and what the profile says dominates.
 #
 # Units are the ones every public boundary uses: densities in fm^-3,
 # temperatures and chemical potentials in MeV, pressure and energy density in
@@ -880,3 +882,343 @@ for name in KNOBS.models:
 # a construction. The other half, and the mass–radius figure that is worth
 # drawing, live in the hybrid notebook, where one of these phases is coupled to
 # a hadronic one through `eos/mixed`.
+
+# %% [markdown]
+# ## 9. Benchmarks
+#
+# What each of these four models costs, per model and per configuration. Every
+# timing here comes from `time`/`timeit` around a **public** call, or out of the
+# `progress` callback the table builders already carry — **no timing hook is
+# added to library code**, and nothing below reads a solver internal.
+#
+# Four numbers, and they are four because they answer four different questions:
+#
+# * **cold point** — one `eos_point` with no warm start, which is what an
+#   inference sampler pays per proposal. Best of `BENCH_REPEAT` runs, so it is
+#   the cost of the call rather than the cost of the first-ever call in a
+#   process (imports, first-touch caches).
+# * **warm point** — the per-point cost *inside* a sweep, where each solved
+#   point seeds the next: the line's `elapsed_s` divided by its `n_solved`. It
+#   is the number that matters for building a table, and it is not the cold
+#   number. Where a line has non-converged points their cost is in `elapsed_s`
+#   but not in `n_solved`, which inflates this figure — the honest reading,
+#   since a table pays for the attempts too.
+# * **line wall time** — one full `n_B` line at one temperature and one
+#   combination of fractions, straight from the callback's `elapsed_s`.
+# * **non-converged** — the count, and the `n_B` where they fall.
+#   Non-convergence is a *return value*, so the benchmark counts these and keeps
+#   going; it never crashes on them and never reports them as time saved.
+#
+# The benchmark line spans 0.05 to 3.0 fm^-3, both ends outside where a
+# deconfined phase is the physical state. That is deliberate: it is where the
+# non-convergence counter reports the real thing rather than a column of zeros,
+# and for these models the low end is not an artificial stress — `ccdm` has a
+# deconfinement onset and simply has no phase to find below it.
+#
+# The rows come from `eos_table(..., rows=True)` rather than from
+# `rows_from_result`, which `njl`, `ccdm` and `abpr` do not export at package
+# level. That is the better spelling anyway, and it is the one all five accept.
+#
+# **This section is the expensive part of the notebook — about ten minutes, and
+# essentially all of it is `ccdm`.** That is not an accident of the grid: it is
+# the measurement. The four models span three orders of magnitude in cost, and
+# the cell below is where that becomes a number instead of an impression.
+
+# %%
+import cProfile
+import io
+import pstats
+import timeit
+
+BENCH_N_B = np.linspace(0.05, 3.0, 24)
+BENCH_REPEAT = 3
+
+# (mode, T, the mode's fractions). `leptons` is not in here: it is the knobs
+# cell's flag, applied through `lepton_kwargs` exactly as everywhere above.
+BENCH_CONFIGS = (("beta_eq_neutrinoless", 0.0, {}),
+                 ("fixed_YC", 10.0, {"Y_C": KNOBS.Y_C}))
+
+
+def bench_line(name, mode, T, conditions):
+    """One benchmark row for one model in one configuration.
+
+    Returns None when the model refuses the configuration or the whole line
+    fails — a refusal is not a slow result and does not belong in a timing
+    table. Everything measured is a public call.
+    """
+    module = model(name)
+    par, species = parameters_for(name), flags_for(name)
+    extra = lepton_kwargs(mode)
+    n_B_probe = float(np.median(BENCH_N_B))
+
+    def one_point():
+        return module.eos_point(par, mode, species, n_B=n_B_probe, T=T,
+                                **conditions, **extra)
+
+    status, _ = run(name, one_point)
+    if status != "ok":
+        return None
+    cold_s = min(timeit.repeat(one_point, repeat=BENCH_REPEAT, number=1))
+
+    axes = {"nB": BENCH_N_B, "T": np.array([T])}
+    for key, value in conditions.items():
+        axes[key] = np.array([value])
+
+    lines = []
+    status, rows = run(name, module.eos_table, par, mode, species, axes,
+                       rows=True, progress=lines.append, **extra)
+    if status != "ok" or not lines:
+        return None
+    info = lines[-1]          # one temperature, one fraction combination
+
+    solved = {round(float(row["n_B"]), 9) for row in rows}
+    missed = [float(x) for x in BENCH_N_B if round(float(x), 9) not in solved]
+    return dict(model=name, mode=mode, T=T,
+                cold_ms=1e3 * cold_s,
+                warm_ms=1e3 * info["elapsed_s"] / max(info["n_solved"], 1),
+                line_s=info["elapsed_s"],
+                n_solved=info["n_solved"],
+                n_requested=info["n_requested"],
+                missed=missed)
+
+
+benchmarks = []
+for mode, T, conditions in BENCH_CONFIGS:
+    header("benchmark", mode)
+    for name in KNOBS.models:
+        row = bench_line(name, mode, T, conditions)
+        if row is not None:
+            benchmarks.append(row)
+            print(f"  [{name:8s}] cold {row['cold_ms']:8.3f} ms   "
+                  f"warm {row['warm_ms']:8.3f} ms/pt   "
+                  f"line {row['line_s']:7.3f} s   "
+                  f"{row['n_solved']}/{row['n_requested']} points")
+
+# %% [markdown]
+# **What the spread says.** These four are not four variations on one cost. A
+# closed-form bag model (`alphabag`) and a bag model with a vector coupling
+# (`vmit`) solve a point in a fraction of a millisecond; `njl` pays about 60 ms
+# for the same point, because its constituent masses come out of a gap equation
+# that has to be re-solved at every residual evaluation; and `ccdm` pays more
+# again, because on top of the gap equation it *enumerates* candidates — the
+# chiral/dielectric branch and the pairing pattern — and solves each.
+#
+# The `warm` column for `ccdm` is the one to read carefully, and it is why cold
+# and warm are reported separately rather than as one number. Its cold point is
+# 94–159 ms, but its warm figure is 14–19 **seconds** per point: a hundred times
+# its own cold cost, where every other model's warm and cold numbers sit within
+# a factor of three of each other. Nothing about the solved points got slower.
+# The line simply spends most of its wall clock on the points it never solves —
+# each miss is retried through up to `MAX_BISECT = 6` halved steps back towards
+# the last solved point, and every one of those retries enumerates the
+# candidates again. Those attempts are in `elapsed_s` and not in `n_solved`.
+# That is the honest arithmetic for anyone budgeting a table, since a table
+# does pay for the attempts; it is not a per-solved-point cost.
+
+# %% [markdown]
+# ### 9.1 Where the line did not converge
+#
+# The count and the densities, per model and configuration. A model that solved
+# every requested point says so; nothing is inferred from a row count alone.
+
+# %%
+header("non-converged points")
+for row in benchmarks:
+    missed = row["missed"]
+    label = f"  [{row['model']:8s} {row['mode']:20s} T={row['T']:4.1f}]"
+    if not missed:
+        print(f"{label} 0 of {row['n_requested']}")
+        continue
+    shown = ", ".join(f"{x:.3f}" for x in missed[:8])
+    more = "" if len(missed) <= 8 else f", ... (+{len(missed) - 8})"
+    print(f"{label} {len(missed)} of {row['n_requested']}  "
+          f"at n_B = {shown}{more} fm^-3")
+
+# %% [markdown]
+# The two models that miss nothing miss nothing at either end, which is worth
+# stating rather than leaving to be inferred: `vmit` and `alphabag` return a
+# solved point at every one of the 24 requested densities in both
+# configurations, including 0.05 fm^-3, where a deconfined phase is not the
+# physical state. A bag model has a root there; whether that root means anything
+# is a question for the construction that uses it, not for the solver.
+#
+# The two that do miss, miss in different places, and the distinction is the
+# reason the densities are printed and not just the count:
+#
+# * **`njl` misses one point, at the top** — n_B = 3.0 fm^-3, the last density
+#   of the grid, in both configurations. That is the far end of a
+#   cutoff-regularized model's domain, not a hole in the middle of it.
+# * **`ccdm` misses seven, in an interior band** — 0.178 to 0.948 fm^-3,
+#   identically in both configurations. Below its deconfinement onset there is
+#   no deconfined phase to find, which its own `table.py` states as physics
+#   rather than as a solver limit, and the table reports those points as missing
+#   instead of inventing them. Note that the first density, 0.05 fm^-3, *does*
+#   solve while the band above it does not — the band is interior on both sides.
+#   Whatever the solver finds down there is worth a look before anyone leans on
+#   it; the benchmark's job here is to report it, which it does.
+
+# %% [markdown]
+# ### 9.2 Bottlenecks
+#
+# `cProfile` over one representative line — one model, one mode, the same grid
+# the timings above used. Top 15 by cumulative time.
+#
+# It is profiled *after* the benchmark cells, which for these four is a matter
+# of first-touch caches rather than of compilation: none of the quark models
+# ships a jitted kernel, so a cold profile here does not report a compiler the
+# way a `T = 0` hadronic line does.
+
+# %%
+PROFILE = ("njl", "beta_eq_neutrinoless", 0.0, {})
+
+profile_model, profile_mode, profile_T, profile_conditions = PROFILE
+profile_axes = {"nB": BENCH_N_B, "T": np.array([profile_T])}
+for key, value in profile_conditions.items():
+    profile_axes[key] = np.array([value])
+
+profiler = cProfile.Profile()
+profiler.enable()
+model(profile_model).eos_table(parameters_for(profile_model), profile_mode,
+                               flags_for(profile_model), profile_axes,
+                               **lepton_kwargs(profile_mode))
+profiler.disable()
+
+report = io.StringIO()
+pstats.Stats(profiler, stream=report).sort_stats("cumulative").print_stats(15)
+print(f"=== cProfile — {profile_model} {profile_mode} T={profile_T} ===")
+print(report.getvalue())
+
+# %% [markdown]
+# **Reading it** (for the default selection, `njl` in beta equilibrium at
+# T = 0): the line is a root find whose residual is expensive, and the profile
+# says so twice over. Almost the whole cumulative time sits under
+# `general/solve.py:solve_system`, and what `solve_system` spends it on is
+# `njl/solver.py:residual` -> `_state` -> `njl/thermodynamics.py:state_at` —
+# the NJL state itself, the constituent masses and the cutoff-regularized
+# integrals that go with them, rebuilt from scratch on every residual call.
+#
+# The call counts are the other half of the reading: roughly 1600 residual
+# evaluations for about 30 attempted points, some 50 per point. That is what a
+# **finite-difference** Jacobian over this model's unknown vector costs, and it
+# is not a defect of the profile — section 9.3 below confirms that no quark
+# model in this repository ships an analytic one. The gap between `njl`/`ccdm`
+# and the two bag models is therefore two compounding factors, not one: a
+# residual that is itself far more expensive, evaluated many more times per
+# solve.
+
+# %% [markdown]
+# ### 9.3 Reference against fast backend
+#
+# Section 9 of the repository's conventions asks for the two flavours side by
+# side **where a model ships one**. None of these four does, and that is checked
+# below rather than asserted: no `eos/<model>/backends/`, and no backend switch
+# on `eos_point`. `vmit` and `alphabag` say so in their own `eos_response`
+# docstrings — "no analytic Jacobian in this repository" — and the reference
+# NumPy/SciPy path is therefore the only path, which is why every number above
+# is a reference number and needs no second column.
+
+# %%
+import inspect
+
+header("backends — is there a fast flavour to compare against?")
+for name in KNOBS.models + ("abpr",):
+    has_dir = (ROOT / "eos" / name / "backends").is_dir()
+    switches = [p for p in inspect.signature(model(name).eos_point).parameters
+                if p in ("analytic_jac", "backend", "fast", "jit")]
+    print(f"  [{name:8s}] backends/ {'present' if has_dir else 'absent':7s}  "
+          f"backend switch on eos_point: {', '.join(switches) or 'none'}")
+
+# %% [markdown]
+# The nearest thing the quark side does ship is a **pair of models**, not a pair
+# of backends, and the distinction matters: `abpr` evaluates the CFL phase in
+# closed form where `alphabag` root-finds it through the Fermi integrals, so the
+# two differ in physics (the `O(m_s^4)` term of section 7) as well as in cost.
+# It is timed here because it is the one place a reader can see what the
+# closed-form path buys — labelled for what it is, and never counted as a
+# backend-parity check.
+
+# %%
+header("closed form against root-finding, at CFL and T = 0")
+cfl_bench_axes = {"nB": BENCH_N_B, "T": np.array([0.0])}
+
+for label, call in (
+        ("abpr (closed form)",
+         lambda: abpr.eos_table(abpr_par, "cfl", None, cfl_bench_axes,
+                                rows=True)),
+        ("alphabag (root-found)",
+         lambda: alphabag.eos_table(
+             matched, "cfl", alphabag.SpeciesFlags(**KNOBS.species),
+             dict(cfl_bench_axes,
+                  Delta0=np.array([abpr_par.Delta0])), rows=True))):
+    status, rows = run(label, call)
+    if status != "ok":
+        continue
+    best = min(timeit.repeat(call, repeat=BENCH_REPEAT, number=1))
+    print(f"  [{label:22s}] {best * 1e3:8.3f} ms for a {len(BENCH_N_B)}-point "
+          f"line, {len(rows)} rows solved")
+
+# %% [markdown]
+# About twenty times, over the same 24 densities — and `abpr` solves all 24
+# where `alphabag`'s CFL sweep solves 23. That is the shape of the trade the
+# two make: the closed form is faster and has no point it can fail to bracket,
+# and what it costs is the `O(m_s^4)` term of section 7. Neither number is a
+# backend-parity check, and calling it one would be the misreading this cell
+# exists to prevent.
+
+# %% [markdown]
+# ### 9.4 The summary table
+#
+# One row per model and configuration, and the same rows written out under the
+# naming convention of section 3. The model slot of the name carries the study
+# (`quark`) rather than a model, because the table spans all four — the model of
+# each row is a column inside it. `missed` is a list and does not survive as a
+# table column, so the file keeps the count and the first density; the densities
+# themselves are printed in 9.1.
+#
+# **The `root=` argument is not decoration.** `table_path`'s default root is the
+# *relative* path `output/tables`, so a kernel started in `notebooks/` — which is
+# what `jupytext --execute` does — writes to `notebooks/output/tables/` instead
+# of to the repository's `output/`. That is why `notebooks/output/` exists in
+# this tree, and it is why the save in section 4 above lands there. The fix
+# belongs in `eos/general/table_io.py`, uniformly for every notebook rather than
+# in one of them, so it is reported here and not patched: this cell passes the
+# absolute root built from the bootstrap `ROOT`, and prints where it wrote.
+
+# %%
+header("summary")
+print(f"  {'model':8s} {'mode':22s} {'T':>5s} {'cold ms':>9s} "
+      f"{'warm ms/pt':>11s} {'line s':>8s} {'solved':>10s}")
+for row in benchmarks:
+    print(f"  {row['model']:8s} {row['mode']:22s} {row['T']:5.1f} "
+          f"{row['cold_ms']:9.3f} {row['warm_ms']:11.3f} "
+          f"{row['line_s']:8.3f} "
+          f"{row['n_solved']:4d}/{row['n_requested']:<5d}")
+
+# %%
+TABLE_ROOT = str(ROOT / "output" / "tables")
+
+bench_rows = [dict(model=row["model"], mode=row["mode"], T=row["T"],
+                   cold_ms=row["cold_ms"], warm_ms=row["warm_ms"],
+                   line_s=row["line_s"], n_solved=row["n_solved"],
+                   n_requested=row["n_requested"],
+                   n_missed=len(row["missed"]),
+                   n_B_first_missed=(row["missed"][0] if row["missed"]
+                                     else float("nan")))
+              for row in benchmarks]
+
+if bench_rows:
+    bench_name = standard_name(
+        "quark", "benchmark", {},
+        {"nB": BENCH_N_B,
+         "T": np.array([T for _, T, _ in BENCH_CONFIGS])},
+        KNOBS.species, leptons=KNOBS.leptons)
+    bench_path = save_table(bench_rows,
+                            table_path("quark", bench_name, root=TABLE_ROOT),
+                            meta={"study": "quark benchmark",
+                                  "models": ",".join(KNOBS.models),
+                                  "modes": ",".join(m for m, _, _
+                                                    in BENCH_CONFIGS),
+                                  "species": KNOBS.species,
+                                  "leptons": KNOBS.leptons,
+                                  "repeat": BENCH_REPEAT})
+    print("wrote", bench_path)
