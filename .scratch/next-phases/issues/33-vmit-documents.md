@@ -1,7 +1,7 @@
 # vmit.md and vmit.tex to §11 standard
 
 Type: task
-Status: claimed
+Status: open
 Blocked by: 09
 Parent: ../map.md
 
@@ -41,3 +41,18 @@ Per-document gaps are named in
 [document-audit.md](../research/document-audit.md). The code decides wherever a
 document and the source disagree; report any disagreement rather than silently
 following one.
+
+## Claim released 2026-08-25
+
+Marked `claimed` in commit 359f76f with **no assignee**, and no session has held
+it since: `ListAgents` shows no holder, and the documents are untouched. Measured
+rather than assumed — the pairs finished under tickets 30/31/32/36 run 860–1205
+lines in the `.md`, and these are all still at pre-refactor summary length:
+
+    vmit.md   82    vmit.tex  265 (Aug 10, untouched)
+    zl.md    167    zl.tex    485
+    sfho.md  188    sfho.tex  685
+    dd2.md   117    dd2.tex   530
+
+So the work was never started, and the stale claim was hiding it from the
+frontier query. Back to `open`. Re-claim before starting.
