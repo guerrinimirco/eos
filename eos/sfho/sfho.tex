@@ -380,10 +380,17 @@ $\munue$, so a three-flavour $\mu = 0$ gas on top would count $\nu_e$ twice,
 and the solver raises saying exactly that. In every other mode no neutrino
 flavour is tracked in the composition, so all three are untracked.
 
-The refusal is itself a known conformance gap rather than a settled design:
-the flag is defined by what it does \emph{not} cover, so under trapping it
-should mean the two remaining flavours and be added, not refused. It is
-recorded in \texttt{docs/DEFERRED.md} and is not this document's to fix.
+\textbf{The refusal is a defect, not a design choice, and it is due to be
+removed.} The repository conventions state that \texttt{thermal\_neutrinos} is
+meaningful alongside \texttt{beta\_eq\_neutrino\_trapped} and that a model
+\emph{must not raise} on the combination: the flag is defined by what it does
+\emph{not} cover, so under trapping --- where the $e$ and $\mu$ families are
+tracked --- it means the $\tau$ family, which is free-streaming and carries no
+lepton number the mode constrains. Five models answer this two ways; the three
+that succeed are the conformant ones, and SFHo and DID drop the raise. So the
+paragraph above states what the code does today and not what it should do:
+when the raise goes, the trapped mode gains the two remaining flavours rather
+than three. This is not a ledgered gap and there is no ledger entry for it.
 
 Every assembled state is checked against the Hugenholtz--Van Hove
 identity~\cite{HugenholtzVanHove1958}

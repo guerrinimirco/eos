@@ -194,11 +194,17 @@ would count `nu_e` twice; `solver.py` refuses the combination with a message
 saying exactly that. In every other mode no neutrino flavour is tracked in the
 composition, so all three are untracked and the factor is 3.
 
-Note that the refusal is itself a known conformance gap, not a settled design:
-CLAUDE.md §4 defines the flag by what it does NOT cover, so under trapping it
-should mean the two remaining flavours and be added, not refused. Five models
-disagree on this and the three that succeed are the conformant ones. See
-`docs/DEFERRED.md`; the fix is not this document's. The Euler sum
+**The refusal is a DEFECT, not a design choice, and it is due to be removed.**
+CLAUDE.md §4 states that `thermal_neutrinos` is meaningful alongside
+`beta_eq_neutrino_trapped` and that **a model must not raise on the
+combination**: the flag is defined by what it does NOT cover, so under trapping,
+where the e and mu families are tracked, it means the tau family — which is
+free-streaming and carries no lepton number the mode constrains. Five models
+answer this two ways; the three that succeed (`njl`, `ccdm`, `enjl`) are the
+conformant ones, and `sfho` and `did` drop the raise. So the paragraph above
+describes what the code does today and not what it should do: when the raise
+goes, the trapped mode gains the two remaining flavours rather than three.
+This is not a ledgered gap and there is no `docs/DEFERRED.md` entry for it. The Euler sum
 reported with the state takes baryons at their FULL potentials and the meson
 gas at its EFFECTIVE ones:
 `sum_i mu_i n_i + sum_j mu*_j n_j + mu_e n_e + mu_nue n_nue`.
