@@ -35,7 +35,7 @@ Usage (notebook)::
 """
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.ticker import AutoMinorLocator
+from matplotlib.ticker import AutoMinorLocator, FuncFormatter
 import numpy as np
 
 # =============================================================================
@@ -129,6 +129,26 @@ PARTICLE_STYLES = {
     'u': (0, (4, 1)), 'd': (0, (4, 1)), 's': (0, (4, 1)),
     'e-': ':', 'e': ':', 'mu-': ':',
 }
+
+
+def log_decades(ax, axis='y'):
+    """Decade labels on a log axis, with an exponent minus sign that renders.
+
+    Part of the missing-minus protection, extended to the one place the
+    rcParams cannot reach. `set_paper_style` and `set_global_style` force an
+    ASCII minus everywhere a label is written out, but matplotlib generates its
+    own log tick labels as mathtext -- `$\\mathdefault{10^{-4}}$` -- mathtext
+    renders a hyphen as U+2212, and it resolves `\\mathdefault` through the TEXT
+    font, which is CMU Serif and has no U+2212 glyph. The exponent's minus then
+    comes out a hollow box. Labelling the decades as ordinary mathtext takes the
+    route that does render, which is why `fm$^{-3}$` in an axis name has always
+    been fine while `10^{-4}` on a log axis was not.
+
+    Call it on any log axis that reaches below 1. `axis` is 'x', 'y' or 'both'.
+    """
+    decade = FuncFormatter(lambda v, _: rf"$10^{{{int(round(np.log10(v)))}}}$")
+    for name in (('x', 'y') if axis == 'both' else (axis,)):
+        getattr(ax, f"{name}axis").set_major_formatter(decade)
 
 
 def particle_style(name, default_color=None):
@@ -594,6 +614,13 @@ if __name__ == '__main__':
                 assert abs(mpl.rcParams['axes.labelsize'] - 9) < 1e-9
                 assert abs(mpl.rcParams['legend.fontsize'] - 8) < 1e-9
                 plt.close(_fig)
+    # The exponent minus of a log axis renders: the tick label must come back
+    # as ordinary mathtext, not through \mathdefault (see log_decades).
+    _fig, _ax = plt.subplots()
+    _ax.set_yscale('log')
+    log_decades(_ax)
+    assert _ax.yaxis.get_major_formatter()(1e-4, 0) == '$10^{-4}$'
+    plt.close(_fig)
     # The two palettes must not have drifted apart into near-duplicates.
     assert len(set(map(tuple, STANDARD_COLORS.values()))) == len(STANDARD_COLORS)
     assert set(PHASE_LW) == set(PHASE_ALPHA)
