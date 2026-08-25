@@ -742,6 +742,39 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 In scope, not yet sharp enough to ticket:
 
+- **Nothing in this repository notices when a stated limitation stops being
+  true.** Three instances surfaced in one afternoon, each found by accident
+  while someone was doing something else, and each is a comment that outlived
+  the behaviour it described:
+
+  - `eos/dd2/nmp.py` claimed a 5x5 round trip "returns the published couplings
+    unchanged". True only while SciPy 1.13 declined to iterate; the published
+    couplings are not a root of the closure at all
+    ([ticket 47](issues/47-dd2-nmp-inversion.md)).
+  - `eos/__init__.py`'s species comment said "dd2 is exempt" where the code
+    implemented no exemption — just an inclusion list of seven, which silently
+    skipped `enjl` and `abpr` too ([ticket 61](issues/61-dd2-species-flags.md)).
+  - `test/test_imports.py`'s species check could only fail in the PESSIMISTIC
+    direction. Closing 61 would have made dd2 conform and sailed straight
+    through, leaving the README and the `#:` comment describing a gap that no
+    longer existed.
+
+  The common shape: we are well drilled at asserting nothing got worse, and
+  have almost nothing that fires when a documented gap is CLOSED. Every
+  `DEFERRED.md` entry, every "not yet implemented" raise and every §4 gap
+  disposition is a claim of this kind, and none of them is checked. The
+  two-way exemption gate eos-88 built for 61 is the first instance of the
+  countermeasure — the test goes red on purpose when the limitation lifts, and
+  its message names the prose that must move with it.
+
+  Unsharp in two ways, which is why this is fog: whether the general form is a
+  `verify/` check, a `DEFERRED.md` convention, or a §12 sentence; and whether
+  it can be mechanised at all, since "this raise still raises" is testable
+  while "this prose still describes the code" is the document-verification
+  problem already in the entry below. Both need
+  `eos/general/verify/`, which does not exist —
+  [ticket 21](issues/21-phase5-structure.md) is where that lands.
+
 - **The model documents are unverified in two ways, and both were caught by
   chance rather than by a check.** Found while tickets 35 and 45 ran
   concurrently, one on each side of the same files.
