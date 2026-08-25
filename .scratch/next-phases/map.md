@@ -1021,6 +1021,41 @@ against this file, not against the earlier `pytest_before*.txt`.
   measured as the OPPOSITE of sfho/dd2's on both values rather than the
   "whatever `solve` does" 54 recorded.
 
+- [notebooks/enjl — skeleton, knobs, figures and the author-table reproduction](issues/18-enjl-notebook.md):
+  **shipped as `notebooks/enjl_eos.py`** (the ticket wrote `notebooks/enjl`; its
+  three siblings are `hadronic_eos`, `quark_eos`, `hybrid_eos`, so all four now
+  spell the same thing). 44 cells, **0 error outputs**, in a `git archive HEAD`
+  copy at `77c2976` with the kernel started in `notebooks/`; `test/enjl` +
+  `test/test_imports.py` **317 collected, 317 passed**; python.org 3.14.2. No
+  library code touched.
+  **The author's tables are reproduced and the residual printed for all five
+  sets**: `P` median 6.9e-07 to 1.7e-06, and the max is 9.94e-06 at `n_B` = 0.10
+  — the LOWEST density, where `P` = 0.46 MeV/fm^3 and the ratio is an absolute
+  agreement of ~5e-6 divided by it. Two sets exceed 1e-04, on their last one or
+  two rows only, and those rows are the approach to that set's own coexistence
+  endpoint, where the author is already following a construction and we are
+  still following a branch. Both numbers are printed rather than a window tuned
+  to hide the effect. The notebook **parses the `.dat` itself and imports
+  nothing out of `test/`**, which `docs/DEFERRED.md` requires of the replacement
+  enjl notebook.
+  **The branch pair is `direction="up"/"down"`** and only 5-6 of the 24-27
+  overlapping densities are two distinct states; above the transition the two
+  continuations converge on one root, so the first draft reported the sign of a
+  1e-12 difference as "which branch is stable". A `1e-8` tolerance now separates
+  them. `enjl_branch_pair` is stated in one line to belong to
+  [ticket 58](issues/58-hybrid-skeleton.md); `eos.mixed` is never imported.
+  **The `table_path` root bug is confirmed by counterexample**, not assumed:
+  with the kernel in `notebooks/` the default returns
+  `<root>/notebooks/output/tables/...`, and with `root=ROOT/"output"/"tables"`
+  everything landed at the repository root. Tickets 15 and 58 owe the same
+  argument.
+  **A concurrent session moved HEAD mid-verification**: `fs.log_decades` was
+  committed by another session (`dfe9695`) BETWEEN the `git archive` and the
+  `AttributeError` it caused. The archived SHA must be recorded with any
+  archive-copy result. Side effect: `quark_eos.py:690`'s two-line
+  `set_yticks`/`set_yticklabels` workaround for the same glyph hazard can now
+  collapse into one `fs.log_decades` call.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
