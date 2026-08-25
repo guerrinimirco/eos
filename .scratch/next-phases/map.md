@@ -1064,6 +1064,42 @@ against this file, not against the earlier `pytest_before*.txt`.
   accident of NaN comparison semantics and without naming the density. All five
   now FAIL with the density. 121 checks across **eleven** suites still pass.
 
+- [notebooks/quark_eos — the benchmark section](issues/17-quark-benchmark.md):
+  **shipped as section 9**, commits `d0445fb` + `f2dee22`; verified by
+  `jupytext --execute` in an archive copy of the COMMITTED tree at `d0445fb`
+  (53 cells, 25 code, **0 error outputs**), `test/general test/test_imports.py
+  test/{vmit,alphabag,njl,ccdm,abpr}` **809 collected, 809 passed** in a second
+  archive copy, python.org 3.14.2, no library file touched.
+  **The finding is a three-order-of-magnitude spread**: `alphabag`/`vmit` solve a
+  cold point in well under a millisecond, `njl` in tens of milliseconds, `ccdm`
+  in ~0.1 s. The section costs ~10 minutes to execute and essentially all of it
+  is `ccdm`, which the notebook says up front.
+  **`ccdm`'s warm column is 10-13 s/pt against a ~0.1 s cold point** — two orders
+  above its own cold cost, where every other model's two numbers sit within a
+  factor of three. Nothing solved got slower: the line pays for the 7 points it
+  never solves, each retried through `MAX_BISECT = 6` halved steps with a full
+  candidate enumeration per retry, and those attempts are in `elapsed_s` but not
+  in `n_solved`. This is exactly why the ticket asked for cold and warm
+  separately.
+  **The misses are in different places and the densities say so**: `njl` misses
+  1 of 24 at the TOP (3.0 fm^-3, its cutoff domain), `ccdm` misses 7 in an
+  INTERIOR band (0.178-0.948, its sub-onset region) — identically in both
+  configurations. Reported not diagnosed: `ccdm`'s first density 0.05 fm^-3
+  *solves* while the band above it does not, so the window is interior on both
+  sides and whatever root lives down there is worth a look.
+  **No quark model ships a `backends/`** — checked in executed output for all
+  five, not asserted — which is also the cause of the profile's ~50 residual
+  evaluations per point (finite-difference Jacobian). The `abpr`-vs-`alphabag`
+  CFL timing (0.170 vs 3.358 ms, ~20x) is shown beside it and explicitly labelled
+  a pair of MODELS, not of backends.
+  **The `table_path` root bug is confirmed a third time** (after tickets 18 and
+  58) and worked around with `root=str(ROOT / "output" / "tables")`. Section 4's
+  save is left on the relative default on purpose: ticket 15 ruled the fix
+  belongs in `table_io.py` uniformly, and one notebook does not get to overturn
+  that. Noticed alongside: `standard_name`'s `_span` uses `%.1f`, so a grid
+  starting at 0.05 renders `nB0.1` and two grids differing only below 0.1 fm^-3
+  would collide — ticket 04's to fix.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
