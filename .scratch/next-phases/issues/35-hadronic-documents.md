@@ -1,7 +1,7 @@
 # zl, sfho and dd2 document pairs to §11 standard
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 09
 Parent: ../map.md
 

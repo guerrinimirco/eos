@@ -232,6 +232,17 @@ against this file, not against the earlier `pytest_before*.txt`.
   Also corrected `DEFERRED.md`'s vmit entry, which claimed DONE while naming 2 of
   ~23 unconverted names.
 
+- [did.md and did.tex to §11 standard](issues/31-did-documents.md): the .md was a
+  README at 3/16 and is now the specification (168 lines → 885); the .tex failed
+  C2 alone and completely. **Neither file had ever carried a parameter table** —
+  two numbers against 29 stored fields — and the omega/phi couplings are DERIVED,
+  so the vertex strengths behind them existed only in the source. Both now carry
+  all of it, with g_8^S = 9.178769 / g_8^N = 9.326009 computed from the code.
+  Two claims the code corrected: `F_M(1) = 0.988` is not one number for "the
+  vector shape" (omega/phi 0.98829, rho 0.96488), and the quoted `g_phiN = -5.20`
+  is the value at saturation, not the stored g^{S(0)}_phiN = -5.262966. No .bib
+  key needed — every new citation was already there. Compiles clean, 13 pages.
+
 - [Apply the approved renames — eos/mixed and eos/did](issues/42-rename-internal.md):
   9 renames, 16 files, **0 added failures and `test/baseline/` unmoved at
   rtol = 1e-10** — a rename that changes a number is not a rename. But the
@@ -244,6 +255,65 @@ against this file, not against the earlier `pytest_before*.txt`.
   LOCAL adapters, which is what the public names are being renamed TO. An AST
   check now rides on tickets 43–45 and has already found the next one,
   `vmit/table.py:188`, before any code moved.
+
+- [njl.md and njl.tex to §11 standard](issues/32-njl-documents.md): the audit's
+  **largest single §11 violation** is closed — 720 lines of equations that
+  contained zero parameter values now carry all three tiers with the vacuum
+  observable each is fitted to, so the reproduction table's numbers are
+  checkable from the document. The `.md` went from 166-line summary to the same
+  document in plain text. Three claims the code overturned while writing:
+  the shipped pairing quadrature is **24** nodes per panel, not the 100 of the
+  accuracy benchmark; `n_ref = 0.48 fm^-3` is a *quark* density, i.e.
+  `n_B = n_sat`; and the mixed adapter does **not** put the winning pattern in
+  the returned block's `fields` — it comes back as the warm-start key, and
+  `njl_phase`'s own docstring says otherwise (reported, not fixed). The
+  carried-in `n_s` collision is discharged with its reason: `eps - 3P = M rho_s`
+  holds only for the medium pieces and only with `P_k4`, so the trace identity
+  is used nowhere and `n_s` really is the strange-quark density. `.tex` compiles
+  clean in two passes, `eos.bib` untouched.
+
+- [ccdm.md and ccdm.tex to §11 standard](issues/30-ccdm-documents.md): the joint
+  worst `.md` (3/16) is now the same document as the `.tex`, in plain text — `U`
+  and `V` in closed form, the five integrals at both temperatures, the residual
+  row by row, every parameter with its number. The carried-in label collision is
+  discharged by giving the *modes* a new label: rows are `R_1..R_4`, the
+  specification's closure rows are **`M1..M5`** in both files. **Four defects
+  the code overturned**: `rho_s = +dOmega/dM*` (the `.tex` had the sign its own
+  per-mode identity contradicts), `gapless` is `min E < 1e-3 max|Delta|` not
+  `min E < 0`, the enumeration ranks by **`f = eps - Ts` at fixed density** and
+  by `Omega` only at fixed potential, and the thermal-neutrino sector (3
+  free-streaming / 2 trapped) `solver.py` adds to `P`, `eps`, `s` was in neither
+  file. `ccdm.tex` now cites `docs/eos.bib` like the other eleven; doing so
+  surfaced **two latent bib defects** — `Steiner2002` and `deCarvalho2010` carry
+  bare underscores in `note` fields and halt pdflatex — now escaped, plus
+  `ParticleDataGroup2024` appended for the tier-1 vacuum constants. 22 pages, no
+  undefined reference or citation.
+
+- [Apply the approved renames — eos/vmit](issues/43-rename-vmit.md): 23 renames,
+  24 files, **0 added failures and `test/baseline/` unmoved**. Both predicted
+  collisions were real and **one was not the one the ticket named**:
+  `table.py`'s local `warm_start` adapter was (it is `seed` now), but so were
+  four local `default_guess = ...` bindings in `solver.py` that the AST check
+  cannot see — it compares imported against defined names, and a local binding
+  inside a function body is neither. `_GUESS_KIND` died with the rename: once
+  `warm_start`/`default_guess` read the §3 mode name, its translation table had
+  nothing to translate. Merging four cold guesses into one was proved
+  **bit-identical** over every mode x density x temperature x Y_C x lepton flag
+  before it was trusted. vMIT is the sixth model to expose `thermo_from_mu`, so
+  `mixed/adapters.py` aliases it beside the five it already aliases.
+
+- **The map's "1648 passed, 15 skipped, 0 failed" line above is STALE.** The
+  suite is **14 failed, 1634 passed, 15 skipped** at HEAD, and all 14 predate
+  ticket 43 — verified against a worktree at HEAD carrying the pre-rename
+  `eos/`, where the same 14 fail with byte-identical messages. Two root causes,
+  neither ticketed: **dd2's NMP inversion no longer converges** (isoscalar
+  residual 8.12e-02 against a 2e-02 floor), which is 3 `test/dd2` + 3
+  `test/tov` failures AND the `dd2` baseline's `nmp.K_sat`/`Q_sat`/`K_sym`
+  drift — one defect, seven tests; and **round-off drift in `test/baseline/`**
+  for quantities the generator's own docstring calls round-off (`ccdm`'s
+  `field_residual`, `sfho`'s `mu_S` at Y_S = 0, the tov sequences, and vmit's
+  `n_e` at Y_C = 0 straddling the 1e-12 gate at 1.7e-13 against a stored
+  3.0e-12). Both are Stage 7 report material, not diffs.
 
 ## Not yet specified
 
