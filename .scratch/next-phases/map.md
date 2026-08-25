@@ -98,7 +98,7 @@ by running them against a detached worktree at HEAD carrying the pre-rename
   `nmp.py:70` describes, Q_sat 117.49 against 169.00.
 - **8 — `test/baseline/`, and NOT all one cause.** `ccdm`'s `field_residual`
   and the tov sequences are round-off drift. `sfho`'s `mu_S` and `vmit`'s
-  `n_e` are [ticket 56](issues/56-baseline-gate-units.md): the generator's
+  `n_e` are [ticket 56](issues/56-baseline-empty-sector-gate.md): the generator's
   absolutely-scaled gates. `vmit`'s is a genuine flakiness band (`n_e` at
   Y_C = 0 straddling 1e-12 at 1.7e-13 against a stored 3.0e-12). `sfho`'s
   additionally has a solver story — its three `fixed_YC_YS` rows all target
@@ -346,7 +346,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   `nmp.py:70` describes, Q_sat 117.49 against 169.00. Also
   **`test/baseline/` drift — but not all one cause** (`ccdm`'s
   `field_residual` and the tov sequences are round-off; `sfho`'s `mu_S` and
-  vmit's `n_e` are [ticket 56](issues/56-baseline-gate-units.md), and sfho's
+  vmit's `n_e` are [ticket 56](issues/56-baseline-empty-sector-gate.md), and sfho's
   is a convergence outlier rather than drift — see the Suite status block; and
   vmit's
   `n_e` at Y_C = 0 straddling the 1e-12 gate at 1.7e-13 against a stored
