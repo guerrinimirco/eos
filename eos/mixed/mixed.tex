@@ -45,6 +45,17 @@ here is asserted by the \texttt{verify/} suite or by \texttt{test/mixed/}.
 
 \maketitle
 
+\section*{Where the parameters are}
+
+A composite engine's parameter argument is the \emph{pair of phases}
+(Sec.~\ref{sec:contract}), each closing over its own model's numbers; those
+numbers, and the equations they pin down, are in the sibling documents ---
+\texttt{eos/dd2/dd2.tex}, \texttt{eos/vmit/vmit.tex}, and likewise for
+\texttt{sfho}, \texttt{zl}, \texttt{did}, \texttt{alphabag} and \texttt{enjl}.
+Everything the engine itself carries is stated here: the contract, the
+equilibrium conditions, the assembly, the numerical constants of the solve, and
+what a mixed table reports beyond a point equation of state.
+
 \section{What is being solved}
 
 At a given total baryon density $\nB$, temperature $T$ and construction
@@ -66,10 +77,11 @@ why the solver must be allowed to return the analytic continuation outside
 the window.
 
 \section{The phase-adapter contract}
+\label{sec:contract}
 
 Everything this engine knows about any bulk model passes through one
 interface, and a \emph{pairing} is two declared phases handed to the solver:
-DD2$+$vMIT is the shipped default, SFHo, ZL and alphaBag adapters ship
+DD2$+$vMIT is the shipped default, SFHo, ZL, DID and alphaBag adapters ship
 alongside it, and two \emph{branches} of one functional (ENJL) pair the same
 way --- the engine cannot tell a two-model pairing from a two-branch one,
 which is the point. An adapter is a map
@@ -84,11 +96,63 @@ which is the point. An adapter is a map
 %
 which solves that phase's own internal self-consistency --- the meson field
 equations for a density-dependent relativistic mean field, the vector-field
-fixed point for a bag model --- at the \emph{given} potentials, and reports
+fixed point for a bag model, the gap equation for a chirally broken one --- at
+the \emph{given} potentials, and reports
 the resulting block. There is no $\eta$ in Eq.~(\ref{eq:adapter}), no mixing
 and no neutrality: those are conditions on the \emph{pair} of phases. An
 adapter describes one phase in isolation, and pairing a different hadronic or
 quark model is writing an adapter, not editing the solver.
+
+\paragraph{The block.} \texttt{PhaseThermo}
+(\texttt{eos.general.state}) is matter only --- no leptons and no photons,
+because those are shared by the whole system and in a mixed phase may be shared
+differently from the matter. A thermal meson gas, on the other hand, \emph{is}
+part of the phase and is listed in \texttt{densities} beside the baryons, which
+is what makes the reported $\nC$ and $\nS$ the TOTAL non-leptonic charge and
+strangeness the neutrality and fixed-fraction conditions are stated in terms
+of. The fields are:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+field & meaning \\
+\midrule
+\texttt{T} & temperature [MeV] \\
+\texttt{mu\_B}, \texttt{mu\_C}, \texttt{mu\_S}
+  & the conserved-charge potentials, $\muC = \mu_p - \mu_n$ \\
+\texttt{fields} & the model's own self-consistent solution, in its own names;
+                  empty where it has none \\
+\texttt{densities} & every active species: baryons, quarks, any thermal meson
+                     gas [fm$^{-3}$] \\
+\texttt{mu\_i} & Eq.~(\ref{eq:projection}), derived, never independent \\
+\texttt{mu\_eff\_i} & $\mu_i - \Sigma^0_i$, the potential entering the Fermi
+                      integrals \\
+\texttt{m\_eff\_i} & the Dirac effective masses, per species \\
+\texttt{n\_B}, \texttt{n\_C}, \texttt{n\_S} & the phase's charge densities
+                                              [fm$^{-3}$] \\
+\texttt{P}, \texttt{eps}, \texttt{s} & [MeV\,fm$^{-3}$, MeV\,fm$^{-3}$,
+                                       fm$^{-3}$] \\
+\texttt{mu\_dot\_n} & $\sum_i \mu_i n_i$ over this phase \\
+\texttt{Sigma\_R} & rearrangement self-energy; enters $\mu$ and $P$, never
+                    $\varepsilon$ \\
+\texttt{condensation} & $\kappa = \max_j |\mu^{*}_j|/m_j$ over the meson gas;
+                        $0$ without one \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\texttt{mu\_eff\_i} and \texttt{m\_eff\_i} are carried rather than
+recomputed because neither can be reconstructed without the fields and the
+per-species couplings, which the engine does not have.
+\texttt{mu\_dot\_n} is supplied by the model rather than derived here, because
+a mean field splits the field energy between $\mu$ and $P$ in a way only the
+model knows --- a thermal meson gas, for instance, contributes
+$\sum_j \mu^{*}_j n_j$ at its \emph{effective} potentials. It is not
+decoration: it is what the $10^{-8}$ Euler check of Eq.~(\ref{eq:euler})
+consumes, through
+$\texttt{euler\_residual()} = (\varepsilon + P - Ts -
+\texttt{mu\_dot\_n})/\varepsilon$.
 
 The last entry, $\kappa = \max_j |\mu^{*}_j| / m_j$ over the phase's thermal
 meson gas, is the phase's distance from Bose condensation, and it is on the
@@ -156,6 +220,19 @@ without one makes the feature that needs it raise, naming the phase, and the
 analytic Jacobian in particular is never generalized: each block
 differentiates one model's own field equations, and the numeric Jacobian
 remains the reference.
+
+\paragraph{The name of the surface.} In this repository the map
+Eq.~(\ref{eq:adapter}) is \texttt{thermo\_from\_mu}, in every model that ships
+one. Three models --- \texttt{dd2}, \texttt{sfho} and \texttt{did} --- spell it
+\texttt{thermo\_at\_potentials}, and in \texttt{sfho} and \texttt{did} that
+name sits above a lower evaluation layer already called
+\texttt{thermo\_from\_mu}, which takes the solved mean fields as arguments as
+well as the potentials. The ruling this document fixes is: \textbf{the contract
+surface is \texttt{thermo\_from\_mu}, and a lower layer that also takes the
+fields is \texttt{thermo\_from\_fields}} --- the name says what the function
+takes, which is the distinction that matters, and it removes the
+one-job-two-names split rather than freezing it. The three models are renamed
+to match under their own package tickets, not here.
 
 \section{The $\eta$ family of constructions}
 
@@ -244,10 +321,20 @@ modes. The unknown vector, the residual list and the analytic Jacobian are all
 \emph{assembled by reading the regimes}, so the four named modes are four
 configurations of one solver and an unnamed combination needs no new code.
 
-Two combinations are refused rather than mis-assembled: per-phase strangeness
-($S$ \textsc{local}) is not wired, and $L_e$ \textsc{local} is not a defined
-mode at all --- the neutrino mean free path is far larger than the
-mixed-phase structures, so neutrinos cannot be localised in one of them.
+Three combinations are refused rather than mis-assembled, each with its own
+message: per-phase strangeness ($S$ \textsc{local}) is not wired, and
+\texttt{fixed\_YC\_YS} conserves strangeness globally over H$+$Q instead;
+$L_e$ \textsc{local} is not a defined mode at all --- the neutrino mean free
+path is far larger than the mixed-phase structures, so neutrinos cannot be
+localised in one of them; and $L_e$ \textsc{global} together with a conserved
+$C$ is refused because trapped neutrinos are defined on top of
+$\beta$-equilibrium charge, so a fixed $Y_C$ combined with a fixed $Y_{L_e}$ is
+not a defined mode.
+
+Two further refusals are declarations of a \emph{phase} rather than of a mode:
+a charge spec conserving $S$ globally raises if either phase declares
+\texttt{supports\_S = False}, and \texttt{SpeciesFlags.sigma\_star} (a
+hidden-strange scalar) is not wired in the hadronic phase.
 
 \section{The equilibrium system}
 
@@ -376,9 +463,18 @@ evaluated through the same shared routines the phases use, and the photons are
 \begin{equation}
 P_\gamma = \frac{\pi^2 T^4}{45 (\hbar c)^3}, \qquad
 \varepsilon_\gamma = 3 P_\gamma, \qquad
-s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} , \qquad \mu_\gamma = 0 .
+s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} , \qquad \mu_\gamma = 0 ,
 \label{eq:photons}
 \end{equation}
+%
+and they are \textbf{unconditional at $T > 0$}: the engine has no species flag
+of its own, it takes the hadronic phase's \texttt{SpeciesFlags} for the
+hadronic sector only, and the assembly adds a photon gas whenever $T > 0$
+without consulting any flag. A mixed point at finite temperature therefore
+always carries Eq.~(\ref{eq:photons}), which is the right default for the
+astrophysical use but is not the switchable-sector contract the single-phase
+models honour, and a caller cannot turn it off. This is a known gap in the
+engine's species handling, recorded as such rather than a silent choice.
 %
 Each lepton population is evaluated at the potential its own neutrality row
 fixed: $\mu_e^{\mathrm{L},\phH}$ and $\mu_e^{\mathrm{L},\phQ}$ for the local
@@ -399,7 +495,15 @@ Eqs.~(\ref{eq:epstot})--(\ref{eq:stot}) weight $\varepsilon$ and $s$, and with
 $\mu_\gamma = 0$. Unlike the pure-phase case this is not an algebraic
 identity: it holds only if every thermal and lepton term has been weighted
 consistently, so it is the sharpest single check on the assembly and it is
-asserted at $10^{-8}$ relative on every solved point.
+asserted at $10^{-8}$ relative on every solved point
+(\texttt{HVH\_RTOL}).
+
+There is no $n_s$ and no identity $n_s = (\varepsilon - 3P)/m^*$ here, and no
+single-species kinetic block beyond Eq.~(\ref{eq:leptonkin}): the engine
+consumes each phase through Eq.~(\ref{eq:adapter}) and forms no scalar density
+of its own. The scalar densities and effective masses live in the phases, are
+reported per phase in \texttt{m\_eff\_i}, and the identities that produce them
+are in the models' own documents.
 
 \section{The two sound speeds}
 
@@ -445,6 +549,40 @@ $\nB^{\mathrm{offset}}(T)$ are made of, and they are part of the result rather
 than something the caller recovers afterwards by scanning the rows for where
 $\chi$ crossed $0$ and $1$.
 
+A \texttt{Window} carries \texttt{n\_onset}, the density at which $\chi$
+reaches $0$ --- the last hadronic point; \texttt{n\_offset}, the density at
+which it reaches $1$ --- the first pure quark point; \texttt{probes}, the
+solved points used to find them, kept so a caller can reuse them; and
+\texttt{onset\_state} / \texttt{offset\_state}, the converged fixed-$\chi$
+solves AT the boundaries when the window was refined exactly, \texttt{None}
+when a boundary is only a bisected estimate. Those two carry the full unknown
+vector at $\chi = 0$ and $\chi = 1$, which is what seeds a neighbouring
+temperature's boundary search and the window sweep's first point.
+
+Both densities are \texttt{nan} when there is no transition on the grid --- a
+physics outcome for those parameters, not a failure. \texttt{exists} is true
+only for a well-ordered window ($\nB^{\mathrm{offset}} >
+\nB^{\mathrm{onset}}$), because $\chi$ is a solved quantity rather than a
+monotone parameter and a sparse or noisy probe set can bracket the two
+crossings out of order. \texttt{reason} reports \emph{why} it is false as a
+distinct label, since the four outcomes are not interchangeable and reporting
+them as one would cost a scan the ability to tell physics from failure:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+label & meaning \\
+\midrule
+\texttt{ok}                     & \texttt{exists} is true \\
+\texttt{no\_transition}         & $\chi$ never crossed either target on this
+                                  grid \\
+\texttt{onset\_unbracketed}     & $\chi = 1$ was located, $\chi = 0$ was not \\
+\texttt{offset\_unbracketed}    & $\chi = 0$ was located, $\chi = 1$ was not \\
+\texttt{crossings\_out\_of\_order} & both located, but offset $\le$ onset \\
+\bottomrule
+\end{tabular}
+\end{center}
+
 The per-phase decomposition satisfies three cheap invariants at every solved
 point,
 %
@@ -461,6 +599,14 @@ cannot show: at fixed total $Y_C$ the hadronic phase can be far more
 positively charged than the average while the quark phase carries the
 compensating negative charge, and how far that separation goes is exactly what
 $\eta$ controls.
+
+A solved point (\texttt{Result}) carries \texttt{converged},
+\texttt{error}, $\nB$, $T$, $\eta$, $\chi$, the two \texttt{PhaseThermo} blocks
+\texttt{th\_H} and \texttt{th\_Q}, the solved unknown-vector slots as
+\texttt{potentials}, the matched physical $\muB$, the totals $P$,
+$\varepsilon$, $s$ of Eqs.~(\ref{eq:Ptot})--(\ref{eq:stot}), and an
+\texttt{extras} dictionary. \texttt{in\_mixed\_phase} is $0 < \chi < 1$, and
+\texttt{phase} is \texttt{'H'}, \texttt{'mix'} or \texttt{'Q'}.
 
 \subsection*{The complete hybrid equation of state}
 
@@ -489,16 +635,92 @@ distinction left for $\eta$ to interpolate, and the leptonless fixed-$Y_C$
 hybrid is a charged slice whose window is $\eta$-independent. Because the
 segments are cut on $\chi$ rather than matched on pressure, they meet by
 construction; before the table reaches a structure solver, round-off pressure
-inversions on a Maxwell plateau are clamped and any larger inversion ---
-mechanical instability no construction has resolved --- is refused.
+inversions on a Maxwell plateau are clamped --- a drop counts as round-off when
+$|\Delta P| \le 10^{-12} \times$ scale (\texttt{\_P\_ROUNDOFF}) --- and any
+larger inversion, mechanical instability no construction has resolved, is
+refused.
+
+\section{The API surface}
+\label{sec:api}
+
+Three entry points, with the signatures every model in this repository carries
+plus the arguments a composite engine adds:
+%
+\begin{verbatim}
+eos_point(par, mode, species, n_B=, T=|SnB=, eta=0.0, vmit_params=,
+          leptons=True, x0=, analytic_jac=, check_consistency=True,
+          phases=, muons=, **conditions)
+eos_table(par, mode, species, axes=, eta=0.0, fixed=, leptons=True,
+          vmit_params=, window_only=True, analytic_jac=, refine="exact",
+          phases=, muons=, progress=, verbose=)
+eos_response(par, mode, species, frozen="equilibrium", n_B=, T=0.0,
+             eta=0.0, vmit_params=, leptons=True, rel_dn=1e-3,
+             phases=, muons=, **conditions)
+\end{verbatim}
+%
+$\nB$ is always the TOTAL baryon density of the mixture, volume-averaged over
+both phases, not the density of either one. \texttt{par}, \texttt{species} and
+\texttt{vmit\_params} are the DD2$+$vMIT front door; \texttt{phases} is the
+general form, and then all three must be \texttt{None}, the two \texttt{Phase}
+objects carrying both models' parameters. \texttt{x0} is a warm start in the
+slot order of \texttt{mixed\_slots(spec, eta, species)}.
+
+\texttt{eos\_table} takes \texttt{axes} $=$ \texttt{\{'nB': grid, exactly one
+of 'T'/'SnB': grid, and optionally any of 'Y\_C'/'Y\_S'/'Y\_Le'\}} and returns
+\texttt{(rows, windows)}. \texttt{window\_only=True} solves the mixed system
+only between the located boundaries, where it is the only thing that can
+answer; outside, the far cheaper pure-phase solvers give the same state --- set
+it \texttt{False} to solve at every grid point, e.g.\ when studying $\chi$
+outside $[0,1]$. \texttt{refine} chooses the boundary resolution:
+\texttt{"exact"} finishes each boundary with one fixed-$\chi$ solve and marches
+those solves along the temperature axis, \texttt{"bisect"} stops at half a grid
+spacing. The \texttt{progress} callback is invoked once per completed line with
+the repository's standard dictionary \texttt{\{mode, line, n\_lines, temp\_key,
+temp, fracs, n\_solved, n\_requested, elapsed\_s\}} plus this engine's two
+extras \texttt{\{eta, window\}}; \texttt{verbose=True} installs the built-in
+printer.
+
+\texttt{eos\_response} implements two freezes, and every result carries
+$\chi$ and \texttt{phase} alongside them, because in a composite engine which
+regime the point is in decides which numbers in the dict mean anything.
+
+\begin{itemize}
+\item \texttt{frozen="equilibrium"} --- everything re-equilibrates. Central
+  differences over a relative density step \texttt{rel\_dn} give
+  $c_{\mathrm{eq}}^2 = \partial P/\partial\varepsilon$ at fixed $T$, returned
+  as \texttt{cs2\_eq}, and $C_V = (T/\nB)\,\partial s/\partial T$ at fixed
+  $\nB$, returned only at $T > 0$. Through a Maxwell window the pressure is
+  constant along that sequence, so \texttt{cs2\_eq} goes to zero: that is the
+  physics, not a failure. \emph{Both are defined only inside the coexistence
+  window.} Outside it the mixed system still has a root --- $\chi$ runs
+  negative or past one --- but that root is an analytic continuation, not the
+  state: at $\eta = 1$ it sits on the pressure plateau at every density, so
+  differentiating it returns zero for matter whose real sound speed is not
+  small. Both quantities are therefore \texttt{nan} at a pure-phase point, and
+  the equilibrium response there comes from that phase's own
+  \texttt{eos\_response}.
+\item \texttt{frozen="chi"} --- the quark volume fraction is held, and with it
+  each phase's charge and strangeness fractions; \texttt{leptons} chooses
+  whether the mixture is re-neutralised under the perturbation. Returns
+  \texttt{cs2\_frozen}, defined at every density: outside the window $\chi$ is
+  clipped and the answer is the pure phase's own frozen sound speed, so the
+  curve joins continuously at the boundaries.
+\end{itemize}
+
+\noindent
+The remaining freezes of the specification --- frozen per-species composition,
+frozen conserved fractions --- raise \texttt{NotImplementedError} naming the
+gap, and are recorded in \texttt{docs/DEFERRED.md}.
 
 \section{Numerics}
 
 \paragraph{Scaling and the gate.} Every residual row is made dimensionless
-before it is judged: density rows are divided by $\nB$, potential equalities
-by a fixed potential scale, and the mechanical row by the larger of the two
-phase pressures. A state is accepted when the largest scaled residual is below
-$10^{-10}$. The rows carry mixed units --- densities of order
+before it is judged: density rows are divided by
+$n_{\rm scale} = \max(\nB, 0.01)\ \mathrm{fm^{-3}}$, potential equalities by the
+fixed $\mu_{\rm scale} = 100.0$~MeV, and the mechanical row by
+$\max\big(|P^\phH + \eta P_\ell^\phH|,\, |P^\phQ + \eta P_\ell^\phQ|,\,
+1.0\big)$ MeV\,fm$^{-3}$. A state is accepted when the largest scaled residual
+is below $10^{-10}$. The rows carry mixed units --- densities of order
 $10^{-1}\,\mathrm{fm}^{-3}$ against potentials of order
 $10^{3}\,\mathrm{MeV}$ --- so a gate on the raw norm would be dominated by
 whichever row happens to be largest and would accept states satisfying the
@@ -508,13 +730,21 @@ others only loosely.
 called once per residual evaluation. Three levels are used, in order of what
 they buy: the hadronic phase's starting field configuration is a constant of
 the solve and is computed once; each density seeds the next along the stiff
-$\nB$ axis; and each isotherm seeds the next. On top of that the mixed system
+$\nB$ axis, with a missed step bisected up to \texttt{max\_bisect} $= 6$
+levels; and each isotherm seeds the next. On top of that the mixed system
 is solved only \emph{inside} the located window --- outside it the far cheaper
 pure-phase solvers answer the same question --- and the window search on one
 isotherm is told where the previous isotherm found its boundaries, since they
 move smoothly with $T$. A hint that produces a boundary on the edge of the
 hinted range is discarded and the full search repeated, so a window that
 genuinely disappears is still reported as gone.
+
+The cold start is physical: each phase is placed at its OWN pure equilibrium
+point at the target density, which matches the $\eta = 1$ structure --- where
+each phase is separately neutral --- far better than a single shared $\mu_e$
+would, and is a sound seed at $\eta = 0$ too; $\chi$ starts mid-window. A pair
+whose first phase declares no cold start raises rather than guessing, and the
+caller passes \texttt{x0}.
 
 \paragraph{Exact boundaries by the fixed-$\chi$ solve.} A phase boundary is a
 $\chi$ crossing, and the crossing can be solved for directly: impose $\chi$
@@ -533,7 +763,12 @@ cold-start finder --- the fixed-$\chi$ system can walk to the wrong root from
 far away --- so the scan decides \emph{which} root and the exact solve
 decides \emph{where}: the onset solve is seeded from the lowest mixed probe,
 the offset solve from the converged onset state, and a solve that fails or
-leaves the probes' bracket is rejected in favour of the bisected estimate.
+leaves the probes' bracket is rejected in favour of the bisected estimate. The
+scan itself uses \texttt{n\_probe} $= 12$ probes per line by default, refined up
+to \texttt{max\_refine} $= 2$ times --- each refinement adding
+$3 \times \texttt{n\_probe}$ probes on the bracketing subinterval --- when no
+hint is available, and the bisection that backs it is bounded by
+\texttt{MAX\_WALK} $= 64$ steps.
 Along a temperature axis the scan is then needed only twice: once two
 isotherms carry converged boundary states, the next isotherm's boundaries are
 two warm-started fixed-$\chi$ solves seeded by linear extrapolation of the
@@ -546,13 +781,25 @@ Jacobian and is the correctness oracle. A hand-assembled analytic Jacobian is
 available as the fast path, validated against finite differences and required
 to reach the same root; where a trial point drives a phase solve out of its
 domain, both paths answer with a large penalty residual so the outer iteration
-backs off instead of aborting.
+backs off instead of aborting. The analytic path lives in \texttt{backends/}
+and is deletable: a pairing in which either phase advertises no analytic block
+silently uses the numeric Jacobian, because \texttt{analytic\_jac=True} asks
+for the fast path where one exists, not for an error where none does.
 
 \paragraph{Non-convergence.} Reported, never raised, at the public boundary:
 the engine is used inside parameter scans that walk into regions where no
 hybrid equation of state exists, and a scan must be able to score such a point
 and move on. A converged point outside $[0,1]$ in $\chi$ is not a failure ---
 it is how the engine says which side of the transition the density is on.
+
+\section{Not implemented}
+
+Recorded in \texttt{docs/DEFERRED.md}: the frozen-per-species and
+frozen-conserved-fraction response freezes; $S$ \textsc{local}; a fixed $Y_C$
+combined with a fixed $Y_{L_e}$; \texttt{SpeciesFlags.sigma\_star} in the
+hadronic phase; a Bose condensate in either phase (refused through $\kappa$);
+and a species-flag surface of the engine's own, which is why the photon gas of
+Eq.~(\ref{eq:photons}) cannot be switched off.
 
 \begin{acknowledgments}
 Written as the specification of \texttt{eos/mixed}.
