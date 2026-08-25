@@ -27,6 +27,7 @@ References:
 from dataclasses import dataclass
 
 from eos.general.tabulate import unconverged_response
+from eos.general.thermal_mesons import condensation_message
 from eos.sfho.solver import EoSPoint, solve_mode
 from eos.sfho.table import MODES, TableSpec, build_table, mode_spec
 
@@ -112,10 +113,8 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
     point = solve_mode(par, n_B, species, spec, T=T, SnB=SnB, x0=x0)
     if not point.converged:
         if point.matter.condensation >= 1.0:
-            return PointResult(
-                False, f"the thermal meson gas Bose-condenses here "
-                       f"(max |mu*|/m = {point.matter.condensation:.3f}); "
-                       f"a condensate is not implemented", None)
+            return PointResult(False, condensation_message(
+                point.matter.condensation, point.n_B, point.T), None)
         return PointResult(
             False, f"residual {point.error:.3e} above the mode's gate", None)
     return PointResult(True, "converged", point)

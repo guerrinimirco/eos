@@ -972,6 +972,15 @@ against this file, not against the earlier `pytest_before*.txt`.
   different answers across six models. Both are
   [ticket 68](issues/68-njl-ccdm-leptons-condition.md).
 
+- [`did` reports meson condensation as a residual below its own gate](issues/66-did-condensation-message.md): the condensation rejection got its
+  own words, in `eos/general/thermal_mesons.py` so it exists once. The
+  root-cause sweep found the defect in **three** sites across **two** models —
+  `sfho/responses.py` had it too, and `sfho` was the ticket's model to copy.
+  Only `did` and `sfho` clear `converged` for a second reason at all. The
+  condensation onset is a curve near 0.302 fm^-3 that moves with T, the
+  species flags and the couplings, not the `n_B <= 0.2` domain the ticket
+  guessed at.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:

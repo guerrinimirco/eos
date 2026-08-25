@@ -118,6 +118,21 @@ def condensation_ratio(mu_pi_plus, mu_K_plus, mu_K0,
     return worst
 
 
+def condensation_message(condensation, n_B, T):
+    """Why a point carrying this `condensation` is refused, in words.
+
+    A Bose-condensed gas is a SECOND reason a solve is rejected, unrelated to
+    its residual: `solve_bose_jel` caps mu at m rather than diverging, so the
+    solve converges happily on a saturated gas that is not the physical state
+    (see the module docstring). The reason lives here, beside the quantity it
+    names, so every consumer refuses it in the same words rather than
+    reporting whatever reason it happens to have a string for.
+    """
+    return (f"the thermal meson gas Bose-condenses at n_B={n_B:g} fm^-3, "
+            f"T={T:g} MeV (max |mu*|/m = {condensation:.3f}); a condensate "
+            f"is not implemented, so this state is outside the model")
+
+
 def thermal_meson_charges(mu_pi_plus, mu_K_plus, mu_K0, T,
                           include_pseudoscalars=False,
                           include_thermal_vectors=False):

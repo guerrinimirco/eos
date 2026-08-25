@@ -25,6 +25,7 @@ from eos.did.solver import EoSPoint, MODE_FRACTIONS, mode_spec, solve_mode
 from eos.did.species import SpeciesFlags
 from eos.did.table import TableSpec, build_table
 from eos.general.tabulate import unconverged_response
+from eos.general.thermal_mesons import condensation_message
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,9 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     point = solve_mode(par, n_B, species, spec, T=T, SnB=SnB, x0=x0)
     if point.converged:
         return PointResult(True, "converged", point)
+    if point.condensation >= 1.0:
+        return PointResult(False, condensation_message(
+            point.condensation, point.n_B, point.T), point)
     return PointResult(False,
                        f"residual {point.error:.3e} above the gate at "
                        f"n_B={n_B:g} fm^-3", point)

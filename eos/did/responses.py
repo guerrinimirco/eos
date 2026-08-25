@@ -21,6 +21,7 @@ References: Typel, Oertel, Klahn et al., CompOSE manual, arXiv:2203.03209
 section 3.6; Constantinou, Guerrini, Zhao et al., arXiv:2506.20418 Eqs. 76-77.
 """
 from eos.did.solver import solve_mode
+from eos.general.thermal_mesons import condensation_message
 
 
 def _solve(par, n_B, flags, spec, T):
@@ -32,6 +33,10 @@ def _solve(par, n_B, flags, spec, T):
     """
     point = solve_mode(par, n_B, flags, spec, T=T)
     if not point.converged:
+        if point.condensation >= 1.0:
+            raise RuntimeError(
+                "the response stencil needs a converged neighbour and "
+                + condensation_message(point.condensation, n_B, T))
         raise RuntimeError(
             f"the response stencil needs a converged neighbour and the solve "
             f"at n_B={n_B:g} fm^-3, T={T:g} MeV did not converge "
