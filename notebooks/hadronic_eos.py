@@ -543,3 +543,255 @@ else:
     run("zl", zl_nmp.invert_nmp, **KNOBS.target_nmp)
 
     print("  [did] no inverse map: the forward map only")
+
+# %% [markdown]
+# ## 6. Benchmarks
+#
+# What a model costs, per model and per configuration. Every timing here comes
+# from `time`/`timeit` around a public call, or out of the `progress` callback
+# the table builders already carry — **no timing hook is added to library
+# code**, and nothing below reads a solver internal.
+#
+# Four numbers, and they are four because they answer different questions:
+#
+# * **cold point** — one `eos_point` with no warm start, which is what an
+#   inference sampler pays per proposal. Best of `BENCH_REPEAT` runs, so it is
+#   the cost of the call and not the cost of the first-ever call in a process
+#   (imports, JIT, first-touch caches).
+# * **warm point** — the per-point cost *inside* a sweep, where each solved
+#   point seeds the next: the line's `elapsed_s` divided by its `n_solved`.
+#   It is the number that matters for building a table, and it is not the cold
+#   number. Where a line has non-converged points their cost is in `elapsed_s`
+#   but not in `n_solved`, which inflates this figure — the honest reading,
+#   since a table pays for the attempts too.
+# * **line wall time** — one full `n_B` line at one temperature and one
+#   combination of fractions, straight from the callback.
+# * **non-converged** — the count, and the `n_B` where they fall.
+#   Non-convergence is a *return value*, so the benchmark counts these and
+#   keeps going; it never crashes on them and never reports them as time saved.
+#
+# The benchmark line is deliberately wider than a production table — down to
+# 0.002 and up to 3.0 fm^-3, both ends outside where uniform matter is the
+# physical state — so that the non-convergence counter reports the real thing
+# rather than a column of zeros.
+
+# %%
+import cProfile
+import io
+import pstats
+import timeit
+
+BENCH_N_B = np.linspace(0.002, 3.0, 64)
+BENCH_REPEAT = 3
+
+# (mode, T, the mode's fractions). `leptons` is not in here: it is the knobs
+# cell's flag and is applied to the fixed-fraction modes exactly as elsewhere.
+BENCH_CONFIGS = (("beta_eq_neutrinoless", 0.0, {}),
+                 ("fixed_YC", 10.0, {"Y_C": KNOBS.Y_C}))
+
+
+def bench_line(name, mode, T, conditions):
+    """One benchmark row for one model in one configuration.
+
+    Returns None when the model refuses the configuration or the whole line
+    fails — a refusal is not a slow result and does not belong in a timing
+    table. Everything measured is a public call.
+    """
+    module = model(name)
+    par, species = parameters_for(name), flags_for(name)
+    extra = {"leptons": KNOBS.leptons} if mode.startswith("fixed_") else {}
+    n_B_probe = float(np.median(BENCH_N_B))
+
+    def one_point():
+        return module.eos_point(par, mode, species, n_B=n_B_probe, T=T,
+                                **conditions, **extra)
+
+    status, _ = run(name, one_point)
+    if status != "ok":
+        return None
+    cold_s = min(timeit.repeat(one_point, repeat=BENCH_REPEAT, number=1))
+
+    axes = {"nB": BENCH_N_B, "T": np.array([T])}
+    for key, value in conditions.items():
+        axes[key] = np.array([value])
+
+    lines = []
+    status, result = run(name, module.eos_table, par, mode, species, axes,
+                         progress=lines.append, **extra)
+    if status != "ok":
+        return None
+    info = lines[-1]          # one temperature, one fraction combination
+    rows = module.rows_from_result(result)
+
+    solved = {round(float(row["n_B"]), 9) for row in rows}
+    missed = [float(x) for x in BENCH_N_B if round(float(x), 9) not in solved]
+    return dict(model=name, mode=mode, T=T,
+                cold_ms=1e3 * cold_s,
+                warm_ms=1e3 * info["elapsed_s"] / max(info["n_solved"], 1),
+                line_s=info["elapsed_s"],
+                n_solved=info["n_solved"],
+                n_requested=info["n_requested"],
+                missed=missed)
+
+
+benchmarks = []
+for mode, T, conditions in BENCH_CONFIGS:
+    header("benchmark", mode)
+    for name in KNOBS.models:
+        row = bench_line(name, mode, T, conditions)
+        if row is not None:
+            benchmarks.append(row)
+            print(f"  [{name}] cold {row['cold_ms']:7.3f} ms   "
+                  f"warm {row['warm_ms']:7.3f} ms/pt   "
+                  f"line {row['line_s']:6.3f} s   "
+                  f"{row['n_solved']}/{row['n_requested']} points")
+
+# %% [markdown]
+# ### Where the line did not converge
+#
+# The count and the densities, per model and configuration. A model that
+# solved every requested point says so; nothing is inferred from a row count
+# alone.
+
+# %%
+header("non-converged points")
+for row in benchmarks:
+    missed = row["missed"]
+    label = f"  [{row['model']:5s} {row['mode']:20s} T={row['T']:4.1f}]"
+    if not missed:
+        print(f"{label} 0 of {row['n_requested']}")
+        continue
+    shown = ", ".join(f"{x:.3f}" for x in missed[:8])
+    more = "" if len(missed) <= 8 else f", ... (+{len(missed) - 8})"
+    print(f"{label} {len(missed)} of {row['n_requested']}  "
+          f"at n_B = {shown}{more} fm^-3")
+
+# %% [markdown]
+# ### Bottlenecks
+#
+# `cProfile` over one representative line — one model, one mode, the same grid
+# the timings above used. Top 15 by cumulative time.
+#
+# The default selection is a **finite-T** line, and it is profiled *after* the
+# benchmark cells above have run. Both matter. A T = 0 line takes the model's
+# jitted T = 0 kernel, and profiling it in a fresh process reports the Numba
+# compilation — `llvmlite`, `install_registry`, `marshal.loads` at the top of
+# the list — rather than any physics. Run cold and the profile describes the
+# compiler; run warm and it describes the solve.
+
+# %%
+PROFILE = ("dd2", "beta_eq_neutrinoless", 10.0, {})
+
+profile_model, profile_mode, profile_T, profile_conditions = PROFILE
+profile_axes = {"nB": BENCH_N_B, "T": np.array([profile_T])}
+for key, value in profile_conditions.items():
+    profile_axes[key] = np.array([value])
+profile_extra = ({"leptons": KNOBS.leptons}
+                 if profile_mode.startswith("fixed_") else {})
+
+profiler = cProfile.Profile()
+profiler.enable()
+model(profile_model).eos_table(parameters_for(profile_model), profile_mode,
+                               flags_for(profile_model), profile_axes,
+                               **profile_extra)
+profiler.disable()
+
+report = io.StringIO()
+pstats.Stats(profiler, stream=report).sort_stats("cumulative").print_stats(15)
+print(f"=== cProfile — {profile_model} {profile_mode} T={profile_T} ===")
+print(report.getvalue())
+
+# %% [markdown]
+# **Reading it** (for the default selection, `dd2` in beta equilibrium at
+# T = 10 MeV): the line is root-finding around integral evaluation. Most of the
+# cumulative time sits under MINPACK's `hybrj`, and what `hybrj` spends it on is
+# `residual` — whose own cost is `kinetic_thermo` and, below that,
+# `solve_fermi_jel`, the JEL Fermi integrals of `eos.general.fermi_integrals`,
+# which is also the largest single entry by *internal* time. The analytic
+# Jacobian of `backends/` is a comparable per-call cost to the residual it
+# differentiates, which is why it buys less here than the evaluation count
+# suggests, and why `sfho` leaves its own off. Profiling another model or mode
+# moves the balance; the top of the list says which.
+#
+# ### Reference against fast backend
+#
+# `dd2` is the only one of these four whose fast backend is reachable from the
+# public API: `eos_point` takes `analytic_jac`, and `False` selects the
+# finite-difference reference. Deleting `backends/` changes no number, only
+# speed — which is what the two columns below measure.
+#
+# The other three: `sfho` ships an analytic Jacobian but leaves it off, and its
+# own docstring says why — it cuts residual evaluations per point but each
+# finite-T kinetic derivative costs four JEL evaluations, so the wall clock
+# moves the wrong way; what it is for is the second-derivative quantities,
+# which need `dR/dx` itself rather than a faster root. `zl` and `did` ship no
+# `backends/` at all, so there is one path and nothing to compare.
+
+# %%
+header("backends — dd2, reference vs fast")
+BACKEND_N_B = 0.4
+BACKEND_T = 10.0
+
+for label, analytic_jac in (("reference (finite difference)", False),
+                            ("fast (analytic Jacobian)", True)):
+
+    def one_point(analytic_jac=analytic_jac):
+        return model("dd2").eos_point(parameters_for("dd2"),
+                                      "beta_eq_neutrinoless", flags_for("dd2"),
+                                      n_B=BACKEND_N_B, T=BACKEND_T,
+                                      analytic_jac=analytic_jac)
+
+    status, _ = run(f"dd2 {label}", one_point)
+    if status == "ok":
+        best = min(timeit.repeat(one_point, repeat=BENCH_REPEAT, number=1))
+        print(f"  [dd2 {label:28s}] {best * 1e3:7.3f} ms per cold point")
+
+# %% [markdown]
+# The table path is not affected by that choice: `dd2`'s warm-started sweep
+# takes the analytic Jacobian by default, so the `warm` column of the summary
+# is already the fast backend.
+#
+# ### The summary table
+#
+# One row per model and configuration, and the same rows written out under the
+# naming convention of section 3. The model slot of the name carries the study
+# (`hadronic`) rather than a model, because the table spans all four — the
+# model of each row is a column inside it. `missed` is a list and does not
+# survive as a table column, so the file keeps the count and the first density;
+# the densities themselves are printed above.
+
+# %%
+header("summary")
+print(f"  {'model':6s} {'mode':22s} {'T':>5s} {'cold ms':>9s} "
+      f"{'warm ms/pt':>11s} {'line s':>8s} {'solved':>10s}")
+for row in benchmarks:
+    print(f"  {row['model']:6s} {row['mode']:22s} {row['T']:5.1f} "
+          f"{row['cold_ms']:9.3f} {row['warm_ms']:11.3f} "
+          f"{row['line_s']:8.3f} "
+          f"{row['n_solved']:4d}/{row['n_requested']:<5d}")
+
+# %%
+bench_rows = [dict(model=row["model"], mode=row["mode"], T=row["T"],
+                   cold_ms=row["cold_ms"], warm_ms=row["warm_ms"],
+                   line_s=row["line_s"], n_solved=row["n_solved"],
+                   n_requested=row["n_requested"],
+                   n_missed=len(row["missed"]),
+                   n_B_first_missed=(row["missed"][0] if row["missed"]
+                                     else float("nan")))
+              for row in benchmarks]
+
+if bench_rows:
+    bench_name = standard_name(
+        "hadronic", "benchmark", {},
+        {"nB": BENCH_N_B,
+         "T": np.array([T for _, T, _ in BENCH_CONFIGS])},
+        KNOBS.species, leptons=KNOBS.leptons)
+    bench_path = save_table(bench_rows, table_path("hadronic", bench_name),
+                            meta={"study": "hadronic benchmark",
+                                  "models": ",".join(KNOBS.models),
+                                  "modes": ",".join(m for m, _, _
+                                                    in BENCH_CONFIGS),
+                                  "species": KNOBS.species,
+                                  "leptons": KNOBS.leptons,
+                                  "repeat": BENCH_REPEAT})
+    print("wrote", bench_path)
