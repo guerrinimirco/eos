@@ -754,6 +754,20 @@ In scope, not yet sharp enough to ticket:
   The rename ruling has now landed (ticket 10), and both serious files are ones
   tickets 44 and 45 rewrite anyway — so the open question narrows to whether the
   reorder rides along with those renames or is gated separately from them.
+- **A `test/baseline/` comparison needs the .npz generation, and nothing records
+  it.** Sharper than the interpreter rule above and NOT closed by it. `test/` is
+  gitignored (§11), so the `.npz` files have no history: when
+  [ticket 56](issues/56-baseline-empty-sector-gate.md) dropped 34 keys from four
+  of them, every earlier `output/_audit/` file silently became a measurement
+  against a key set that no longer exists and cannot be reconstructed. So two
+  audit files can agree on the interpreter and still be incomparable on their
+  `test_baseline[*]` rows. The honest minimum today is that a resolution touching
+  `test/baseline/` says so loudly. A cheap real mechanism, unpriced: have the
+  baseline generator stamp a fingerprint — sorted key names hashed, plus the
+  generating interpreter — into the audit file's header, so a listing carries its
+  own denominator. Whether that lives in the generator (gitignored, so it would
+  be lost again) or in `eos/` is the same question as the entry below.
+
 - **Several real fixes now live outside version control.** `.gitignore:75`
   excludes `/test/` entirely (§11), so ticket 39's helper skip, ticket 40's
   completed baseline exclusion and now [ticket 56](issues/56-baseline-empty-sector-gate.md)'s
