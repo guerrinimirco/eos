@@ -177,7 +177,8 @@ and a meson is one function:
   \label{eq:shape}
 \end{equation}
 $g^{S,N(0)}_{Mi}$ is the vertex strength near saturation ($F_M(1) = 1$ exactly
-when $c_M \to \infty$, and $0.988$ for the vector shape of the published set),
+when $c_M \to \infty$, as the $\sigma$ has; the published set gives
+$F_\omega(1) = F_\phi(1) = 0.98829$ and $F_\rho(1) = 0.96488$),
 $a_M$ sets the low-density decay, $b_M$ is the high-density plateau in units of
 $g^{(0)}$, and $c_M$, $d_M$ are the centre and width of the switch between
 them, in units of $\nzero$. The published set takes $c_\sigma = \infty$, which
@@ -314,6 +315,147 @@ $\rho = 0$ and $\Sigmat = 0$ so that Eq.~\eqref{eq:U} collapses to
 \end{equation}
 one linear equation. There is no published DID $\Delta$ table, so this is a
 choice this implementation offers, not a result of Ref.~\cite{Frohaug2025}.
+
+\section{The parameter set}
+\label{sec:parameters}
+
+Everything below is an \emph{argument}: \texttt{Parameters} is passed into every
+entry point and nothing in the subpackage reads a module-level constant, so a
+Bayesian run varies these numbers across millions of calls without editing a
+source file. \texttt{Parameters.default()} is the maximum-likelihood estimate of
+Table~II of Ref.~\cite{Frohaug2025}, transcribed digit for digit, with $\nzero$
+from their Table~III and the meson masses from their Table~I. DID and DIDY are
+the \emph{same} set: the hyperon couplings of Table~II were fitted together with
+the nucleonic ones and what distinguishes DIDY is
+\texttt{SpeciesFlags(hyperons=True)}, so \texttt{named("DID")} and
+\texttt{named("DIDY")} return the same object.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llrl}
+\toprule
+sector & symbol & value & source \\
+\midrule
+saturation & $\nzero$ [fm$^{-3}$] & $0.15880045$ & Table III; fixes $P(\nzero)=0$ in ISM \\
+\midrule
+meson masses & $m_\sigma$ [MeV] & $550.0$ & Table I (the DD2Y values) \\
+             & $m_\omega$ [MeV] & $783.0$ & \\
+             & $m_\phi$   [MeV] & $1020.0$ & \\
+             & $m_\rho$   [MeV] & $763.0$ & \\
+\midrule
+$\sigma$ & $g^{S(0)}_{\sigma N}$ & $8.94873669$ & fitted \\
+         & $g^{N(0)}_{\sigma N}$ & $8.89241948$ & fitted \\
+         & $a_\sigma$            & $0.16394393$ & fitted \\
+         & $c_\sigma$            & $\infty$     & fixed a priori: no plateau \\
+         & $b_\sigma,\ d_\sigma$ & $0.0,\ 1.8$  & irrelevant while $c_\sigma=\infty$ \\
+         & $g^{S(0)}_{\sigma\Lambda}$ & $7.51077621$ & fitted to $U_\Lambda$ \\
+         & $g^{S(0)}_{\sigma\Sigma}$  & $6.26418057$ & fitted to $U_\Sigma$ \\
+         & $g^{S(0)}_{\sigma\Xi}$     & $6.53781517$ & fitted to $U_\Xi$ \\
+\midrule
+$\omega,\phi$ & $\tilde{g}^{S(0)}_{\omega N}$ & $10.82857726$ & fitted, Eq.~\eqref{eq:aggregate} \\
+              & $\tilde{g}^{N(0)}_{\omega N}$ & $11.00228164$ & fitted \\
+              & $z = g_1/g_8$                 & $0.07720445$  & fitted \\
+              & $a_\omega$                    & $0.15313180$  & fitted \\
+              & $b_\omega$                    & $0.80$        & fixed a priori \\
+              & $c_\omega,\ d_\omega$         & $3.5,\ 1.8$   & fixed a priori \\
+              & $\alpha = F/(D+F)$            & $1$           & fixed \\
+              & $\tan\theta$                  & $1/\sqrt{2}$  & ideal mixing, fixed \\
+\midrule
+$\rho$ & $g^{S(0)}_{\rho N}$ & $3.23020263$ & fitted \\
+       & $g^{N(0)}_{\rho N}$ & $2.59340047$ & fitted \\
+       & $a_\rho$            & $0.39223762$ & fitted \\
+       & $b_\rho$            & $0.40$       & fixed a priori \\
+       & $c_\rho,\ d_\rho$   & $3.5,\ 1.8$  & fixed a priori \\
+       & $g^{S(0)}_{\rho\Sigma}$ & $0.00545444$ & fitted \\
+       & $g^{S(0)}_{\rho\Xi}$    & $1.11415631$ & fitted \\
+       & $g_{\rho\Lambda}$       & $0$          & identically, $I_\Lambda = 0$ \\
+\midrule
+$\Delta$ (extension) & $x_{\sigma\Delta},x_{\omega\Delta},x_{\rho\Delta}$
+       & $1,1,1$ & not in Ref.~\cite{Frohaug2025}; Sec.~\ref{sec:deltas} \\
+\midrule
+blend & $e$ & $1/3$ & fixed, Eq.~\eqref{eq:blend} \\
+\bottomrule
+\end{tabular}
+\caption{The complete stored parameter content. Fifteen numbers are the fit
+(marked ``fitted''); the vector transition zones $c_M = 3.5$, $d_M = 1.8$ in
+units of $\nzero$, the plateaus $b_\omega = 0.80$ and $b_\rho = 0.40$, and
+$c_\sigma = \infty$ were fixed a priori rather than sampled.}
+\end{table}
+
+The $\omega$ and $\phi$ couplings are \emph{not} stored: they are derived from
+$\tilde{g}_{\omega N}$ and $z$ through Eqs.~\eqref{eq:g8} and \eqref{eq:su3},
+and the hyperon $\sigma$ and $\rho$ vertices carry one fitted number each, their
+neutron-matter branch following from Eq.~\eqref{eq:branchtie}. The vertex
+strengths that result are
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrrrrrrr}
+\toprule
+& \multicolumn{2}{c}{$\sigma$} & \multicolumn{2}{c}{$\omega$}
+& \multicolumn{2}{c}{$\phi$} & \multicolumn{2}{c}{$\rho$} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+multiplet & $g^{S(0)}$ & $g^{N(0)}$ & $g^{S(0)}$ & $g^{N(0)}$
+          & $g^{S(0)}$ & $g^{N(0)}$ & $g^{S(0)}$ & $g^{N(0)}$ \\
+\midrule
+$N$        & $8.948737$ & $8.892419$ & $10.046675$ & $10.207836$ & $-5.262966$ & $-5.347391$ & $3.230203$ & $2.593400$ \\
+$\Lambda$  & $7.510776$ & $7.463509$ & $9.178769$  & $9.326009$  & $-6.490370$ & $-6.594484$ & $0$ & $0$ \\
+$\Sigma$   & $6.264181$ & $6.224758$ & $9.178769$  & $9.326009$  & $-6.490370$ & $-6.594484$ & $0.005454$ & $0.004379$ \\
+$\Xi$      & $6.537815$ & $6.496671$ & $8.310864$  & $8.444181$  & $-7.717774$ & $-7.841577$ & $1.114156$ & $0.894512$ \\
+$\Delta$   & $8.948737$ & $8.892419$ & $10.046675$ & $10.207836$ & $0$ & $0$ & $3.230203$ & $2.593400$ \\
+\bottomrule
+\end{tabular}
+\caption{Every vertex of the model at the published set, with
+$g_8^S = 9.178769$ and $g_8^N = 9.326009$ from Eq.~\eqref{eq:g8}. Only the
+$\sigma$ and $\rho$ columns of $N$, and the $g^{S(0)}$ entries of
+$\Lambda,\Sigma,\Xi$, are stored; the rest are derived. With $\alpha = 1$ the
+coefficients $c_\Lambda$ and $c_\Sigma$ of Eq.~\eqref{eq:su3} both vanish, which
+is why the $\Lambda$ and $\Sigma$ vector columns coincide. These are the
+$g^{(0)}$, the shape factor $F_M(x)$ of Eq.~\eqref{eq:shape} multiplies them:
+$F_\sigma(1) = 1$ exactly, $F_\omega(1) = F_\phi(1) = 0.98829$ and
+$F_\rho(1) = 0.96488$, so that in symmetric matter at saturation
+$g_{\sigma N} = 8.9487$, $g_{\omega N} = 9.9291$, $g_{\phi N} = -5.2014$ and
+$g_{\rho N} = 3.1168$.}
+\end{table}
+
+\paragraph{Masses and degeneracies.} Baryon and lepton masses are \emph{not}
+model parameters: they are the PDG values, held once in
+\texttt{eos.general.particles} and shared by every model in the repository. With
+$d_i$ the spin degeneracy $2J+1$ that multiplies every integral of
+Sec.~\ref{sec:kinetics}:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrrrrl}
+\toprule
+$i$ & $m_i$ [MeV] & $C_i$ & $S_i$ & $\tau_{3i}$ & $d_i$ & multiplet \\
+\midrule
+$p$          & $938.2721$  & $+1$ & $0$  & $+1$ & $2$ & $N$ \\
+$n$          & $939.5654$  & $0$  & $0$  & $-1$ & $2$ & $N$ \\
+$\Lambda$    & $1115.683$  & $0$  & $+1$ & $0$  & $2$ & $\Lambda$ \\
+$\Sigma^+$   & $1189.370$  & $+1$ & $+1$ & $+2$ & $2$ & $\Sigma$ \\
+$\Sigma^0$   & $1192.642$  & $0$  & $+1$ & $0$  & $2$ & $\Sigma$ \\
+$\Sigma^-$   & $1197.449$  & $-1$ & $+1$ & $-2$ & $2$ & $\Sigma$ \\
+$\Xi^0$      & $1314.860$  & $0$  & $+2$ & $+1$ & $2$ & $\Xi$ \\
+$\Xi^-$      & $1321.710$  & $-1$ & $+2$ & $-1$ & $2$ & $\Xi$ \\
+$\Delta^{++}$& $1232.0$    & $+2$ & $0$  & $+3$ & $4$ & $\Delta$ \\
+$\Delta^{+}$ & $1232.0$    & $+1$ & $0$  & $+1$ & $4$ & $\Delta$ \\
+$\Delta^{0}$ & $1232.0$    & $0$  & $0$  & $-1$ & $4$ & $\Delta$ \\
+$\Delta^{-}$ & $1232.0$    & $-1$ & $0$  & $-3$ & $4$ & $\Delta$ \\
+\midrule
+$e^-$        & $0.510999$  & --- & $0$ & --- & $2$ & --- \\
+$\mu^-$      & $105.6584$  & --- & $0$ & --- & $2$ & --- \\
+$\nu$        & $0$         & --- & $0$ & --- & $1$ & --- \\
+\bottomrule
+\end{tabular}
+\caption{Vacuum masses, conserved charges, isospin in the $\tau_3 = 2I_3$
+normalisation of Sec.~\ref{sec:conventions}, and spin degeneracies. Leptons
+carry no strong charge $C$ (Sec.~\ref{sec:conventions}); the neutrino
+degeneracy is $1$ because only one helicity state exists, the antineutrinos
+coming from the antiparticle branch of Eq.~\eqref{eq:n}. The octet is always
+available; $\Delta$'s enter under \texttt{SpeciesFlags(deltas=True)} and are an
+extension of this implementation.}
+\end{table}
 
 \section{Thermodynamics}
 \label{sec:thermo}
@@ -555,6 +697,7 @@ None of these feel the strong mean fields, and all of them come from
         \mu^*_{K^0} = -\muS
           - \big(g_{\omega N} - g_{\omega \Lambda}\big)\omega
           + \tfrac{1}{2}g_{\rho N}\rho ,
+        \label{eq:mesonpotentials}
       \end{equation}
       following Ref.~\cite{Lavagno2010}. The gas carries electric charge and
       strangeness, so it enters $\nC$ and $\nS$ --- and hence neutrality and
@@ -563,6 +706,97 @@ None of these feel the strong mean fields, and all of them come from
       returned: the gas Bose-condenses there and the ideal-gas expressions
       stop describing it.
 \end{itemize}
+
+\subsection{The thermal meson gas, written out}
+\label{sec:bosegas}
+
+The gas is an ideal Bose gas of one-body excitations riding on the mean
+fields~\cite{Lavagno2010}, and the three potentials of
+Eq.~\eqref{eq:mesonpotentials} are the only thing in it that is DID's --- the
+species list, the masses and the Bose sums are shared code. Particle and
+antiparticle are listed as \emph{separate} species with conjugated potentials,
+and the strangeless neutral mesons sit at $\mu^* = 0$:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrrrr}
+\toprule
+$j$ & $\mu^*_j$ & $m_j$ [MeV] & $C_j$ & $S_j$ & $g_j$ \\
+\midrule
+$\pi^+$      & $\mu^*_{\pi^+}$   & $139.57039$ & $+1$ & $0$  & $1$ \\
+$\pi^-$      & $-\mu^*_{\pi^+}$  & $139.57039$ & $-1$ & $0$  & $1$ \\
+$\pi^0$      & $0$               & $134.9768$  & $0$  & $0$  & $1$ \\
+$K^+$        & $\mu^*_{K^+}$     & $493.677$   & $+1$ & $-1$ & $1$ \\
+$K^-$        & $-\mu^*_{K^+}$    & $493.677$   & $-1$ & $+1$ & $1$ \\
+$K^0$        & $\mu^*_{K^0}$     & $497.611$   & $0$  & $-1$ & $1$ \\
+$\bar{K}^0$  & $-\mu^*_{K^0}$    & $497.611$   & $0$  & $+1$ & $1$ \\
+$\eta$       & $0$               & $547.862$   & $0$  & $0$  & $1$ \\
+$\eta'$      & $0$               & $957.78$    & $0$  & $0$  & $1$ \\
+\bottomrule
+\end{tabular}
+\caption{The pseudoscalar gas. Strangeness follows this repository's
+$S = +1$ per $s$ quark, so $K^+ = u\bar{s}$ carries $S = -1$. The isospin
+partners carry their \emph{separate} physical masses: the $4.6$ MeV
+$\pi^{\pm}$--$\pi^0$ splitting alone moves the $\pi^0$ density by some 17\% at
+$T = 30$ MeV. The vector nonet is not wired in DID: its \texttt{thermal\_mesons}
+flag is the pseudoscalar gas.}
+\end{table}
+
+With $E_{kj} = \sqrt{k^2 + m_j^2}$ and the Bose occupation
+$b_j(k) = \big[e^{(E_{kj} - \mu^*_j)/T} - 1\big]^{-1}$,
+\begin{align}
+  n_j &= \frac{g_j}{2\pi^2}\int_0^\infty \! k^2 dk\; b_j(k) ,
+  &
+  \epsilon^{\rm gas}_j &= \frac{g_j}{2\pi^2}\int_0^\infty \! k^2 dk\;
+                          E_{kj}\, b_j(k) ,
+  \label{eq:bosen} \\
+  P^{\rm gas}_j &= \frac{g_j}{6\pi^2}\int_0^\infty \! dk\;
+                   \frac{k^4}{E_{kj}}\, b_j(k) ,
+  &
+  s^{\rm gas}_j &= \frac{\epsilon^{\rm gas}_j + P^{\rm gas}_j
+                          - \mu^*_j n_j}{T} ,
+  \label{eq:bosePs}
+\end{align}
+evaluated with the Bose branch of the Johns--Ellis--Lattimer
+approximation~\cite{JohnsEllisLattimer1996} in
+\texttt{eos.general.bose\_integrals}. The gas contributes
+\begin{equation}
+  P^{\rm gas} = \sum_j P^{\rm gas}_j , \quad
+  \epsilon^{\rm gas} = \sum_j \epsilon^{\rm gas}_j , \quad
+  s^{\rm gas} = \sum_j s^{\rm gas}_j , \quad
+  n_C^{\rm gas} = \sum_j C_j n_j , \quad
+  n_S^{\rm gas} = \sum_j S_j n_j ,
+\end{equation}
+and $\sum_j \mu^*_j n_j$ to Eq.~\eqref{eq:stot}. The charge and strangeness
+sums are the point: they enter $\nC$ and $\nS$, and therefore the neutrality
+and fixed-fraction rows of Sec.~\ref{sec:modes}, not only $\epsilon$, $P$ and
+$s$. Every solved point reports
+\begin{equation}
+  \text{condensation} \;=\; \max_j \frac{|\mu^*_j|}{m_j} ,
+\end{equation}
+and a point at which it reaches $1$ is returned as \emph{not} converged:
+the species Bose-condenses there and Eqs.~\eqref{eq:bosen}--\eqref{eq:bosePs}
+stop describing it. Condensates are not implemented.
+
+\paragraph{Leptons and photons, written out.} The leptons are the \emph{same}
+ideal Fermi gas as Eqs.~\eqref{eq:n}--\eqref{eq:s}, with $\meff{i} \to m_i$
+(they feel no mean field) and $\nu_i \to \mu_i$: $m_e = 0.510999$ MeV and
+$m_\mu = 105.6584$ MeV at $d = 2$, massless neutrinos at $d = 1$, all with
+antiparticles. Their $T = 0$ limits are Eqs.~\eqref{eq:nT0}--\eqref{eq:PT0}
+with the same substitution. The photon gas is closed-form,
+\begin{equation}
+  P_\gamma = \frac{\pi^2 T^4}{45 (\hbar c)^3} = \frac{\epsilon_\gamma}{3} ,
+  \qquad
+  s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} = \frac{4 P_\gamma}{T} ,
+  \qquad
+  n_\gamma = \frac{2\zeta(3) T^3}{\pi^2 (\hbar c)^3} ,
+\end{equation}
+with $g = 2$ polarisations and $\mu_\gamma = 0$, and carries no conserved
+charge. The untracked neutrino flavours enabled by
+\texttt{thermal\_neutrinos} are three $\mu = 0$ massless Fermi gases at
+$d = 1$ each, contributing to $\epsilon$, $P$ and $s$ alone; requesting them
+together with a trapped electron family raises, since $\nu_e$ would then be
+counted twice.
 
 \section{The solve}
 \label{sec:modes}
@@ -629,9 +863,10 @@ asked for:
 \end{align}
 The four field rows are present in every mode: a mean field does not know what
 is being held fixed. Each row is divided by the scale of the quantity it
-balances --- a field gap by a typical field, a density row by $\nB$ --- so that
-one tolerance means the same thing for all of them; the state is accepted when
-the largest scaled row is below $10^{-10}$. Non-convergence is a value carried
+balances --- a field gap by the typical field $30$ MeV, a density row by
+$\nB^{\rm target}$ --- so that one tolerance means the same thing for all of
+them; the state is accepted when the largest scaled row is below $10^{-10}$,
+the one gate the whole repository uses. Non-convergence is a value carried
 on the returned record, never an exception and never an unbounded loop.
 
 The entropy row deserves one remark. In a fixed-$Y_C$ mode with neutralizing
@@ -669,6 +904,44 @@ $T$ to Eq.~\eqref{eq:unknowns} and $R_{11}$ to the rows.}
 nucleons only, $\nS \equiv 0$ and $R_9$ is satisfied at $Y_S = 0$ for any
 $\muS$ and unsatisfiable otherwise, so the potential returned would be
 wherever the solver's path happened to end.
+
+
+\subsection{What one solved point carries}
+\label{sec:returns}
+
+Every quantity the model returns, so that nothing in the list below has to be
+re-derived by a consumer that has only the densities:
+
+\begin{itemize}
+\item \textbf{The state asked for:} $\nB$ and $T$ (the $T$ solved for, where an
+      entropy per baryon was imposed).
+\item \textbf{The model's own variables:} $\sigma$, $\omega$, $\rho$, $\phi$
+      [MeV], $\beta$, and both rearrangement self-energies $\Sigmar$, $\Sigmat$
+      [MeV].
+\item \textbf{Potentials:} $\muB$, $\muC = \mu_p - \mu_n$, $\muS$, $\mu_e$,
+      $\munue$, and per species the effective potential $\nu_i$ and the
+      effective mass $\meff{i}$. The full $\mu_i$ is not stored: it is
+      $\muB + C_i\muC + S_i\muS$ and is derived on demand, so the charge basis
+      cannot drift out of step with the species potentials. In a leptonless
+      fixed-$Y_C$ solve $\mu_e$ is reported from $\mu_e = -\muC$ as a
+      diagnostic; there is no lepton sector there.
+\item \textbf{Thermodynamics:} $\epsilon$, $P$, $s$ --- totals, including the
+      leptons, photons and any thermal gas the flags enabled --- with $P$ split
+      into its hadronic, leptonic and photonic parts, and the free energy
+      density $f = \epsilon - Ts$.
+\item \textbf{Composition:} $n_i$ for every active baryon, $n_e$, $n_\mu$,
+      $n_{\nu_e}$, and the conserved-charge densities $\nC$, $\nS$ with the
+      fractions $Y_C$, $Y_S$, $Y_{L_e}$, $Y_e$ and $S/A = s/\nB$. $\nC$ and
+      $\nS$ are TOTAL and non-leptonic: baryons plus the meson gas.
+\item \textbf{Scalar densities} $n^s_i$, obtained through the trace identity
+      of Eq.~\eqref{eq:identities} rather than integrated, and summed into the
+      $\sigma$ source of Eq.~\eqref{eq:fields}.
+\item \textbf{Status:} \texttt{converged} (the scaled-residual gate),
+      \texttt{error} (the largest scaled row), the Hugenholtz--Van Hove
+      residual $(\epsilon + P - Ts - \sum_i\mu_i n_i)/\epsilon$ of
+      Eq.~\eqref{eq:euler} as a standing diagnostic, and the gas condensation
+      ratio of Sec.~\ref{sec:bosegas}.
+\end{itemize}
 
 \subsection{Tables and continuation}
 
@@ -745,6 +1018,68 @@ Ref.~\cite{Frohaug2025} (their $S$, $L$ and $K_{\rm sym}$ are quoted there as
 $S_2 + (S - S_2)$ and so on). Asserted by
 \texttt{verify/run\_full\_check.py}.}
 \end{table}
+
+\section{Response functions}
+\label{sec:response}
+
+\texttt{eos\_response} returns the second-derivative quantities of the CompOSE
+manual~\cite{TypelCompOSE2015,Constantinou2025}. A second derivative is only
+defined once one says what is held fixed, so the conditioning is explicit and
+has three axes (CLAUDE.md~\S5): what composition is held, which thermal
+variable is held, and whether leptons re-neutralize. DID implements
+$\texttt{frozen} = \texttt{'equilibrium'}$ --- \emph{nothing} is held, the
+composition re-equilibrates under the perturbation --- and raises for any other
+freeze. Whether the leptons re-neutralize is the mode's own choice
+(Sec.~\ref{sec:modes}) and is inherited, not a separate argument.
+
+Every derivative is a central difference along the same mode's sequence with a
+full re-solve at each neighbour: the reference flavour of CLAUDE.md~\S9, and
+DID ships no accelerated one. With $\sigma \equiv s/\nB$ the entropy
+\emph{per baryon} --- per baryon rather than per volume because $C_P$ is taken
+at fixed pressure, where the volume moves --- and steps
+$\delta \nB = 10^{-3}\nB$, $\delta T = 0.05$ MeV,
+\begin{equation}
+  \left(\frac{\partial P}{\partial \nB}\right)_T ,\quad
+  \left(\frac{\partial \epsilon}{\partial \nB}\right)_T ,\quad
+  \left(\frac{\partial \sigma}{\partial \nB}\right)_T ,\quad
+  \left(\frac{\partial P}{\partial T}\right)_{\nB} ,\quad
+  \left(\frac{\partial \sigma}{\partial T}\right)_{\nB} ,
+\end{equation}
+the last two zero at $T = 0$, where there is no cold side to difference
+against. From them
+\begin{align}
+  c^2_{s,\rm isothermal} &= \left(\frac{\partial P}{\partial\epsilon}\right)_T
+    = \frac{(\partial P/\partial \nB)_T}{(\partial\epsilon/\partial \nB)_T} ,
+  \label{eq:cs2iso} \\
+  C_V &= T\left(\frac{\partial\sigma}{\partial T}\right)_{\nB} ,
+  \qquad
+  C_P = T\left(\frac{\partial\sigma}{\partial T}\right)_{P}
+      = T\left[\left(\frac{\partial\sigma}{\partial T}\right)_{\nB}
+        - \left(\frac{\partial P}{\partial T}\right)_{\nB}
+          \frac{(\partial\sigma/\partial \nB)_T}{(\partial P/\partial \nB)_T}
+        \right] ,
+  \label{eq:CVCP} \\
+  c^2_{s,\rm adiabatic} &= \frac{C_P}{C_V}\, c^2_{s,\rm isothermal} ,
+  \qquad
+  \Gamma_{\rm th} = 1 + \frac{P - P_{\rm cold}}{\epsilon - \epsilon_{\rm cold}} ,
+  \label{eq:cs2ad}
+\end{align}
+both heat capacities per baryon and therefore dimensionless. $C_P$ is the usual
+Jacobian rotation, with every partial taken along the same re-solved sequence.
+The cold reference of $\Gamma_{\rm th}$ is the \emph{same mode} at $T = 0$ and
+the same $\nB$, which is what a simulation's thermal-pressure prescription is
+calibrated against; it is returned as \texttt{nan} where
+$\epsilon - \epsilon_{\rm cold} \le 0$. At $T = 0$ the ratio $C_P/C_V$ is unity
+by construction and the two sound speeds coincide, so the cold limit needs no
+special case and only $c^2_s$ is returned. Both are named for the thermal
+variable they hold: there is no bare $c_s^2$ whose meaning would depend on the
+arguments.
+
+Not implemented, and recorded in \texttt{docs/DEFERRED.md}: the composition
+freezes (held $Y_i$, held $Y_C$) and the susceptibility matrix
+$\chi_{ab} = \partial n_a/\partial\mu_b$ for $a,b \in (B, C, S)$. A freeze DID
+does not carry raises rather than silently falling back to
+\texttt{equilibrium}.
 
 \section{What the implementation reproduces}
 \label{sec:validation}
