@@ -31,6 +31,9 @@
 #    exercised through `eos_point` and `eos_table` across the selected models.
 # 5. **Parametrisation** — the published sets, the forward nuclear-matter-
 #    parameter map, and the inverse where a model has one.
+# 6. **Benchmarks** — what a model costs, and where a line does not converge.
+# 7. **Figures** — six families, every panel selectable for hyperons and
+#    Deltas, and the stellar-structure pass behind two of them.
 #
 # Units are the ones every public boundary uses: densities in fm^-3,
 # temperatures and chemical potentials in MeV, pressure and energy density in
@@ -272,7 +275,10 @@ example = standard_name("dd2", "fixed_YC", KNOBS.conditions("fixed_YC"),
                         KNOBS.axes("fixed_YC"), KNOBS.species,
                         leptons=KNOBS.leptons)
 print(example)
-print(table_path("dd2", example))
+# `table_path`'s root is relative, so it is anchored to the ROOT found in the
+# first cell: a kernel started in `notebooks/` would otherwise write the table
+# into `notebooks/output/`.
+print(table_path("dd2", example, root=str(ROOT / "output" / "tables")))
 
 # %% [markdown]
 # ## 4. A section per mode
@@ -374,7 +380,9 @@ if SAVE in tables:
     filename = standard_name(name, mode, KNOBS.conditions(mode),
                              KNOBS.axes(mode), KNOBS.species,
                              leptons=KNOBS.leptons)
-    path = save_table(tables[SAVE], table_path(name, filename),
+    path = save_table(tables[SAVE],
+                      table_path(name, filename,
+                                 root=str(ROOT / "output" / "tables")),
                       meta={"model": name, "mode": mode,
                             "parameters": parameters_for(name),
                             "species": flags_for(name),
@@ -786,7 +794,9 @@ if bench_rows:
         {"nB": BENCH_N_B,
          "T": np.array([T for _, T, _ in BENCH_CONFIGS])},
         KNOBS.species, leptons=KNOBS.leptons)
-    bench_path = save_table(bench_rows, table_path("hadronic", bench_name),
+    bench_path = save_table(bench_rows,
+                            table_path("hadronic", bench_name,
+                                       root=str(ROOT / "output" / "tables")),
                             meta={"study": "hadronic benchmark",
                                   "models": ",".join(KNOBS.models),
                                   "modes": ",".join(m for m, _, _
@@ -795,3 +805,466 @@ if bench_rows:
                                   "leptons": KNOBS.leptons,
                                   "repeat": BENCH_REPEAT})
     print("wrote", bench_path)
+
+# %% [markdown]
+# ## 7. Figures
+#
+# Six families, every one of them drawn for the sector combinations selected in
+# the cell below — the panels of a figure ARE that selection, so a figure with
+# hyperons on and off is one file with two panels rather than two files to line
+# up by eye.
+#
+# All styling comes from `eos.general.figure_style` and nothing else: no
+# rcParams are set here, no colour is re-declared, and the observational bands
+# come from `eos.general.constraints.overlay`, keyed by the plane they live in.
+# Everything is written under the repository root computed in the first cell,
+# not under the working directory — a notebook executed from `notebooks/` would
+# otherwise scatter its output into `notebooks/output/`.
+
+# %%
+import matplotlib.pyplot as plt
+
+from eos.astro.tov import compute_tov_sequence, find_mmax_precise
+from eos.general.constraints import overlay
+from eos.general.figure_style import (LABELS, OKAB_CAT, PARTICLE_STYLES,
+                                      log_decades, paper_grid, panel_label,
+                                      particle_style, save_figure)
+from eos.general.state import EOSTable_for_TOV
+
+# Anchored to ROOT, not to the working directory.
+FIG_DIR = ROOT / "output" / "hadronic"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
+TABLE_ROOT = str(ROOT / "output" / "tables")
+print("figures  ->", FIG_DIR)
+print("tables   ->", TABLE_ROOT)
+
+# --- what every panel is selectable over -------------------------------
+# Each entry is one panel: a name and the two sector flags it overrides on the
+# knobs cell's species dict. Everything else about the species stays as the
+# knobs cell set it.
+FIG_SECTORS = (("nucleonic", dict(hyperons=False, deltas=False)),
+               ("hyperons", dict(hyperons=True, deltas=False)))
+# The other two, ready to be selected:
+#   ("deltas",          dict(hyperons=False, deltas=True)),
+#   ("hyperons+deltas", dict(hyperons=True,  deltas=True)),
+
+FIG_N_B = np.geomspace(0.05, 1.2, 60)     # fm^-3, the curve grid
+FIG_T = 0.0                               # MeV; the figures are the cold EoS
+FIG_CS2_N_B = np.geomspace(0.10, 1.2, 25)  # coarser: one solve per stencil point
+FIG_N_STARS = 20                          # central densities per TOV sequence
+
+# Colour = model, so the same model is the same colour in all six families.
+MODEL_COLOR = dict(zip(KNOBS.models, OKAB_CAT))
+
+# %% [markdown]
+# ### The sector is not free of the parametrisation
+#
+# Section 5 showed the coupling: `sfho` and `dd2` refuse a hyperonic sector on a
+# nucleonic parameter set, because nobody published those couplings, and
+# `sfho`'s Deltas need `SFHo_2fam`. So a sector selection carries a parameter
+# set with it, and where it does not the knobs cell's choice stands. `did`
+# appears nowhere below: its hyperon and Delta couplings were fitted with the
+# rest, so the flag alone selects the sector.
+#
+# Symmetric nuclear matter is `Y_C = 0.5` with `Y_S = 0`. Three of the four take
+# that as `fixed_YC_YS`. `zl` refuses the mode — and the refusal is the reason
+# it does not need it: the functional is written in `n_p` and `n_n` alone, so
+# `n_S = 0` identically and `fixed_YC` at `Y_C = 0.5` **is** symmetric matter
+# there. One mode name per model, each for a stated reason.
+
+# %%
+SECTOR_SETS = {("sfho", "hyperons"): "SFHoY_Fortin",
+               ("sfho", "deltas"): "SFHo_2fam",
+               ("sfho", "hyperons+deltas"): "SFHo_2fam",
+               ("dd2", "hyperons"): "DD2Y",
+               ("dd2", "hyperons+deltas"): "DD2Y"}
+
+SNM_MODES = {"zl": "fixed_YC", "sfho": "fixed_YC_YS",
+             "dd2": "fixed_YC_YS", "did": "fixed_YC_YS"}
+
+
+def figure_rows(name, sector, flags, mode, leptons=None, **conditions):
+    """One model's rows over `FIG_N_B` at `FIG_T`, or None if it refuses.
+
+    `leptons` is named only by the caller that means it — the fixed-fraction
+    modes — and left unsaid for beta equilibrium, exactly as in section 4.
+    """
+    module = model(name)
+    axes = {"nB": FIG_N_B, "T": np.array([FIG_T])}
+    for key, value in conditions.items():
+        axes[key] = np.array([value])
+
+    def build():
+        published = SECTOR_SETS.get((name, sector))
+        par = (module.Parameters.named(published) if published
+               else parameters_for(name))
+        species = module.SpeciesFlags(**dict(KNOBS.species, **flags))
+        extra = {} if leptons is None else {"leptons": leptons}
+        return module.eos_table(par, mode, species, axes, **extra)
+
+    status, result = run(f"{name} {sector}", build)
+    return None if status != "ok" else module.rows_from_result(result)
+
+
+def column(rows, key):
+    """One column of a row list as an array."""
+    return np.array([row[key] for row in rows])
+
+
+header("beta equilibrium at T = 0")
+beta_rows = {}
+for sector, flags in FIG_SECTORS:
+    for name in KNOBS.models:
+        rows = figure_rows(name, sector, flags, "beta_eq_neutrinoless")
+        if rows is None:
+            continue
+        beta_rows[(name, sector)] = rows
+        print(f"  [{name:5s} {sector:16s}] {len(rows):3d}/{len(FIG_N_B)} rows   "
+              f"P {rows[0]['P']:7.3f} -> {rows[-1]['P']:8.3f} MeV/fm^3")
+
+header("symmetric nuclear matter — Y_C = 0.5, Y_S = 0, leptons=False")
+snm_rows = {}
+for sector, flags in FIG_SECTORS:
+    for name in KNOBS.models:
+        mode = SNM_MODES[name]
+        conditions = ({"Y_C": 0.5} if mode == "fixed_YC"
+                      else {"Y_C": 0.5, "Y_S": 0.0})
+        rows = figure_rows(name, sector, flags, mode, leptons=False,
+                           **conditions)
+        if rows is None:
+            continue
+        snm_rows[(name, sector)] = rows
+        print(f"  [{name:5s} {sector:16s}] {mode:12s} {len(rows):3d} rows   "
+              f"P {rows[0]['P']:7.3f} -> {rows[-1]['P']:8.3f} MeV/fm^3")
+
+# %% [markdown]
+# ### Family 1 — pressure in beta equilibrium
+#
+# All selected models on one axis, one panel per sector selection.
+
+# %%
+def sector_grid(aspect=1.0, width=None):
+    """A panel per selected sector, in the paper style. Nothing else in this
+    notebook builds a figure, so the geometry is stated once, here."""
+    fig, axes = paper_grid(f"1x{len(FIG_SECTORS)}", mode="double",
+                           placeholder=False, aspect=aspect, width=width)
+    return fig, axes[0]
+
+
+fig, axes = sector_grid()
+for ax, (sector, _) in zip(axes, FIG_SECTORS):
+    for name in KNOBS.models:
+        rows = beta_rows.get((name, sector))
+        if rows is None:
+            continue
+        ax.plot(column(rows, "n_B"), column(rows, "P"),
+                color=MODEL_COLOR[name], label=name)
+    ax.set_xlabel(LABELS['nB'])
+    ax.set_ylabel(LABELS['P'])
+    ax.set_yscale("log")
+    log_decades(ax)
+    ax.set_title(sector)
+axes[0].legend(loc="upper left")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="lower right")
+save_figure(fig, str(FIG_DIR / "pressure_beta_eq"))
+
+# %% [markdown]
+# ### Family 2 — pressure of symmetric nuclear matter, against the flow data
+#
+# The heavy-ion constraints live in the `P-n` plane and are drawn by
+# `overlay`: the Danielewicz, Lacey and Lynch (2002) analysis and the FOPI
+# (IQMD) 2016 re-analysis, both bands on the pressure of SYMMETRIC matter, which
+# is why this panel and not the beta-equilibrium one carries them.
+#
+# Below saturation the pressure of symmetric matter is negative — the binding —
+# and a log axis cannot show it, so the panel starts where the bands do.
+
+# %%
+fig, axes = sector_grid()
+for ax, (sector, _) in zip(axes, FIG_SECTORS):
+    overlay(ax, "P-n")
+    for name in KNOBS.models:
+        rows = snm_rows.get((name, sector))
+        if rows is None:
+            continue
+        ax.plot(column(rows, "n_B"), column(rows, "P"),
+                color=MODEL_COLOR[name], label=name)
+    ax.set_xlabel(LABELS['nB'])
+    ax.set_ylabel(LABELS['P'])
+    ax.set_xlim(0.15, 0.85)
+    ax.set_yscale("log")
+    ax.set_ylim(0.5, 400.0)
+    log_decades(ax)
+    ax.set_title(f"{sector} — symmetric matter")
+axes[0].legend(loc="lower right")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="upper left")
+save_figure(fig, str(FIG_DIR / "pressure_snm"))
+
+# %% [markdown]
+# ### The gate that runs before any structure integration
+#
+# A table handed to a structure solver must have `P` non-decreasing in `n_B` and
+# `0 <= c_s^2 <= 1`; a raw model branch may legitimately violate both inside a
+# first-order transition, where mechanical instability is real physics rather
+# than a bug (CLAUDE.md section 8). So the check runs **before** the TOV
+# integration and returns a status: a branch that fails it is reported and left
+# alone, never quietly repaired and never integrated into a mass that would mean
+# nothing.
+#
+# `c_s^2` here is the finite-difference `dP/deps` of the delivered table itself,
+# which is the quantity the solver will interpolate — not the model's
+# `eos_response`, which is the next family and answers a different question.
+
+# %%
+def deliverable(core):
+    """CLAUDE.md section 8's gate on a table about to be integrated.
+
+    Returns (ok, message, cs2), with `cs2 = dP/deps` on the mid-points of the
+    table. Nothing is modified: a failing table comes back as a status.
+    """
+    dP = np.diff(core.P)
+    d_eps = np.diff(core.epsilon)
+    cs2 = np.divide(dP, d_eps, out=np.full(dP.shape, np.nan), where=d_eps != 0)
+    falling = np.flatnonzero(dP <= 0.0)
+    acausal = np.flatnonzero(~((cs2 >= 0.0) & (cs2 <= 1.0)))
+    mid = 0.5 * (core.nB[:-1] + core.nB[1:])
+    parts = []
+    if falling.size:
+        parts.append(f"P falls at {falling.size} of {dP.size} steps, first at "
+                     f"n_B = {mid[falling[0]]:.3f} fm^-3")
+    if acausal.size:
+        parts.append(f"c_s^2 outside [0, 1] at {acausal.size} steps, first at "
+                     f"n_B = {mid[acausal[0]]:.3f} fm^-3")
+    ok = not parts
+    message = ("P non-decreasing and 0 <= c_s^2 <= 1 over "
+               f"{dP.size} steps, max c_s^2 = {np.nanmax(cs2):.3f}"
+               if ok else "; ".join(parts))
+    return ok, message, cs2
+
+
+header("the section 8 gate, before integration")
+cores = {}
+for key, rows in beta_rows.items():
+    core = EOSTable_for_TOV(P=column(rows, "P"), epsilon=column(rows, "eps"),
+                            nB=column(rows, "n_B"))
+    ok, message, _ = deliverable(core)
+    name, sector = key
+    print(f"  [{name:5s} {sector:16s}] {'PASS' if ok else 'HOLD'}  {message}")
+    if ok:
+        cores[key] = core
+
+# %% [markdown]
+# ### Families 3 and 4 — mass–radius and mass–tidal deformability
+#
+# One TOV sequence per model and sector, over the gated tables only, with the
+# BPS crust attached at `n_B = 0.08` fm^-3 — the density where that table tops
+# out. `compute_tov_sequence` returns `(e_c, n_c, P_c, R, M, M_b, k2, Lambda)`,
+# and `find_mmax_precise` gives the index of the maximum-mass star, so the slice
+# up to it is the stable branch — everything beyond is unstable and belongs on
+# neither plane. The library's own `truncate_to_stable_branch` is not used here:
+# it re-orders to six columns and drops `Lambda`, which family 4 needs.
+
+# %%
+header("TOV sequences")
+sequences = {}
+for key, core in cores.items():
+    name, sector = key
+    e_c = np.geomspace(250.0, 0.95 * float(core.epsilon.max()), FIG_N_STARS)
+    sequence = compute_tov_sequence(core, e_c, add_crust_table="BPS",
+                                    n_transition=0.08, verbose=False)
+    index, _, m_max = find_mmax_precise(sequence)
+    sequences[key] = sequence[:index + 1]
+    print(f"  [{name:5s} {sector:16s}] M_max = {m_max:.3f} M_sun at "
+          f"R = {sequence[index, 3]:5.2f} km, {len(sequences[key]):2d} stable "
+          f"of {len(sequence)} stars")
+
+# %%
+fig, axes = sector_grid()
+for ax, (sector, _) in zip(axes, FIG_SECTORS):
+    overlay(ax, "M-R")
+    for name in KNOBS.models:
+        sequence = sequences.get((name, sector))
+        if sequence is None:
+            continue
+        ax.plot(sequence[:, 3], sequence[:, 4],
+                color=MODEL_COLOR[name], label=name)
+    ax.set_xlabel("$R$ [km]")
+    ax.set_ylabel(r"$M$ [$M_\odot$]")
+    ax.set_xlim(8.5, 16.0)
+    ax.set_ylim(0.5, 2.7)
+    ax.set_title(sector)
+axes[0].legend(loc="lower left")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="upper right")
+save_figure(fig, str(FIG_DIR / "mass_radius"))
+
+# %%
+fig, axes = sector_grid()
+for ax, (sector, _) in zip(axes, FIG_SECTORS):
+    overlay(ax, "M-Lambda")
+    for name in KNOBS.models:
+        sequence = sequences.get((name, sector))
+        if sequence is None:
+            continue
+        ax.plot(sequence[:, 4], sequence[:, 7],
+                color=MODEL_COLOR[name], label=name)
+    ax.set_xlabel(r"$M$ [$M_\odot$]")
+    ax.set_ylabel(r"$\Lambda$")
+    ax.set_xlim(0.9, 2.1)
+    ax.set_yscale("log")
+    ax.set_ylim(5.0, 5e3)
+    log_decades(ax)
+    ax.set_title(sector)
+axes[0].legend(loc="lower left")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="upper right")
+save_figure(fig, str(FIG_DIR / "mass_lambda"))
+
+# %% [markdown]
+# ### Family 5 — the sound speed, named for what it holds
+#
+# `eos_response(frozen='equilibrium')` at each density: nothing is held, so the
+# composition re-equilibrates under the perturbation and the derivative is taken
+# along the mode's own sequence. These curves are at `T = 0`, where the
+# isothermal and the adiabatic sound speed coincide — but the label still says
+# which one was computed, because at `T > 0` they are different numbers and a
+# bare `c_s^2` would mean whichever the arguments happened to select.
+#
+# The four models do not spell the key alike: `sfho` and `did` return
+# `cs2_isothermal` (and `did` also `cs2_adiabatic`), while `zl` and `dd2` return
+# `cs2_eq` — a name for the *freeze* rather than for the thermal variable. The
+# quantity is the same one at fixed `T`; the cell below takes whichever key the
+# model returns and prints which it took.
+
+# %%
+def sound_speed(out):
+    """(value, key) — the isothermal sound speed under whichever name the
+    model returned it. `cs2_eq` is `zl`'s and `dd2`'s spelling of it."""
+    for key in ("cs2_isothermal", "cs2_eq"):
+        if key in out:
+            return float(out[key]), key
+    raise KeyError(f"no sound speed in {sorted(out)}")
+
+
+header("sound speed")
+cs2_curves = {}
+for sector, flags in FIG_SECTORS:
+    for name in KNOBS.models:
+        module = model(name)
+        published = SECTOR_SETS.get((name, sector))
+
+        # The parameter set and the species flags are built once, and inside
+        # `run`: constructing the flags is itself a refusal site, and a model
+        # that has not wired the sector must say so once rather than once per
+        # density.
+        def prepare():
+            par = (module.Parameters.named(published) if published
+                   else parameters_for(name))
+            return par, module.SpeciesFlags(**dict(KNOBS.species, **flags))
+
+        status, prepared = run(f"{name} {sector}", prepare)
+        if status != "ok":
+            continue
+        par, species = prepared
+
+        densities, values, keys = [], [], set()
+        for n_B in FIG_CS2_N_B:
+
+            def respond(n_B=float(n_B)):
+                return module.eos_response(par, "beta_eq_neutrinoless",
+                                           species, n_B=n_B, T=FIG_T)
+
+            status, out = run(f"{name} {sector}", respond)
+            if status != "ok" or not out.get("converged", True):
+                continue
+            value, key = sound_speed(out)
+            densities.append(float(n_B))
+            values.append(value)
+            keys.add(key)
+        if not densities:
+            continue
+        cs2_curves[(name, sector)] = (np.array(densities), np.array(values))
+        print(f"  [{name:5s} {sector:16s}] {len(densities):2d} points, "
+              f"key {'/'.join(sorted(keys))}, max {max(values):.3f}")
+
+# %%
+fig, axes = sector_grid()
+for ax, (sector, _) in zip(axes, FIG_SECTORS):
+    for name in KNOBS.models:
+        curve = cs2_curves.get((name, sector))
+        if curve is None:
+            continue
+        ax.plot(curve[0], curve[1], color=MODEL_COLOR[name], label=name)
+    ax.axhline(1.0 / 3.0, color='0.5', lw=0.8, ls=':')
+    ax.set_xlabel(LABELS['nB'])
+    ax.set_ylabel(r"$c_{s,\,\mathrm{isothermal}}^{2}$  $[c^2]$")
+    ax.set_ylim(0.0, 1.0)
+    ax.set_title(f"{sector} — $T = 0$")
+axes[0].legend(loc="upper left")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="lower right")
+save_figure(fig, str(FIG_DIR / "cs2_isothermal"))
+
+# %% [markdown]
+# ### Family 6 — composition
+#
+# One panel per model, one row of panels per sector selection, every species
+# coloured by `figure_style.particle_style`: colour by particle, linestyle by
+# multiplet — nucleons solid, hyperons dashed, Deltas dash-dot, leptons dotted —
+# so the panel reads in black and white too. A dozen species in a panel is what
+# the `width` override of `paper_grid` is for.
+
+# %%
+def species_of(rows):
+    """The species columns of a row list, in the order the style table names
+    them, so the same particle sits in the same place in every panel."""
+    present = {key[2:] for key in rows[-1] if key.startswith("Y_")}
+    return [name for name in PARTICLE_STYLES if name in present]
+
+
+fig, axes = paper_grid(f"{len(FIG_SECTORS)}x{len(KNOBS.models)}", mode="double",
+                       placeholder=False, aspect=1.0, width=11.0)
+for row, (sector, _) in zip(axes, FIG_SECTORS):
+    for ax, name in zip(row, KNOBS.models):
+        ax.set_title(f"{name} — {sector}")
+        ax.set_xlabel(LABELS['nB'])
+        ax.set_ylabel(LABELS['Y_i'])
+        ax.set_yscale("log")
+        ax.set_ylim(1e-4, 1.5)
+        log_decades(ax)
+        rows = beta_rows.get((name, sector))
+        if rows is None:
+            ax.text(0.5, 0.5, "sector absent\nfrom the model", ha="center",
+                    va="center", transform=ax.transAxes)
+            continue
+        n_B = column(rows, "n_B")
+        for particle in species_of(rows):
+            fraction = column(rows, f"Y_{particle}")
+            if np.nanmax(fraction) < 1e-4:
+                continue
+            colour, linestyle = particle_style(particle)
+            ax.plot(n_B, fraction, color=colour, ls=linestyle, label=particle)
+
+# One legend for the whole figure: the species colours are the same table in
+# every panel, so twelve panel legends would say the same thing twelve times
+# and cover the onsets while doing it.
+found = {}
+for ax in axes.flat:
+    for handle, label in zip(*ax.get_legend_handles_labels()):
+        found.setdefault(label, handle)
+order = [name for name in PARTICLE_STYLES if name in found]
+fig.legend([found[name] for name in order], order,
+           loc="outside lower center", ncol=min(len(order), 9))
+save_figure(fig, str(FIG_DIR / "composition"))
+
+# %% [markdown]
+# ### What was written
+#
+# Every path below is anchored to the repository root found in the first cell.
+
+# %%
+header("figures written")
+for path in sorted(FIG_DIR.iterdir()):
+    print(f"  {path.relative_to(ROOT)}  ({path.stat().st_size / 1024:.0f} kB)")
