@@ -67,6 +67,22 @@ default is deliberately overridden here: tickets 12–25 build and run things.
 - Non-convergence is a return value, not an exception (§6).
 - Every ticket reports failures **added** against `output/_audit/pytest_before.txt`
   and never silently fixes or deletes a pre-existing one.
+- **Commit with explicit pathspecs. Never `git add -A`, never `git commit -a`.**
+  Always the rule for concurrent sessions; now load-bearing rather than
+  hygienic, because `output_old/` is **24 GB and not gitignored** —
+  `.gitignore:37` ignores `output/` and the rename walked out from under it, so
+  a single `git add -A` would try to stage all of it.
+- **An `output/_audit/` file names its interpreter in its FILENAME**, not only
+  in prose: `_py39` (anaconda 3.9.7 / numpy 1.26.4 / scipy 1.13.1) or `_py314`
+  (python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0). Per
+  [ticket 47](issues/47-dd2-nmp-inversion.md) the stack IS the difference between
+  0 and 14 failures, so a directory listing that cannot say which stack produced
+  a before-image invites a future session to diff across the two and read the
+  interpreter as a regression. **The nine files predating this rule are all
+  `_py314`** and are not renamed; new ones carry the suffix.
+- **Report the collected count with the failure count.** The denominator moves:
+  ticket 20 added +2 tests to `test/test_imports.py`, so collection is **1665**,
+  not the 1663 this map's earlier numbers imply.
 
 **Skills every session should consult.** `grilling` and `domain-modeling` for the
 decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
@@ -648,6 +664,40 @@ against this file, not against the earlier `pytest_before*.txt`.
   writing to `output/tables/<model>/` (§11's per-model split, over the ticket's
   flat `output/tables/`). `use_nmp_inversion` ships off — zl refuses by design and
   dd2's inversion is ticket 47 — so **12 is now also blocked by 47**.
+
+- [Phase 5 items 1, 2 and 4 — top-level imports and a runnable README](issues/20-phase5-api-readme.md):
+  `import eos` is now **0.088 s** and lazy (PEP 562), because eager would put
+  `eos.dd2`'s 0.47 s of Numba and `constraints`' 0.42 s on every caller;
+  `eos.MODES`, `eos.SPECIES_FLAGS`, `eos.MODELS`, the `ModeSpec` factories,
+  `EOSTable_for_TOV` and the table I/O are the eager top-level surface.
+  **The species flags could not be one class** — every model has its own
+  dataclass — so the top level carries the shared NAMES. **A second empty
+  surface turned up and is fixed**: `eos/astro/tov/__init__.py` was zero bytes,
+  so the commonest downstream task was three modules deep; it now re-exports
+  `solver.py` and `crust.py` (not `rotating`, which shells out to a compiled
+  solver). `README.md` rewritten 557 -> 424 lines — it documented five models
+  of ten, three retired module paths and three `TableSettings` dialects.
+  **Every block executed, mechanically**: a script `exec`s all seven in ONE
+  namespace in order, so example 5 really does continue from example 3.
+  (c) gives **M_max = 2.419, R(M_max) = 11.99 km, R(1.4) = 13.19 km** — the
+  published DD2 star, from a bare environment with **no `EOS_CRUST_DIR`**,
+  which is [ticket 39](issues/39-crust-silent-fallback.md) confirmed end to
+  end. Anaconda 3.9.7 stack; those numbers are stack-dependent if
+  [57](issues/57-canonical-stack.md) rules for 3.14. **Three findings, all
+  from running rather than reading**: the quick-start example as first written
+  raised a bare `KeyError: 'Lambda'` — `Parameters.default()` with
+  `hyperons=True` — which is §4's raise without §4's message, now
+  [ticket 60](issues/60-dd2-hyperon-flag-raise.md); dd2's missing flag names,
+  reached independently of and converging with
+  [ticket 61](issues/61-dd2-species-flags.md), whose diagnosis corrects mine
+  (`neutrinos` is the matter-composition field, not `thermal_neutrinos`
+  misspelt); and **`eos_table` has no `leptons=` at all**, so retiring
+  `fixed_YC_neutral` per [ticket 54](issues/54-signature-corrections.md) item 1
+  without adding the flag there would make the neutral fixed-Y_C table
+  unreachable — noted on 54. Two tests added to `test/test_imports.py`, since
+  the lazy hook is invisible to a module sweep. Targeted runs only (the suite
+  gate was held): imports 188 + 2, `gmode`+`tov` 64 passed / 15 skipped,
+  `mixed` 20 passed.
 
 ## Not yet specified
 

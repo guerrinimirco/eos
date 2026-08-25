@@ -53,8 +53,15 @@ the same files, and run tickets 42/43's AST check here: both proved that a
 rename onto a name this repo already uses for a local adapter fails silently.
 
 Resolved when `SpeciesFlags(**six)` constructs for all ten models, or raises
-with a §4-compliant message. Report added failures with the interpreter named
-([ticket 57](57-canonical-stack.md)) and check `test/baseline/` is unmoved.
+with a §4-compliant message, and `test/baseline/` is unmoved.
+
+**Reporting.** Name the interpreter **in the filename** of whatever lands in
+`output/_audit/` — `_py39` or `_py314` — not only in the prose. Per
+[ticket 47](47-dd2-nmp-inversion.md) the stack is the whole difference between
+0 and 14 failures, and the directory already holds files from both with nothing
+in the name to tell them apart, so a listing alone can hand the next session the
+wrong before-image. Report the **collected count** alongside the failure count
+too: ticket 20's +2 tests in `test/test_imports.py` moved it to 1665.
 
 **Neighbour, not duplicate:** [ticket 60](60-dd2-hyperon-flag-raise.md) is a bare
 `KeyError` when `hyperons=True` meets a nucleonic parameter set — the same file
