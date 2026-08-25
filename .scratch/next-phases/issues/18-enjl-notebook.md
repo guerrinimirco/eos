@@ -21,3 +21,13 @@ of the section, its message printed, and the notebook continues.
 
 Figures to `output/enjl/`. Done when the notebook executes clean, every figure
 file exists, and the reproduced author table's residual is printed.
+
+## Added by ticket 05
+
+**The ENJL branch pair belongs to THIS notebook, not `hybrid_eos`.**
+`enjl_branch_pair` lives in `eos/mixed/adapters.py` and §5 lists it among the
+shipped adapters, so this notebook and [ticket 58](58-hybrid-skeleton.md) overlap
+on exactly that object. The two branches are two branches of one functional, not
+two models being coupled — the physics is ENJL's and `eos/mixed` is the machinery
+it is expressed through. State the boundary in one line here; ticket 58 states it
+there.

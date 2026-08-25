@@ -21,3 +21,15 @@ empty M–R panel.
 
 Figures to `output/quark/`. Done when the notebook executes clean and every
 figure file exists.
+
+## Added by ticket 05
+
+**`abpr` is in, as a companion panel — not a fifth peer in the knobs cell.**
+One figure against `alphabag` at CFL and T = 0, showing the O(m_s^4) difference
+`abpr/verify/run_full_check.py` already measures; the two are driven as a matched
+pair through alpha_s = pi/2 (1 - a4). It is CFL-only and T = 0-only, so as a peer
+it would trip ticket 04's unsupported-combination pattern on nearly every cell.
+
+`abpr` has no `table.py` but **does** have `eos_table` (`abpr/api.py:146`) —
+nothing in the model iterates, so §5's conditional-existence clause is satisfied
+and there is no gap to work around.

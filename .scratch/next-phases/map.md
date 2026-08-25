@@ -7,10 +7,12 @@ Source: [docs/NEXT_PHASES_PROMPT.md](../../docs/NEXT_PHASES_PROMPT.md)
 ## Destination
 
 `eos` on `main` and `nucleation` on `paper-release` both satisfy the Acceptance
-criteria block of `docs/REFACTOR_PROMPTS.md`: three grouped usage notebooks exist
-and execute end to end, every per-model document passes CLAUDE.md §11's test (a
-physicist reproduces the model without opening the source), CLAUDE.md describes
-the repository as it actually is, and Phase 5 and Phase 6 are done.
+criteria block of `docs/REFACTOR_PROMPTS.md`: **four** grouped usage notebooks
+exist and execute end to end — the prompt's three plus `hybrid_eos`, added by
+[ticket 05](issues/05-notebook-coverage.md) as this map's own addition — every
+per-model document passes CLAUDE.md §11's test (a physicist reproduces the model
+without opening the source), CLAUDE.md describes the repository as it actually
+is, and Phase 5 and Phase 6 are done.
 
 Reached when every ticket here is resolved and the Stage 7 report can be written
 with real tool output behind every claim.
@@ -614,6 +616,22 @@ against this file, not against the earlier `pytest_before*.txt`.
   gone, every one a Phase 3/4 MOVE rather than a Phase 5 rename, now on
   [ticket 23](issues/23-phase6-respec.md).
 
+- [Which models and subsystems get a notebook at all](issues/05-notebook-coverage.md):
+  **four notebooks, not three.** `mixed` gets the fourth, `notebooks/hybrid_eos`
+  (tickets [58](issues/58-hybrid-skeleton.md), [59](issues/59-hybrid-figures.md)),
+  headline pairing DD2+vMIT with DID+NJL and DID+CCDM as the swap cell, ending on
+  a TOV pass through `to_tov()`. `abpr` is a companion panel inside `quark_eos`
+  against `alphabag` at CFL, not a fifth peer in the knobs cell. `astro/tov` gets
+  no notebook — it is already exercised in two — `astro/gmode` gets nothing and is
+  a named gap, and `zlvmit` stays out of scope **without** touching
+  [ticket 41](issues/41-corrupt-notebooks.md). Two of the ticket's premises were
+  wrong: **`abpr` already has `eos_table`** (`api.py:146`; it lacks only
+  `table.py`, because nothing in it iterates — which also settles ticket 07's row
+  as "the physics has no such part"), and `astro/*` has no `eos_table` at all.
+  `notebooks/eos_tables_DD2vMIT/` was **moved, not deleted**, to
+  `output_old/eos_tables_DD2vMIT_from_notebooks/`, so ticket 59 can compare
+  against the published figures instead of asserting a replacement.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
@@ -646,18 +664,11 @@ In scope, not yet sharp enough to ticket:
   `verify/` suites is not decidable until someone measures how many of the
   twelve are affected.
 
-- **The 46 MB of `notebooks/eos_tables_DD2vMIT/`.** [Ticket 03](issues/03-stage0-removals.md)
-  removed everything that produced it but held the folder itself: it is gitignored
-  with zero files tracked, so deletion is permanent, and it holds the 32 computed
-  mixed-phase tables and the 42 published figures. What becomes of it — regenerated
-  by a replacement notebook, promoted into `output/public/`, or deleted — is not
-  decidable until [ticket 05](issues/05-notebook-coverage.md) rules whether `mixed`
-  gets a notebook at all.
-
-- **Notebooks for what the three do not cover.** `mixed`, `zlvmit`, `astro/tov`
-  (including the RNS rotating backend) and `astro/gmode` have no usage notebook,
-  and `docs/REFACTOR_PLAN.md:110` once planned per-model notebooks for several of
-  them. Ticket 05 sharpens this; whatever survives becomes tickets.
+- **`output_old/` is 24 GB and is not gitignored.** `.gitignore:37` ignores
+  `output/`; the rename to `output_old/` walked out from under it, so every
+  session now sees 24 GB of untracked files in `git status`. Whether the folder
+  is ignored, pruned or moved off the repo is the user's call and was not part
+  of [ticket 05](issues/05-notebook-coverage.md).
 - **`output/public/` curation.** §11 makes it the one tracked output folder. The
   new notebooks will produce tables with standardised names; which of them belong
   in the tracked folder is not decidable until the tables exist.
