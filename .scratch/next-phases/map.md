@@ -868,6 +868,41 @@ against this file, not against the earlier `pytest_before*.txt`.
   [ticket 64](issues/64-general-verify-suite-missing.md) (`general/` has no
   `verify/`).
 
+- [notebooks/hadronic_eos — skeleton, knobs, modes and parametrisation](issues/12-hadronic-skeleton.md):
+  **shipped and executing.** `notebooks/hadronic_eos.py` paired to `.ipynb`
+  (`e81e034`), and the code this ticket owed the other three notebooks —
+  `standard_name` / `table_path` in `eos/general/table_io.py` (`407c984`),
+  reproducing all three of ticket 04's names byte-for-byte. `jupytext --to
+  notebook --execute` completes with 0 error outputs, verified BOTH on the live
+  tree and in an isolated `git archive HEAD` copy, because two other sessions
+  hold `eos/*/api.py` and `general/fermi_integrals.py`; the two runs differ only
+  in round-off (sfho Q_sat by 9e-4). 323 collected / 323 passed on
+  `test/general` + `test/test_imports.py` in the HEAD copy, python.org 3.14.2.
+  Three adaptations of the spine, each forced by this ticket's own deliverable
+  list and none of them a re-decision of the three shapes: `mode` -> `modes` with
+  `conditions(mode)` (a section per mode needs more than one), species flags
+  built INSIDE the section (`SpeciesFlags(**six)` is itself a refusal site, so
+  the knobs cell would die before the reporting pattern could run), and a
+  four-line path bootstrap (`eos` is installed in neither stack).
+  **`leptons` governs `eos_point` only**: `eos_table` takes it in zl and did and
+  `TypeError`s in sfho and dd2, and passing it to two of four would be exactly
+  the per-model translation table ticket 04 blocked this ticket to avoid — so it
+  waits on [ticket 54](issues/54-signature-corrections.md) item 1 and is a
+  one-line change when that lands.
+  **Four real unrecorded gaps, none fixed**: did reports meson condensation as
+  `residual 5.684e-15 above the gate` when its gate is 1e-10 (the cause is
+  `condensation >= 1.0` at `did/solver.py:574`, and `did/api.py:99` prints the
+  residual either way); zl's `EoSPoint` spells the totals `P_total/e_total/s_total`
+  against `P/eps/s` in the other three (the `rows_from_result` schema, by
+  contrast, is uniform — which is why every grid goes through rows); `did`'s
+  `compute_nmp` returns its own key names; and the inverse map has no shared
+  calling convention (`dd2.invert_nmp(nmp)` positional, `sfho.invert_nmp(**nmp)`
+  keyword), with `sfho.from_nmp` raising `RuntimeError` where `invert_nmp`
+  returns a status.
+  Environment: `nbconvert 7.17.1` installed into python.org 3.14 — jupytext's
+  executor, which this ticket's done-when names; `pyproject.toml` untouched. And
+  `timeout python3` runs under Rosetta and dies on numpy's arm64 extensions.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:

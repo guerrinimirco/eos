@@ -1,7 +1,8 @@
 # notebooks/hadronic_eos — skeleton, knobs, modes and parametrisation
 
 Type: task
-Status: open
+Status: resolved
+Assignee: session 9a857509
 Blocked by: 03, 04, 26, 47, 61
 Parent: ../map.md
 
@@ -37,3 +38,161 @@ in the answer any gap that is real but unrecorded.
 
 Done when `jupytext --to notebook --execute` runs the notebook to completion on a
 small grid with no traceback.
+
+## Answer
+
+**Shipped: [notebooks/hadronic_eos.py](../../../notebooks/hadronic_eos.py) paired
+to `.ipynb` (`e81e034`), and `standard_name` / `table_path` in
+[eos/general/table_io.py](../../../eos/general/table_io.py) (`407c984`).**
+
+`jupytext --to notebook --execute` runs it to completion with **no traceback**,
+verified twice: on the live tree, and in an isolated `git archive HEAD` copy so
+the claim is about the committed tree rather than the two sessions editing
+`eos/*/api.py` and `general/fermi_integrals.py` beside it. 24 cells, 12 code
+cells, **0 error outputs** in both. Interpreter: **python.org 3.14.2, numpy
+2.3.5, scipy 1.17.0**. Whole notebook runs in **~5 s** on a 12x2 grid.
+
+Targeted tests, run in the isolated HEAD copy so they measure this ticket and
+not the other two: `test/general` + `test/test_imports.py` = **323 collected,
+323 passed, 0 failed**. The full suite was not run (concurrency).
+
+### The code owed to tickets 15, 18 and 58
+
+`standard_name()` and `table_path()` landed **first**, beside `save_table`,
+byte-for-byte reproducing all three names ticket 04 settled:
+
+    dd2_fixed_YC_YC0.100_T0.0-30.0x4_nB0.1-1.2x64_mu+ph.h5
+    vmit_beta_eq_neutrinoless_T0.0x1_nB0.1-1.5x32_ph_nolep.h5
+    dd2vmit_fixed_YC_YC0.100_eta0.30_T0.0-30.0x4_nB0.1-1.2x64_mu+ph.h5
+
+Five tests in `test/general/test_table_io_names.py` (gitignored with the rest of
+`test/`). Import line for the other three notebooks:
+
+    from eos.general.table_io import save_table, standard_name, table_path
+
+### Three adaptations of the spine, and why each was forced
+
+The prototype's three shapes are unchanged. Three things around them had to move,
+each because ticket 12's own deliverable list demanded it:
+
+1. **`Knobs.mode: str` became `Knobs.modes: tuple`, and `conditions()` became
+   `conditions(mode)`.** This ticket delivers *a section per mode*, which a
+   single-valued `mode` field cannot express. The semantics the prototype's
+   self-check pins are preserved exactly: `conditions("fixed_YC")` returns
+   `{"Y_C": 0.1}` with `Y_S` set and dropped, and `leptons` is never in it.
+2. **Species flags are constructed inside the section, not in the knobs cell.**
+   `SpeciesFlags(**six)` is itself a refusal site — `zl` raises
+   `NotImplementedError` on `muons`, `sfho` and `dd2` raise on `hyperons` against
+   a nucleonic set. Building them in the knobs cell would kill the notebook
+   before section 2 could report anything, so `flags_for(name)` is called inside
+   the `run(...)` call and a flag refusal is reported through the same three-way
+   pattern as a mode refusal.
+3. **A four-line path bootstrap at the top.** `eos` is not installed in either
+   stack (`conftest.py`'s `sys.path` insert is what pytest uses), so a kernel
+   started in `notebooks/` cannot import it. The root is found by walking up for
+   `eos/general/`, which works from `notebooks/`, from the root, or from any
+   directory inside the checkout.
+
+`use_nmp_inversion` ships **off**, as ticket 04 settled. The branch was executed
+separately to prove it works, and all four models behave as ticket 12 predicted:
+
+    [dd2]  recovered — converged      predicted: Q_sat -212.14, K_sym -110.20
+    [sfho] no parameters — isoscalar residual 1.04e-06 above the 1e-06 gate
+           after 16 restarts (the targets are probably not representable ...)
+    [zl]   not supported: six parameters against the five NMPs ... leaves a
+           one-parameter family, and ZL has no published closure condition
+    [did]  no inverse map: the forward map only
+
+So the notebook shows `zl`'s NMPs as computed predictions beside dd2's and
+sfho's and states that zl cannot be built *from* a set, with the reason — the
+thing ticket 26 made truer than the prompt's "zl has no nmp.py".
+
+### The one place the notebook does NOT carry the knobs cell's `leptons`
+
+`eos_table` accepts `leptons=` in `zl` and `did` and **`TypeError`s in `sfho` and
+`dd2`**, where the only route to the neutralizing flavour is the mode name
+`fixed_YC_neutral` that §3 does not define. That is
+[ticket 54](54-signature-corrections.md) item 1 plus
+[ticket 20](20-phase5-api-readme.md)'s note ("both entry points take the
+argument, or neither name goes"), open and in flight in another session.
+
+Passing it to two models and not the other two would be exactly the per-model
+translation table ticket 04 blocked this ticket to avoid. So the flag governs
+`eos_point` (where all four take it today) and the table cell says in one line
+that the grids are built at each model's own default treatment. **When 54 lands,
+that is a one-line change**: add `leptons=KNOBS.leptons` to the `build` closure
+and delete the paragraph.
+
+### Gaps cross-checked against `docs/DEFERRED.md`
+
+**Already recorded, and reported by the notebook as refusals working correctly:**
+zl's muons and `thermal_neutrinos`; sfho's muons; dd2's `thermal_neutrinos`;
+dd2's `fixed_YC_YS` with `leptons=True`; the thermal meson gas leaving its domain
+above saturation (sfho and dd2 both name the Bose condensation and print
+`max |mu*|/m`). zl's `fixed_YC_YS` refusal and its absent hyperon/delta/meson
+sectors are §3 and §4 working; the messages are the best in the repo.
+
+**Real and unrecorded — four, none fixed here:**
+
+1. **`did` reports meson condensation as a residual that is five orders BELOW
+   its own gate.** With `thermal_mesons=True`, every `n_B >= 0.4` returns
+   `ok=False` with `"residual 5.684e-15 above the gate at n_B=0.4 fm^-3"`.
+   `RESIDUAL_TOL` is `1e-10`; 5.7e-15 is not above it. The real cause is
+   `eos/did/solver.py:574` — `condensation = 1.16 >= 1.0` — and `eos/did/api.py:99`
+   formats `point.error` regardless of which of the two rejected the point. So
+   the one model of the four whose message a reader can check against the gate is
+   the one whose message contradicts it, while sfho and dd2 say plainly that the
+   gas condensed. A message defect, not a physics defect: the point is correctly
+   rejected. `n_B <= 0.2` converges at every T tried.
+2. **`zl`'s `EoSPoint` spells the totals `P_total`, `e_total`, `s_total`** where
+   `sfho`, `dd2` and `did` spell them `P`, `eps`, `s`. The notebook crosses it in
+   a four-line `thermo(point)` and says so. Nothing else diverges: the
+   `rows_from_result` schema is uniform across all four (`n_B, T, P, eps, s,
+   mu_B, mu_S, mu_e, Y_C, Y_S, Y_p, Y_n, Y_e, S_per_B, chi, phase`), which is why
+   every grid in the notebook goes through rows and not through point attributes.
+3. **`did.compute_nmp` returns its own key names**: `n_0, B, K, Q, M, S_2, L_2,
+   K_sym2, S, L, K_sym, X_p_eq`, against the standard `n_sat, E_sat, K_sat,
+   Q_sat, E_sym, L_sym, K_sym` (+`m_eff_ratio`, `P_sat`) of zl, sfho and dd2. §5
+   says the forward and inverse maps "share the NMP list, its ordering"; nothing
+   says the list is shared *between* models, but four models returning three key
+   sets makes the cross-model table the notebook prints unreadable without a
+   footnote, which it now carries.
+4. **The inverse map has no shared calling convention.** `dd2.invert_nmp(nmp)`
+   takes the dictionary positionally; `sfho.invert_nmp(**nmp)` expands it as
+   keywords. There is no spelling that reaches both, so the notebook writes the
+   two calls out and names the divergence in a comment. Related, smaller: on a
+   target it cannot represent `sfho.from_nmp` raises `RuntimeError` while
+   `sfho.invert_nmp` returns `(None, status)` — the notebook uses the latter,
+   because `RuntimeError` is caught by no refusal pattern and is not one of the
+   two classes a refusal uses.
+
+**Two more, minor, offered without a ticket:** there is no uniform way to ask a
+model which parameter sets it ships (`sfho` exposes `PUBLISHED_SETS`, `dd2` and
+`did` keep theirs inside `Parameters.named`, `zl` has no `named` at all), so the
+notebook carries the list as a knob; and `did.Parameters.named("DID")` and
+`named("DIDY")` return the same object **by design and by docstring** — the
+hyperon couplings were fitted with the rest, so in `did` the flag alone selects
+the sector, where in `sfho` and `dd2` it needs a different published set. The
+notebook shows that split rather than hiding it.
+
+### Two things the executed output makes visible that are worth keeping
+
+- With the extra sectors off, `SFHo_Nucleonic`, `SFHoY_Fortin` and `SFHo_2fam`
+  agree to every printed digit, and so do `DD2` and `DD2Y`. A parametrisation is
+  not a knob that moves the nucleonic answer; it is the couplings the *sectors*
+  are read through. Turn hyperons on and they part company (sfho 126.43 -> 121.59
+  MeV/fm^3 at n_B = 0.6, dd2 220.36 -> 135.69, did 161.70 -> 154.02).
+- Every grid solved **24/24** points in every supported model and mode, so the
+  row-count line reads as a real check rather than decoration.
+
+### One environment note
+
+`jupytext --to notebook --execute` needs an executor, and python.org 3.14 had
+neither `nbconvert` nor `nbclient`. **`nbconvert 7.17.1` was installed** into
+that stack. It is the tool this ticket's own done-when names, not a library
+dependency: nothing in `eos/` imports it and `pyproject.toml` is untouched.
+
+Separately, `timeout python3 ...` runs the interpreter under Rosetta and dies on
+`numpy`'s arm64 extension modules. Do not prefix python3 with `timeout`.
+
+Status: resolved.
