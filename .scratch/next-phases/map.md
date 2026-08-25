@@ -422,6 +422,17 @@ against this file, not against the earlier `pytest_before*.txt`.
   [ticket 44](issues/44-rename-dd2.md); `CLAUDE.md` was taken instead precisely
   because it is disjoint from every rename.
 
+- **The empty-sector question is now sharp and ticketed.** What ticket 37 left as
+  "whether an underdetermined potential belongs in a frozen baseline at all" is
+  [ticket 56](issues/56-baseline-empty-sector-gate.md): ticket 40's exclusion
+  MECHANISM is right and its GATE is wrong, testing an absolute `n_S < 1e-12`
+  where emptiness is a statement about `n_S / n_B`. Measured blast radius is
+  **one row in one model** — `sfho.npz ycys.n0.16`, `n_S = 2.49e-09`
+  (Y_S = 1.6e-08, nine orders above the gate) with a free `mu_S = 8.4496` frozen
+  at rtol = 1e-10. `did`'s twenty tiny-`n_S` rows and all twelve of `dd2`'s carry
+  `mu_S = 0` exactly — imposed, not solved — so the generator's second gate keeps
+  them correctly and the fix cannot cost them.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
@@ -456,19 +467,11 @@ In scope, not yet sharp enough to ticket:
   The rename ruling has now landed (ticket 10), and both serious files are ones
   tickets 44 and 45 rewrite anyway — so the open question narrows to whether the
   reorder rides along with those renames or is gated separately from them.
-- **Whether an underdetermined potential belongs in a frozen baseline at all.**
-  [Ticket 37](issues/37-did-failures.md) has now measured `did`'s case exactly —
-  one `Delta mu_S` of 2.32e-05 MeV propagating into each hyperon as `S_i x
-  Delta mu_S`, nothing physical moved — so the general question is live:
-  `docs/DEFERRED.md` records that `mu_S` at Y_S = 0 and `mu_e` at Y_C = 0 land on
-  round-off, and `test/baseline/` pins them anyway at rtol = 1e-10 with a 1e-10
-  absolute floor. Whether the floor should exclude such quantities by name, and
-  which models' baselines carry them, is the design question. Blocked on ticket
-  37's ruling.
 - **Several real fixes now live outside version control.** `.gitignore:75`
-  excludes `/test/` entirely (§11), so ticket 39's helper skip and ticket 40's
-  completed baseline exclusion exist only in a working copy — anyone
-  reconstructing `test/` reintroduces both bugs. Whether some of that logic
+  excludes `/test/` entirely (§11), so ticket 39's helper skip, ticket 40's
+  completed baseline exclusion and now [ticket 56](issues/56-baseline-empty-sector-gate.md)'s
+  gate correction exist only in a working copy — anyone reconstructing `test/`
+  reintroduces all three bugs. Whether some of that logic
   belongs in `eos/` where it would be tracked, or whether the layout rule should
   bend, is worth settling during [ticket 21](issues/21-phase5-structure.md).
 - **Scaling the strangeness residual.** Ticket 40 measured that a 1e-10 gate
