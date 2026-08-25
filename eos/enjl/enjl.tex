@@ -1046,7 +1046,6 @@ where it comes from:
 field & symbol & from \\
 \midrule
 \texttt{n}          & $n_i$, all eight species & the request \\
-\texttt{kF}         & $k_{F,i}$ & Eq.~\eqref{eq:nmed} inverted \\
 \texttt{M\_q}       & $M_u, M_d, M_s$ & the gap equation, Eq.~\eqref{eq:gap} \\
 \texttt{M\_b}       & $M_p, M_n, M_\Lambda$ & Eq.~\eqref{eq:baryonmass} \\
 \texttt{nu}         & $\nu_i$, all eight --- the PRIMARY kinetic quantity
@@ -1080,6 +1079,45 @@ field & symbol & from \\
 \end{center}
 
 \noindent
+A table row (\texttt{table.beta\_row}) is that state flattened and made
+fm-based: $\nB$, $T$, $P$, $\varepsilon$, $s$, $s/\nB$, the four potentials
+$\muB$, $\muC$, $\muS$, $\mu_e$, the fractions $Y_C$ and $Y_S$, the eight
+species densities, the three constituent and three baryon masses, and
+%
+\begin{equation}
+\chi \;\equiv\; \frac{\nB^Q}{\nB} ,
+\label{eq:chi}
+\end{equation}
+%
+the fraction of the baryon density carried by deconfined quarks --- the
+\texttt{fq} column of the author's tables. It plays here the part the quark
+volume fraction plays in a two-engine mixed phase, and carries the same name
+for that reason, but it is not a volume fraction: the two phases of this model
+occupy the same volume.
+
+\paragraph{The scalar density, and why it is not the trace identity.} $n^s_i$
+is returned for all six strongly interacting species and is \emph{integrated},
+Eqs.~\eqref{eq:nsmed}, \eqref{eq:nsmedT} and \eqref{eq:nsvac}, not obtained
+from the trace of the energy--momentum tensor. The trace form
+%
+\begin{equation}
+\varepsilon^{\rm med} - 3 P^{\rm med} = M\, n^{s,{\rm med}}
+\label{eq:trace}
+\end{equation}
+%
+does hold here, identically and per species, for the \emph{medium} terms: it
+follows from Eqs.~\eqref{eq:epsmed}--\eqref{eq:Pmed} and \eqref{eq:nsmed} term
+by term, and is verified to round-off for a baryon and for a quark with the
+cut-off switched off. It fails for the quarks as they are actually used, and
+for the totals, and for two separate reasons. The Dirac-sea subtraction removes
+$\varepsilon^{\rm vac}$ from $\varepsilon$ and $n^{s,{\rm vac}}$ from $n^s$ but
+nothing from $P$, and $\varepsilon^{\rm vac} \ne M\, n^{s,{\rm vac}}$; and the
+total $\varepsilon$ and $P$ of Eqs.~\eqref{eq:eps} and \eqref{eq:P} carry
+condensate, vector, rearrangement and thermal terms that Eq.~\eqref{eq:trace}
+knows nothing about. So $n^s = (\varepsilon - 3P)/m^*$ is not a route to $n^s$
+in this model and is not used as one; where a reader of another model's
+document meets that identity, this is where it stops.
+
 A mode solve returns a \texttt{BetaPoint}, which carries the same record plus
 the density it was asked at, the mode declaration it was asked under, the
 conserved-charge potentials $\muB$, $\muC$ and $\muS$ it solved for, the
@@ -1087,9 +1125,18 @@ lepton potential $\mu_e$, and the converged unknown vector $\mathbf{x}$ ---
 which is what warm-starts the next density of a sweep, and what makes the
 continuation follow one branch. \texttt{eos\_response} is not implemented for this model: the
 second-derivative quantities of the CompOSE list divide into those that need
-$T > 0$ (the heat capacities, the thermal index) and those that need a
-conditioning statement the $T = 0$ branch structure of
-Sec.~\ref{sec:numerics} has not yet settled.
+$T > 0$ (the heat capacities, the thermal index, the
+isothermal/adiabatic distinction) and those that need a conditioning statement
+the branch structure of Sec.~\ref{sec:numerics} has not yet settled ---
+$c_s^2$ and the susceptibilities $\chi_{ab} = \partial n_a/\partial\mu_b$,
+since above the model's first first-order transition more than one branch
+satisfies the equilibrium conditions at the same density, and differentiating
+along the branch a continuation happened to reach would return a number whose
+meaning depends on the direction the table was swept in. The raise message
+states the first half as ``this is a $T = 0$ model'', which the \emph{modes}
+are not: they are closed at any $T \ge 0$. What is $T = 0$-only is the
+construction of Sec.~\ref{sec:construction}, and the response gap is the
+branch statement, not the temperature.
 
 \section{The construction: from branches to a delivered EoS}
 \label{sec:construction}
