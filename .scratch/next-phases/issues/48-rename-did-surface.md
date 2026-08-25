@@ -1,7 +1,7 @@
 # Rename did's and dd2's phase-adapter surface to thermo_from_mu
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 36
 Parent: ../map.md
 
@@ -55,3 +55,111 @@ Call sites: `eos/mixed/adapters.py:797, 813` aliases it as `_did_at_mu`, and
 `did`'s own `solver.py` / `verify/`. Run the AST collision check tickets 43-45
 carry before moving anything, and `test/baseline/` must not move at
 rtol = 1e-10 — a rename that changes a number is not a rename.
+
+---
+
+## Resolution
+
+Done. Three renames, in the order the ticket required — did's lower layer first,
+so the surface rename does not land on an occupied name.
+
+    did  thermo_from_mu        -> thermo_from_fields   (takes the solved fields)
+    did  thermo_at_potentials  -> thermo_from_mu       (the section 5 surface)
+    dd2  thermo_at_potentials  -> thermo_from_mu       (the section 5 surface)
+
+Commit `2891715`. All ten models now spell the surface `thermo_from_mu`, verified
+by introspecting every package rather than by reading; `sfho` and `did` are the
+only two carrying a `thermo_from_fields` beneath it.
+
+### The ticket's collision diagnosis was wrong, and the real one is three times bigger
+
+The ticket predicted `eos/mixed/adapters.py` would hold "a module-level
+`thermo_from_mu` beside two function-local **aliased** imports of the same name
+from sfho and did". That cannot collide: sfho's is `_sfho_at_mu` (:705) and
+did's is `_did_at_mu` (:815), and aliasing is precisely what makes them safe.
+
+Sandboxed the naive rename in scratchpad before touching the repo — copied
+`adapters.py`, applied only the bare dd2 rename, ran the three-shape checker:
+
+    2 local binding adapters.py:426   'thermo_from_mu' rebound inside enjl_phase()
+    2 local binding adapters.py:1081  'thermo_from_mu' rebound inside njl_phase()
+    2 local binding adapters.py:1231  'thermo_from_mu' rebound inside ccdm_phase()
+
+The real colliders are three **bare** function-local imports the ticket never
+names. Shape 2, not shape 3 — and shape 3 could never have fired, because it
+only inspects module level and every competing import here is function-local.
+Aliasing dd2's to `_dd2_at_mu` returns the tree to CLEAN. All three were scoped,
+so nothing was ever live-broken; this is the fragile shape, not a live bug.
+Reported, NOT widened into a fix for enjl/njl/ccdm.
+
+### `\b` is not supported by BSD sed
+
+The first rename pass was `sed -i '' 's/\bthermo_from_mu\b/.../'` and was a
+SILENT NO-OP — zero substitutions, exit 0. Caught only because the pass was
+followed by a grep instead of being trusted. Every subsequent rename used `perl
+-pi -e`. Anyone scripting a rename on macOS from these tickets should assume the
+same trap; tickets 42-45 all describe `sed` usage without flagging it.
+
+### Five document passages corrected
+
+The rename falsified prose in `dd2.md`, `sfho.md`, `sfho.tex`, `mixed.md` and
+`mixed.tex` — each asserted either that dd2 was "the outstanding one" or that
+three models "currently" spell the surface `thermo_at_potentials`. Left alone
+they would state something untrue about the code, which is the same defect class
+as the two docstring cross-references the ticket DOES list
+(`sfho/thermodynamics.py:566`, `enjl/thermodynamics.py:741`). Corrected here.
+`mixed.md` / `mixed.tex` keep a deliberate past-tense mention of the old name,
+because that paragraph exists to record the ruling.
+
+### Evidence
+
+- **904 probe values bit-identical by exact `==`, not rtol.** A deep walk over
+  the whole returned structure (dataclasses, dicts, arrays — not a hand-listed
+  set of field names) for dd2 and did across `beta_eq_neutrinoless` and
+  `fixed_YC`, T = 0 and 20 MeV, n_B = 0.16 and 0.4, plus 24 direct calls on the
+  renamed surface. Zero keys added, zero dropped, zero moved. Re-run after the
+  indentation fixes and identical again.
+- **Full suite byte-identical to its before-image.** `12 failed, 1638 passed,
+  15 skipped`, same node ids, and `diff` of the 121 `^E ` assertion lines is
+  EMPTY. 0 added failures, 0 cleared.
+  Before `output/_audit/pytest_after_ticket56_py314.txt`,
+  after `output/_audit/pytest_after_ticket48_py314.txt`.
+- **Baseline gate**, in ticket 56's corrected wording — "no SURVIVING baseline
+  value moved": the six `test_baseline[*]` failure bodies are byte-identical, and
+  `test/baseline/` was never written to (mtimes unchanged; the four at Aug 25
+  15:17 are ticket 56's, predating this ticket's first edit).
+- **verify PASS**: `did` all 13 checks (euler 4.53e-15, residual_gate 2.25e-14),
+  `dd2` all 6 (golden SNM 1.40e-05, backend parity 4.40e-14), `mixed` all 9
+  (euler/HVH 9.67e-15, TOV M_max 2.340 unchanged).
+- **shadowcheck CLEAN** before and after, whole tree.
+
+### Interpreter, and what that qualifies
+
+Run on `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3`
+(3.14.2 / numpy 2.3.5 / scipy 1.17.0 / numba 0.63.1), chosen because
+`output/_audit/` is a 3.14 audit trail and comparability is what a rename gate
+needs. This is NOT a vote on [ticket 57](57-canonical-stack.md). If anaconda is
+ruled canonical, the claim restates without weakening: no rename-attributable
+number moved on the stack the audit trail was built on, and the 904-point
+bit-identical probe is stack-independent evidence in any case.
+
+### One measurement thrown away
+
+The first post-rename suite run was killed and discarded. The shorter names left
+continuation lines hanging, and I re-aligned them AFTER the run had started, so
+it spanned a source edit — the exact contamination ticket 45 paid for. Restarted
+on a frozen tree. The reported numbers come from that second run.
+
+### Not done here
+
+- `test/` is gitignored (`.gitignore:75`), so the edits to
+  `test/did/test_did_thermodynamics.py` (6 sites) and
+  `test/dd2/test_thermodynamics.py` (4 sites) live ONLY in the working copy —
+  the same hazard the map records for tickets 39, 40, 45 and 56. Anyone
+  reconstructing `test/` reintroduces `thermo_at_potentials` and the suite goes
+  red at import.
+- `test/sfho/test_thermo_from_mu.py` is named after the surface; did's and dd2's
+  equivalents are not. Not in this ticket, not renamed.
+- The tree was NOT clean: ticket 20's `fe68f20` + `7c5b7a9` were present in both
+  the before-image and this run, and collection is 1665, not the map's 1663.
+  Both measurements carry it equally, so the diff is still valid.

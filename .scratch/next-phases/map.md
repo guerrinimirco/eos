@@ -738,6 +738,32 @@ against this file, not against the earlier `pytest_before*.txt`.
   gate was held): imports 188 + 2, `gmode`+`tov` 64 passed / 15 skipped,
   `mixed` 20 passed.
 
+- [Rename did's and dd2's phase-adapter surface to thermo_from_mu](issues/48-rename-did-surface.md):
+  done, commit `2891715`. did's lower layer -> `thermo_from_fields` FIRST, then
+  both surfaces -> `thermo_from_mu`. **All ten models now spell the surface the
+  same way**; sfho and did are the only two with a lower layer. **The ticket's
+  collision prediction was wrong and the real one is 3x bigger**: sfho's and
+  did's imports in `eos/mixed/adapters.py` are ALIASED and never collide; the
+  actual colliders are three BARE function-local imports it never names —
+  `enjl:426`, `njl:1081`, `ccdm:1231`, shape 2 not shape 3, proved in a
+  scratchpad sandbox before touching the repo. Aliasing dd2's to `_dd2_at_mu`
+  clears all three. **`\b` is not supported by BSD sed** — the first rename pass
+  was a silent no-op at exit 0, caught only by grepping after instead of
+  trusting; tickets 42-45 all describe `sed` without flagging this. Five
+  document passages that the rename made FALSE were corrected (`dd2.md`,
+  `sfho.md`, `sfho.tex`, `mixed.md`, `mixed.tex` each said dd2 was "the
+  outstanding one"). Evidence: **904 probe values bit-identical by exact `==`**
+  (deep walk of the whole returned structure, not a hand-listed field set),
+  full suite **byte-identical** to `pytest_after_ticket56_py314.txt` — same 12
+  node ids, `diff` of the 121 `^E ` lines EMPTY, 0 added / 0 cleared — and
+  did/dd2/mixed `verify` all PASS. Run on **3.14**, stated as a comparability
+  choice, not a vote on [57](issues/57-canonical-stack.md). Baseline gate met in
+  56's wording: no SURVIVING value moved, and `test/baseline/` never written to.
+  First suite run was killed and discarded for spanning a re-indentation edit,
+  the same contamination [45](issues/45-rename-sfho.md) paid for.
+  `test/` edits (6 sites in did's tests, 4 in dd2's) are gitignored and live
+  only in the working copy.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
