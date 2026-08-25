@@ -841,7 +841,19 @@ In scope, not yet sharp enough to ticket:
   reintroduces all three bugs. Whether some of that logic
   belongs in `eos/` where it would be tracked, or whether the layout rule should
   bend, is worth settling during [ticket 21](issues/21-phase5-structure.md).
-  **Ticket 56 escalates this from lost logic to lost DATA**: besides the gate
+  **Decided, for now (user, this session): §11 stands unchanged and
+  `test/baseline/` is copied OUTSIDE the repo by hand.** Tracking `test/` was
+  weighed — 44 MB total, of which 13 MB is the irreplaceable `.npz` and ~25 MB
+  regenerable `zlvmit` fixtures — and rejected for now because §11 says `test/`
+  is not published and un-ignoring it would publish the suite with the repo.
+  **Two caveats the interim measure carries:** a hand copy is only as fresh as
+  the last time it was taken, and [ticket 57](issues/57-canonical-stack.md)
+  regenerates every `.npz` — so the copy is worth taking AFTER that lands, not
+  before, or it preserves the superseded set. The underlying question — whether
+  some of this belongs in `eos/` where it would be tracked — is still
+  [ticket 21](issues/21-phase5-structure.md)'s.
+
+    **Ticket 56 escalates this from lost logic to lost DATA**: besides the gate
   fix, its four regenerated `.npz` files exist only in this working copy. Lose
   the checkout and the absolute-vs-relative gate bug returns *and* brings the 34
   keys back with it — and `test/baseline/` is §12 ground truth, so what is
