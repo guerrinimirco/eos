@@ -69,7 +69,7 @@ from eos.did.parameters import Parameters
 from eos.did.species import SpeciesFlags, active_baryons
 from eos.did.thermodynamics import (
     Fields, G_NU, N_NEUTRINO_FLAVOURS, baryon_kinetics, mean_fields, species_table,
-    thermal_meson_thermo, thermo_from_mu,
+    thermal_meson_thermo, thermo_from_fields,
 )
 
 #: A typical mean field [MeV]. A field equation is field = source/m^2, so
@@ -485,8 +485,8 @@ def assemble(x, sys: System) -> EoSPoint:
     """
     fields, mu_tilde_B, mu_C, mu_S, mu_nue, T = _unpack(x, sys)
     matter = baryon_kinetics(sys.par, sys.specs, fields, mu_tilde_B, mu_C, mu_S, T)
-    block = thermo_from_mu(sys.par, sys.flags, fields, mu_tilde_B, mu_C, mu_S,
-                           T, matter=matter)
+    block = thermo_from_fields(sys.par, sys.flags, fields, mu_tilde_B, mu_C,
+                               mu_S, T, matter=matter)
 
     P, eps, s = block.P, block.eps, block.s
     mu_dot_n = block.mu_dot_n

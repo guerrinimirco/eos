@@ -355,8 +355,8 @@ def field_eps_P(par, fields):
     return 0.5 * (s2 + w2 + r2 + p2) / hc3, 0.5 * (-s2 + w2 + r2 + p2) / hc3
 
 
-def thermo_from_mu(par, flags, fields, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
-                   matter=None):
+def thermo_from_fields(par, flags, fields, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
+                       matter=None):
     """The matter block at given potentials and fields, as a `PhaseThermo`.
 
     MATTER ONLY: baryons plus any thermal meson gas, no leptons and no
@@ -539,9 +539,9 @@ def cold_start(par, flags, n_B_guess=0.2, beta=0.0):
 COLD_START_BETAS = (0.0, -0.9)
 
 
-def thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
-                         n_B_guess=0.2, x0=None, x0_fallback=None,
-                         return_state=False):
+def thermo_from_mu(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
+                   n_B_guess=0.2, x0=None, x0_fallback=None,
+                   return_state=False):
     """DID's matter at fixed conserved-charge potentials, state solved.
 
     `mu_tilde_B = mu_B - Sigma^r` is the KINETIC baryon potential: Sigma^r is
@@ -587,5 +587,5 @@ def thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
             f"tol {RESIDUAL_TOL:.0e})")
 
     fields = _unpack_fields(best)
-    state = thermo_from_mu(par, flags, fields, mu_tilde_B, mu_C, mu_S, T)
+    state = thermo_from_fields(par, flags, fields, mu_tilde_B, mu_C, mu_S, T)
     return (state, dict(x_phase=list(best))) if return_state else state

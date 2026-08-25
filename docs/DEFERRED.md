@@ -894,7 +894,7 @@ decision that cannot be made before the tables exist.
   `test/dd2/test_dd2_m10_jac.py`; and `eos_response(frozen='equilibrium')`
   raises without `backends/` rather than degrading to a slower path, which is
   the one place §5's deletability is a feature gap rather than a speed cost.
-  `thermo_at_potentials` now makes the reference cheap to write — perturb
+  `thermo_from_mu` now makes the reference cheap to write — perturb
   mu_B, mu_C, mu_S, re-solve, read (n_B, n_C, n_S) — but writing it is new
   physics, so it waits for the response-function session.
 

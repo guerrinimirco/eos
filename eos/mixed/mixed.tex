@@ -223,16 +223,16 @@ remains the reference.
 
 \paragraph{The name of the surface.} In this repository the map
 Eq.~(\ref{eq:adapter}) is \texttt{thermo\_from\_mu}, in every model that ships
-one. Three models --- \texttt{dd2}, \texttt{sfho} and \texttt{did} --- spell it
-\texttt{thermo\_at\_potentials}, and in \texttt{sfho} and \texttt{did} that
-name sits above a lower evaluation layer already called
+one. Three models --- \texttt{dd2}, \texttt{sfho} and \texttt{did} --- once spelled
+it \texttt{thermo\_at\_potentials}, and in \texttt{sfho} and \texttt{did} that
+name sat above a lower evaluation layer already called
 \texttt{thermo\_from\_mu}, which takes the solved mean fields as arguments as
 well as the potentials. The ruling this document fixes is: \textbf{the contract
 surface is \texttt{thermo\_from\_mu}, and a lower layer that also takes the
 fields is \texttt{thermo\_from\_fields}} --- the name says what the function
 takes, which is the distinction that matters, and it removes the
-one-job-two-names split rather than freezing it. The three models are renamed
-to match under their own package tickets, not here.
+one-job-two-names split rather than freezing it. All three have since been
+renamed to match, under their own package tickets.
 
 \section{The $\eta$ family of constructions}
 

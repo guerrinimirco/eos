@@ -285,7 +285,7 @@ layers, and both belong to the model:
 `eos/mixed/adapters.py:hadronic_phase` is the second layer for DD2, written
 outside dd2 with its own residual, seed and gate -- a second implementation of
 DD2's field solve that can drift from the first. dd2/thermodynamics.py gains
-`thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S, T, x0)` and the
+`thermo_from_mu(par, flags, mu_tilde_B, mu_C, mu_S, T, x0)` and the
 hadronic adapter becomes a thin call that maps the result into `PhaseThermo`.
 The adapter contract then IS the thermodynamics/solver boundary rather than
 merely resembling it. The mixed hot path runs through here, so the warm start

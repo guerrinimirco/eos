@@ -27,7 +27,7 @@ from eos.did.species import SpeciesFlags, active_baryons
 from eos.did.thermodynamics import (
     Fields, Matter, Species, cold_start, baryon_kinetics, field_estimate,
     kinetic_thermo, mean_fields, meson_potentials, single_particle_potential,
-    species_table, thermal_meson_thermo, thermo_at_potentials, thermo_from_mu,
+    species_table, thermal_meson_thermo, thermo_from_mu, thermo_from_fields,
 )
 from eos.did.solver import (
     EoSPoint, MODE_FRACTIONS, System, assemble, default_guess, mode_spec,
@@ -54,7 +54,7 @@ __all__ = [
     "Fields", "Matter", "Species", "species_table", "kinetic_thermo",
     "mean_fields", "baryon_kinetics", "field_estimate", "cold_start",
     "meson_potentials", "thermal_meson_thermo", "single_particle_potential",
-    "thermo_from_mu", "thermo_at_potentials",
+    "thermo_from_fields", "thermo_from_mu",
     "EoSPoint", "System", "MODE_FRACTIONS", "unknown_names", "residual",
     "assemble", "default_guess", "warm_start", "mode_spec", "solve",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",

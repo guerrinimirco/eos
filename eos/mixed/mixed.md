@@ -162,14 +162,14 @@ remains the reference.
 
 **The name of the surface.** In this repository the map (adapter) is
 `thermo_from_mu`, in every model that ships one. Three models — dd2, sfho and
-did — currently spell it `thermo_at_potentials`, and in sfho and did that name
-sits above a lower evaluation layer already called `thermo_from_mu`, which
-takes the solved mean fields as arguments as well as the potentials. The ruling
-this document fixes is: **the contract surface is `thermo_from_mu`, and a lower
+did — once spelled it `thermo_at_potentials`, and in sfho and did that name sat
+above a lower evaluation layer already called `thermo_from_mu`, which takes the
+solved mean fields as arguments as well as the potentials. The ruling this
+document fixes is: **the contract surface is `thermo_from_mu`, and a lower
 layer that also takes the fields is `thermo_from_fields`** — the name says what
 the function takes, which is the distinction that matters, and it removes the
-one-job-two-names split rather than freezing it. The three models are renamed
-to match under their own package tickets, not here.
+one-job-two-names split rather than freezing it. All three have since been
+renamed to match, under their own package tickets.
 
 
 ## The eta family of constructions

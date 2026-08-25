@@ -563,7 +563,7 @@ def thermo_from_mu(par, flags, mu_B, mu_C, mu_S=0.0, T=0.0,
     `thermo_from_fields`. No leptons, no neutrality, no held fraction — those
     are conditions on a system, and this describes matter. It is the surface the
     phase-adapter contract consumes, shaped like
-    `eos.dd2.thermodynamics.thermo_at_potentials` with one physical
+    `eos.dd2.thermodynamics.thermo_from_mu` with one physical
     difference: SFHo's couplings are constants, so there is no rearrangement
     term and the PHYSICAL mu_B enters directly — no kinetic potential, and no
     density unknown either, because n_i follows outright from (mu_i, fields).

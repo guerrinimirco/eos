@@ -864,7 +864,7 @@ table = eos_table(par, "fixed_YC", didy,
     parameters.py      the numbers, the multiplet table, couplings_at(n_B, beta)
     species.py         SpeciesFlags and the active baryon list
     thermodynamics.py  kinetics, fields, both Sigma terms, assembly, and
-                       thermo_at_potentials (the phase-adapter surface)
+                       thermo_from_mu (the phase-adapter surface)
     solver.py          the residual, the modes, the warm start
     nmp.py             the forward nuclear-matter map + the Delta inversion
     table.py           the grid driver over eos.general.tabulate

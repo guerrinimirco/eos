@@ -49,7 +49,7 @@ from scipy.optimize import root
 from eos.general.physics_constants import hc, hc3
 from eos.general.basis import quark_charges, quark_potentials
 from eos.general.state import PhaseThermo
-from eos.dd2.thermodynamics import thermo_at_potentials
+from eos.dd2.thermodynamics import thermo_from_mu as _dd2_at_mu
 from eos.dd2.solver import solve_beta_eq_neutrinoless, solve, sweep
 from eos.mixed.charges import Regime
 from eos.vmit.parameters import Parameters as VMITParameters
@@ -240,7 +240,7 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
     iteration — see CLAUDE.md §2), the non-leptonic charge potential `mu_C`
     (= mu_C) and the strangeness potential `mu_S`.
 
-    A thin call to `eos.dd2.thermodynamics.thermo_at_potentials`, which solves
+    A thin call to `eos.dd2.thermodynamics.thermo_from_mu`, which solves
     the DD-RMF meson fields and the phase's own baryon density
     self-consistently. dd2 owns that solve, because it is dd2's own
     self-consistency and nothing about it depends on a mode; this adapter's job
@@ -277,7 +277,7 @@ def hadronic_phase(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
     # stronger seed is available and this is the hot path, so supply it: a
     # charge-neutral beta-equilibrium solve at n_B_guess, which is physical by
     # construction and independent of the charge potentials.
-    state, internal = thermo_at_potentials(
+    state, internal = _dd2_at_mu(
         par, flags, mu_tilde_B, mu_C, mu_S, T=T, n_B_guess=n_B_guess,
         x0=x0,
         x0_fallback=lambda: hadronic_seed(par, flags, T, n_B_guess),
@@ -796,7 +796,7 @@ def did_phase(par, flags):
     phase-internal solve closes seven equations rather than four: the meson
     fields, the phase's own density, its asymmetry beta and the isospin
     rearrangement self-energy Sigma^t. All of that is `eos.did`'s own business
-    and stays inside `eos.did.thermodynamics.thermo_at_potentials`; what
+    and stays inside `eos.did.thermodynamics.thermo_from_mu`; what
     reaches the engine is the same `PhaseThermo` every other adapter returns.
 
     The slot carries the KINETIC potential mu~_B = mu_B - Sigma^r, as DD2's
@@ -812,7 +812,7 @@ def did_phase(par, flags):
         solve_fixed_yc as _did_yc,
         solve_fixed_yc_ys as _did_yc_ys,
     )
-    from eos.did.thermodynamics import thermo_at_potentials as _did_at_mu
+    from eos.did.thermodynamics import thermo_from_mu as _did_at_mu
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
                return_state=False):

@@ -775,10 +775,9 @@ report.
 It takes the \textbf{physical} $\muB$. SFHo's couplings are constants, so
 there is no rearrangement term and no kinetic potential --- unlike the DD2
 counterpart, which takes the kinetic one. Which of the two a phase's slot
-carries is a declared property of the phase, never an engine assumption. That
-counterpart is also still spelled \texttt{thermo\_at\_potentials}: seven of
-the ten models use \texttt{thermo\_from\_mu} for this surface, SFHo is now one
-of them, and DD2 is the outstanding one.
+carries is a declared property of the phase, never an engine assumption. All ten
+models spell this surface \texttt{thermo\_from\_mu}; SFHo and DID are the two
+that also carry a lower \texttt{thermo\_from\_fields} beneath it.
 %
 \begin{quote}
 \texttt{thermo\_from\_fields(mu\_B, mu\_C, mu\_S, sigma, omega, rho, phi, T,\\

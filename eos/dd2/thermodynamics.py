@@ -14,7 +14,7 @@ Two layers, both thermodynamics:
     self-consistency    at given CHARGE POTENTIALS, solving DD2's OWN meson
                         fields (and, for one phase of a mixture, its own
                         density). A solve -- but of nothing mode-dependent.
-                        `thermo_at_potentials` is that layer, and it is what
+                        `thermo_from_mu` is that layer, and it is what
                         `eos.mixed`'s hadronic adapter calls.
 
 Natural units inside (energies and masses MeV, densities MeV^3, eps and P
@@ -568,9 +568,9 @@ def self_consistency_residual(x, par, ctx, mu_tilde_B, mu_C, mu_S, fast=True):
     return res
 
 
-def thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
-                         n_B_guess=0.2, x0=None, x0_fallback=None,
-                         return_state=False, fast=True):
+def thermo_from_mu(par, flags, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
+                   n_B_guess=0.2, x0=None, x0_fallback=None,
+                   return_state=False, fast=True):
     """DD2's matter at fixed conserved-charge potentials, fields solved.
 
     The self-consistent layer: given (mu_tilde_B, mu_C, mu_S, T) it solves the

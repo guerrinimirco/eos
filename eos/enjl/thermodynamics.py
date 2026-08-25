@@ -738,7 +738,7 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, x0=None):
     vector-field self-consistencies, the two rearrangement definitions, and
     n_B = sum_i B_i n_i, which is what closes the density.
 
-    Unlike `eos.dd2.thermodynamics.thermo_at_potentials` this takes the
+    Unlike `eos.dd2.thermodynamics.thermo_from_mu` this takes the
     PHYSICAL mu_B rather than the kinetic mu_B - Sigma^R. It can, because the
     rearrangement terms are already carried as unknowns with their defining
     equations as rows, so the circularity that makes dd2 prefer the kinetic

@@ -250,9 +250,9 @@ Note it takes the **PHYSICAL `mu_B`**. SFHo's couplings are constants, so there
 is no rearrangement term and no kinetic potential; dd2's counterpart takes the
 kinetic one, and whether a phase's slot carries the kinetic or the physical
 baryon potential is a declared property of the phase, never an engine
-assumption. dd2's counterpart is also still spelled `thermo_at_potentials`:
-seven of the ten models use `thermo_from_mu` for this surface, sfho is now one
-of them, and dd2 is the outstanding one.
+assumption. All ten models spell this surface `thermo_from_mu`;
+sfho and did are the two that also carry a lower `thermo_from_fields` beneath
+it.
 
     thermo_from_fields(mu_B, mu_C, mu_S, sigma, omega, rho, phi, T,
                        particles, params, include_pseudoscalar_mesons=False)

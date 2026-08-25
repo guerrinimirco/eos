@@ -278,10 +278,9 @@ makes this thermodynamics rather than a mode. Imposing neutrality on one phase
 of a Gibbs construction would be wrong in any case — global neutrality is the
 engine's condition, not the phase's.
 
-The entry point is `thermo_at_potentials(par, flags, mu_tilde_B, mu_C, mu_S,
-T, ...)`. Note the name: seven of the ten models spell this surface
-`thermo_from_mu`, and dd2 is one of the three that do not yet — the rename is
-outstanding, so this document names the function the package actually has.
+The entry point is `thermo_from_mu(par, flags, mu_tilde_B, mu_C, mu_S,
+T, ...)` — the section 5 phase-adapter surface, which all ten models spell the
+same way.
 
 **NMPs.** Forward map at the model's own saturation: E_sat, m*/m, K_sat,
 Q_sat, E_sym, L_sym (and K_sym). Inverse map imposes

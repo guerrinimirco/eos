@@ -159,7 +159,7 @@ def check_rearrangement(par, tol=1.0e-10):
     alone; if a rearrangement term had leaked into it, the two would differ by
     n_B Sigma^r, which is tens of MeV/fm^3.
     """
-    from eos.did.thermodynamics import field_eps_P, thermo_from_mu
+    from eos.did.thermodynamics import field_eps_P, thermo_from_fields
 
     flags = SpeciesFlags(hyperons=True, muons=False, photons=False)
     specs = species_table(flags)
@@ -170,8 +170,8 @@ def check_rearrangement(par, tol=1.0e-10):
         mu_tilde_B = point.mu_B - point.Sigma_r
         matter = baryon_kinetics(par, specs, fields, mu_tilde_B, point.mu_C,
                           point.mu_S, point.T)
-        block = thermo_from_mu(par, flags, fields, mu_tilde_B, point.mu_C,
-                               point.mu_S, point.T, matter=matter)
+        block = thermo_from_fields(par, flags, fields, mu_tilde_B, point.mu_C,
+                                   point.mu_S, point.T, matter=matter)
         eps_fields, P_fields = field_eps_P(par, fields)
         # The energy carries the kinetic pieces and the fields and NOTHING
         # else; the pressure carries n_B Sigma^r on top of them.
