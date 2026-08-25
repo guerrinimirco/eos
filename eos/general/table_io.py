@@ -160,3 +160,69 @@ def export_csv(rows, path, meta=None):
                 out.append(v if isinstance(v, str) else f"{float(v):.8e}")
             f.write("  ".join(out) + "\n")
     return path
+
+
+# ----------------------------------------------------------- automatic names
+
+_FLAG_TOKENS = {"hyperons": "hyp", "deltas": "del", "muons": "mu",
+                "thermal_mesons": "mes", "thermal_neutrinos": "nu",
+                "photons": "ph"}
+
+
+def standard_name(model, mode, conditions, axes, species, leptons=True,
+                  eta=None, ext="h5"):
+    """The automatic file name for a generated table.
+
+    Every choice that changes a number is in the name, so two tables in one
+    folder cannot collide silently and a name alone says how it was made:
+
+        dd2_fixed_YC_YC0.100_T0.0-30.0x4_nB0.1-1.2x64_mu+ph.h5
+        vmit_beta_eq_neutrinoless_T0.0x1_nB0.1-1.5x32_ph_nolep.h5
+        dd2vmit_fixed_YC_YC0.100_eta0.30_T0.0-30.0x4_nB0.1-1.2x64_mu+ph.h5
+
+    Order: model, mode, the mode's fractions, eta if a composite engine, the
+    thermal axis, the density axis, the sectors that are ON, and `nolep` only
+    when leptons are off (their presence is the common case). `bare` is the
+    literal token when no sector is on, rather than an empty gap that would
+    make the name ambiguous.
+
+    The complete metadata still goes into the file through `save_table(meta=)`;
+    the name is for the human reading the folder months later.
+    """
+    parts = [model, mode]
+    for key in ("Y_C", "Y_S", "Y_Le", "Y_Lmu"):
+        if conditions.get(key) is not None:
+            parts.append(f"{key.replace('_', '')}{conditions[key]:.3f}")
+    if eta is not None:
+        parts.append(f"eta{eta:.2f}")
+    for key in ("T", "SnB"):
+        if key in axes:
+            parts.append(f"{key}{_span(axes[key])}")
+    parts.append(f"nB{_span(axes['nB'])}")
+
+    on = [token for flag, token in _FLAG_TOKENS.items() if species.get(flag)]
+    parts.append("+".join(on) if on else "bare")
+    if not leptons:
+        parts.append("nolep")
+    return "_".join(parts) + "." + ext
+
+
+def _span(grid):
+    """A grid as `lo-hix n` — or just `lo x1` when it is a single value."""
+    grid = np.atleast_1d(np.asarray(grid, dtype=float))
+    if grid.size == 1:
+        return f"{grid[0]:.1f}x1"
+    return f"{grid[0]:.1f}-{grid[-1]:.1f}x{grid.size}"
+
+
+def table_path(model, name, root="output/tables"):
+    """`output/tables/<model>/<name>` — CLAUDE.md section 11's per-model folder.
+
+    The folder is created on demand, so a notebook that saves a table does not
+    need a setup step before it.
+    """
+    import os
+
+    folder = os.path.join(root, model)
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, name)
