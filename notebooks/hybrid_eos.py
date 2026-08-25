@@ -48,6 +48,12 @@
 # 6. **A table is rows plus windows** — the headline DD2 + vMIT run, saved.
 # 7. **The stitched hybrid table** — hadronic wing, mixed window, quark core,
 #    and the handoff into the structure solver.
+# 8. **Figures** — the four families that only a composite engine has.
+# 9. **The TOV pass** — the gate that runs before any integration, then M-R.
+# 10. **Swapping both sides of the pair** — DID + NJL and DID + CCDM.
+# 11. **Against the retired DD2 + vMIT tables** — the same inputs, rebuilt from
+#     the provenance header of the first-generation run, and the boundaries
+#     compared.
 #
 # Units are the ones every public boundary uses: densities in fm^-3,
 # temperatures and chemical potentials in MeV, pressure and energy density in
@@ -634,13 +640,569 @@ for mode in KNOBS.modes:
           f"P {for_tov.P[0]:.3f} -> {for_tov.P[-1]:.3f} MeV/fm^3")
 
 # %% [markdown]
+# ## 8. Figures — the composite engine's own observables
+#
+# Four families, and every one of them is something a single-phase model has no
+# way to draw. They are why the engine earned a notebook: the pressure with the
+# coexistence window marked on it, the quark volume fraction crossing that
+# window, the conserved charges resolved by phase, and the boundaries themselves
+# as curves in temperature.
+#
+# All styling comes from `eos.general.figure_style` and nothing else — no
+# rcParams are set here, no colour is re-declared — and the observational bands
+# come from `eos.general.constraints.overlay`, keyed by the plane they live in.
+# Everything is written under the repository root found in the first cell, never
+# under the working directory, so a notebook run from `notebooks/` does not
+# scatter its output into `notebooks/output/`.
+#
+# **The panels ARE the `eta` selection.** A construction is not a coordinate
+# (section 5), so a figure that wants Gibbs beside Maxwell is one file with a
+# panel each, not two files to line up by eye.
+
+# %%
+import matplotlib.pyplot as plt
+
+from eos.astro.tov import compute_tov_sequence, find_mmax_precise
+from eos.general.constraints import overlay
+from eos.general.figure_style import (OKAB_CAT, T_COLORS, paper_grid,
+                                      panel_label, save_figure)
+
+# Anchored to ROOT, not to the working directory.
+FIG_DIR = ROOT / "output" / "hybrid"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
+print("figures ->", FIG_DIR)
+
+# --- what every panel is selectable over --------------------------------
+# One panel per construction. eta is a scalar per call, so each of these is a
+# separate solve and the grid below is a grid of figures, never of table axes.
+FIG_ETAS = (0.0, 0.5, 1.0)
+
+FIG_N_B = np.geomspace(0.05, 1.40, 60)   # fm^-3, the curve grid
+FIG_MODE = "beta_eq_neutrinoless"        # the headline equilibrium
+FIG_T = 0.0                              # MeV; these are the cold curves
+FIG_T_CURVE = (0.0, 10.0, 20.0, 30.0)    # the boundary curves' temperature axis
+FIG_N_STARS = 24                         # central densities per TOV sequence
+
+# Colour = construction, so eta 0.5 is the same colour in every family below.
+ETA_COLOR = dict(zip(FIG_ETAS, OKAB_CAT))
+# ... and a line style too, for the one plane where the constructions very
+# nearly coincide: on M-R three curves within 0.1 km of each other would hide
+# two of themselves behind whichever was drawn last.
+ETA_STYLE = dict(zip(FIG_ETAS, ("-", "--", ":")))
+
+
+def eta_grid(aspect=1.2, width=None):
+    """A panel per selected construction, in the paper style. Nothing else in
+    this notebook builds a figure, so the geometry is stated once, here."""
+    fig, axes = paper_grid(f"1x{len(FIG_ETAS)}", mode="double",
+                           placeholder=False, aspect=aspect, width=width)
+    return fig, axes[0]
+
+
+# %% [markdown]
+# The curves themselves: one stitched table per construction, on the finer grid
+# above. `hybrid_table` gives the hadronic wing, the mixed window and the quark
+# core in one array with a `phase` tag per row, which is what lets a single
+# curve be drawn across a transition without splicing it by hand.
+
+# %%
+header("the figure tables")
+figure_tables = {}
+for eta in FIG_ETAS:
+
+    def build(eta=eta):
+        return hybrid_table(None, FIG_MODE, None, n_B_grid=FIG_N_B, eta=eta,
+                            T=FIG_T, phases=PAIR,
+                            muons=KNOBS.species["muons"])
+
+    status, result = run(f"eta={eta}", build)
+    if status != "ok":
+        continue
+    figure_tables[eta] = result.table
+    table = result.table
+    counts = {tag: int(np.sum(table.phase == tag)) for tag in ("H", "mix", "Q")}
+    window = (f"{table.n_onset:.4f} -> {table.n_offset:.4f} fm^-3"
+              if table.has_transition else "none on this grid")
+    print(f"  [eta={eta:.2f}] {len(table.n_B):3d} rows {counts}  window {window}")
+
+# %% [markdown]
+# ### Family 1 — pressure, with the window marked
+#
+# The shaded span is the coexistence window, drawn from `n_onset` and `n_offset`
+# as the engine returned them rather than recovered by scanning the curve for
+# where `chi` left `[0, 1]` — that is the whole point of the windows being part
+# of the result. At `eta = 1` the curve is flat across the span: two separately
+# neutral phases coexist at one pressure, which is what a Maxwell construction
+# is. At `eta = 0` it rises through it.
+
+# %%
+fig, axes = eta_grid()
+for ax, eta in zip(axes, FIG_ETAS):
+    table = figure_tables.get(eta)
+    if table is None:
+        ax.set_title(f"$\\eta$ = {eta:.1f} — did not solve")
+        continue
+    if table.has_transition:
+        ax.axvspan(table.n_onset, table.n_offset, color="0.85", zorder=0,
+                   label="mixed phase")
+    ax.plot(table.n_B, table.P, color=ETA_COLOR[eta])
+    ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+    ax.set_ylabel(r"$P$ [MeV fm$^{-3}$]")
+    ax.set_xlim(FIG_N_B[0], FIG_N_B[-1])
+    ax.set_title(f"$\\eta$ = {eta:.1f}")
+    ax.legend(loc="upper left")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="lower right")
+save_figure(fig, str(FIG_DIR / "pressure_window"))
+
+# %% [markdown]
+# ### Family 2 — the quark volume fraction
+#
+# `chi` is the fraction of volume the quark phase occupies, and it is the one
+# curve that says where the transition actually is: it leaves 0 at `n_onset` and
+# reaches 1 at `n_offset`. Outside the window the stitched table pins it at its
+# pure-phase value, so the curve is flat there by construction rather than by
+# accident.
+
+# %%
+fig, axes = eta_grid()
+for ax, eta in zip(axes, FIG_ETAS):
+    table = figure_tables.get(eta)
+    if table is None:
+        ax.set_title(f"$\\eta$ = {eta:.1f} — did not solve")
+        continue
+    if table.has_transition:
+        ax.axvspan(table.n_onset, table.n_offset, color="0.85", zorder=0)
+    ax.plot(table.n_B, table.chi, color=ETA_COLOR[eta])
+    ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+    ax.set_ylabel(r"$\chi$")
+    ax.set_xlim(FIG_N_B[0], FIG_N_B[-1])
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_title(f"$\\eta$ = {eta:.1f}")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="upper left")
+save_figure(fig, str(FIG_DIR / "quark_fraction"))
+
+# %% [markdown]
+# ### Family 3 — the conserved charges, resolved by phase
+#
+# One panel per conserved charge. The two solid curves are the hadronic and
+# quark shares on the volume-weighted convention; the dashed curve is their sum,
+# which is the global fraction the mode fixed and is therefore a check rather
+# than a result — section 6 measured it closing to 1e-15.
+#
+# This is what `eta` controls and what a global sum cannot show. At `eta = 0`
+# the two phases share one electron sea, so neither is neutral on its own and
+# `Y_C_H` and `Y_C_Q` run apart; at `eta = 1` each neutralizes itself. The rows
+# come from `eos_table` rather than the stitched table, because the partition is
+# only defined inside the window.
+
+# %%
+CHARGE_PANELS = (("B", "Y_B_H", "Y_B_Q", None, r"$Y_B$"),
+                 ("C", "Y_C_H", "Y_C_Q", "Y_C", r"$Y_C$"),
+                 ("S", "Y_S_H", "Y_S_Q", "Y_S", r"$Y_S$"))
+
+header("the charge-partition rows")
+charge_rows = {}
+for eta in FIG_ETAS:
+
+    def build(eta=eta):
+        return eos_table(None, FIG_MODE, None,
+                         {"nB": FIG_N_B, "T": np.array([FIG_T])}, eta=eta,
+                         phases=PAIR, muons=KNOBS.species["muons"],
+                         window_only=True, verbose=False)
+
+    status, result = run(f"eta={eta}", build)
+    if status != "ok":
+        continue
+    rows, _ = result
+    charge_rows[eta] = rows
+    print(f"  [eta={eta:.2f}] {len(rows)} rows in the window")
+
+# %%
+ETA_CHARGE = KNOBS.eta      # one construction; the panels are the charges here
+
+fig, axes = paper_grid("1x3", mode="double", placeholder=False, aspect=1.2)
+axes = axes[0]
+rows = charge_rows.get(ETA_CHARGE, [])
+for ax, (name, had_key, quark_key, total_key, label) in zip(axes, CHARGE_PANELS):
+    if rows:
+        n_B = np.array([r["n_B"] for r in rows])
+        had = np.array([r[had_key] for r in rows])
+        quark = np.array([r[quark_key] for r in rows])
+        total = (had + quark if total_key is None
+                 else np.array([r[total_key] for r in rows]))
+        ax.plot(n_B, had, color=OKAB_CAT[0], label="hadronic")
+        ax.plot(n_B, quark, color=OKAB_CAT[1], label="quark")
+        ax.plot(n_B, total, color="0.3", ls="--", label="sum")
+    ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+    ax.set_ylabel(label)
+    ax.set_title(f"charge {name}")
+axes[0].legend(loc="center right")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="lower left")
+save_figure(fig, str(FIG_DIR / "charges_by_phase"))
+
+# %% [markdown]
+# ### Family 4 — the transition curves
+#
+# `n_onset` and `n_offset` against temperature, one pair per construction: the
+# phase diagram of the pairing in the plane the windows live in. Each point is
+# one line of one `eos_table` call, and the window it contributes is a returned
+# value, not something read back off the rows.
+#
+# A line where the boundaries could not be located contributes no point rather
+# than a fabricated one, so a gap in a curve is the engine saying so.
+
+# %%
+header("the boundary curves")
+boundaries = {}
+for eta in FIG_ETAS:
+    located = []
+    for temperature in FIG_T_CURVE:
+
+        def build(eta=eta, temperature=temperature):
+            return eos_table(None, FIG_MODE, None,
+                             {"nB": FIG_N_B, "T": np.array([temperature])},
+                             eta=eta, phases=PAIR,
+                             muons=KNOBS.species["muons"],
+                             window_only=True, verbose=False)
+
+        status, result = run(f"eta={eta} T={temperature}", build)
+        if status != "ok":
+            continue
+        _, windows = result
+        window = next(iter(windows.values()), None)
+        if window is None or not np.isfinite(window.n_onset):
+            print(f"  [eta={eta:.2f} T={temperature:4.1f}] no window located")
+            continue
+        located.append((temperature, window.n_onset, window.n_offset))
+        print(f"  [eta={eta:.2f} T={temperature:4.1f}] "
+              f"n_onset={window.n_onset:.4f}  n_offset={window.n_offset:.4f}")
+    boundaries[eta] = np.array(located) if located else np.empty((0, 3))
+
+# %%
+fig, axes = eta_grid()
+for ax, eta in zip(axes, FIG_ETAS):
+    found = boundaries.get(eta, np.empty((0, 3)))
+    if found.size:
+        ax.plot(found[:, 1], found[:, 0], color=ETA_COLOR[eta], marker="o",
+                ms=3, label=r"$n_{\rm onset}$")
+        ax.plot(found[:, 2], found[:, 0], color=ETA_COLOR[eta], marker="s",
+                ms=3, ls="--", label=r"$n_{\rm offset}$")
+        ax.fill_betweenx(found[:, 0], found[:, 1], found[:, 2],
+                         color=ETA_COLOR[eta], alpha=0.15)
+    ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+    ax.set_ylabel(r"$T$ [MeV]")
+    ax.set_title(f"$\\eta$ = {eta:.1f}")
+    ax.legend(loc="best")
+for ax, tag in zip(axes, "abcd"):
+    panel_label(ax, f"({tag})", corner="upper right")
+save_figure(fig, str(FIG_DIR / "transition_curves"))
+
+# %% [markdown]
+# ## 9. The TOV pass
+#
+# `.to_tov()` is the declared contract into `eos.astro.tov`: an
+# `EOSTable_for_TOV`, which lives in `general/` — the layer the composite engine
+# and the structure solver may both import — and that object is the whole of the
+# handoff.
+#
+# ### The gate that runs before any integration
+#
+# A table delivered to a structure solver has `P` non-decreasing in `n_B` and
+# `0 <= c_s^2 <= 1`. A raw branch may legitimately violate both inside a
+# first-order transition, where mechanical instability is real physics rather
+# than a bug — which is exactly the region this notebook is about, so the check
+# is not decoration here. It runs **before** the integration and returns a
+# status: a table that fails it is reported and left alone, never quietly
+# repaired and never turned into a mass that would mean nothing.
+#
+# A Maxwell window is a genuine plateau, `dP = 0` exactly, so the monotonicity
+# is tested as "non-decreasing" against round-off rather than as strictly
+# rising — a strict test would reject the one construction that is most clearly
+# correct.
+#
+# `c_s^2` here is the finite-difference `dP/deps` of the delivered table itself,
+# which is the quantity the solver will interpolate. It is not the model's
+# `eos_response`, which holds something fixed and answers a different question.
+
+# %%
+def deliverable(core):
+    """The gate on a table about to be integrated.
+
+    Returns `(ok, message, cs2)` with `cs2 = dP/deps` on the mid-points of the
+    table. Nothing is modified: a failing table comes back as a status.
+    """
+    dP = np.diff(core.P)
+    d_eps = np.diff(core.epsilon)
+    cs2 = np.divide(dP, d_eps, out=np.full(dP.shape, np.nan), where=d_eps != 0)
+    falling = np.flatnonzero(dP < 0.0)
+    acausal = np.flatnonzero(~((cs2 >= 0.0) & (cs2 <= 1.0)))
+    mid = 0.5 * (core.nB[:-1] + core.nB[1:])
+    parts = []
+    if falling.size:
+        parts.append(f"P falls at {falling.size} of {dP.size} steps, first at "
+                     f"n_B = {mid[falling[0]]:.3f} fm^-3")
+    if acausal.size:
+        parts.append(f"c_s^2 outside [0, 1] at {acausal.size} steps, first at "
+                     f"n_B = {mid[acausal[0]]:.3f} fm^-3")
+    ok = not parts
+    message = ("P non-decreasing and 0 <= c_s^2 <= 1 over "
+               f"{dP.size} steps, max c_s^2 = {np.nanmax(cs2):.3f}"
+               if ok else "; ".join(parts))
+    return ok, message, cs2
+
+
+header("the gate, before integration")
+cores = {}
+for eta in FIG_ETAS:
+    table = figure_tables.get(eta)
+    if table is None:
+        continue
+    core = table.to_tov()
+    ok, message, _ = deliverable(core)
+    print(f"  [eta={eta:.2f}] {'PASS' if ok else 'HOLD'}  {message}")
+    if ok:
+        cores[eta] = core
+
+# %% [markdown]
+# One sequence per construction, over the gated tables only, with the BPS crust
+# attached at `n_B = 0.08` fm^-3 — the density where that table tops out.
+# `compute_tov_sequence` returns `(e_c, n_c, P_c, R, M, M_b, k2, Lambda)` and
+# `find_mmax_precise` gives the index of the maximum-mass star, so the slice up
+# to it is the stable branch; everything past it is unstable and belongs on no
+# plane.
+#
+# A construction whose table did not pass the gate has no entry here. That is
+# the point of the gate returning a status: the absence is visible, and no mass
+# stands in for it.
+
+# %%
+header("TOV sequences")
+sequences = {}
+for eta, core in cores.items():
+    e_c = np.geomspace(250.0, 0.95 * float(core.epsilon.max()), FIG_N_STARS)
+    sequence = compute_tov_sequence(core, e_c, add_crust_table="BPS",
+                                    n_transition=0.08, verbose=False)
+    index, _, m_max = find_mmax_precise(sequence)
+    sequences[eta] = sequence[:index + 1]
+    print(f"  [eta={eta:.2f}] M_max = {m_max:.3f} M_sun at "
+          f"R = {sequence[index, 3]:5.2f} km, {len(sequences[eta]):2d} stable "
+          f"of {len(sequence)} stars")
+
+# %% [markdown]
+# ### Mass–radius
+#
+# The observational regions come from `eos.general.constraints.overlay` on the
+# `M-R` plane; nothing about them is drawn here.
+
+# %%
+fig, axes = paper_grid("1x1", mode="centered", placeholder=False, aspect=1.0)
+ax = axes[0][0]
+overlay(ax, "M-R")
+for eta in FIG_ETAS:
+    sequence = sequences.get(eta)
+    if sequence is None:
+        continue
+    ax.plot(sequence[:, 3], sequence[:, 4], color=ETA_COLOR[eta],
+            ls=ETA_STYLE[eta], label=f"$\\eta$ = {eta:.1f}")
+ax.set_xlabel(r"$R$ [km]")
+ax.set_ylabel(r"$M$ [$M_\odot$]")
+ax.set_xlim(8.5, 16.0)
+ax.set_ylim(0.5, 2.7)
+ax.legend(loc="lower left")
+save_figure(fig, str(FIG_DIR / "mass_radius"))
+
+# %% [markdown]
+# ## 10. Swapping both sides of the pair
+#
+# The claim of section 4 was that a new pairing is a new adapter and never a new
+# engine. Section 4 tested it at one density; here both sides change at once and
+# the whole table is asked for — DID + NJL and DID + CCDM, neither of which
+# shares a model with the headline DD2 + vMIT.
+#
+# A converged table is the floor, and depth is a runtime call: these get the
+# window and the row count, not the four figure families and not a TOV pass.
+# What is skipped is printed rather than quietly dropped.
+
+# %%
+SWAP_PAIRINGS = (("did", "njl"), ("did", "ccdm"))
+SWAP_N_B = np.linspace(0.20, 1.40, 25)
+
+header("both sides of the pair swapped")
+print("  depth: a converged table and its windows. Skipped for runtime and "
+      "NOT computed below —")
+print("         the four figure families, the boundary curves in T, and the "
+      "TOV pass.")
+
+for had_name, quark_name in SWAP_PAIRINGS:
+
+    def build(had_name=had_name, quark_name=quark_name):
+        had_par = parameters_for(had_name, "default")
+        quark_par = parameters_for(quark_name, "default")
+        hadronic = getattr(adapters, f"{had_name}_phase")(
+            had_par, hadronic_flags(had_name))
+        quark = getattr(adapters, f"{quark_name}_phase")(quark_par)
+        return eos_table(None, FIG_MODE, None,
+                         {"nB": SWAP_N_B, "T": np.array([FIG_T])},
+                         eta=KNOBS.eta, phases=(hadronic, quark),
+                         muons=KNOBS.species["muons"], window_only=True,
+                         verbose=False)
+
+    label = f"{had_name}+{quark_name}"
+    status, result = run(label, build)
+    if status != "ok":
+        continue
+    rows, windows = result
+    for key, window in sorted(windows.items()):
+        if window is None or not np.isfinite(window.n_onset):
+            print(f"  [{label:10s}] line {key}: no window located on this grid")
+            continue
+        print(f"  [{label:10s}] line {key}: n_onset={window.n_onset:.4f}  "
+              f"n_offset={window.n_offset:.4f} fm^-3")
+    if rows:
+        first, last = rows[0], rows[-1]
+        print(f"  [{label:10s}] {len(rows)} rows   "
+              f"P {first['P']:8.3f} -> {last['P']:8.3f}   "
+              f"chi {first['chi']:+.4f} -> {last['chi']:+.4f}")
+    else:
+        print(f"  [{label:10s}] no in-window rows on this grid")
+
+# %% [markdown]
+# ## 11. Against the retired DD2 + vMIT tables
+#
+# `eos_tables_DD2vMIT/` at the repository root holds the tables and figures of
+# the first-generation hybrid notebook, and each of its CSV files carries the
+# run's full provenance in a `# key = value` header — every coupling of the
+# hadronic parametrisation, the vMIT bag constant and quark masses, and every
+# species flag. That is enough to rebuild the exact inputs and ask the present
+# engine for the same numbers.
+#
+# It is the cheapest end-to-end check there is that a refactor preserved the
+# physics, and it is a numeric one rather than an eyeball: the boundaries of a
+# first-order transition are the most sensitive thing the engine computes, so
+# two of them agreeing is a strong statement about everything upstream.
+#
+# The parametrisation in that header is a custom set, not one of the published
+# ones — `gamma_sigma` and `n_sat` differ from `DD2Y`'s in the fourth digit, and
+# `B4` is 170 rather than the shipped default of 180 — which is precisely why
+# it is read out of the file instead of guessed at.
+
+# %%
+import ast
+import dataclasses
+
+RETIRED = ROOT / "eos_tables_DD2vMIT"
+RETIRED_FILE = RETIRED / "mixed_beta_eq_neutrinoless_eta0.00.csv"
+
+# n_onset, n_offset at T = 0 in beta equilibrium, read from completeness.csv
+# of that run, one entry per eta it was built at.
+RETIRED_WINDOWS = {0.0: (0.331028523, 1.07830952),
+                   0.3: (0.876716755, 0.997672412),
+                   1.0: (0.883484512, 0.966425534)}
+
+
+def provenance(path):
+    """The `# key = value` block the retired notebook wrote above its columns.
+
+    The array-valued entries wrap onto continuation lines that carry no `#`,
+    so the block is read to the first line that begins with neither.
+    """
+    entries = {}
+    for line in Path(path).read_text().splitlines():
+        if not (line.startswith("#") or line.startswith(" ")):
+            break
+        if line.startswith("# ") and " = " in line:
+            key, _, value = line[2:].partition(" = ")
+            entries[key] = value
+    return entries
+
+
+if RETIRED_FILE.exists():
+    from eos.dd2 import Parameters as DD2Parameters
+    from eos.dd2 import SpeciesFlags as DD2Flags
+    from eos.vmit import Parameters as VMITParameters
+
+    entries = provenance(RETIRED_FILE)
+    fields = {f.name for f in dataclasses.fields(DD2Parameters)}
+    retired_par = DD2Parameters(**{
+        name: (value if name == "nucleon_mass_mode" else ast.literal_eval(value))
+        for key, value in entries.items()
+        if key.startswith("parametrization.")
+        and (name := key.split(".", 1)[1]) in fields})
+    retired_quark = VMITParameters(
+        name="vMIT_from_header",
+        m_u=float(entries["vmit.m_u"]), m_d=float(entries["vmit.m_d"]),
+        m_s=float(entries["vmit.m_s"]), a=float(entries["vmit.a"]),
+        B4=float(entries["vmit.B4"]))
+    # The retired flag names for the meson sectors are this repository's
+    # `thermal_mesons` and `thermal_vectors`; the rest carry over unchanged.
+    retired_flags = DD2Flags(
+        hyperons=entries["flags.hyperons"] == "True",
+        deltas=entries["flags.deltas"] == "True",
+        muons=entries["flags.muons"] == "True",
+        thermal_mesons=entries["flags.include_pseudoscalars"] == "True",
+        thermal_vectors=entries["flags.include_thermal_vectors"] == "True",
+        thermal_neutrinos=False,
+        photons=entries["flags.photons"] == "True",
+        neutrinos=entries["flags.neutrinos"] == "True",
+        phi_field=entries["flags.phi_field"] == "True",
+        sigma_star=entries["flags.sigma_star"] == "True")
+    retired_pair = (adapters.dd2_phase(retired_par, retired_flags),
+                    adapters.vmit_phase(retired_quark))
+    print(f"rebuilt from {RETIRED_FILE.name}:")
+    print(f"  gamma_sigma = {retired_par.gamma_sigma}  "
+          f"n_sat = {retired_par.n_sat}  B4 = {retired_quark.B4}")
+    print(f"  hyperons={retired_flags.hyperons} deltas={retired_flags.deltas} "
+          f"muons={retired_flags.muons} "
+          f"thermal_mesons={retired_flags.thermal_mesons}")
+else:
+    retired_pair = None
+    print(f"{RETIRED} not present in this checkout; the comparison is skipped.")
+
+# %% [markdown]
+# The comparison itself. Only the boundaries are compared: they are the number
+# the retired run recorded per line in its `completeness.csv`, and they are the
+# number a change anywhere in the hadronic sector, the quark sector or the
+# coupling between them would move.
+
+# %%
+if retired_pair is not None:
+    header("boundaries, now against the retired run")
+    print("             now                    retired               difference")
+    for eta, (was_onset, was_offset) in RETIRED_WINDOWS.items():
+
+        def build(eta=eta):
+            return eos_table(None, "beta_eq_neutrinoless", None,
+                             {"nB": FIG_N_B, "T": np.array([0.0])}, eta=eta,
+                             phases=retired_pair, muons=True,
+                             window_only=True, verbose=False)
+
+        status, result = run(f"eta={eta}", build)
+        if status != "ok":
+            continue
+        _, windows = result
+        window = next(iter(windows.values()), None)
+        if window is None or not np.isfinite(window.n_onset):
+            print(f"  [eta={eta:.2f}] no window located")
+            continue
+        d_on = 100.0 * abs(window.n_onset - was_onset) / was_onset
+        d_off = 100.0 * abs(window.n_offset - was_offset) / was_offset
+        print(f"  [eta={eta:.2f}] {window.n_onset:.6f} {window.n_offset:.6f}"
+              f"    {was_onset:.6f} {was_offset:.6f}"
+              f"    {d_on:.2f}% {d_off:.2f}%")
+
+# %% [markdown]
 # ## Two boundaries this notebook does not cross
 #
 # **ENJL is not here.** `enjl_branch_pair` is an `eos/mixed` adapter, but it
 # pairs two branches of one functional rather than two models, and the physics
-# that makes it interesting is ENJL's own — so it belongs to the ENJL notebook,
-# not to this one.
+# that makes it interesting is ENJL's own — so it belongs to `enjl_eos`, not to
+# this one.
 #
-# **Figures are not here.** This notebook produces converged tables and the
-# windows that go with them; overlaying them, and checking them against the
-# tables of the retired `eos_tables_DD2vMIT` notebook, is a study of its own.
+# **The sound speed is the delivered table's, not the model's.** Section 9's
+# gate differentiates the table it is about to hand over, which is the quantity
+# the structure solver interpolates. The response functions a model computes at
+# fixed composition or fixed entropy are a different question and are asked in
+# the notebooks of the models themselves.
