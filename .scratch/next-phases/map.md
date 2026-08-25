@@ -1012,6 +1012,15 @@ against this file, not against the earlier `pytest_before*.txt`.
   The `table_path` relative-root bug is closed for this notebook at all four
   write sites; the isolated run created no `notebooks/output/`.
 
+- [njl and ccdm smuggle `leptons` through `**conditions` too](issues/68-njl-ccdm-leptons-condition.md):
+  both models take the flag as a named argument on all three entry points and
+  nothing in `eos/` reads it out of a condition bag any more. The effective
+  default was **`True`** in both — not the `False` sfho/dd2/did use — and was
+  kept, so no number moved. The beta-mode half is now
+  [ticket 69](issues/69-leptons-on-a-beta-mode.md), with njl/ccdm's answer
+  measured as the OPPOSITE of sfho/dd2's on both values rather than the
+  "whatever `solve` does" 54 recorded.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:

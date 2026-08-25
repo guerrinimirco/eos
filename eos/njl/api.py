@@ -51,7 +51,13 @@ class PointResult:
 
 
 def _check(mode, conditions):
-    """Validate the call, and return the fractions the mode consumes."""
+    """Validate the call, and return the fractions the mode consumes.
+
+    The condition names are fixed at n_B, T, Y_C, Y_S, Y_Le, Y_Lmu (CLAUDE.md
+    section 5); `leptons` is a flag rather than a condition and reaches the
+    entry points as a named argument, so finding it here means a caller still
+    routing it through the bag.
+    """
     if mode not in MODE_FRACTIONS:
         raise ValueError(f"unknown mode {mode!r}; expected one of "
                          f"{list(MODE_FRACTIONS)}")
@@ -64,15 +70,18 @@ def _check(mode, conditions):
     missing = [k for k in MODE_FRACTIONS[mode] if k not in conditions]
     if missing:
         raise ValueError(f"mode {mode!r} needs {missing}")
-    extra = [k for k in conditions
-             if k not in MODE_FRACTIONS[mode] and k != "leptons"]
+    if "leptons" in conditions:
+        raise TypeError("leptons is a flag, not a condition; pass it as the "
+                        "named argument leptons=")
+    extra = [k for k in conditions if k not in MODE_FRACTIONS[mode]]
     if extra:
         raise ValueError(f"mode {mode!r} does not take {extra}")
     return conditions
 
 
 def eos_point(par, mode, species=None, n_B=None,
-              T=None, SnB=None, x0=None, patterns=None, **conditions):
+              T=None, SnB=None, leptons=True, x0=None, patterns=None,
+              **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -93,9 +102,15 @@ def eos_point(par, mode, species=None, n_B=None,
         Restrict the pairing enumeration to these candidates. The default
         enumerates unpaired, 2SC, CFL and one asymmetric free seed when the
         `csc` flag is on, and only the unpaired one when it is off.
+    leptons : bool
+        For the fixed-fraction modes: whether neutralizing leptons are added,
+        so the total system is electrically neutral. With leptons=False the
+        result is charged matter, which is what a mixed-phase construction
+        needs per pure phase before imposing global neutrality. It is a flag,
+        not a condition (CLAUDE.md section 3), so it is a named argument
+        rather than a member of `conditions`.
     conditions :
-        The fractions the mode fixes (Y_C, Y_S, Y_Le), plus leptons=True/False
-        for the fixed-fraction modes.
+        The fractions the mode fixes (Y_C, Y_S, Y_Le).
     """
     species = species if species is not None else SpeciesFlags()
     conditions = dict(_check(mode, dict(conditions)))
@@ -105,7 +120,7 @@ def eos_point(par, mode, species=None, n_B=None,
     if SnB is not None:
         def entropy_at(temp):
             p = solve(mode, n_B, temp, par, species, x0, patterns=patterns,
-                      **conditions)
+                      leptons=leptons, **conditions)
             return p.s_total / p.n_B if p.n_B else 0.0
         try:
             T = temperature_at_entropy(entropy_at, SnB)
@@ -116,7 +131,7 @@ def eos_point(par, mode, species=None, n_B=None,
             return PointResult(False, str(err))
 
     point = solve(mode, n_B, T, par, species, x0, patterns=patterns,
-                  **conditions)
+                  leptons=leptons, **conditions)
     if point.converged:
         return PointResult(True, f"converged in pattern {point.pattern!r}",
                            point)
@@ -159,8 +174,8 @@ RESPONSE_FREEZES = ("equilibrium",)
 
 
 def eos_response(par, mode, species=None,
-                 frozen="equilibrium", n_B=None, T=0.0, rel_dn=1e-3, dT=0.05,
-                 patterns=None, **conditions):
+                 frozen="equilibrium", n_B=None, T=0.0, leptons=True,
+                 rel_dn=1e-3, dT=0.05, patterns=None, **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' -- nothing is held: the composition re-equilibrates
@@ -177,6 +192,10 @@ def eos_response(par, mode, species=None,
     bare `cs2` whose meaning would depend on the arguments (CLAUDE.md section
     5). Pass `patterns=('2SC',)` to differentiate within one pattern instead
     of across the enumeration.
+
+    `leptons` is the same flag `eos_point` takes: a named argument rather
+    than a member of `conditions` (CLAUDE.md section 5), and it holds through
+    every point of the stencil.
 
     Every result also carries `converged` and `reason`. A stencil point the
     solver cannot reach is NOT an exception: the same dict comes back with
@@ -195,7 +214,7 @@ def eos_response(par, mode, species=None,
             f"the gaps needs Delta fixed against its own equation "
             f"(see docs/DEFERRED.md)")
 
-    kwargs = dict(patterns=patterns, **conditions)
+    kwargs = dict(patterns=patterns, leptons=leptons, **conditions)
     names = ("cs2_isothermal", "cs2_adiabatic")
     if T > 0.0:
         names += ("C_V", "C_P", "Gamma_th")
