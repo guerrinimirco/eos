@@ -532,8 +532,15 @@ against this file, not against the earlier `pytest_before*.txt`.
   `eos_response` set, the masses, the reduced nucleon-only system and the
   phase-adapter residual. **Two sfho claims the code overturned, one of them
   mine**: the trapped mode does NOT double-count `nu_e` — `solver.py` refuses
-  the combination — and that refusal is itself the ledgered §4 gap; the factor
-  where the gas is added is a measured 3.000000. **The sfho half was written
+  the combination — and the factor where the gas IS added is a measured
+  3.000000. **The refusal's disposition then took a second correction**, from
+  the session holding ticket 45: it is a DEFECT
+  [ticket 54](issues/54-signature-corrections.md) deletes, not a ledgered gap.
+  `CLAUDE.md:176` already forbids the raise (landed by
+  [ticket 22](issues/22-phase5-claudemd.md)), and
+  [ticket 11](issues/11-conformance-triage.md):135 rules the row (b) + (a), so
+  the `DEFERRED.md` pointer my first fix added had no target and never should
+  have. Corrected in `463278a`. **The sfho half was written
   against [ticket 45](issues/45-rename-sfho.md)'s uncommitted tree** by
   arrangement with the session holding it, every name verified independently and
   re-checked at commit. Its correction also saved the dd2 half: **ticket 44

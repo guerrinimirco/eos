@@ -137,9 +137,23 @@ phase-adapter residual `did.tex` documented and `dd2.tex` did not.
 trapped mode plus `thermal_neutrinos` double-counts `nu_e`; it does not —
 `solver.py` REFUSES the combination and names that exact reason. Measured
 instead of inferred, and the factor where the gas IS added is exactly
-3.000000 of the single-flavour gas. Second: that refusal is itself the known
-conformance gap, since §4 defines the flag by what it does not cover, so both
-files record it as ledgered rather than as settled design.
+3.000000 of the single-flavour gas.
+
+Second — and this one I got wrong twice before it was right, caught by the
+session holding [ticket 45](45-rename-sfho.md): **the refusal is a DEFECT, not a
+deferred design choice.** `CLAUDE.md:176` already says `thermal_neutrinos` is
+meaningful alongside `beta_eq_neutrino_trapped` and that a model MUST NOT RAISE
+on the combination — landed by [ticket 22](22-phase5-claudemd.md) — so my first
+correction, which called it a ledgered gap and pointed at `docs/DEFERRED.md`,
+had a document arguing against the current specification. The pointer also had
+no target: `grep` finds no such entry, correctly, because
+[ticket 11](11-conformance-triage.md):135 rules the row **(b) + (a)** and not
+(c), which is why [ticket 55](55-deferred-ledger.md) was never asked to ledger
+it. [Ticket 54](54-signature-corrections.md) item 5 deletes the raise in `sfho`
+and `did`; the three that succeed (`njl`, `ccdm`, `enjl`) are the conformant
+ones. Fixed in `463278a`: both files name it as a defect due for removal and
+say what changes when it goes — the trapped mode gains the two remaining
+flavours, not three.
 
 **Carried-in ticket 27 item discharged**: the three-flavour gas is now in both
 sfho files. **Both `.md`-only items survived the merge**: SFHo's `hc^3` field
