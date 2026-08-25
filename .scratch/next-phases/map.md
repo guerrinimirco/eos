@@ -905,6 +905,30 @@ against this file, not against the earlier `pytest_before*.txt`.
   executor, which this ticket's done-when names; `pyproject.toml` untouched. And
   `timeout python3` runs under Rosetta and dies on numpy's arm64 extensions.
 
+- [general/ owes a public T = 0 entry point, and one loop is unbounded](issues/52-general-t0-integrals.md):
+  the door is open and the loop is bounded — `_compute_exact_T0` promoted to
+  **`solve_fermi_t0`**, the third solver of the `solve_fermi_*` family (same
+  jitted body, so its three existing callers are a rename apart and no number in
+  the repository moves), and `invert_fermi_density`'s two bracket loops now stop
+  at `_MAX_BRACKET_STEPS = 200` and **return NaN** rather than raising (§6).
+  `ffae9db`, gated in an isolated copy beside a HEAD control on anaconda 3.9.7
+  because the live checkout had a concurrent session editing `dd2/api.py`
+  mid-run: **137 passed in both**, `test/general` plus the dd2, zl, vmit and enjl
+  baselines at rtol = 1e-10. **dd2's half was implemented, measured and
+  reverted**: of 4692 stored dd2 quantities 3434 come out bit-identical and every
+  EoS quantity moves under 5.9e-15 relative, but the finite-difference NMP map
+  amplifies last-bit noise by 1e6–1e8 — `nmp.Q_sat` moves 3.6e-4 (0.061 MeV),
+  `K_sat` and `K_sym` ~2e-8 — so `test_baseline[dd2]` and one knife-edge
+  inversion test fail while the golden SNM(0.16) point and CompOSE HS(DD2) do not
+  move at all. No reformulation makes it bit-exact (fastmath, `mu` against a
+  round-tripped `EF`, and an `hc3` round trip), so the remaining half is a ruling
+  rather than a task: [ticket 67](issues/67-dd2-t0-adoption.md), blocked by
+  [62](issues/62-regenerate-baselines-py314.md). Two ledger corrections fell out:
+  the loop cannot hang even on a non-finite target (`n_hi` overflows to `inf` and
+  the comparison goes False — the worst case is a ~1700-iteration spin), and its
+  UPPER bracket cannot be exhausted by any finite target, since it opens at twice
+  the T = 0 estimate.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
