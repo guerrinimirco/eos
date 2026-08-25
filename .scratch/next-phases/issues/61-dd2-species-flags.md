@@ -135,3 +135,17 @@ gitignored**: a fresh clone, a `git worktree`, or another machine has no such
 test, so the assertion cannot reach whoever works this ticket there. The
 ticket body is the only artifact that survives the checkout. (Where `test/`
 does exist, the enforcement is real and will catch a partial close.)
+
+## The check is two-way, and that must be read HERE
+
+`test/test_imports.py`'s rebuilt check fires in **both** directions: it fails if
+a model loses a §4 flag, and it fails if **dd2 GAINS** the two names — naming the
+three prose sites that must move with it (`README.md`, `eos/__init__.py`'s
+`SPECIES_FLAGS` comment, the test's own docstring). Verified to fire by standing
+`sfho` in for a fixed dd2, not assumed. 190 passed on anaconda 3.9.7.
+
+Written here rather than left for whoever closes this ticket to meet as a red
+test, because **`test/` is gitignored (§11)**: a fresh clone has no such test, so
+the failing-test channel does not survive and this ticket body is the only
+durable carrier. So: closing this ticket makes that test go red ON PURPOSE, and
+the fix is to update the three sites, never to relax the check.
