@@ -35,7 +35,8 @@ def nuclear_matter(par, n_B, beta=0.0, T=0.0):
     fraction that means is Y_C = (1 - beta)/2, since for nucleons
     beta = (n_n - n_p)/n_B = 1 - 2 Y_C.
     """
-    return thermo_from_n(n_B, 0.5 * (1.0 - beta), T, par)
+    Y_C = 0.5 * (1.0 - beta)
+    return thermo_from_n((1.0 - Y_C) * n_B, Y_C * n_B, T, par)
 
 
 def energy_per_baryon(par, n_B, beta=0.0, T=0.0):

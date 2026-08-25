@@ -54,15 +54,14 @@ def _check(mode, conditions):
     missing = [k for k in MODE_FRACTIONS[mode] if k not in conditions]
     if missing:
         raise ValueError(f"mode {mode!r} needs {missing}")
-    extra = [k for k in conditions
-             if k not in MODE_FRACTIONS[mode] and k != "leptons"]
+    extra = [k for k in conditions if k not in MODE_FRACTIONS[mode]]
     if extra:
         raise ValueError(f"mode {mode!r} does not take {extra}")
     return conditions
 
 
-def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, x0=None,
-              **conditions):
+def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
+              leptons=False, x0=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -78,15 +77,22 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, x0=None,
     T, SnB : float
         Exactly one of temperature [MeV] or entropy per baryon; SnB makes T an
         unknown of the same solve rather than an outer iteration.
+    leptons : bool
+        For the fixed-fraction modes: whether neutralizing leptons are added,
+        so the total system is electrically neutral. With leptons=False the
+        result is charged matter, which is what a mixed-phase construction
+        needs per pure phase before imposing global neutrality. Meaningless in
+        the beta-equilibrium modes, where the leptons are what the equilibrium
+        is about. It is a flag, not a condition (CLAUDE.md section 3), so it is
+        a named argument rather than a member of `conditions`.
     conditions :
-        The fractions the mode fixes (Y_C, Y_S, Y_Le), plus leptons=True/False
-        for the fixed-fraction modes.
+        The fractions the mode fixes (Y_C, Y_S, Y_Le).
     """
     species = species if species is not None else SpeciesFlags()
     conditions = _check(mode, dict(conditions))
     if (T is None) == (SnB is None):
         raise ValueError("exactly one of T / SnB must be given")
-    spec = mode_spec(mode, conditions)
+    spec = mode_spec(mode, dict(conditions, leptons=leptons))
     point = solve_mode(par, n_B, species, spec, T=T, SnB=SnB, x0=x0)
     if point.converged:
         return PointResult(True, "converged", point)
@@ -126,7 +132,7 @@ RESPONSE_FREEZES = ("equilibrium",)
 
 
 def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
-                 T=0.0, rel_dn=1e-3, dT=0.05, **conditions):
+                 T=0.0, leptons=False, rel_dn=1e-3, dT=0.05, **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' -- nothing is held: the composition re-equilibrates
@@ -158,7 +164,7 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
             f"{RESPONSE_FREEZES}. Holding a composition needs the species "
             f"fractions carried through the solve as constraints "
             f"(see docs/DEFERRED.md)")
-    spec = mode_spec(mode, conditions)
+    spec = mode_spec(mode, dict(conditions, leptons=leptons))
     names = ("cs2_isothermal", "cs2_adiabatic")
     if T > 0.0:
         names += ("C_V", "C_P", "Gamma_th")

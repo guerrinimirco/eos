@@ -34,7 +34,7 @@ from eos.general.physics_constants import hc3, PI, PI2
 from eos.general.fermi_integrals import solve_fermi_jel
 from eos.general import particles
 from eos.general.basis import quark_charges, charge_potentials_from_quarks
-from eos.alphabag.parameters import Parameters
+from eos.alphabag.parameters import Parameters, TC_COEFF
 
 #: Spin (2) x colour (3) for one quark flavour. Antiquarks are carried by the
 #: integrals themselves, not by a further factor of two.
@@ -44,10 +44,6 @@ G_QUARK = particles.get_particle("quark").g_degen
 #: exact m -> 0 limit, and evaluating a Fermi integral at m = 0 through the
 #: general machinery would only be slower.
 M_MASSLESS = 1e-5
-
-#: The critical temperature of the CFL gap, as a multiple of Delta0:
-#: T_c = 0.57 * 2^(1/3) * Delta0.
-TC_COEFF = 0.57 * 2**(1.0/3.0)
 
 #: Below this the square root in dDelta/dT is treated as zero rather than
 #: divided by, which bounds the entropy correction at the last grid point
@@ -405,28 +401,35 @@ def thermo_from_mu(mu_u: float, mu_d: float, mu_s: float, T: float,
 # =============================================================================
 # THE CFL GAP
 # =============================================================================
-def T_critical(Delta0: float) -> float:
-    """The temperature at which the CFL gap closes, T_c = 0.57 * 2^(1/3) Delta0."""
-    return TC_COEFF * Delta0
+def T_critical(Delta0: float, tc_coeff: float = TC_COEFF) -> float:
+    """The temperature at which the CFL gap closes, T_c = tc_coeff * Delta0.
+
+    `tc_coeff` is `Parameters.tc_coeff`; the default is the shipped set's
+    0.57 * 2^(1/3). It is an argument rather than a module constant so that
+    an inference run over CFL pairing can vary it (CLAUDE.md section 6).
+    """
+    return tc_coeff * Delta0
 
 
-def cfl_gap(T: float, Delta0: float) -> float:
+def cfl_gap(T: float, Delta0: float, tc_coeff: float = TC_COEFF) -> float:
     """The CFL pairing gap at temperature T, BCS-shaped and imposed.
 
         Delta(T) = Delta0 sqrt(1 - T^2/T_c^2)   for T < T_c,   0 above.
 
     The gap is not solved for: this model has no gap equation, and Delta0 is
-    a phase selector passed per call rather than a parameter of the set.
+    a phase selector passed per call rather than a parameter of the set;
+    `tc_coeff` fixes T_c and IS a parameter.
     """
     if Delta0 <= 0 or T < 0:
         return 0.0
-    T_c = T_critical(Delta0)
+    T_c = T_critical(Delta0, tc_coeff)
     if T >= T_c:
         return 0.0
     return Delta0 * np.sqrt(1.0 - (T/T_c)**2)
 
 
-def cfl_dgap_dT(T: float, Delta0: float) -> float:
+def cfl_dgap_dT(T: float, Delta0: float,
+                tc_coeff: float = TC_COEFF) -> float:
     """dDelta/dT of `cfl_gap`, which the entropy correction needs:
 
         dDelta/dT = -Delta0 T / ( T_c^2 sqrt(1 - T^2/T_c^2) )
@@ -438,7 +441,7 @@ def cfl_dgap_dT(T: float, Delta0: float) -> float:
     """
     if Delta0 <= 0 or T <= 0:
         return 0.0
-    T_c = T_critical(Delta0)
+    T_c = T_critical(Delta0, tc_coeff)
     if T >= T_c:
         return 0.0
     sqrt_term = np.sqrt(1.0 - (T/T_c)**2)
@@ -451,7 +454,8 @@ def cfl_dgap_dT(T: float, Delta0: float) -> float:
 # THE CFL CORRECTIONS AND SUMS
 # =============================================================================
 def cfl_P_correction(mu_u: float, mu_d: float, mu_s: float,
-                     T: float, Delta0: float) -> float:
+                     T: float, Delta0: float,
+                     tc_coeff: float = TC_COEFF) -> float:
     """The pairing term of the CFL pressure,
 
         dP = (mu_u^2 + mu_d^2 + mu_s^2) Delta(T)^2 / ( pi^2 (hbar c)^3 ) ,
@@ -465,22 +469,24 @@ def cfl_P_correction(mu_u: float, mu_d: float, mu_s: float,
     `kinetic_thermo` already carries exactly, and adding both would count it
     twice.
     """
-    Delta = cfl_gap(T, Delta0)
+    Delta = cfl_gap(T, Delta0, tc_coeff)
     mu_sum_sq = mu_u**2 + mu_d**2 + mu_s**2
     return mu_sum_sq * Delta**2 / (PI2 * hc3)
 
 
-def cfl_n_correction(mu: float, T: float, Delta0: float) -> float:
+def cfl_n_correction(mu: float, T: float, Delta0: float,
+                     tc_coeff: float = TC_COEFF) -> float:
     """The pairing term of one flavour's density, d(dP)/dmu_q:
 
         dn_q = 2 mu_q Delta(T)^2 / ( pi^2 (hbar c)^3 )
     """
-    Delta = cfl_gap(T, Delta0)
+    Delta = cfl_gap(T, Delta0, tc_coeff)
     return 2.0 * mu * Delta**2 / (PI2 * hc3)
 
 
 def cfl_s_correction(mu_u: float, mu_d: float, mu_s: float,
-                     T: float, Delta0: float) -> float:
+                     T: float, Delta0: float,
+                     tc_coeff: float = TC_COEFF) -> float:
     """The pairing term of the entropy, d(dP)/dT:
 
         ds = 2 (mu_u^2 + mu_d^2 + mu_s^2) Delta(T) (dDelta/dT)
@@ -490,8 +496,8 @@ def cfl_s_correction(mu_u: float, mu_d: float, mu_s: float,
     Fermi surface, so the condensate carries less entropy than the gas it
     replaces.
     """
-    Delta = cfl_gap(T, Delta0)
-    dDelta_dT = cfl_dgap_dT(T, Delta0)
+    Delta = cfl_gap(T, Delta0, tc_coeff)
+    dDelta_dT = cfl_dgap_dT(T, Delta0, tc_coeff)
     mu_sum_sq = mu_u**2 + mu_d**2 + mu_s**2
     return 2.0 * mu_sum_sq * Delta * dDelta_dT / (PI2 * hc3)
 
@@ -529,7 +535,7 @@ def cfl_thermo_from_mu(mu_u: float, mu_d: float, mu_s: float, T: float,
     alpha = params.alpha
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    Delta = cfl_gap(T, Delta0)
+    Delta = cfl_gap(T, Delta0, params.tc_coeff)
 
     thermo_u = kinetic_thermo(mu_u, T, m_u, alpha)
     thermo_d = kinetic_thermo(mu_d, T, m_d, alpha)
@@ -541,11 +547,12 @@ def cfl_thermo_from_mu(mu_u: float, mu_d: float, mu_s: float, T: float,
     n_s_unpaired = thermo_s.n
     s_unpaired = thermo_u.s + thermo_d.s + thermo_s.s
 
-    P_corr = cfl_P_correction(mu_u, mu_d, mu_s, T, Delta0)
-    n_u_corr = cfl_n_correction(mu_u, T, Delta0)
-    n_d_corr = cfl_n_correction(mu_d, T, Delta0)
-    n_s_corr = cfl_n_correction(mu_s, T, Delta0)
-    s_corr = cfl_s_correction(mu_u, mu_d, mu_s, T, Delta0)
+    tc = params.tc_coeff
+    P_corr = cfl_P_correction(mu_u, mu_d, mu_s, T, Delta0, tc)
+    n_u_corr = cfl_n_correction(mu_u, T, Delta0, tc)
+    n_d_corr = cfl_n_correction(mu_d, T, Delta0, tc)
+    n_s_corr = cfl_n_correction(mu_s, T, Delta0, tc)
+    s_corr = cfl_s_correction(mu_u, mu_d, mu_s, T, Delta0, tc)
 
     B = params.B / hc3
     P = P_unpaired + P_corr - B

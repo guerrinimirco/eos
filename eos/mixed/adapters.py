@@ -970,8 +970,10 @@ def zl_phase(params=None):
     def frozen_thermo(th, scale, T, mu_slot=None):
         # Two species: holding Y_C freezes the composition exactly, and the
         # inverse direction needs no fixed point at all.
-        m = _zl_from_n(th.n_B * scale, th.n_C / th.n_B, T, params=params)
-        return m.P, m.e, (th.n_C / th.n_B) * (th.n_B * scale)
+        Y_C = th.n_C / th.n_B
+        n_B = th.n_B * scale
+        m = _zl_from_n((1.0 - Y_C) * n_B, Y_C * n_B, T, params=params)
+        return m.P, m.e, Y_C * n_B
 
     return Phase(name="ZL", thermo=thermo, potential_kind="physical",
                  cold_start=cold_start, supports_S=False,

@@ -34,6 +34,14 @@ arrangement of the alpha_s correction; M. Alford and S. Reddy, Phys. Rev. D
 from dataclasses import dataclass
 
 
+#: The CFL critical-temperature coefficient of the shipped set,
+#: T_c = 0.57 * 2^(1/3) Delta0 -- the weak-coupling BCS result with the
+#: colour factor of D. T. Son, Phys. Rev. D 59, 094019 (1999). It is the
+#: DEFAULT of `Parameters.tc_coeff`, not a constant: an inference run over
+#: CFL pairing varies it like any other parameter (CLAUDE.md section 6).
+TC_COEFF = 0.57 * 2**(1.0/3.0)
+
+
 @dataclass(frozen=True)
 class Parameters:
     """One alphaBag parameter set.
@@ -50,6 +58,9 @@ class Parameters:
                1 - 15a/(4 pi) multiplying the quark chemical, quark thermal
                and gluon terms.
         B4: bag constant B^(1/4) (MeV)
+        tc_coeff: the CFL critical temperature as a multiple of the
+                  zero-temperature gap, T_c = tc_coeff * Delta0. Only the
+                  paired (`cfl`) mode reads it.
     """
     name: str = "alphabag_default"
     m_u: float = 0.0       # MeV (up quark mass, treated as massless)
@@ -57,6 +68,7 @@ class Parameters:
     m_s: float = 150.0     # MeV (strange quark mass)
     alpha: float = 0.3     # dimensionless (QCD coupling alpha_s)
     B4: float = 165.0      # MeV (bag constant B^1/4)
+    tc_coeff: float = TC_COEFF   # dimensionless (T_c = tc_coeff * Delta0)
 
     @property
     def B(self) -> float:

@@ -39,8 +39,13 @@ class PointResult:
     point: EoSPoint = None
 
 
-def _normalize(mode, conditions):
-    """(mode, solver kwargs) from spec-named conditions.
+def _check(mode, conditions):
+    """The fractions this mode consumes, from spec-named conditions.
+
+    The condition names are fixed at n_B, T, Y_C, Y_S, Y_Le, Y_Lmu (CLAUDE.md
+    section 5); `leptons` is a flag rather than a condition and reaches the
+    entry points as a named argument, so finding it here means a caller still
+    routing it through the bag.
 
     Y_Lmu raises: the muon family is not tracked in DD2's trapped mode, and
     per the species-flag rules an unimplemented request must never become a
@@ -50,17 +55,14 @@ def _normalize(mode, conditions):
         raise NotImplementedError(
             "DD2 does not track the muon lepton family; "
             "beta_eq_neutrino_trapped takes (n_B, Y_Le, T) only")
-    leptons = conditions.pop("leptons", None)
-    if leptons is not None:
-        if mode != "fixed_YC":
-            raise ValueError("leptons= applies to fixed_YC (fixed_YC_YS with "
-                             "leptons is not wired; see docs/DEFERRED.md)")
-        mode = "fixed_YC_neutral" if leptons else "fixed_YC"
-    return mode, dict(conditions)
+    if "leptons" in conditions:
+        raise TypeError("leptons is a flag, not a condition; pass it as the "
+                        "named argument leptons=")
+    return dict(conditions)
 
 
-def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
-              analytic_jac=True, **conditions):
+def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
+              x0=None, analytic_jac=True, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -76,8 +78,13 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
     T, SnB : float
         Exactly one of temperature [MeV] or entropy per baryon; SnB adds an
         outer 1-D solve for T.
-    conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le), plus
-        leptons=True/False for fixed_YC (neutralizing leptons on/off).
+    leptons : bool
+        For fixed_YC: whether the neutralizing leptons are added, so the total
+        system is electrically neutral. With leptons=False the matter is
+        charged, which is what a mixed-phase construction needs per pure phase
+        before imposing global neutrality. A flag, not a condition (CLAUDE.md
+        section 3), so it is a named argument.
+    conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le).
 
     Returns
     -------
@@ -92,8 +99,8 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
     """
     if (T is None) == (SnB is None):
         raise ValueError("exactly one of T / SnB must be given")
-    mode, fr = _normalize(mode, dict(conditions))    # caller errors raise here
-    kwargs = _mode_kwargs(mode, fr)
+    fr = _check(mode, dict(conditions))              # caller errors raise here
+    kwargs = _mode_kwargs(mode, fr, leptons)
     try:
         if SnB is not None:
             point = solve_at_entropy(par, n_B, SnB, species, x0=x0,
@@ -111,8 +118,8 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
         return PointResult(False, str(err))
 
 
-def eos_table(par, mode, species, axes, fixed=None, skip_errors=True,
-              progress=None, verbose=False):
+def eos_table(par, mode, species, axes, fixed=None, leptons=False,
+              skip_errors=True, progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
     A thin wrapper over eos.dd2.build_table: axes and fixed follow TableSpec
@@ -122,12 +129,16 @@ def eos_table(par, mode, species, axes, fixed=None, skip_errors=True,
     directly. skip_errors=True drops non-converged points from their line
     (the sampler-friendly default) rather than aborting the table.
 
+    leptons : as in `eos_point` — the section 3 flag, so the neutral flavour
+        of a fixed-Y_C table is reachable here too and not only through a
+        mode name.
     progress : callable, invoked once per completed line with a dict
         {mode, line, n_lines, temp, fracs, n_solved, n_requested, elapsed_s}.
     verbose : True installs a one-line printer as the callback.
     """
+    _check(mode, dict(fixed or {}))                  # caller errors raise here
     spec = TableSpec(parametrization=par, mode=mode, axes=dict(axes),
-                     include=species, fixed=dict(fixed or {}))
+                     include=species, fixed=dict(fixed or {}), leptons=leptons)
     return build_table(spec, skip_errors=skip_errors, progress=progress,
                        verbose=verbose)
 

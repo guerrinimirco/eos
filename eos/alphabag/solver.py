@@ -806,7 +806,7 @@ def solve_cfl(
     def paired_density(mu, m):
         """One flavour's density in the condensate, Eq. (n_q) of alphabag.tex."""
         return (quark_density(mu, T, m, alpha)
-                + cfl_n_correction(mu, T, Delta0))
+                + cfl_n_correction(mu, T, Delta0, params.tc_coeff))
 
     def residual(x):
         mu_u, mu_d, mu_s = x

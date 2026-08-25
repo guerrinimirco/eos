@@ -30,16 +30,19 @@ from eos.dd2.solver import solve, sweep, sweep
 #:
 #:   beta_eq_neutrinoless      charge-neutral beta equilibrium, neutrinos escape
 #:   beta_eq_neutrino_trapped  ... with neutrinos trapped at fixed Y_Le
-#:   fixed_YC                  fixed non-leptonic charge fraction, no leptons
+#:   fixed_YC                  fixed non-leptonic charge fraction
 #:                             (the CompOSE general-purpose (nB, T, Y_q) slice)
-#:   fixed_YC_neutral          ... plus neutralizing leptons, so the total
-#:                             system is electrically neutral
 #:   fixed_YS                  charge-neutral, strangeness fraction fixed
 #:   fixed_YC_YS               both fractions fixed
+#:
+#: Whether the neutralizing leptons are present is the orthogonal `leptons`
+#: flag of CLAUDE.md section 3, carried beside the mode rather than folded
+#: into its name: with leptons=False the matter is charged, which is what a
+#: mixed-phase construction needs per pure phase before imposing global
+#: neutrality. `takes_leptons` says which mode the flag applies to.
 MODES = {
     "beta_eq_neutrinoless": dict(charge_mode="neutral"),
-    "fixed_YC": dict(charge_mode="fixed"),
-    "fixed_YC_neutral": dict(charge_mode="fixed", yc_leptons=True),
+    "fixed_YC": dict(charge_mode="fixed", takes_leptons=True),
     "fixed_YS": dict(charge_mode="neutral", strange_mode="fixed"),
     "fixed_YC_YS": dict(charge_mode="fixed", strange_mode="fixed"),
     "beta_eq_neutrino_trapped": dict(charge_mode="neutral",
@@ -50,16 +53,25 @@ MODES = {
 #: grid or as a scalar in `TableSpec.fixed`. Mirrors
 #: `eos.mixed.MODE_FRACTIONS`, which names the four modes both engines share.
 MODE_FRACTIONS = {
-    "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",),
-    "fixed_YC_neutral": ("Y_C",), "fixed_YS": ("Y_S",),
+    "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",), "fixed_YS": ("Y_S",),
     "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_Le",),
 }
 
 
-def _mode_kwargs(mode, fixed):
+def _mode_kwargs(mode, fixed, leptons=False):
+    """The `solve` keywords a mode name, its fractions and the section 3
+    `leptons` flag mean. Asking for the flag where it does not apply raises
+    rather than being quietly dropped."""
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
     kw = dict(MODES[mode])
+    if kw.pop("takes_leptons", False):
+        kw["yc_leptons"] = bool(leptons)
+    elif leptons:
+        raise ValueError(
+            f"leptons=True does not apply to mode {mode!r}; it selects the "
+            f"neutralizing leptons of fixed_YC (fixed_YC_YS with leptons is "
+            f"not wired; see docs/DEFERRED.md)")
     for key in MODE_FRACTIONS[mode]:
         if key not in fixed:
             raise ValueError(f"mode {mode!r} needs fixed[{key!r}]")
@@ -129,12 +141,15 @@ class TableSpec:
            'Y_C'/'Y_S'/'Y_Le': grid to sweep that fraction as a further axis}
     fixed: scalar values for the fractions the mode needs that are not swept
            as axes
+    leptons: for fixed_YC, whether the neutralizing leptons are present. The
+           orthogonal flag of CLAUDE.md section 3, not part of the mode name.
     """
     parametrization: object
     mode: str                             # a key of MODES, above
     axes: dict
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)   # Y_C / Y_S / Y_Le targets
+    leptons: bool = False
     want_coeffs: bool = False             # attach equilibrium c_s^2 per T-line
 
     def __post_init__(self):
@@ -152,7 +167,7 @@ class TableSpec:
         # axis or a scalar; an axis value stands in here only for the check.
         probe = dict(self.fixed)
         probe.update({k: 0.0 for k in self._frac_keys})
-        _mode_kwargs(self.mode, probe)
+        _mode_kwargs(self.mode, probe, self.leptons)
 
 
 @dataclass
@@ -234,7 +249,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
         for combo in product(*frac_grids) if frac_grids else [()]:
             fracs = dict(spec.fixed)
             fracs.update(zip(frac_keys, (float(c) for c in combo)))
-            mode_kw = _mode_kwargs(spec.mode, fracs)
+            mode_kw = _mode_kwargs(spec.mode, fracs, spec.leptons)
             has_phi = flags.phi_field and flags.hyperons
             has_muS = mode_kw.get("strange_mode") == "fixed"
             has_muL = mode_kw.get("lepton_mode") == "trapped"

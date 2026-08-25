@@ -754,7 +754,7 @@ def check_refusals():
         failures.append("photons/thermal_neutrinos still raise, but they are "
                         "implemented")
     try:
-        eos_response(par, n_B=0.3)
+        eos_response(par, "beta_eq_neutrinoless", n_B=0.3)
     except NotImplementedError:
         pass
     else:
@@ -775,7 +775,7 @@ def check_non_convergence_is_returned():
     probe.
     """
     par = Parameters.default()
-    result = eos_point(par, n_B=8.0)
+    result = eos_point(par, "beta_eq_neutrinoless", n_B=8.0)
     if result.ok:
         return CheckResult("non_convergence", True, 0.0,
                            "a cold start at n_B = 8 fm^-3 converged; the "

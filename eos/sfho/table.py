@@ -53,18 +53,20 @@ from eos.sfho.parameters import Parameters
 #:
 #:   beta_eq_neutrinoless      charge-neutral beta equilibrium, neutrinos escape
 #:   beta_eq_neutrino_trapped  ... with the electron family trapped at Y_Le
-#:   fixed_YC                  fixed non-leptonic charge fraction, no leptons
-#:                             (charged matter -- what a mixed phase needs)
-#:   fixed_YC_neutral          ... plus the neutralizing electrons
-#:   fixed_YC_YS               charge and strangeness fixed, no leptons
-#:   fixed_YC_YS_neutral       ... plus the neutralizing electrons
+#:   fixed_YC                  fixed non-leptonic charge fraction
+#:   fixed_YC_YS               charge and strangeness fixed
+#:
+#: Whether the neutralizing electrons are present is the orthogonal `leptons`
+#: flag of CLAUDE.md section 3, carried beside the mode rather than folded
+#: into its name: with leptons=False the matter is charged, which is what a
+#: mixed-phase construction needs per pure phase before imposing global
+#: neutrality. `takes_leptons` says which modes the flag applies to -- in the
+#: beta-equilibrium modes the leptons are what the equilibrium is about.
 MODES = {
     "beta_eq_neutrinoless":     dict(spec=modes.beta_eq_neutrinoless),
     "beta_eq_neutrino_trapped": dict(spec=modes.beta_eq_neutrino_trapped),
-    "fixed_YC":                 dict(spec=modes.fixed_YC, leptons=False),
-    "fixed_YC_neutral":         dict(spec=modes.fixed_YC, leptons=True),
-    "fixed_YC_YS":              dict(spec=modes.fixed_YC_YS, leptons=False),
-    "fixed_YC_YS_neutral":      dict(spec=modes.fixed_YC_YS, leptons=True),
+    "fixed_YC":                 dict(spec=modes.fixed_YC, takes_leptons=True),
+    "fixed_YC_YS":              dict(spec=modes.fixed_YC_YS, takes_leptons=True),
 }
 
 #: mode name -> the fractions it consumes, in the order its factory takes
@@ -74,15 +76,13 @@ MODE_FRACTIONS = {
     "beta_eq_neutrinoless": (),
     "beta_eq_neutrino_trapped": ("Y_Le",),
     "fixed_YC": ("Y_C",),
-    "fixed_YC_neutral": ("Y_C",),
     "fixed_YC_YS": ("Y_C", "Y_S"),
-    "fixed_YC_YS_neutral": ("Y_C", "Y_S"),
 }
 
 #: The equilibrium names the settings object at the bottom of this file uses,
-#: mapped onto the modes above. `include_electrons` picks the neutral flavour
-#: of a fixed-fraction mode, and the two isentropic names are the same modes
-#: on the 'SnB' axis rather than modes of their own.
+#: mapped onto the modes above. `include_electrons` becomes the `leptons`
+#: flag, and the two isentropic names are the same modes on the 'SnB' axis
+#: rather than modes of their own.
 _LEGACY_EQUILIBRIA = {
     "beta_eq": ("beta_eq_neutrinoless", "T"),
     "trapped_neutrinos": ("beta_eq_neutrino_trapped", "T"),
@@ -93,16 +93,25 @@ _LEGACY_EQUILIBRIA = {
 }
 
 
-def mode_spec(mode: str, fracs: Dict[str, float]) -> modes.ModeSpec:
-    """The `ModeSpec` a table mode name declares, at these fractions.
+def mode_spec(mode: str, fracs: Dict[str, float],
+              leptons: bool = False) -> modes.ModeSpec:
+    """The `ModeSpec` a mode name declares, at these fractions and this flag.
 
     One place where a name becomes a declaration; nothing downstream of here
-    branches on the name again.
+    branches on the name again. `leptons` is the section 3 flag: it applies to
+    the fixed-fraction modes and asking for it elsewhere raises rather than
+    being quietly dropped.
     """
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
     entry = dict(MODES[mode])
     factory = entry.pop("spec")
+    if entry.pop("takes_leptons", False):
+        entry["leptons"] = bool(leptons)
+    elif leptons:
+        raise ValueError(
+            f"leptons=True does not apply to mode {mode!r}; beta equilibrium "
+            f"is defined by the leptons")
     values = []
     for key in MODE_FRACTIONS[mode]:
         if key not in fracs:
@@ -155,12 +164,16 @@ class TableSpec:
            'Y_C'/'Y_S'/'Y_Le': grid to sweep that fraction as a further axis}
     include: the active degrees of freedom
     fixed: scalar values for the fractions the mode needs that are not swept
+    leptons: for the fixed-fraction modes, whether the neutralizing electrons
+        are present. The orthogonal flag of CLAUDE.md section 3, not part of
+        the mode name.
     """
     parametrization: Parameters
     mode: str
     axes: dict
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)
+    leptons: bool = False
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -177,7 +190,7 @@ class TableSpec:
         # axis or a scalar; an axis value stands in here only for the check.
         probe = dict(self.fixed)
         probe.update({k: 0.0 for k in self._frac_keys})
-        mode_spec(self.mode, probe)
+        mode_spec(self.mode, probe, self.leptons)
 
 
 @dataclass
@@ -279,7 +292,7 @@ def build_table(spec: TableSpec, skip_errors: bool = False,
         for tv in temp:
             fracs = dict(spec.fixed)
             fracs.update(zip(frac_keys, (float(c) for c in combo)))
-            spec_mode = mode_spec(spec.mode, fracs)
+            spec_mode = mode_spec(spec.mode, fracs, spec.leptons)
             T = None if isentropic else float(tv)
             SnB = float(tv) if isentropic else None
             # The cold start needs a temperature even when T is an unknown;
@@ -492,8 +505,8 @@ def _settings_to_spec(settings: TableSettings) -> Tuple[TableSpec, List[str]]:
     if eq not in _LEGACY_EQUILIBRIA:
         raise ValueError(f"Unknown equilibrium type: {settings.equilibrium}")
     mode, temp_key = _LEGACY_EQUILIBRIA[eq]
-    if mode in ("fixed_YC", "fixed_YC_YS") and settings.include_electrons:
-        mode += "_neutral"
+    leptons = (mode in ("fixed_YC", "fixed_YC_YS")
+               and bool(settings.include_electrons))
 
     grids = {"Y_C": settings.Y_C_values, "Y_S": settings.Y_S_values,
              "Y_Le": settings.Y_L_values}
@@ -510,7 +523,7 @@ def _settings_to_spec(settings: TableSettings) -> Tuple[TableSpec, List[str]]:
         settings.T_values if temp_key == "T" else settings.S_values, dtype=float)
 
     spec = TableSpec(parametrization=_get_params(settings), mode=mode,
-                     axes=axes, include=_get_flags(settings))
+                     axes=axes, include=_get_flags(settings), leptons=leptons)
     # 'S' rather than 'SnB': the .dat column has been called S since the first
     # tables were written, and files on disk carry that header.
     return spec, frac_names + [temp_key if temp_key == "T" else "S"]

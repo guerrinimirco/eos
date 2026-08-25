@@ -75,7 +75,7 @@ def _check_call(mode, species, T, SnB, conditions, leptons=True):
     return T, SnB, species
 
 
-def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
+def eos_point(par, mode, species=None, n_B=None,
               T=0.0, SnB=None, x0=None, leptons=True, **conditions):
     """One solved state; non-convergence is a return value.
 
@@ -132,7 +132,7 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
     return PointResult(True, "converged", point)
 
 
-def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
+def eos_table(par, mode, species=None, axes=None,
               direction="up", x0=None, leptons=True, rows=False,
               progress=None, verbose=False, coexistences=None,
               eta=1.0):
@@ -229,7 +229,7 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
 RESPONSE_FREEZES = ()
 
 
-def eos_response(par, mode="beta_eq_neutrinoless", species=None,
+def eos_response(par, mode, species=None,
                  frozen="equilibrium", n_B=None, T=0.0, **conditions):
     """Second-derivative quantities -- not implemented for this model.
 

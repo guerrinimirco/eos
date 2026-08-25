@@ -357,40 +357,31 @@ simply changes sign between $P$ and $\varepsilon$ and the $a_i$ keep
 coefficient one.
 
 \paragraph{The \texttt{thermal\_neutrinos} sector.} With the flag on and
-$T > 0$ the solver adds a $\mu = 0$ massless neutrino gas at \textbf{three}
-flavours, multiplying the single-flavour result (antiparticles included) into
-the totals:
+$T > 0$ the solver adds a $\mu = 0$ massless neutrino gas over the flavours
+the composition does \emph{not} track, multiplying the single-flavour result
+(antiparticles included) into the totals:
 %
 \begin{equation}
-P \mathrel{+}= 3 P_\nu(0, T) , \qquad
-\varepsilon \mathrel{+}= 3 \varepsilon_\nu(0, T) , \qquad
-s \mathrel{+}= 3 s_\nu(0, T) .
+P \mathrel{+}= N_\nu P_\nu(0, T) , \qquad
+\varepsilon \mathrel{+}= N_\nu \varepsilon_\nu(0, T) , \qquad
+s \mathrel{+}= N_\nu s_\nu(0, T) ,
 \label{eq:thermalnu}
 \end{equation}
 %
-It carries no conserved charge and no lepton number, so it touches nothing
-else. The factor is exactly $3$, measured: at $\nB = 0.3\ \mathrm{fm}^{-3}$,
+with $N_\nu = 3$ where no neutrino flavour is tracked and $N_\nu = 2$ in a
+mode that holds $Y_{L_e}$. It carries no conserved charge and no lepton
+number, so it touches nothing else. The factor is exactly $3$ in the
+free-streaming modes, measured: at $\nB = 0.3\ \mathrm{fm}^{-3}$,
 $T = 20$~MeV in \texttt{beta\_eq\_neutrinoless}, switching the flag on moves
 $P$, $\varepsilon$ and $s$ by $3.000000$ times the single-flavour gas.
 
-Three is right in the modes where the gas is added, and
-\texttt{beta\_eq\_neutrino\_trapped} \emph{refuses} the combination rather
-than adding it: that mode carries the electron neutrino explicitly at its own
-$\munue$, so a three-flavour $\mu = 0$ gas on top would count $\nu_e$ twice,
-and the solver raises saying exactly that. In every other mode no neutrino
-flavour is tracked in the composition, so all three are untracked.
-
-\textbf{The refusal is a defect, not a design choice, and it is due to be
-removed.} The repository conventions state that \texttt{thermal\_neutrinos} is
-meaningful alongside \texttt{beta\_eq\_neutrino\_trapped} and that a model
-\emph{must not raise} on the combination: the flag is defined by what it does
-\emph{not} cover, so under trapping --- where the $e$ and $\mu$ families are
-tracked --- it means the $\tau$ family, which is free-streaming and carries no
-lepton number the mode constrains. Five models answer this two ways; the three
-that succeed are the conformant ones, and SFHo and DID drop the raise. So the
-paragraph above states what the code does today and not what it should do:
-when the raise goes, the trapped mode gains the two remaining flavours rather
-than three. This is not a ledgered gap and there is no ledger entry for it.
+The count follows the mode, and \texttt{beta\_eq\_neutrino\_trapped} does not
+refuse the combination: that mode carries the electron neutrino explicitly at
+its own $\munue$, so a three-flavour $\mu = 0$ gas on top would count $\nu_e$
+twice and the gas is two flavours there. The flag is defined by what it does
+\emph{not} cover, so under trapping --- where the $e$ family is tracked --- it
+means the $\mu$ and $\tau$ families, which are free-streaming and carry no
+lepton number the mode constrains. Nothing here is deferred.
 
 Every assembled state is checked against the Hugenholtz--Van Hove
 identity~\cite{HugenholtzVanHove1958}

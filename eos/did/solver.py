@@ -210,11 +210,6 @@ class System(NamedTuple):
 
 def _system(par, flags, spec, n_B, T=None, SnB=None):
     """The `System` a named mode hands to `solve`."""
-    if flags.thermal_neutrinos and spec.is_fixed("L_e"):
-        raise ValueError(
-            "thermal_neutrinos are the flavours the composition does NOT "
-            "track; with the electron family trapped they would double-count "
-            "nu_e. Wire the remaining two flavours before enabling it.")
     return System(par=par, flags=flags, specs=species_table(flags), spec=spec,
                   n_B=n_B, T=T, SnB=SnB)
 
@@ -379,7 +374,8 @@ def _radiation(sys: System, T):
 
     Both carry no conserved charge and enter eps, P and s alone; the thermal
     neutrinos are mu = 0 gases of the flavours the composition does not track
-    (CLAUDE.md section 4).
+    (CLAUDE.md section 4): all three where the electron neutrino is
+    free-streaming, two where a trapped mode already counts it at mu_nue.
     """
     P = eps = s = 0.0
     if sys.flags.photons:
@@ -387,9 +383,11 @@ def _radiation(sys: System, T):
         P, eps, s = ph.P, ph.e, ph.s
     if sys.flags.thermal_neutrinos and T > 0.0:
         nu = neutrino_thermo(0.0, T)
-        P += N_NEUTRINO_FLAVOURS * nu.P * G_NU
-        eps += N_NEUTRINO_FLAVOURS * nu.e * G_NU
-        s += N_NEUTRINO_FLAVOURS * nu.s * G_NU
+        n_flavours = N_NEUTRINO_FLAVOURS - (1.0 if sys.spec.is_fixed("L_e")
+                                            else 0.0)
+        P += n_flavours * nu.P * G_NU
+        eps += n_flavours * nu.e * G_NU
+        s += n_flavours * nu.s * G_NU
     return P, eps, s
 
 

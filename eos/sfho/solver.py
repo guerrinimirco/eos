@@ -101,8 +101,10 @@ BARYONS_NYD = NUCLEONS + HYPERONS + DELTAS
 #: typical field puts every row near unity; sigma at saturation is about 30 MeV.
 FIELD_SCALE = 30.0
 
-#: Thermal neutrino flavours carried as a mu = 0 gas when the composition
-#: tracks none of them (CLAUDE.md section 4, `thermal_neutrinos`).
+#: Neutrino flavours in nature. `thermal_neutrinos` carries the ones the
+#: composition does NOT track, as mu = 0 gases (CLAUDE.md section 4): all
+#: three where the electron neutrino is free-streaming, two where a trapped
+#: mode already counts it at its own potential.
 N_NEUTRINO_FLAVOURS = 3.0
 
 
@@ -522,9 +524,10 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
 
     if sys.thermal_neutrinos and T > 0:
         nu = neutrino_thermo(0.0, T, include_antiparticles=True)
-        P_total += N_NEUTRINO_FLAVOURS * nu.P
-        e_total += N_NEUTRINO_FLAVOURS * nu.e
-        s_total += N_NEUTRINO_FLAVOURS * nu.s
+        n_flavours = N_NEUTRINO_FLAVOURS - (1.0 if spec.is_fixed("L_e") else 0.0)
+        P_total += n_flavours * nu.P
+        e_total += n_flavours * nu.e
+        s_total += n_flavours * nu.s
 
     # Y_C and Y_S are the ACHIEVED fractions, read off the solved state rather
     # than echoed from the targets, so a point that did not converge does not
@@ -572,11 +575,6 @@ def solve(sys: System, x0=None) -> EoSPoint:
     6): `converged` is judged on the largest residual and `error` carries it,
     so a sampler can score a bad point and move on.
     """
-    if sys.thermal_neutrinos and sys.spec.is_fixed("L_e"):
-        raise ValueError(
-            "thermal_neutrinos are the flavours the composition does NOT "
-            "track; with the electron family trapped they would double-count "
-            "nu_e. Wire the remaining two flavours before enabling it.")
     if sys.isentropic and sys.spec.is_fixed("C") and sys.spec.leptons:
         raise NotImplementedError(
             "an isentropic fixed-Y_C solve with neutralizing leptons is not "

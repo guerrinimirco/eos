@@ -71,7 +71,7 @@ def _check(mode, conditions):
     return conditions
 
 
-def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
+def eos_point(par, mode, species=None, n_B=None,
               T=None, SnB=None, x0=None, patterns=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
@@ -125,7 +125,7 @@ def eos_point(par, mode="beta_eq_neutrinoless", species=None, n_B=None,
                        f"n_B={n_B:g} fm^-3", point)
 
 
-def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
+def eos_table(par, mode, species=None, axes=None,
               fixed=None, leptons=True, skip_errors=True, rows=False,
               progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
@@ -158,7 +158,7 @@ def eos_table(par, mode="beta_eq_neutrinoless", species=None, axes=None,
 RESPONSE_FREEZES = ("equilibrium",)
 
 
-def eos_response(par, mode="beta_eq_neutrinoless", species=None,
+def eos_response(par, mode, species=None,
                  frozen="equilibrium", n_B=None, T=0.0, rel_dn=1e-3, dT=0.05,
                  patterns=None, **conditions):
     """Second-derivative quantities at one state.

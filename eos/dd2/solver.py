@@ -861,15 +861,16 @@ def solve_beta_eq_neutrinoless(par, n_B, flags, T=0.0, x0=None,
 
 
 def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
-                   x0=None, analytic_jac=True, check_consistency=True,
-                   include_photons=True, **fracs):
+                   leptons=False, x0=None, analytic_jac=True,
+                   check_consistency=True, include_photons=True, **fracs):
     """
     One hadronic point in a NAMED equilibrium mode — the counterpart of
     `eos.mixed.solve`, so both engines are driven the same way.
 
     mode  : one of `eos.dd2.MODES` — 'beta_eq_neutrinoless',
-            'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_neutral',
-            'fixed_YS', 'fixed_YC_YS'.
+            'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YS', 'fixed_YC_YS'.
+    leptons: for fixed_YC, whether the neutralizing leptons are present. The
+            orthogonal flag of CLAUDE.md section 3, not part of the mode name.
     fracs : the fixed fractions the mode consumes, as keywords, e.g.
             Y_C=0.3 for 'fixed_YC' or Y_Le=0.4 for the trapped mode. Which
             keys each mode needs is `eos.dd2.MODE_FRACTIONS`.
@@ -882,7 +883,7 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
                        analytic_jac=analytic_jac,
                        check_consistency=check_consistency,
                        include_photons=include_photons,
-                       **_mode_kwargs(mode, fracs))
+                       **_mode_kwargs(mode, fracs, leptons))
 
 
 def solve_fixed_yc(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,

@@ -124,6 +124,8 @@ $\as$      & \texttt{alpha}  & $0.3$        & QCD coupling, constant \\
 $B^{1/4}$  & \texttt{B4}     & $165$ MeV    & bag constant, quoted as its fourth root \\
 $B$        & \texttt{B}      & $7.412\times 10^{8}\ \mathrm{MeV}^4$
                                             & $= (B^{1/4})^4 = 96.466\ \mathrm{MeV/fm}^3$ \\
+$c_{T_c}$  & \texttt{tc\_coeff} & $0.57 \cdot 2^{1/3} = 0.71815$
+                                            & CFL critical temperature as a multiple of $\Delta_0$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -290,11 +292,14 @@ temperature with a single parameter, the zero-temperature gap $\Delta_0$:
    0 , & T \ge T_c ,
 \end{cases}
 \qquad
-T_c = 0.57 \cdot 2^{1/3}\, \Delta_0 = 0.71815\, \Delta_0 ,
+T_c = c_{T_c} \Delta_0 , \quad c_{T_c} = 0.57 \cdot 2^{1/3} = 0.71815 ,
 \label{eq:gap}
 \end{equation}
 %
-so that $\Delta_0 = 100$~MeV gives $T_c = 71.815$~MeV. The entropy needs the
+so that $\Delta_0 = 100$~MeV gives $T_c = 71.815$~MeV. Here $c_{T_c}$ is
+\texttt{tc\_coeff} of the parameter record rather than a constant of the code:
+an inference run over CFL pairing varies it like any other parameter, and the
+shipped value is the weak-coupling BCS result with its colour factor. The entropy needs the
 derivative, which follows by differentiating Eq.~\eqref{eq:gap}:
 %
 \begin{equation}

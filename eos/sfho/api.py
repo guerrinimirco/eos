@@ -43,8 +43,13 @@ class PointResult:
     point: EoSPoint = None
 
 
-def _normalize(mode, conditions):
-    """(mode, the fractions it needs) from spec-named conditions.
+def _check(mode, conditions):
+    """The fractions this mode needs, from spec-named conditions.
+
+    The condition names are fixed at n_B, T, Y_C, Y_S, Y_Le, Y_Lmu (CLAUDE.md
+    section 5); `leptons` is a flag rather than a condition and reaches the
+    entry points as a named argument, so finding it here means a caller still
+    routing it through the bag.
 
     Y_Lmu raises: SFHo does not track the muon lepton family at all, and per
     the species-flag rules an unimplemented request must never become a silent
@@ -54,22 +59,17 @@ def _normalize(mode, conditions):
         raise NotImplementedError(
             "SFHo does not track the muon lepton family; "
             "beta_eq_neutrino_trapped takes (n_B, Y_Le, T) only")
-    leptons = conditions.pop("leptons", None)
-    if leptons is not None:
-        if mode not in ("fixed_YC", "fixed_YC_YS"):
-            raise ValueError("leptons= applies to the fixed-fraction modes; "
-                             "beta equilibrium is defined by the leptons")
-        if leptons:
-            mode += "_neutral"
+    if "leptons" in conditions:
+        raise TypeError("leptons is a flag, not a condition; pass it as the "
+                        "named argument leptons=")
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of "
-                         f"{[m for m in MODES if not m.endswith('_neutral')]} "
-                         f"(with leptons=True for the neutral flavours)")
-    return mode, dict(conditions)
+                         f"{list(MODES)}")
+    return dict(conditions)
 
 
-def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
-              **conditions):
+def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
+              x0=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -87,9 +87,13 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
         the unknown vector (CLAUDE.md section 3).
     x0 : array, optional
         A warm start, in the unknown order `solver.unknown_names` documents.
-    conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le), plus
-        leptons=True/False for the fixed-fraction modes (neutralizing
-        electrons on/off).
+    leptons : bool
+        For the fixed-fraction modes: whether the neutralizing electrons are
+        added, so the total system is electrically neutral. With leptons=False
+        the matter is charged, which is what a mixed-phase construction needs
+        per pure phase before imposing global neutrality. A flag, not a
+        condition (CLAUDE.md section 3), so it is a named argument.
+    conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le).
 
     Returns
     -------
@@ -103,8 +107,8 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
     """
     if (T is None) == (SnB is None):
         raise ValueError("exactly one of T / SnB must be given")
-    mode, fracs = _normalize(mode, dict(conditions))   # caller errors raise here
-    spec = mode_spec(mode, fracs)
+    fracs = _check(mode, dict(conditions))             # caller errors raise here
+    spec = mode_spec(mode, fracs, leptons)
     point = solve_mode(par, n_B, species, spec, T=T, SnB=SnB, x0=x0)
     if not point.converged:
         if point.matter.condensation >= 1.0:
@@ -117,8 +121,8 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, x0=None,
     return PointResult(True, "converged", point)
 
 
-def eos_table(par, mode, species, axes, fixed=None, skip_errors=True,
-              rows=False, progress=None, verbose=False):
+def eos_table(par, mode, species, axes, fixed=None, leptons=False,
+              skip_errors=True, rows=False, progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
     A thin wrapper over `eos.sfho.build_table`: axes and fixed follow
@@ -128,16 +132,19 @@ def eos_table(par, mode, species, axes, fixed=None, skip_errors=True,
     directly. skip_errors=True drops non-converged points from their line (the
     sampler-friendly default) rather than leaving them in it.
 
+    leptons : as in `eos_point` — the section 3 flag, so the neutral flavour
+        of a fixed-fraction table is reachable here too and not only through
+        a mode name.
+
     progress : callable, invoked once per completed line with a dict
         {mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,
         elapsed_s}.
     verbose : True installs a one-line printer as the callback.
     """
-    mode, _ = _normalize(mode, dict(fixed or {}))
+    _check(mode, dict(fixed or {}))                    # caller errors raise here
     spec = TableSpec(parametrization=par, mode=mode, axes=dict(axes),
-                     include=species,
-                     fixed={k: v for k, v in (fixed or {}).items()
-                            if k != "leptons"})
+                     include=species, fixed=dict(fixed or {}),
+                     leptons=leptons)
     return build_table(spec, skip_errors=skip_errors, rows=rows,
                        progress=progress, verbose=verbose)
 
@@ -151,7 +158,7 @@ RESPONSE_FREEZES = ("equilibrium",)
 
 
 def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
-                 **conditions):
+                 leptons=False, **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' — nothing is held: the composition re-equilibrates
@@ -191,8 +198,8 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
             f"(see docs/DEFERRED.md)")
     if n_B is None:
         raise ValueError("eos_response needs n_B [fm^-3]")
-    mode, fracs = _normalize(mode, dict(conditions))
-    spec = mode_spec(mode, fracs)
+    fracs = _check(mode, dict(conditions))
+    spec = mode_spec(mode, fracs, leptons)
 
     from eos.sfho import responses as _fd
     try:

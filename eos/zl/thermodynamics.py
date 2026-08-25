@@ -371,20 +371,21 @@ def thermo_from_mu(mu_p: float, mu_n: float, T: float,
     return thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, params)
 
 
-def thermo_from_n(n_B: float, Y_C: float, T: float,
+def thermo_from_n(n_n: float, n_p: float, T: float,
                   params: Parameters = None) -> MatterThermo:
-    """The matter block at given (n_B, Y_C, T) -- the inverse direction.
+    """The matter block at given (n_n, n_p, T) -- the inverse direction.
 
-    With the composition fixed, no fixed point is needed: n_p = Y_C n_B and
-    n_n = (1 - Y_C) n_B determine the interaction potentials outright, the
-    Fermi integrals are inverted for mu_eff_i, and the physical potentials
-    follow as mu_i = mu_eff_i + mu_Hv_i.
+    With the densities given, no fixed point is needed: they determine the
+    interaction potentials outright, the Fermi integrals are inverted for
+    mu_eff_i, and the physical potentials follow as mu_i = mu_eff_i + mu_Hv_i.
+
+    The species densities, not (n_B, Y_C): the two are the same information
+    for nucleons, but Y_C is the fraction a MODE holds, and this module never
+    knows which mode it is in (CLAUDE.md section 5). A caller that has
+    (n_B, Y_C) passes n_p = Y_C n_B and n_n = (1 - Y_C) n_B.
     """
     if params is None:
         params = Parameters.default()
-
-    n_p = Y_C * n_B
-    n_n = (1 - Y_C) * n_B
 
     mu_eff_p = invert_fermi_density(n_p, T, params.m_p, G_NUCLEON)
     mu_eff_n = invert_fermi_density(n_n, T, params.m_n, G_NUCLEON)

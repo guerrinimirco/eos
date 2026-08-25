@@ -89,6 +89,7 @@ parameter an inference run can vary.
 | `alpha_s` | `alpha` | 0.3 | QCD coupling, constant |
 | `B^(1/4)` | `B4`    | 165 MeV | bag constant, quoted as its fourth root |
 | `B`       | `B`     | 7.412e8 MeV^4 | `= (B^(1/4))^4 = 96.466 MeV/fm^3` |
+| `c_Tc`    | `tc_coeff` | `0.57 * 2^(1/3) = 0.71815` | CFL critical temperature as a multiple of `Delta0`; read by the `cfl` mode only |
 
 `B` is a derived property of the parameter record, never stored, so a set
 cannot carry a `B` and a `B^(1/4)` that disagree. The defaults are a central
@@ -216,9 +217,12 @@ The gap is not solved for. It is imposed as a BCS-shaped function of
 temperature with a single parameter, the zero-temperature gap `Delta0`:
 
     Delta(T) = Delta0 sqrt(1 - T^2/T_c^2)   for T < T_c, else 0
-    T_c      = 0.57 * 2^(1/3) Delta0 = 0.71815 Delta0                   (gap)
+    T_c      = c_Tc Delta0 ,   c_Tc = 0.57 * 2^(1/3) = 0.71815          (gap)
 
-so that `Delta0 = 100` MeV gives `T_c = 71.815` MeV. The entropy needs the
+so that `Delta0 = 100` MeV gives `T_c = 71.815` MeV. `c_Tc` is `tc_coeff` of
+the parameter record, not a constant of the code: an inference run over CFL
+pairing varies it like any other parameter, and the shipped value is the
+weak-coupling BCS result with its colour factor. The entropy needs the
 derivative, which follows by differentiating (gap):
 
     dDelta/dT = - Delta0 T / ( T_c^2 sqrt(1 - T^2/T_c^2) ),   T < T_c  (dgap)

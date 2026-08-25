@@ -174,37 +174,29 @@ with P_mf, eps_mf the mean-field terms above. Photons:
 `P = pi^2 T^4/(45 hc^3)`, `eps = 3P`, `s = 4 pi^2 T^3/(45 hc^3)`.
 
 **The `thermal_neutrinos` sector.** With the flag on and `T > 0`, the solver
-adds a `mu = 0` massless neutrino gas at **THREE flavours**
-(`N_NEUTRINO_FLAVOURS = 3.0`), multiplying the single-flavour
-`neutrino_thermo(0, T)` — antiparticles included — into `P`, `eps` and `s`:
+adds a `mu = 0` massless neutrino gas over the flavours the composition does
+NOT track, multiplying the single-flavour `neutrino_thermo(0, T)` —
+antiparticles included — into `P`, `eps` and `s`:
 
-    P   += 3 P_nu(mu=0, T)
-    eps += 3 eps_nu(mu=0, T)
-    s   += 3 s_nu(mu=0, T)
+    P   += N_nu P_nu(mu=0, T)
+    eps += N_nu eps_nu(mu=0, T)
+    s   += N_nu s_nu(mu=0, T)
+
+    N_nu = 3 - 1 [the mode holds Y_Le] .
 
 It carries no conserved charge and no lepton number, so it touches nothing
-else. The factor is exactly 3, measured: at `n_B = 0.3 fm^-3`, `T = 20 MeV` in
-`beta_eq_neutrinoless`, turning the flag on moves `P`, `eps` and `s` by
-3.000000 times the single-flavour `mu = 0` gas.
+else. The factor is exactly 3 where no flavour is tracked, measured: at
+`n_B = 0.3 fm^-3`, `T = 20 MeV` in `beta_eq_neutrinoless`, turning the flag on
+moves `P`, `eps` and `s` by 3.000000 times the single-flavour `mu = 0` gas.
 
-**Three is right in the modes where the gas is added, and the trapped mode
-RAISES rather than adding it.** `beta_eq_neutrino_trapped` carries the electron
-neutrino explicitly at its own `mu_nue`, so a three-flavour `mu = 0` gas on top
-would count `nu_e` twice; `solver.py` refuses the combination with a message
-saying exactly that. In every other mode no neutrino flavour is tracked in the
-composition, so all three are untracked and the factor is 3.
-
-**The refusal is a DEFECT, not a design choice, and it is due to be removed.**
-CLAUDE.md §4 states that `thermal_neutrinos` is meaningful alongside
-`beta_eq_neutrino_trapped` and that **a model must not raise on the
-combination**: the flag is defined by what it does NOT cover, so under trapping,
-where the e and mu families are tracked, it means the tau family — which is
-free-streaming and carries no lepton number the mode constrains. Five models
-answer this two ways; the three that succeed (`njl`, `ccdm`, `enjl`) are the
-conformant ones, and `sfho` and `did` drop the raise. So the paragraph above
-describes what the code does today and not what it should do: when the raise
-goes, the trapped mode gains the two remaining flavours rather than three.
-This is not a ledgered gap and there is no `docs/DEFERRED.md` entry for it. The Euler sum
+**The count follows the mode, and the trapped mode does not raise.**
+`beta_eq_neutrino_trapped` carries the electron neutrino explicitly at its own
+`mu_nue`, so a three-flavour `mu = 0` gas on top would count `nu_e` twice; the
+gas is therefore two flavours there, and three in every other mode, where no
+neutrino flavour is tracked in the composition. This is CLAUDE.md §4's
+definition applied literally — the flag covers what the composition does not —
+and it is the count `njl`, `ccdm` and `enjl` already use. There is no
+`docs/DEFERRED.md` entry for it: nothing is deferred. The Euler sum
 reported with the state takes baryons at their FULL potentials and the meson
 gas at its EFFECTIVE ones:
 `sum_i mu_i n_i + sum_j mu*_j n_j + mu_e n_e + mu_nue n_nue`.
