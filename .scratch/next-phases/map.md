@@ -104,6 +104,25 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
+**[Ticket 57](issues/57-canonical-stack.md) is RESOLVED, and the text below has
+not caught up.** The ruling is **python.org 3.14 is canonical** and
+`test/baseline/` regenerates on it, under two conditions; until that
+regeneration lands, 57 itself restates the rule that every failure count names
+its interpreter and its collected count. Read the blocks below as history.
+
+**Concurrency is now the binding constraint on a full-suite number, not the
+stack.** Tickets 60/61 met their gates while another session held eight
+`eos/*/api.py` files and a new `test/test_nonconvergence_return.py` modified in
+the working tree (ticket 49). A full-suite run in the repo therefore measures
+BOTH sessions and has no before-image; the way through is an isolated copy built
+with `git archive HEAD` plus one snapshot of the gitignored `test/`, run beside a
+second copy carrying only HEAD. Two costs, both measured: an isolated copy has
+**no numba cache**, so kernels recompile and `test/mixed` runs for hours; and it
+produces **six `test/abpr` round-trip failures the real repo does not**, which
+without the HEAD copy beside it read as the ticket's own regressions. Collection
+in such a copy is **1677**, not 1665 — ticket 49's file adds 12.
+
+
 **CORRECTED by [ticket 47](issues/47-dd2-nmp-inversion.md): the 14 are a
 STACK artifact, not a code state.** This machine carries two Python stacks —
 anaconda `python` (3.9.7 / numpy 1.26.4 / scipy 1.13.1) and python.org 3.14
@@ -195,6 +214,54 @@ against this file, not against the earlier `pytest_before*.txt`.
 ## Decisions so far
 
 <!-- one line per closed ticket: gist + link -->
+
+- [dd2 cannot take two of §4's six species flags](issues/61-dd2-species-flags.md):
+  **closed by giving dd2 the names — all ten models now take `SpeciesFlags(**six)`
+  and none answers §4's vocabulary with a `TypeError`.** The meson half is a pure
+  rename (`include_pseudoscalars` -> `thermal_mesons`, `include_thermal_vectors` ->
+  `thermal_vectors`), reading §4's *"pi, K (and optionally the vector nonet)"* as
+  one sector plus an option rather than two halves; no alias, because an alias
+  leaves two spellings of one boolean for `dataclasses.replace` to pick between.
+  The tau-gas half is the name WITHOUT the sector: `thermal_neutrinos` exists and
+  RAISES `NotImplementedError`, which §4 permits and which the ticket blessed —
+  the complaint was the missing name, not the missing physics. dd2's own
+  `neutrinos` (the trapped modes' matter-composition electron neutrino) is
+  untouched and now sits next to it with comments pointing each at the other.
+  **The prose sites were FOUR, not the three the two-way gate names**:
+  `README.md`, `eos/__init__.py`, the test docstring — and `docs/DEFERRED.md`,
+  whose dd2 section carried the same claim as a deferral and which nothing would
+  have fired on. That is a fourth instance of the Not-yet-specified pattern
+  below, found the same way as the first three: by accident. `exempt` in
+  `test/test_imports.py` is now `{}` (kept as an empty dict, so a future
+  exemption has to be argued for in writing); the inversion the ticket demanded
+  was already in place, so `enjl` and `abpr` stopped being skipped for nothing.
+  Defaults measured and NOT changed as instructed — the divergence is
+  **three-way** (`muons` 5/5, `photons` 6/4, `thermal_neutrinos` True in
+  `alphabag` alone), graduated to [ticket 62](issues/62-species-flag-defaults.md),
+  which does not block the notebooks because the knobs cell passes all six
+  explicitly. AST check for `{thermal_mesons, thermal_vectors,
+  thermal_neutrinos}` clean before and after; no positional `SpeciesFlags`
+  construction anywhere, so reordering fields is safe; no `test/baseline/*.npz`
+  stores a key named after either old flag (all 13 checked — `table_io.asdict`
+  is the path by which a field rename could have moved a stored key).
+
+- [dd2 raises a bare KeyError when hyperons are asked of a nucleonic set](issues/60-dd2-hyperon-flag-raise.md):
+  **fixed with one guard, and the exception TYPE is the whole fix.**
+  `build_baryon_specs` has exactly one caller in the repository, so the guard
+  goes there and no sibling caller keeps the old behaviour; it tests
+  `b.name not in hyp`, so a partial coupling map is caught like an empty one.
+  It raises **`NotImplementedError`, not `ValueError`** — measured, not
+  reasoned: with `ValueError` (which is what `sfho`'s equivalent guard uses)
+  `eos_point` returned `ok=False` instead of raising, because
+  `eos/dd2/api.py:106-108` re-raises `NotImplementedError` and converts
+  `ValueError` into a non-converged status. A malformed call reported as a
+  failed solve is worse than the bare `KeyError` the ticket opened on: a sampler
+  scores it and moves on. `sfho` has the same defect one refactor away and is
+  saved only by calling its guard outside `api.py`'s try — Stage 7 material, not
+  changed here. **`deltas` has no equivalent hole**, measured rather than
+  assumed: `x_Delta_*` default to 1.0 as a real coupling choice, and
+  `deltas=True` on the nucleonic set converges, so no guard was added where the
+  model can genuinely compute.
 
 - [The baseline's empty-sector gate is absolute where the physics is relative](issues/56-baseline-empty-sector-gate.md):
   **fixed — the gates now read fractions, and the suite is GREEN on the stack
@@ -803,6 +870,12 @@ In scope, not yet sharp enough to ticket:
     direction. Closing 61 would have made dd2 conform and sailed straight
     through, leaving the README and the `#:` comment describing a gap that no
     longer existed.
+  - `docs/DEFERRED.md`'s dd2 section carried the SAME claim as a deferral, and
+    the two-way gate built for 61 does not name it — the gate lists three prose
+    sites and there were four. Found while closing 61, by grepping for the old
+    flag names rather than by anything firing. §11 calls that file the tracked
+    ledger of per-model gaps, which makes it the one place a closed gap left
+    open is most load-bearing, and it is the site with the least protection.
 
   The common shape: we are well drilled at asserting nothing got worse, and
   have almost nothing that fires when a documented gap is CLOSED. Every
