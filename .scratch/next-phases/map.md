@@ -1170,6 +1170,42 @@ against this file, not against the earlier `pytest_before*.txt`.
   belongs with [ticket 54](issues/54-signature-corrections.md); and `fq0.5_B1`
   at fixed `Y_C` on the `"down"` branch misses an INTERIOR density band.
 
+- [notebooks/quark_eos — the NJL and CCDM step-by-step section](issues/16-quark-stepwise.md):
+  **shipped as section 10**, commit `2d9d7e8`; verified by `jupytext --execute`
+  in an archive copy of the COMMITTED tree (86 cells, 43 code, **0 error
+  outputs**, ~14 min, of which section 10 is ~5), targeted tests **811
+  collected, 811 passed** in a second archive copy — 809 in tickets 15/17, +2
+  from another session, **0 added** — python.org 3.14.2, no library file
+  touched. Five new figures, and the two colormaps it needs are BUILT from
+  `figure_style`'s palette rather than picked from matplotlib's.
+  **In neutral matter CFL wins wherever a gap survives**, at fixed `mu_B` and at
+  fixed `n_B` alike, in both models. **`P` does not rank phases at fixed
+  density and the printed table shows it failing to**: `njl`'s 2SC branch has
+  the higher pressure while CFL has the lower free energy and is the ground
+  state — the branches sit at different `mu_B` at the same `n_B`.
+  **A three-root trap was hit and fixed as physics, not tuning**: a
+  density-only warm start put `ccdm`'s 2SC row at T = 40 on the trivial gap root
+  and carried the zero across the whole line, printing a gapless band between
+  two gapped ones. The sweep now continues in temperature as well, which also
+  takes `njl`'s 2SC line from 6/8 to 8/8 points and 13 s to 5.7 s.
+  **The document comparison is IN the notebook (10.3c), not only in the answer**,
+  against `njl_csc_implementation.md` section 6's own neutral solve at
+  `mu_B = 1500` MeV. Every entry of both rows matches to the document's printed
+  precision **except the 2SC light constituent masses** (doc 11.96/7.65, code
+  9.72/8.90) — and `Delta_3`, `mu_8`, `n_B` and `P` all agreeing to four digits
+  is what says the document's two entries are wrong, not the code's. Three more
+  disagreements reported, code deciding each: the CFL neutral solve is flagged
+  "not tightly converged (residual 13)" in that document's sections 6.3 and 11
+  and **is converged now** (residual 4e-16, 41 of 42 grid cells);
+  `ccdm_implementation.md` section 6.5 says gapless states must be excluded from
+  the Omega minimization and **both solvers rank them** (`njl/solver.py:601`,
+  `ccdm/solver.py:678`), which is live at the probe point where `njl`'s 2SC state
+  is gapless; and the document puts leptons inside `Omega` where the code keeps
+  them out of the phase, same totals, different boundary.
+  Reported not fixed: `njl`'s `eos_response` cannot reach n_B = 2.2 fm^-3 for
+  `unpaired`/`2SC` (stencil neighbour at 2.2022 does not converge), and `ccdm`'s
+  returns `branch_changed=True` there even with the pattern restricted.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
