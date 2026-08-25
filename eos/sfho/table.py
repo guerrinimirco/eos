@@ -39,14 +39,7 @@ from eos.sfho.species import SpeciesFlags
 from eos.sfho.solver import (
     EoSPoint, solve_mode, default_guess, warm_start,
 )
-from eos.sfho.parameters import (
-    Parameters,
-    get_sfho_nucleonic,
-    get_sfhoy_fortin,
-    get_sfhoy_star_fortin,
-    get_sfho_2fam_phi,
-    get_sfho_2fam
-)
+from eos.sfho.parameters import Parameters
 
 
 # =============================================================================
@@ -457,16 +450,18 @@ def _get_params(settings: TableSettings) -> Parameters:
     if settings.custom_params is not None:
         return settings.custom_params
 
+    # The legacy TableSettings names a set by a short string; the published
+    # names are `parameters.PUBLISHED_SETS`.
     param_map = {
-        'sfho': get_sfho_nucleonic,
-        'sfhoy': get_sfhoy_fortin,
-        'sfhoy_star': get_sfhoy_star_fortin,
-        '2fam_phi': get_sfho_2fam_phi,
-        '2fam': get_sfho_2fam,
+        'sfho': 'SFHo_Nucleonic',
+        'sfhoy': 'SFHoY_Fortin',
+        'sfhoy_star': 'SFHoY*_Fortin',
+        '2fam_phi': 'SFHo_2fam_phi',
+        '2fam': 'SFHo_2fam',
     }
 
     if settings.parametrization.lower() in param_map:
-        return param_map[settings.parametrization.lower()]()
+        return Parameters.named(param_map[settings.parametrization.lower()])
     else:
         raise ValueError(f"Unknown parametrization: {settings.parametrization}")
 
@@ -1049,7 +1044,7 @@ if __name__ == "__main__":
     print("=" * 70 + "\n")
 
     spec = TableSpec(
-        parametrization=get_sfho_2fam_phi(),
+        parametrization=Parameters.named("SFHo_2fam_phi"),
         mode="beta_eq_neutrinoless",
         axes={"nB": np.linspace(0.1, 10, 40) * 0.1583, "T": [0.0, 10.0]},
         include=SpeciesFlags(),

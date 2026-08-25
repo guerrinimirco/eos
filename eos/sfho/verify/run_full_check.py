@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from eos.sfho.parameters import get_sfho_nucleonic, get_sfhoy_fortin
+from eos.sfho.parameters import Parameters
 from eos.sfho.species import SpeciesFlags, active_baryons
 from eos.sfho.solver import (
     solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
@@ -425,8 +425,8 @@ def _check_susceptibilities(hyp, n_B=0.8, T=10.0, rel=1e-4):
 # =============================================================================
 def run_full_check(par=None, hyp=None, grid=None):
     """Run the SFHo verification suite; returns a structured FullCheckReport."""
-    par = par or get_sfho_nucleonic()
-    hyp = hyp or get_sfhoy_fortin()
+    par = par or Parameters.default()
+    hyp = hyp or Parameters.named("SFHoY_Fortin")
     grid = np.array(grid) if grid is not None else np.array([0.16, 0.32, 0.64])
 
     report = FullCheckReport()

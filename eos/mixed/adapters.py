@@ -693,7 +693,7 @@ def sfho_phase(par, flags):
 
     SFHo's couplings are constants — no rearrangement term — so the slot
     carries the physical mu_B and its adapter surface is
-    `eos.sfho.thermodynamics.thermo_at_potentials` (four meson fields solved,
+    `eos.sfho.thermodynamics.thermo_from_mu` (four meson fields solved,
     the densities following outright from the potentials and fields).
     """
     from eos.sfho.solver import (
@@ -702,7 +702,7 @@ def sfho_phase(par, flags):
         solve_fixed_yc as _sfho_yc,
         solve_fixed_yc_ys as _sfho_yc_ys,
     )
-    from eos.sfho.thermodynamics import thermo_at_potentials as _sfho_at_mu
+    from eos.sfho.thermodynamics import thermo_from_mu as _sfho_at_mu
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
                return_state=False):

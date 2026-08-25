@@ -78,10 +78,10 @@ def susceptibilities(par, n_B, flags, T=0.0, spec=None):
 
 
 if __name__ == "__main__":
-    from eos.sfho.parameters import get_sfhoy_fortin
+    from eos.sfho.parameters import Parameters
     from eos.sfho.species import SpeciesFlags
 
-    par, flags = get_sfhoy_fortin(), SpeciesFlags(hyperons=True)
+    par, flags = Parameters.named("SFHoY_Fortin"), SpeciesFlags(hyperons=True)
     for n in (0.16, 0.4, 0.8):
         chi = susceptibilities(par, n, flags, T=10.0)
         print(f"n_B={n}: chi_BB={chi[0, 0]:.3e}  "

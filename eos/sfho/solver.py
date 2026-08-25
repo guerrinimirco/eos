@@ -38,9 +38,9 @@ so beta equilibrium reads mu_C + mu_e = mu_nue.
 
 Usage:
     from eos.sfho.solver import solve_beta_eq_neutrinoless, BARYONS_N
-    from eos.sfho.parameters import get_sfho_2fam_phi
+    from eos.sfho.parameters import Parameters
 
-    params = get_sfho_2fam_phi()
+    params = Parameters.named("SFHo_2fam_phi")
     result = solve_beta_eq_neutrinoless(n_B=0.16, T=10.0, params=params,
                                         particles=BARYONS_N)
     print(f"P = {result.P} MeV/fm^3")
@@ -70,7 +70,7 @@ from eos.general.modes import (
 from eos.sfho.parameters import Parameters
 from eos.sfho.species import SpeciesFlags, active_baryons, check_couplings
 from eos.sfho.thermodynamics import (
-    baryon_thermo, field_residuals, thermal_meson_thermo, thermo_from_mu,
+    baryon_thermo, field_residuals, thermal_meson_thermo, thermo_from_fields,
 )
 from eos.general.thermodynamics_leptons import (
     electron_thermo, photon_thermo, neutrino_thermo, electron_thermo_from_density
@@ -469,7 +469,7 @@ def assemble(x, sys: System, x0=None) -> EoSPoint:
     par, spec = sys.params, sys.spec
     sigma, omega, rho, phi, mu_B, mu_C, mu_S, mu_nue, T = _unpack(x, sys)
 
-    matter = thermo_from_mu(
+    matter = thermo_from_fields(
         mu_B, mu_C, mu_S, sigma, omega, rho, phi, T, sys.particles, par,
         include_pseudoscalar_mesons=sys.thermal_mesons)
 
@@ -849,9 +849,8 @@ def warm_start(result: EoSPoint, spec: ModeSpec,
 # SELF-TEST
 # =============================================================================
 if __name__ == "__main__":
-    from eos.sfho.parameters import get_sfho_2fam_phi, get_sfhoy_fortin
 
-    par, n_B, T = get_sfho_2fam_phi(), 0.16, 10.0
+    par, n_B, T = Parameters.named("SFHo_2fam_phi"), 0.16, 10.0
     nucleons = SpeciesFlags()
     hyperons = SpeciesFlags(hyperons=True)
 
@@ -868,7 +867,7 @@ if __name__ == "__main__":
     r = solve_fixed_yc(par, n_B, 0.3, nucleons, T=T)
     print("fixed Y_C = 0.3          "
           f"converged={r.converged}  Y_C={r.matter.Y_C:.4f}  P={r.P:.2f}")
-    r = solve_fixed_yc_ys(get_sfhoy_fortin(), 0.32, 0.4, 0.1,
+    r = solve_fixed_yc_ys(Parameters.named("SFHoY_Fortin"), 0.32, 0.4, 0.1,
                           hyperons, T=T)
     print("fixed Y_C, Y_S           "
           f"converged={r.converged}  Y_S={r.matter.Y_S:.4f}  mu_S={r.matter.mu_S:.2f}")

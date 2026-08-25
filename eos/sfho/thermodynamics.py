@@ -418,7 +418,7 @@ def thermal_meson_thermo(T, mu_C, mu_S, omega, rho, params):
                                      include_pseudoscalars=True)
 
 
-def thermo_from_mu(
+def thermo_from_fields(
     mu_B: float, mu_C: float, mu_S: float,
     sigma: float, omega: float, rho: float, phi: float,
     T: float,
@@ -553,15 +553,15 @@ def get_residual_vector(
 # =============================================================================
 
 
-def thermo_at_potentials(par, flags, mu_B, mu_C, mu_S=0.0, T=0.0,
-                         n_B_guess=0.2, x0=None, x0_fallback=None,
-                         return_state=False):
+def thermo_from_mu(par, flags, mu_B, mu_C, mu_S=0.0, T=0.0,
+                   n_B_guess=0.2, x0=None, x0_fallback=None,
+                   return_state=False):
     """SFHo's matter at fixed conserved-charge potentials, fields solved.
 
     The self-consistent layer: given (mu_B, mu_C, mu_S, T) it solves the four
     meson fields against `get_residual_vector` and assembles with
-    `thermo_from_mu`. No leptons, no neutrality, no held fraction — those are
-    conditions on a system, and this describes matter. It is the surface the
+    `thermo_from_fields`. No leptons, no neutrality, no held fraction — those
+    are conditions on a system, and this describes matter. It is the surface the
     phase-adapter contract consumes, shaped like
     `eos.dd2.thermodynamics.thermo_at_potentials` with one physical
     difference: SFHo's couplings are constants, so there is no rearrangement
@@ -617,7 +617,7 @@ def thermo_at_potentials(par, flags, mu_B, mu_C, mu_S=0.0, T=0.0,
             f"mu_S={mu_S:.3f}, T={T} (scaled residual {err:.2e})")
 
     sigma, omega, rho, phi = sol.x
-    th = thermo_from_mu(mu_B, mu_C, mu_S, sigma, omega, rho, phi, T,
-                        particles, par,
-                        include_pseudoscalar_mesons=flags.thermal_mesons)
+    th = thermo_from_fields(mu_B, mu_C, mu_S, sigma, omega, rho, phi, T,
+                            particles, par,
+                            include_pseudoscalar_mesons=flags.thermal_mesons)
     return (th, {"x_phase": list(sol.x)}) if return_state else th

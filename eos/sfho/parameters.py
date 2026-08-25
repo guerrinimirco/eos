@@ -258,7 +258,26 @@ class Parameters:
             return self.m_delta
         else:
             return 0.0
-    
+
+    @classmethod
+    def default(cls) -> "Parameters":
+        """The nucleon-only SFHo table (Steiner, Hempel & Fischer 2013).
+
+        The CompOSE table values, with no hyperon or Delta couplings declared;
+        it is the set `nmp.py` reports the published nuclear-matter parameters
+        against and the one `test/baseline` is frozen at.
+        """
+        return _nucleonic()
+
+    @classmethod
+    def named(cls, name: str) -> "Parameters":
+        """One of the published sets; see `PUBLISHED_SETS` for what each is."""
+        if name not in PUBLISHED_SETS:
+            raise KeyError(f"unknown SFHo parameter set {name!r}; published: "
+                           f"{sorted(PUBLISHED_SETS)}")
+        return PUBLISHED_SETS[name]()
+
+
 # =============================================================================
 # BASE SFHo PARAMETERS (CompOSE table values)
 # =============================================================================
@@ -335,7 +354,7 @@ def _get_base_sfho() -> Parameters:
 # PARAMETRIZATION FACTORY FUNCTIONS
 # =============================================================================
 
-def get_sfho_nucleonic() -> Parameters:
+def _nucleonic() -> Parameters:
     """
     SFHo with nucleons only (Steiner et al. 2013).
     
@@ -346,7 +365,7 @@ def get_sfho_nucleonic() -> Parameters:
     return p
 
 
-def get_sfhoy_fortin() -> Parameters:
+def _sfhoy_fortin() -> Parameters:
     """
     SFHoY parametrization from Fortin et al. 2017 (PASA 35, e044).
     
@@ -402,7 +421,7 @@ def get_sfhoy_fortin() -> Parameters:
     return p
 
 
-def get_sfhoy_star_fortin() -> Parameters:
+def _sfhoy_star_fortin() -> Parameters:
     """
     SFHoY* parametrization from Fortin et al. 2017.
     
@@ -454,7 +473,7 @@ def get_sfhoy_star_fortin() -> Parameters:
     return p
 
 
-def get_sfho_2fam_phi() -> Parameters:
+def _two_family_phi() -> Parameters:
     """
     SFHoYD: SFHo with Hyperons and Deltas - includes phi meson coupling.
     
@@ -520,7 +539,7 @@ def get_sfho_2fam_phi() -> Parameters:
     return p
 
 
-def get_sfho_2fam() -> Parameters:
+def _two_family() -> Parameters:
     """
     SFHo with Hyperons and Deltas - NO phi meson coupling (2-family without phi).
     
@@ -533,7 +552,7 @@ def get_sfho_2fam() -> Parameters:
     This is the same as 2fam_phi but with phi meson couplings set to zero
     for all strange baryons.
     """
-    p = get_sfho_2fam_phi()
+    p = _two_family_phi()
     p.name = "SFHo_2fam"
     
     # Set phi coupling to zero for all hyperons
@@ -664,15 +683,25 @@ def print_params_summary(params: Parameters) -> None:
             print(f"  {particle:10s}: R_σ={Rs:.3f}, R_ω={Rw:.3f}, R_ρ={Rr:.3f}, R_φ={Rp:.3f}")
 
 
-def get_all_parametrizations() -> Dict[str, Parameters]:
-    """Return dictionary of all available parametrizations."""
-    return {
-        'SFHo_Nucleonic': get_sfho_nucleonic(),
-        'SFHoY_Fortin': get_sfhoy_fortin(),
-        'SFHoY*_Fortin': get_sfhoy_star_fortin(),
-        'SFHo_2fam_phi': get_sfho_2fam_phi(),
-        'SFHo_2fam': get_sfho_2fam(),
-    }
+#: The published parameter sets, by the name each one carries in its `name`
+#: field. The values are BUILDERS, not instances: a `Parameters` holds mutable
+#: coupling maps, so a shared instance would be global mutable state
+#: (CLAUDE.md section 6). Reach them through `Parameters.named(...)`.
+#:
+#:   SFHo_Nucleonic   nucleons only, the CompOSE SFHo table; `default()`.
+#:   SFHoY_Fortin     + hyperons, scaled vector couplings (y = 1.5), scalar
+#:                    couplings from U_Y (Fortin et al. 2017).
+#:   SFHoY*_Fortin    + hyperons, SU(6) vector couplings (same reference).
+#:   SFHo_2fam_phi    + hyperons and Deltas, SU(6) vectors, hyperons coupled
+#:                    to phi.
+#:   SFHo_2fam        as SFHo_2fam_phi with g_phi = 0 for every strange baryon.
+PUBLISHED_SETS = {
+    'SFHo_Nucleonic': _nucleonic,
+    'SFHoY_Fortin': _sfhoy_fortin,
+    'SFHoY*_Fortin': _sfhoy_star_fortin,
+    'SFHo_2fam_phi': _two_family_phi,
+    'SFHo_2fam': _two_family,
+}
 
 
 # =============================================================================
@@ -683,11 +712,9 @@ if __name__ == "__main__":
     print("=" * 70)
     
     # Test all parametrizations
-    params_dict = get_all_parametrizations()
-    
-    for name, params in params_dict.items():
+    for name in PUBLISHED_SETS:
         print(f"\n{'='*70}")
-        print_params_summary(params)
+        print_params_summary(Parameters.named(name))
     
     # Test general parametrization
     print(f"\n{'='*70}")
@@ -705,7 +732,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("Testing coupling retrieval for SFHo_2fam_phi:")
     print("-" * 50)
-    p = get_sfho_2fam_phi()
+    p = Parameters.named('SFHo_2fam_phi')
     test_particles = ['proton', 'neutron', 'lambda', 'sigma+', 'xi-', 'delta++']
     
     print(f"{'Particle':<12} {'σ':>10} {'ω':>10} {'ρ':>10} {'φ':>10}")

@@ -32,9 +32,7 @@ from scipy.optimize import brentq, root
 from eos.general.physics_constants import hc, hc3
 from eos.sfho.species import SpeciesFlags
 from eos.sfho.parameters import (
-    Parameters, get_sfho_nucleonic, get_sfhoy_fortin, 
-    get_sfhoy_star_fortin, get_sfho_2fam_phi, get_sfho_2fam,
-    SU6_RATIOS, SQRT2, _get_base_sfho
+    Parameters, SU6_RATIOS, SQRT2, _get_base_sfho
 )
 
 
@@ -67,7 +65,7 @@ def compute_saturation_fields(params: Optional[Parameters] = None,
     from eos.sfho.species import SpeciesFlags
     
     if params is None:
-        params = get_sfho_nucleonic()
+        params = Parameters.default()
     
     result = solve_fixed_yc(params, n_B, Y_C, SpeciesFlags(photons=False),
                            T=T)
@@ -575,7 +573,7 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
     missing = [k for k in required if k not in nmp]
     if missing:
         raise ValueError(f"invert_nmp needs {required}; missing {missing}")
-    base = par_base or get_sfho_nucleonic()
+    base = par_base or Parameters.default()
     n_sat = float(nmp["n_sat"])
 
     # Hard infeasibility: below about 0.35 the scalar field has eaten the
@@ -747,7 +745,7 @@ def print_nmp_summary(par=None):
     A reading aid, not part of any solve: nothing in `eos` calls it, and
     `verify/run_full_check.py` is what asserts the agreement.
     """
-    par = par or get_sfho_nucleonic()
+    par = par or Parameters.default()
     nmp = compute_nmp(par)
     print(f"nuclear-matter parameters, {getattr(par, 'name', '?')}")
     print(f"{'':14s} {'this model':>12s} {'published':>12s} {'difference':>12s}")
