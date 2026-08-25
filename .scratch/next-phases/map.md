@@ -850,6 +850,24 @@ against this file, not against the earlier `pytest_before*.txt`.
   any difference larger than round-off halts the regeneration rather than being
   absorbed into a new ground truth.
 
+- [Non-convergence escapes as an exception at seven public boundaries](issues/49-nonconvergence-return.md):
+  **eleven sites, not seven** — all now return the same dict the converged path
+  returns, with `converged=False`, NaN in every quantity and the `reason` the
+  exception carried, built by one new `general/tabulate.unconverged_response`.
+  The ticket's SnB half was two sites (njl, ccdm), not seven: the other five
+  already caught. Its four "already compliant" models were the bigger half —
+  `sfho`, `did`, `njl` and `ccdm` all leaked a `RuntimeError` out of
+  `eos_response`, each with a `responses.py` docstring asserting the api layer
+  caught it, which it did not. `dd2` unverified by the session constraint (its
+  route is the analytic Jacobian, not a stencil). 1055 collected, 0 failed
+  across eleven suites on python.org 3.14.2; verify PASS 9/9; 0 added failures,
+  and the intersection with the 12 known 3.14 failures is empty.
+  Two findings graduated rather than fixed:
+  [ticket 63](issues/63-verify-causality-nan-silent-pass.md) (the NaN this fix
+  lets five verify checks absorb) and
+  [ticket 64](issues/64-general-verify-suite-missing.md) (`general/` has no
+  `verify/`).
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
