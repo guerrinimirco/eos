@@ -71,6 +71,13 @@ MODES = ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
 #: everything else is an explicit boolean, and setting one a model does not
 #: implement raises rather than being silently ignored. A model adds flags of
 #: its own for physics only it has (`phi_field`, `gluons`, `csc`).
+#:
+#: `dd2` -- and `eos.mixed`, which reuses its flags -- does not carry two of
+#: these six. `thermal_mesons` is split into `include_pseudoscalars` and
+#: `include_thermal_vectors`, and there is no `thermal_neutrinos` at all: dd2's
+#: `neutrinos` is the matter-composition field of the trapped modes, so the
+#: thermal tau gas is unwired rather than renamed. Passing the six shared names
+#: to dd2 raises TypeError, which reads as the caller's bug.
 SPECIES_FLAGS = ("hyperons", "deltas", "muons", "thermal_mesons",
                  "thermal_neutrinos", "photons")
 
