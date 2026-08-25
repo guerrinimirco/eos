@@ -1,8 +1,7 @@
 # Write the ten (c)-class conformance rows into docs/DEFERRED.md
 
 Type: task
-Status: claimed
-Assignee: session 71c0bff3
+Status: resolved
 Blocked by: 11
 Parent: ../map.md
 
@@ -90,3 +89,53 @@ and points at 44 rather than pre-announcing the rename as done.
 
 Documentation only. No `eos/` or `test/` file is touched, so the suite cannot
 move; report that it did not.
+
+## Resolution
+
+**All ten rows written, plus the correction — `docs/DEFERRED.md` +206/−2, and no
+`eos/` or `test/` file touched, so the suite cannot have moved and did not.**
+Placed by shape rather than by row number: six are cross-cutting `###` entries
+appended to that section, four are bullets in the per-unit section they belong to
+(`general`, `mixed`, `abpr`, `vmit`, and `astro/tov`).
+
+**Every row was re-measured against the code before it was written, and three had
+moved since the audit.**
+
+- **Row 1's fourth import site is not the one the ticket names.** `eos/astro/
+  gmode/verify/run_full_check.py:39-41` now reads `from eos.dd2 import Parameters,
+  SpeciesFlags` / `responses.sound_speed_eq` / `solver.sweep,
+  solve_beta_eq_neutrinoless` — the audit's `Parametrization` and
+  `sweep_beta_eq_octet` are both names [ticket 44](44-rename-dd2.md) retired. The
+  breach is unchanged in substance and the entry states the current symbols.
+
+- **Row 2 is ten sites, not eleven.** `eos/dd2/api.py`'s `responses as _fd` is
+  gone: dd2's `api.py` now defers only `backends/responses_jac` (`:166`) and
+  `responses` (`:178`), both inside the branch that selects the analytic
+  Jacobian — an optional-backend deferral, which is not the drift this row is
+  about. The other ten are live at the lines the audit gave, with `sfho/
+  parameters.py`'s two shifted by one.
+
+- **The correction the ticket asks for had already come true.** `DEFERRED.md:328`
+  asserted "every model's parameter dataclass is `Parameters`" while
+  `eos/dd2/parameters.py` held `class Parametrization`. Ticket 44 has since
+  landed, so the sentence is now TRUE of all ten models —
+  `grep -c '^class Parameters' eos/*/parameters.py` returns ten hits, verified.
+  It is corrected to say so, with the history (sfho and vmit first, dd2 last) and
+  a checkable grep, rather than being deleted as false or left implying dd2 was
+  never the exception. The same paragraph's "sfho has not" is left standing and
+  sharpened: sfho's CLASS converted, its five `get_sfho*` CONSTRUCTORS have not,
+  and that half is [ticket 45](45-rename-sfho.md)'s.
+
+**One row gained a measurement it did not have.** Row 4 called
+`general/fermi_integrals.py:518,524` the one unbounded loop; the entry now also
+records WHY it has never been observed to bite — the bracket expansion is
+geometric (`mu_hi *= 1.5`, `mu_lo *= 0.5`), so it clears any representable target
+in a few dozen iterations, and the shape that would actually spin is a non-finite
+`n_target`. That is what makes a counter returning non-convergence the right fix
+rather than a large bound.
+
+**Noticed and NOT fixed, per the map's hard rule.** `### astro/tov` still carries
+"Crust table paths are absolute and machine-specific. A missing crust file
+currently degrades to no crust" — closed by [ticket 39](39-crust-silent-fallback.md),
+which shipped the tables in `eos/astro/tov/data/` and made the helpers skip. Stage
+7 report material, not this ticket's diff.

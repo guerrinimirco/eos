@@ -475,6 +475,27 @@ against this file, not against the earlier `pytest_before*.txt`.
   `shadowcheck.py`; [ticket 45](issues/45-rename-sfho.md) makes sfho the third
   model onto those words and must sweep the whole tree, not just its own names.
 
+- [Write the ten (c)-class conformance rows into docs/DEFERRED.md](issues/55-deferred-ledger.md):
+  all ten written plus the correction, `docs/DEFERRED.md` +206/-2 with **no
+  `eos/` or `test/` file touched**, so the suite could not move. Three rows had
+  moved since the audit and the code decided each: gmode's fourth import site
+  now names `Parameters` and `sweep`, not the `Parametrization` and
+  `sweep_beta_eq_octet` [ticket 44](issues/44-rename-dd2.md) retired; the
+  downward-deferral row is **ten sites, not eleven**, because dd2's
+  `responses as _fd` is gone and its two remaining deferrals are the
+  analytic-Jacobian branch, which is a deliberate optional-backend deferral
+  rather than drift; and **the correction the ticket asks for had already come
+  true** — ticket 44 made "every model's parameter dataclass is `Parameters`"
+  true of all ten (`grep -c '^class Parameters' eos/*/parameters.py` → ten), so
+  the sentence is corrected to state the fact with its history rather than
+  deleted as false, and sfho's still-unconverted `get_sfho*` constructors are
+  named as [ticket 45](issues/45-rename-sfho.md)'s half. Row 4 gained a
+  measurement: the one unbounded loop expands its bracket GEOMETRICALLY, so a
+  hang needs a non-finite `n_target`, which is why the fix is a counter
+  returning non-convergence rather than a large bound. Noticed and not fixed:
+  `### astro/tov`'s crust-path bullet is stale, closed by
+  [ticket 39](issues/39-crust-silent-fallback.md) — Stage 7 material.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
