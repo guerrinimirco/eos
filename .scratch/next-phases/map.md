@@ -865,6 +865,18 @@ In scope, not yet sharp enough to ticket:
   single-home rule for the basis maps is what makes the diagnosis possible at
   all, which is a stronger case for it than "declared once, imported
   everywhere".
+
+  **Better as a check than as a diagnostic, and it has a home that does not exist
+  yet.** Any two species differing only in strangeness must move in the ratio of
+  their `S` when an undetermined potential shifts — so this could run directly
+  and fail FIRST, rather than being applied after something goes red. The home is
+  the `general/verify/` suite §5 requires and [ticket 11](issues/11-conformance-triage.md)
+  row 31 ruled `general/` earns: **`eos/general/verify/` does not exist today**
+  (checked), so this is candidate content for whatever
+  [ticket 21](issues/21-phase5-structure.md) creates. What stays unsharp is the
+  form — a single-point identity (`mu_i` equals its projection through B_i, C_i,
+  S_i) and a two-run differential check are different tests, and only the second
+  is what was actually observed.
 - **Whether other tests silently degrade on missing data.** Ticket 39 fixed the
   two TOV helpers and generalised their guard to every `CRUST_FILES` name, but
   nothing has swept the rest of `test/` for the same pattern — an absent input

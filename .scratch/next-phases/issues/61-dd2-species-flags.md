@@ -95,3 +95,27 @@ checks §4's six names against seven models' dataclass fields and **exempts
 when this lands — that is the check that keeps the answer from drifting back.
 (`test/` is gitignored, so it is in a working copy only; see the map's
 untracked-guards bullet.)
+
+
+## Verified, and the exemption is not dd2-specific
+
+Checked rather than taken on relay. `test/test_imports.py:252` reads
+
+    for model in ("sfho", "zl", "did", "vmit", "alphabag", "njl", "ccdm"):
+
+— an **inclusion list of seven**, not an exemption of one. Three models are
+absent: `dd2` (which genuinely fails), and **`enjl` and `abpr`, both of which
+PASS the six-flag check today** and are being skipped for nothing. Measured with
+`dataclasses.fields`: neither is missing any of §4's six.
+
+So dropping dd2's exemption when this closes is necessary and not sufficient.
+**The list must be inverted**: iterate every model and exempt by explicitly named
+exception, because as written a model added tomorrow is exempt by default and
+the check meant to prevent drift is what permits it. That is the same defect the
+docstring's `dd2` sentence describes, one level up.
+
+Three prose sites carry the claim and all three change when this lands
+(eos-88, `bcb9d56`): `README.md`'s species-flags paragraph, `eos/__init__.py`'s
+`SPECIES_FLAGS` `#:` comment (`7c5b7a9`), and this test's docstring. The edit
+differs by resolution — giving dd2 the two names DELETES those paragraphs, a
+raise that names the gap REWRITES them.
