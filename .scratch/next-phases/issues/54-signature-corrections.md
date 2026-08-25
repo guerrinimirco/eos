@@ -66,3 +66,13 @@ already used for a LOCAL adapter fails silently.** Run their AST check here too.
 
 Items 1, 2 and 5 change no converged number; 3 and 4 are gated as stated. Report
 added failures against `output/_audit/pytest_before_with_crust.txt`.
+
+## Noted by [ticket 20](20-phase5-api-readme.md)
+
+Item 1 has a table half the text does not state. `eos_table` accepts no
+`leptons=` at all — in dd2 it goes straight into `TableSpec(mode=...)`
+(`eos/dd2/api.py:129`), so the ONLY way to ask a table for the neutralizing
+flavour today is the invented mode name `fixed_YC_neutral` this item retires.
+Retiring it without giving `eos_table` the flag would make the neutral
+fixed-Y_C table unreachable. Both entry points take the argument, or neither
+name goes.
