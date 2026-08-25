@@ -1,7 +1,8 @@
 # vmit.md and vmit.tex to §11 standard
 
 Type: task
-Status: open
+Status: claimed
+Assignee: session 71c0bff3
 Blocked by: 09
 Parent: ../map.md
 

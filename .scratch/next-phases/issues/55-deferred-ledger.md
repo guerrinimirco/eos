@@ -1,7 +1,8 @@
 # Write the ten (c)-class conformance rows into docs/DEFERRED.md
 
 Type: task
-Status: open
+Status: claimed
+Assignee: session 71c0bff3
 Blocked by: 11
 Parent: ../map.md
 
