@@ -96,9 +96,28 @@ Reported, NOT widened into a fix for enjl/njl/ccdm.
 
 The first rename pass was `sed -i '' 's/\bthermo_from_mu\b/.../'` and was a
 SILENT NO-OP — zero substitutions, exit 0. Caught only because the pass was
-followed by a grep instead of being trusted. Every subsequent rename used `perl
--pi -e`. Anyone scripting a rename on macOS from these tickets should assume the
-same trap; tickets 42-45 all describe `sed` usage without flagging it.
+followed by a grep instead of being trusted. Every subsequent rename here used
+`perl -pi -e`.
+
+The working BSD spelling is the word-boundary CLASS, confirmed on this machine
+against a string carrying both the bare name and a `_x` suffix:
+
+    sed 's/\bNAME\b/NEW/g'              -> no-op, exit 0        (GNU only)
+    sed 's/[[:<:]]NAME[[:>:]]/NEW/g'     -> correct, and leaves NAME_x alone
+    perl -pe 's/\bNAME\b/NEW/g'         -> correct, same
+
+**The exposure was checked and comes back GREEN.** Tickets 42-45 all describe
+`sed`-based renames without flagging this, so every old name those tickets were
+meant to remove was grepped across `eos/`: `thermo_at_potentials`,
+`get_sfho_nucleonic`, `get_sfhoy_fortin`, `get_sfhoy_star_fortin`,
+`get_sfho_2fam_phi`, `get_sfho_2fam`, `get_all_parametrizations`, `_GUESS_KIND`,
+`from_dd2_defaults`, `solve_octet`, `Parametrization`. All clean. Two hits, both
+deliberate and neither a miss: this ticket's own past-tense mention in
+`mixed.md:165`, and `sfho/parameters.py:662`'s
+`print(f"Parametrization: {params.name}")` — a printed label in a demo block,
+prose in output rather than a symbol, cosmetic and ticket 45's territory.
+So the trap is real and cost this ticket one pass, but **it bit no earlier
+ticket** — verified by grep, independently, from both sessions.
 
 ### Five document passages corrected
 

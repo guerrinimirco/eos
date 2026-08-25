@@ -749,7 +749,11 @@ against this file, not against the earlier `pytest_before*.txt`.
   scratchpad sandbox before touching the repo. Aliasing dd2's to `_dd2_at_mu`
   clears all three. **`\b` is not supported by BSD sed** — the first rename pass
   was a silent no-op at exit 0, caught only by grepping after instead of
-  trusting; tickets 42-45 all describe `sed` without flagging this. Five
+  trusting; tickets 42-45 all describe `sed` without flagging this. Working BSD
+  spelling is the boundary CLASS, `s/[[:<:]]NAME[[:>:]]/NEW/g`. **The exposure
+  was then checked and is GREEN**: all 11 old names from 42-45 grepped clean
+  across `eos/` (only cosmetic hit `sfho/parameters.py:662`, a printed label,
+  45's territory). Real trap, cost this ticket one pass, bit no earlier ticket. Five
   document passages that the rename made FALSE were corrected (`dd2.md`,
   `sfho.md`, `sfho.tex`, `mixed.md`, `mixed.tex` each said dd2 was "the
   outstanding one"). Evidence: **904 probe values bit-identical by exact `==`**
