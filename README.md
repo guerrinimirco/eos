@@ -1,557 +1,439 @@
-# Nuclear Equation of State (EOS) Library
+# eos — equations of state for dense nuclear and quark matter
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
+A Python library for equations of state of dense matter, at zero and finite
+temperature: ten models — relativistic mean fields with nucleons, hyperons and
+Delta isobars, bag and Nambu–Jona-Lasinio quark matter, colour-superconducting
+and colour-flavour-locked phases — plus a composite engine that couples a
+hadronic and a quark phase across a first-order transition, and the stellar
+structure code that turns any of them into an M–R curve.
 
-A Python library for computing finite-temperature Equations of State (EOS) for dense nuclear and quark matter. 
-Designed for astrophysical applications (including neutron star structure, core-collapse supernovae and compact binary mergers) and heavy-ion collisions.
+What it computes, for every model through the same three functions:
 
-This is a recent (2026) Python rewrite of some of the code I wrote in Mathematica and Python during my PhD (2022-2026). It is mainly for personal use, but if you need help to use it, please contact me!
+- **thermodynamics** — P, eps, s, the densities of every active species, and
+  the chemical potentials, in one of five equilibrium modes;
+- **tables** — warm-started grids over n_B, T (or entropy per baryon) and the
+  fractions a mode fixes, in the shape a simulation table wants;
+- **response functions** — heat capacities, equilibrium and frozen sound
+  speeds, adiabatic and thermal indices, and the susceptibility matrix
+  chi_ab = dn_a/dmu_b;
+- **stellar structure** — TOV with crust attachment, tidal deformability, and
+  uniformly rotating models through an RNS backend;
+- **figures** — one publication style and a library of observational
+  constraints (M–R, M–Lambda, P–n, ...) that overlay onto an axis in one call.
 
-**Author:** Mirco Guerrini (University of Ferrara)
 
-**Contact:** mirco.guerrini@unife.it
 
-**Publications:** [INSPIRE-HEP Profile](https://inspirehep.net/authors/2775420)
-
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Models Overview](#models-overview)
-- [Package Structure](#package-structure)
-- [Usage Examples](#usage-examples)
-  - [SFHo Hadronic EOS](#1-sfho-hadronic-eos)
-  - [Zhao-Lattimer Nucleonic EOS](#2-zhao-lattimer-nucleonic-eos)
-  - [AlphaBag Quark EOS](#3-alphabag-quark-eos)
-  - [vMIT Quark EOS](#4-vmit-quark-eos)
-  - [ZL+vMIT Hybrid EOS](#5-zlvmit-hybrid-eos)
-  - [ABPR CFL Quark EOS](#6-abpr-cfl-quark-eos)
-  - [TOV Solver](#7-tov-neutron-star-structure)
-- [Equilibrium Modes](#equilibrium-modes)
-- [Output Format](#output-format)
-- [Physical Conventions](#physical-conventions)
-- [References](#references)
-- [Future Development](#future-development)
-- [Collaborators](#collaborators)
-
----
-
-## Features
-
-- **Multiple EOS Models**: Hadronic (SFHo, ZL), quark (AlphaBag, vMIT, ABPR), and hybrid constructions
-- **Finite Temperature**: Full thermal treatment with Fermi-Dirac/Bose-Einstein integrals
-- **Multiple Equilibrium Modes**: Beta equilibrium, fixed composition, trapped neutrinos
-- **Phase Transitions**: Gibbs, Maxwell, and intermediate constructions
-- **Neutron Star Applications**: Built-in TOV solver with crust matching and baryonic mass
-
+**Author:** Mirco Guerrini (University of Ferrara) ·
+**Contact:** mirco.guerrini@unife.it ·
+[INSPIRE-HEP](https://inspirehep.net/authors/2775420)
 
 ---
 
 ## Installation
 
-!pip install git+https://github.com/guerrinimirco/eos.git --quiet
+```bash
+pip install git+https://github.com/guerrinimirco/eos.git
+```
 
-
-### Dependencies
-
-- Python >= 3.9
-- NumPy
-- SciPy
-- Matplotlib
-- Numba
-
-All dependencies are automatically installed via pip.
+Python >= 3.9 with NumPy, SciPy, Matplotlib and Numba, all installed
+automatically. Nothing else is needed: the neutron-star crust tables and the
+observational-constraint contours ship inside the package, so the M–R examples
+below run from a fresh clone with no data to fetch and no environment variable
+to set.
 
 ---
 
-## Quick Start
+## One import deep
+
+```python
+import eos                                   # milliseconds; no model is imported yet
+
+par   = eos.dd2.Parameters.named("DD2Y")     # parameters are ARGUMENTS
+flags = eos.dd2.SpeciesFlags(hyperons=True)  # every degree of freedom is explicit
+res   = eos.dd2.eos_point(par, "beta_eq_neutrinoless", flags, n_B=0.32, T=10.0)
+print(res.ok, res.point.P)                   # convergence is a RETURN VALUE
+```
+
+```
+True 32.27157556177297
+```
+
+The model packages, the composite engine and `eos.astro` are imported on first
+attribute access, so `import eos` costs milliseconds and does not compile ten
+models' Numba kernels for the one you asked for. The top level also carries the
+vocabulary — `eos.MODELS`, `eos.MODES`, `eos.SPECIES_FLAGS`, the `ModeSpec`
+factories, `eos.EOSTable_for_TOV` and the table I/O.
+
+### The uniform API
+
+Every model exposes these three entry points, with these signatures:
+
+```python
+eos_point(par, mode, species, **conditions)      # quantities at one point
+eos_table(par, mode, species, axes)              # a tabulated EoS over a grid
+eos_response(par, mode, species, frozen=..., **conditions)   # 2nd derivatives
+```
+
+`par` is the parameter object and is never optional. `mode` is one of the
+strings below. `species` is that model's `SpeciesFlags`. The conditions are
+named exactly `n_B`, `T` (or `SnB`), `Y_C`, `Y_S`, `Y_Le`, `Y_Lmu` — whichever
+the mode makes independent.
+
+`Parameters.default()` returns the published parameter set of every model;
+where a model has more than one (`dd2`, `sfho`, `did`, `enjl`, `njl`, `ccdm`),
+`Parameters.named(key)` selects it, and `Parameters.named("__")` lists the keys
+in its error message.
+
+### Modes
+
+A mode fixes the independent variables. All five are `eos.MODES`.
+
+| mode | independent variables | meaning |
+|---|---|---|
+| `beta_eq_neutrinoless` | (n_B, T) | beta equilibrium, free-streaming neutrinos (mu_nu = 0), charge neutral |
+| `beta_eq_neutrino_trapped` | (n_B, Y_Le, [Y_Lmu], T) | beta equilibrium with trapped neutrinos; the muon family is optional |
+| `fixed_YC` | (n_B, Y_C, T) | fixed non-leptonic charge fraction — the simulation-table mode |
+| `fixed_YC_YS` | (n_B, Y_C, Y_S, T) | fixed charge and strangeness; Y_C = 0.5, Y_S = 0 is symmetric nuclear matter |
+| `cfl` | (n_B, T) | colour-flavour-locked quark matter; the locking fixes Y_C = 0 and Y_S = +1 identically |
+
+`cfl` is not a choice of equilibrium condition but a statement about which
+phase the model describes, so only the locked-phase models (`alphabag`,
+`abpr`) expose it. `fixed_YC` and `fixed_YC_YS` take an orthogonal
+`leptons=True/False`: with it, neutralizing electrons (and muons) are added so
+the total system is electrically neutral; without it the result is
+strongly-interacting matter only, electrically charged, which is what a
+mixed-phase construction needs per pure phase. Wherever a temperature is
+accepted, entropy per baryon `SnB=` is accepted in its place.
+
+A mode a model cannot support **raises**, naming the gap. Nothing is ever
+silently skipped.
+
+### Species flags
+
+Nucleons are always present. Everything else is an explicit named boolean,
+carrying the same name in every model (`eos.SPECIES_FLAGS`):
+
+| flag | what it adds |
+|---|---|
+| `hyperons` | Lambda, Sigma, Xi |
+| `deltas` | Delta(1232) |
+| `muons` | the muon lepton family |
+| `thermal_mesons` | pi, K (and optionally the vector nonet) — these carry C and S, so they enter the charge and strangeness bookkeeping, not only eps, P and s |
+| `thermal_neutrinos` | neutrino flavours *not* tracked in the matter composition, as thermal mu = 0 gases |
+| `photons` | radiation; carries no conserved charge |
+
+Setting a flag a model does not implement raises. A `NotImplementedError` is
+never turned into a silent no-op — and a model that has a sector switches it
+with the flag, never implicitly. A model may add flags of its own for physics
+only it has: `phi_field` and `sigma_star` for the hidden-strange mesons,
+`gluons` in a bag model, `csc` for colour superconductivity.
+
+One model does not yet carry two of the six. `dd2` — and `eos.mixed`, which
+reuses its flags — splits `thermal_mesons` into `include_pseudoscalars` and
+`include_thermal_vectors`, and has no `thermal_neutrinos` at all: its
+`neutrinos` field is the matter-composition one of the trapped modes, not the
+thermal tau gas. Pass those names to `dd2` and the six shared ones to the
+other nine.
+
+### Conventions
+
+- **Units at every public boundary are fm-based**: n in fm^-3, T and mu in
+  MeV, eps and P in MeV/fm^3.
+- **Y_C is NON-leptonic**: Y_C = n_C/n_B counts baryons, quarks and charged
+  mesons only. Electric neutrality (n_C = n_e + n_mu) is a separate condition
+  that a mode may or may not impose.
+- **S = +1 per s quark** — the s quark, Lambda and Sigma have S = +1, Xi has
+  S = +2. This is the opposite of the PDG convention and is used consistently
+  throughout.
+- **mu_C = mu_p − mu_n**, so beta equilibrium reads **mu_C + mu_e = 0**.
+- Every fraction is relative to n_B: Y_X = n_X/n_B.
+
+---
+
+## Examples
+
+All five are copy-paste runnable and the output below each is what they
+actually printed, on CPython 3.9.7 with NumPy 1.26.4 and SciPy 1.13.1. The
+last digits of a solved quantity, and the M–R numbers of example 3, depend on
+that stack; the physics does not. Together they take about half a minute, the
+M–R sequence being most of it.
+
+### 1. One point, one model, beta equilibrium
+
+```python
+from eos.dd2 import Parameters, SpeciesFlags, eos_point
+
+par = Parameters.default()               # the published DD2 table
+flags = SpeciesFlags()                   # nucleons, electrons, muons, photons
+
+res = eos_point(par, "beta_eq_neutrinoless", flags, n_B=0.32, T=10.0)
+print(res.ok, res.message)
+
+p = res.point
+print(f"P    = {p.P:10.4f} MeV/fm^3")
+print(f"eps  = {p.eps:10.4f} MeV/fm^3")
+print(f"s    = {p.s:10.6f} fm^-3")
+print(f"mu_B = {p.matter.mu_B:10.4f} MeV")
+print(f"mu_e = {p.leptons.mu_e:10.4f} MeV")
+print(f"Y_p  = {p.matter.densities['p'] / p.n_B:10.6f}")
+```
+
+```
+True converged
+P    =    33.0983 MeV/fm^3
+eps  =   317.0589 MeV/fm^3
+s    =   0.144737 fm^-3
+mu_B =  1089.7181 MeV
+mu_e =   166.3827 MeV
+Y_p  =   0.097031
+```
+
+`res.ok` is the convergence status — test it before reading `res.point`. A
+sampler that walks into unphysical parameter space gets `False` and a message,
+never an exception and never a hang.
+
+### 2. A fixed-Y_C table over n_B and T
 
 ```python
 import numpy as np
-from eos.sfho.table import TableSettings, compute_table
+from eos.dd2 import Parameters, SpeciesFlags, eos_table
 
-# Generate a simple beta-equilibrium EOS table
-settings = TableSettings(
-    parametrization='sfho',
-    particle_content='nucleons',
-    equilibrium='beta_eq',
-    n_B_values=np.linspace(0.1, 8, 100) * 0.16,  # fm^-3
-    T_values=[0.1, 10.0, 30.0],                   # MeV
-    save_to_file=True
-)
+par, flags = Parameters.default(), SpeciesFlags()
+n_B = np.linspace(0.05, 0.60, 12)
+T = [0.0, 10.0, 30.0]
 
-results = compute_table(settings)
+table = eos_table(par, "fixed_YC", flags,
+                  axes={"nB": n_B, "T": T}, fixed={"Y_C": 0.3},
+                  verbose=True)
+
+print("   n_B      P(T=0)    P(T=10)    P(T=30)   [MeV/fm^3]")
+for i, n in enumerate(table.nB):
+    row = "".join(f"{line[i].P:11.4f}" for line in table.points)
+    print(f"{n:7.4f}{row}")
 ```
 
+```
+[1/3] fixed_YC T=0: 12/12 points in 0.1s
+[2/3] fixed_YC T=10: 12/12 points in 0.0s
+[3/3] fixed_YC T=30: 12/12 points in 0.0s
+   n_B      P(T=0)    P(T=10)    P(T=30)   [MeV/fm^3]
+ 0.0500    -0.2866     0.0540     1.2291
+ 0.1000    -0.3580     0.1622     2.5020
+ 0.1500     0.4688     1.0755     4.3805
+ 0.2000     3.3238     3.9584     7.9199
+ 0.2500     9.7544    10.3762    14.6345
+ 0.3000    21.0824    21.6689    25.9318
+ 0.3500    38.0403    38.5861    42.6964
+ 0.4000    60.8351    61.3443    65.2571
+ 0.4500    89.3780    89.8579    93.5867
+ 0.5000   123.4636   123.9215   127.5007
+ 0.5500   162.8642   163.3063   166.7729
+ 0.6000   207.3684   207.7995   211.1866
+```
+
+`table.points` is one line per (temperature, fractions) combination, warm-started
+along the density axis — each solved point seeds the next. `verbose=True`
+installs the built-in progress printer; pass `progress=` your own callback for
+the same dictionary. The negative cold pressures at low density are the
+liquid–gas instability of Y_C = 0.3 matter and are real: a raw model branch may
+violate P monotonicity, and the check belongs where a table is *delivered* to a
+structure solver, which is the next example.
+
+This is the leptonless flavour — strongly-interacting matter only. For the
+neutralizing one, `eos_point(..., leptons=True)`, or the mode
+`"fixed_YC_neutral"` in a DD2 table.
+
+### 3. That table through the TOV solver: M–R and the maximum mass
+
+```python
+import numpy as np
+from eos.dd2 import Parameters, SpeciesFlags, eos_table
+from eos.general.state import EOSTable_for_TOV
+from eos.astro.tov import (compute_tov_sequence, find_mmax_precise,
+                           generate_ec_logspace)
+
+par, flags = Parameters.default(), SpeciesFlags()
+cold = eos_table(par, "beta_eq_neutrinoless", flags,
+                 axes={"nB": np.geomspace(0.05, 1.25, 150), "T": [0.0]})
+
+line = cold.points[0]                    # one line per (T, fractions) combo
+core = EOSTable_for_TOV(P=np.array([p.P for p in line]),
+                        epsilon=np.array([p.eps for p in line]),
+                        nB=np.array([p.n_B for p in line]))
+
+seq = compute_tov_sequence(core, generate_ec_logspace(150.0, 3000.0, 60),
+                           add_crust_table="BPS", n_transition=0.08,
+                           verbose=False)
+
+i, e_c, M_max = find_mmax_precise(seq)   # seq columns: e_c n_c P_c R M M_b k2 Lambda
+M, R = seq[:i + 1, 4], seq[:i + 1, 3]    # the stable branch
+print(f"M_max    = {M_max:.3f} M_sun  at  e_c = {e_c:.1f} MeV/fm^3")
+print(f"R(M_max) = {seq[i, 3]:.2f} km")
+print(f"R(1.4)   = {np.interp(1.4, M, R):.2f} km")
+```
+
+```
+M_max    = 2.419 M_sun  at  e_c = 1086.6 MeV/fm^3
+R(M_max) = 11.99 km
+R(1.4)   = 13.19 km
+```
+
+That is the published DD2 neutron star: M_max ~ 2.42 M_sun and
+R(1.4) ~ 13.2 km. `EOSTable_for_TOV` — three parallel arrays, P and eps in
+MeV/fm^3 and n_B in fm^-3, ordered by increasing density — is the whole
+contract between a model and the structure solver. Building one is the model's side; running a sequence
+over it is `eos.astro`'s. `add_crust_table="BPS"` uses the crust table shipped
+in the package; dropping it costs most of a kilometre in R(1.4), so a missing
+table raises rather than quietly returning a smaller star.
+
+### 4. The same model with hyperons
+
+```python
+from eos.dd2 import Parameters, SpeciesFlags, eos_point
+
+par = Parameters.named("DD2Y")                    # the hyperonic parameter set
+flags = SpeciesFlags(hyperons=True, muons=True, photons=True)
+
+res = eos_point(par, "beta_eq_neutrinoless", flags, n_B=0.6, T=0.0)
+print(res.ok, res.message)
+for name, n in res.point.matter.densities.items():
+    print(f"  Y_{name:<7s} = {n / res.point.n_B:.6f}")
+print(f"  P         = {res.point.P:.3f} MeV/fm^3")
+```
+
+```
+True converged
+  Y_p       = 0.139660
+  Y_n       = 0.565871
+  Y_Lambda  = 0.183203
+  Y_Sigma+  = 0.000000
+  Y_Sigma0  = 0.000000
+  Y_Sigma-  = 0.051713
+  Y_Xi0     = 0.000000
+  Y_Xi-     = 0.059553
+  P         = 135.431 MeV/fm^3
+```
+
+Nothing but the flag and the parameter set changed. `hyperons=True` opens the
+full octet, and at n_B = 0.6 fm^-3 the Lambda, the Sigma^- and the Xi^- are
+populated while the neutral and positive channels are not — the composition is
+an output, not a declaration. (DD2 and DD2Y are different published
+parameterisations, not one set read through two flag settings, which is why
+both are listed in `Parameters.named`.)
+
+### 5. That M–R curve with the observational constraints, in the house style
+
+Continuing from example 3, where `seq` and `i` were computed:
+
+```python
+import matplotlib.pyplot as plt
+from eos.general.figure_style import set_paper_style, apply_style, save_figure
+from eos.general.constraints import overlay
+
+set_paper_style()
+fig, ax = plt.subplots(figsize=(3.4, 3.0))
+overlay(ax, "M-R")                                   # every M-R constraint shipped
+ax.plot(seq[:i + 1, 3], seq[:i + 1, 4], "k-", lw=1.6, label="DD2")
+ax.set(xlabel=r"$R$ [km]", ylabel=r"$M$ [$M_\odot$]",
+       xlim=(9, 16), ylim=(0.5, 2.6))
+apply_style(ax)
+save_figure(fig, "dd2_MR")
+```
+
+```
+Saved: dd2_MR.{png, pdf}
+```
+
+![DD2 mass–radius curve against the NICER and mass measurements](docs/figures/dd2_MR.png)
+
+`overlay(ax, plane)` draws every constraint available in that plane — here the
+NICER measurements of PSR J0030+0451, J0740+6620 and J0614−3329, and
+HESS J1731−347, as nested 68%/95% credible regions, plus the PSR J0952−0607
+mass measurement as a band. `style="gradient"` shades the posterior density
+continuously instead. Other planes are
+`"M-Lambda"`, `"Mchirp-Lambdatilde"`, `"P-n"`, `"E-n"` and `"Esym-n"`;
+`eos.general.constraints.list_available()` prints what is there. Adding a
+constraint is a data entry, not a new code path.
+
 ---
 
-## Models Overview
+## The models
 
-| Model | Type | Description | Particles |
-|-------|------|-------------|-----------|
-| **SFHo** | Hadronic | Relativistic Mean Field with σ-ω-ρ-φ mesons | N, Y, Δ |
-| **ZL** | Hadronic | Zhao-Lattimer nucleonic model | n, p |
-| **AlphaBag** | Quark | MIT bag model with α_s QCD corrections | u, d, s |
-| **vMIT** | Quark | Vector-MIT bag model with repulsive interactions | u, d, s |
-| **ABPR** | Quark | CFL quark matter at T=0 (analytical) | u, d, s |
-| **ZLvMIT** | Hybrid | ZL hadronic + vMIT quark mixed phase | Mixed |
-| **SFHo+AlphaBag** | Hybrid | SFHo hadronic + AlphaBag quark mixed phase | Mixed |
+| package | kind | degrees of freedom | what it is |
+|---|---|---|---|
+| `dd2` | hadronic | N, Y, Delta | density-dependent RMF, the published DD2/DD2Y tables |
+| `sfho` | hadronic | N, Y, Delta | nonlinear RMF with the sigma–omega–rho cross coupling A(sigma, omega) |
+| `zl` | hadronic | n, p | the Zhao–Lattimer nucleonic functional: six numbers set the six lowest nuclear-matter parameters almost independently |
+| `did` | hadronic | N, Y, Delta | RMF whose couplings depend on the isospin asymmetry as well as on the density |
+| `vmit` | quark | u, d, s | MIT bag with a repulsive vector interaction |
+| `alphabag` | quark | u, d, s, gluons | MIT bag with the leading pQCD correction; unpaired and CFL |
+| `abpr` | quark | u, d, s | CFL at T = 0 in closed form — nothing iterates |
+| `njl` | quark | u, d, s | three-flavour NJL with the 't Hooft determinant, a vector channel and colour superconductivity; the pairing pattern is an outcome |
+| `ccdm` | quark | u, d, s | chiral colour-dielectric: confinement and chiral breaking from one dilaton field |
+| `enjl` | both | baryons + quarks | extended NJL — a baryon is a three-quark cluster built from the same constituent masses, so chiral, quarkyonic and deconfinement transitions come from one functional |
+| `mixed` | composite | hadronic + quark | the phase-adapter engine: a first-order transition between any declared pair, with the transition window, the quark volume fraction chi and the per-phase charge decomposition as part of the result |
+| `zlvmit` | legacy | ZL + vMIT | the first-generation hybrid, kept for its published results and exempt from the uniform API |
+
+Each model carries its own paper-style description with the full set of
+equations — the Lagrangian or thermodynamic potential, the parameters and the
+reference they are fitted to, the field equations, and the residual row by row
+for every mode — as `eos/<model>/<model>.tex` and `.md`. They are written so
+that a physicist can reproduce the model without opening the source.
 
 ---
 
-## Package Structure
+## Layout
 
 ```
 eos/
-├── pyproject.toml          # Package configuration
-├── setup.py                # Installation script
-├── README.md               # This file
-│
-├── eos/                    # Main package
-│   ├── __init__.py         # Package initialization, REPO_ROOT path
-│   │
-│   ├── general/            # Shared infrastructure
-│   │   ├── physics_constants.py    # Physical constants (PDG values)
-│   │   ├── particles.py            # Particle definitions
-│   │   ├── fermi_integrals.py      # Fermi-Dirac integrals
-│   │   ├── bose_integrals.py       # Bose-Einstein integrals
-│   │   ├── thermodynamics_leptons.py  # e, μ, ν thermodynamics
-│   │   └── plotting_info.py        # Plotting utilities
-│   │
-│   ├── sfho/               # SFHo RMF hadronic model
-│   │   ├── parameters.py           # Model parametrizations
-│   │   ├── thermodynamics_hadrons.py  # Baryon thermodynamics
-│   │   ├── eos.py                  # EOS solvers
-│   │   ├── compute_tables.py       # Table generation script
-│   │   ├── nuclear_saturation_properties.py
-│   │   └── compare_with_compose.py # Validation tools
-│   │
-│   ├── zl/                 # Zhao-Lattimer nucleonic model
-│   │   ├── parameters.py           # Model parameters
-│   │   ├── thermodynamics_nucleons.py  # Nucleon thermodynamics
-│   │   ├── eos.py                  # EOS solvers
-│   │   └── compute_tables.py       # Table generation script
-│   │
-│   ├── alphabag/           # AlphaBag quark model
-│   │   ├── parameters.py           # Bag constant, α_s, masses
-│   │   ├── thermodynamics_quarks.py   # Quark thermodynamics
-│   │   ├── eos.py                  # EOS solvers (unpaired, CFL)
-│   │   └── compute_tables.py       # Table generation script
-│   │
-│   ├── vmit/               # Vector-MIT bag model
-│   │   ├── parameters.py           # Bag constant, vector coupling
-│   │   ├── thermodynamics.py       # Quark thermodynamics
-│   │   ├── eos.py                  # EOS solvers
-│   │   ├── table.py                # Grid driver
-│   │   └── api.py                  # eos_point / eos_table / eos_response
-│   │
-│   ├── abpr/               # ABPR analytical CFL model (T=0)
-│   │   ├── parameters.py           # Parameters (m_s, Delta0, a4, B4)
-│   │   ├── species.py              # SpeciesFlags -- every sector off
-│   │   ├── thermodynamics.py       # P(μ), n_B(μ), ε(μ), s, c_s²
-│   │   ├── solver.py               # closed-form inverses, solve_cfl
-│   │   └── api.py                  # eos_point / eos_table / eos_response
-│   │
-│   ├── zlvmit/             # ZL+vMIT hybrid model
-│   │   ├── mixed_phase_eos.py      # Phase transition solvers
-│   │   ├── hybrid_table_generator.py  # Configuration & runner
-│   │   ├── trapped_solvers.py      # Trapped neutrino mode
-│   │   ├── isentropic.py           # Isentropic trajectories
-│   │   ├── table_reader.py         # Table I/O utilities
-│   │   └── plot_results.py         # Visualization tools
-│   │
-│   │   ├── mixed_phase_eos.py      # Phase transition solvers
-│   │   └── hybrid_table_generator.py  # Configuration & runner
-│   │
-│   └── tov/                # Neutron star structure
-│       └── solver.py               # TOV equation solver
-│
-├── notebooks/              # Jupyter notebooks
-│   └── ZLvMIT_hybrid.ipynb # Interactive hybrid EOS exploration
-│
-└── output/                 # Generated EOS tables
+  general/     shared infrastructure: Fermi and Bose integrals, particle data
+               and constants, the conserved-charge basis maps, lepton/photon
+               thermodynamics, the thermal meson gas, table I/O, the figure
+               style, and the observational constraints
+  dd2/ sfho/ zl/ did/ vmit/ alphabag/ abpr/ enjl/ njl/ ccdm/
+               one subpackage per model, all laid out the same way:
+               parameters.py  species.py  thermodynamics.py  solver.py
+               table.py  api.py  verify/  <model>.tex
+  mixed/       the composite hadron–quark engine
+  zlvmit/      the legacy first-generation hybrid
+  astro/
+    tov/       TOV, tidal deformability, crust attachment, rotating (RNS)
+    gmode/     composition g-modes
+docs/          eos.bib and the deferred-gaps ledger
+output/        generated tables and figures
 ```
 
----
-
-## Usage Examples
-
-### 1. SFHo Hadronic EOS
-
-The SFHo model is a Relativistic Mean Field (RMF) model with σ-ω-ρ-φ meson exchange.
-
-```python
-from eos.sfho.table import TableSettings, compute_table
-import numpy as np
-
-settings = TableSettings(
-    # Model selection
-    parametrization='sfhoy',           # 'sfho', 'sfhoy', 'sfhoy_star', '2fam_phi', '2fam'
-    particle_content='nucleons_hyperons',  # 'nucleons', 'nucleons_hyperons', 'nucleons_hyperons_deltas'
-
-    # Equilibrium mode
-    equilibrium='beta_eq',             # 'beta_eq', 'fixed_yc', 'fixed_yc_ys', 'trapped_neutrinos',
-                                       # 'isentropic_beta_eq', 'isentropic_trapped'
-
-    # Density and temperature grid
-    n_B_values=np.linspace(0.1, 10, 300) * 0.1583,  # fm^-3
-    T_values=[0.1, 10.0, 30.0, 50.0],               # MeV
-    S_values=[1.0, 2.0],                            # For isentropic modes (entropy per baryon)
-
-    # For fixed_yc or trapped modes:
-    Y_C_values=np.arange(0.0, 0.55, 0.05),  # Charge fraction
-    Y_L_values=np.arange(0.1, 0.45, 0.05),  # Lepton fraction
-
-    # Physics options
-    include_photons=True,
-    include_electrons=True,
-    include_thermal_neutrinos=False,
-    include_pseudoscalar_mesons=False,
-
-    # Output
-    save_to_file=True,
-    output_filename="sfhoy_beta_eq.dat"
-)
-
-results = compute_table(settings)
-```
-
-**Available Parametrizations:**
-
-| Name | Description |
-|------|-------------|
-| `sfho` | Standard SFHo (nucleons only) |
-| `sfhoy` | SFHo with hyperon couplings (Fortin et al.) |
-| `sfhoy_star` | Alternative hyperon couplings |
-| `2fam_phi` | Two-families model with φ meson |
-| `2fam` | Two-families model |
-
-**Custom Parametrization:**
-
-```python
-from eos.sfho.parameters import create_custom_parametrization
-
-my_params = create_custom_parametrization(
-    U_Lambda_N=-28.0, U_Sigma_N=+30.0, U_Xi_N=-18.0,
-    name="MyCustom"
-)
-settings = TableSettings(
-    custom_params=my_params,
-    particle_content='nucleons_hyperons'
-)
-```
-
-### 2. Zhao-Lattimer Nucleonic EOS
-
-A phenomenological nucleonic model based on Zhao & Lattimer (2020).
-
-```python
-from eos.zl import Parameters, eos_table
-import numpy as np
-
-table = eos_table(
-    Parameters.default(),
-    "fixed_YC",                        # or 'beta_eq_neutrinoless',
-                                       # 'beta_eq_neutrino_trapped'
-    axes={"nB": np.linspace(0.1, 12, 300) * 0.16,
-          "T": [0.1, 10.0, 50.0, 100.0],
-          "Y_C": [0.1, 0.2, 0.3, 0.4, 0.5]},
-    leptons=True,                      # neutralizing electrons
-    verbose=True,
-)
-```
-
-### 3. AlphaBag Quark EOS
-
-MIT bag model with perturbative QCD corrections. Supports unpaired and CFL phases.
-
-```python
-from eos.alphabag import TableSettings, compute_table
-import numpy as np
-
-# Unpaired quark matter
-settings = TableSettings(
-    phase='unpaired',                  # 'unpaired' or 'cfl'
-    equilibrium='beta_eq',             # 'beta_eq', 'fixed_yc', 'fixed_yc_ys'
-
-    # Model parameters
-    alpha=0.3,                         # QCD coupling α_s
-    B4=165.0,                          # Bag constant B^(1/4) in MeV
-    m_s=150.0,                         # Strange quark mass in MeV
-
-    n_B_values=np.linspace(0.1, 12, 300) * 0.16,
-    T_values=[0.1, 10.0, 30.0, 50.0],
-
-    Y_C_values=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5],  # For fixed_yc
-    Y_S_values=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],  # For fixed_yc_ys
-
-    include_photons=True,
-    include_gluons=True,
-    include_thermal_neutrinos=True,
-    save_to_file=True
-)
-
-results = compute_table(settings)
-```
-
-**CFL Phase:**
-
-```python
-cfl_settings = TableSettings(
-    phase='cfl',
-    Delta0_values=[80.0, 100.0, 150.0],  # Pairing gap in MeV
-    B4=165.0,
-    m_s=100.0,
-    n_B_values=np.linspace(0.1, 12, 300) * 0.16,
-    T_values=[0.1, 10.0, 50.0],
-    save_to_file=True
-)
-
-cfl_results = compute_table(cfl_settings)
-```
-
-### 4. vMIT Quark EOS
-
-Vector-MIT bag model with repulsive vector interactions.
-
-```python
-from eos.vmit.compute_tables import vMITTableSettings, compute_vmit_table
-import numpy as np
-
-settings = vMITTableSettings(
-    equilibrium='beta_eq',
-    B4=165.0,                          # Bag constant B^(1/4) in MeV
-    a=0.2,                             # Vector coupling in fm²
-    m_s=150.0,                         # Strange quark mass in MeV
-
-    n_B_values=np.linspace(0.1, 12, 300) * 0.16,
-    T_values=[0.1, 10.0, 30.0],
-    save_to_file=True
-)
-
-results = compute_vmit_table(settings)
-```
-
-### 5. ZL+vMIT Hybrid EOS
-
-Hadron-quark phase transition between fully local and fully global electric charge neutrality (Gibbs ↔ Maxwell).
-
-see notebooks/ZLvMIT_hybrid.ipynb for details and implementation
-```
-
-### 6. ABPR CFL Quark EOS
-
-Colour-flavour locked quark matter at T=0, in closed form
-(Alford-Braby-Paris-Reddy). Pairing locks the three flavour densities
-together, so the composition is fixed: the phase is electrically neutral with
-no leptons, `Y_C = 0` and `Y_S = +1` identically, and the whole model is a
-polynomial in the common quark chemical potential `μ = μ_B/3`. Its one mode is
-`cfl`; the four equilibrium modes have no state here and each raises naming
-the physics.
-
-```python
-import numpy as np
-from eos.abpr import (
-    Parameters, pressure, baryon_density, energy_density,
-    mu_from_nB, mu_from_P, eos_point, eos_table,
-)
-
-params = Parameters(
-    m_s=150.0,     # Strange quark mass (MeV)
-    Delta0=100.0,  # CFL pairing gap (MeV)
-    a4=0.7,        # pQCD factor; alpha_s = pi/2 * (1 - a4)
-    B4=145.0,      # Bag constant B^(1/4) (MeV)
-)
-
-mu = 400.0                              # quark chemical potential (MeV)
-P = pressure(mu, params)                # MeV/fm³
-n_B = baryon_density(mu, params)        # fm⁻³
-epsilon = energy_density(mu, params)    # MeV/fm³
-
-# The inverses are closed forms, so nothing iterates.
-mu_solved, converged = mu_from_nB(0.5, params)
-mu_surface, _ = mu_from_P(0.0, params)  # the P = 0 surface of a strange star
-
-# The uniform API
-result = eos_point(params, "cfl", n_B=0.5)
-print(result.ok, result.point.P_total, result.point.mu_B)
-
-rows = eos_table(params, "cfl", axes={"nB": np.linspace(0.2, 1.6, 300)},
-                 rows=True)
-```
-
-`params.alpha` gives the coupling `alpha_s = pi/2 (1 - a4)` and `params.B` the
-bag constant in MeV⁴ (divide by `(ħc)³` for MeV/fm³), matching
-`eos.alphabag.Parameters` and `eos.vmit.Parameters`. This model is the T=0
-analytic limit of the CFL phase of `eos.alphabag`, which carries `m_s` exactly
-where this one expands it to `O(m_s²)`; `eos/abpr/abpr.tex` states and
-measures the difference between the two.
-
-### 7. TOV (Neutron Star Structure)
-
-Solve Tolman-Oppenheimer-Volkoff equations for neutron star mass-radius relations.
-
-```python
-from eos.astro.tov.solver import (
-    compute_tov_sequence,
-    EOSTable_for_TOV,
-    add_crust,
-    generate_ec_logspace
-)
-import numpy as np
-
-# Generate M-R curve from EOS file
-e_c_values = generate_ec_logspace(100, 2000, 50)  # MeV/fm³
-
-results = compute_tov_sequence(
-    eos_file="my_eos.dat",
-    e_c_vec=e_c_values,
-
-    # Crust options
-    add_crust_table='BPS',             # 'No', 'BPS', 'compose_sfho', 'personalized'
-    add_crust_mode='interpolate',       # 'attach', 'interpolate', 'maxwell'
-    n_transition=0.08,                  # Transition density (fm⁻³)
-    delta_n=0.01,                       # Interpolation width
-
-    # For 'personalized' crust:
-    # custom_crust_path="/path/to/crust.dat",
-
-    # Computed quantities
-    compute_baryonic_mass=True,
-    compute_tidal=False,                 # not yet implemented
-
-    output_file="tov_results.dat",
-    eos_columns=(0, 1, 2),              # (P, epsilon, nB) column indices
-    skip_header=0,                      # Header lines to skip
-    verbose=True
-)
-
-# Results array columns: e_c, n_c, P_c, R, M, [M_b], [k2], [Lambda]
-```
-
-**Crust Matching Modes:**
-
-| Mode | Description |
-|------|-------------|
-| `attach` | Simple attachment at transition density |
-| `interpolate` | Smooth tanh interpolation of P and μ_B |
-| `maxwell` | Maxwell construction matching μ_B(P) |
-
----
-
-## Equilibrium Modes
-
-| Mode | Description | Constraints | Use Case |
-|------|-------------|-------------|----------|
-| `beta_eq` | Beta equilibrium | μ_n = μ_p + μ_e, charge neutrality | Cold neutron stars |
-| `fixed_yc` | Fixed charge fraction | Y_C = n_C/n_B fixed | astrophysical simulations |
-| `fixed_yc_ys` | Fixed charge & strangeness | Y_C and Y_S fixed | Heavy-ion collisions |
-| `trapped_neutrinos` | Trapped neutrinos | Y_L = (n_e + n_ν)/n_B fixed | Proto-neutron stars |
-| `isentropic_beta_eq` | Constant entropy | s/n_B = const, beta equilibrium | Adiabatic evolution |
-| `isentropic_trapped` | Constant entropy + trapped | s/n_B = const, Y_L fixed | Proto-neutron star |
-
----
-
-## Output Format
-
-Tables are saved as whitespace-separated `.dat` files:
-
-```
-# SFHo EOS Table: sfho, nucleons
-# Equilibrium: beta_eq
-# Components: photons, electrons
-#          n_B             T         sigma         omega  ...
-  1.583000e-02  1.000000e-01  3.924156e+01  2.312847e+01  ...
-```
-
-**Standard Columns:**
-
-| Column | Description | Units |
-|--------|-------------|-------|
-| `n_B` | Baryon number density | fm⁻³ |
-| `T` | Temperature | MeV |
-| `sigma`, `omega`, `rho`, `phi` | Meson mean fields | MeV |
-| `mu_B`, `mu_C`, `mu_S` | Baryon, charge, strangeness chemical potentials | MeV |
-| `mu_e`, `mu_nu` | Electron, neutrino chemical potentials | MeV |
-| `P_total` | Total pressure | MeV/fm³ |
-| `e_total` | Total energy density | MeV/fm³ |
-| `s_total` | Total entropy density | fm⁻³ |
-| `f_total` | Free energy density (ε - Ts) | MeV/fm³ |
-| `Y_C`, `Y_S`, `Y_L` | Charge, strangeness, lepton fractions | dimensionless |
-| `converged` | Solver convergence flag | 0 or 1 |
-
----
-
-## Physical Conventions
-
-### Units
-- **Energy/Mass:** MeV
-- **Length:** fm
-- **Density:** fm⁻³
-- **Pressure/Energy density:** MeV/fm³
-- **Entropy density:** fm⁻³
-
-### Sign Conventions
-- **Strangeness (Y_S):** Number of strange quarks per baryon. S = +1 for hyperons.
-  *(Note: some literature uses S = −1)*
-- **Charge fraction (Y_C):** Electric charge per baryon of hadrons and quarks (no leptons), Y_C = n_C/n_B
-
-### Key Constants (PDG values)
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| ℏc | 197.327 MeV·fm | Reduced Planck constant × c |
-| m_n | 939.565 MeV | Neutron mass |
-| m_p | 938.272 MeV | Proton mass |
-| m_e | 0.511 MeV | Electron mass |
-| α | 1/137.036 | Fine structure constant |
+Inside a model, `thermodynamics.py` computes quantities *from* the state and
+never knows which mode it is in; `solver.py` finds the state. Where a model
+carries a `backends/`, deleting it changes no number — only the speed.
 
 ---
 
 ## References
 
-### Models
+**Models**, one primary reference each — DD2: Typel, Röpke, Klähn, Blaschke &
+Wolter, PRC 81, 015803 (2010). SFHo: Steiner, Hempel & Fischer, ApJ 774, 17
+(2013), with the hyperon couplings of Fortin, Oertel & Providência, PASA 35,
+e044 (2018). ZL: Zhao & Lattimer, PRD 102, 023021 (2020). DID: Frohaug,
+Maslov, Dexheimer, Grefa, Jahan, Ratti & Restrepo, arXiv:2511.15646. vMIT:
+Gomes, Char & Schramm, ApJ 877, 139 (2019), on the bag of Chodos et al.,
+PRD 9, 3471 (1974). alphaBag: Alford, Rajagopal & Wilczek, NPB 537, 443 (1999);
+Fischer et al. (2011). ABPR: Alford, Braby, Paris & Reddy, ApJ 629, 969
+(2005). NJL: Rüster, Werth, Buballa, Shovkovy & Rischke, PRD 72, 034004
+(2005). CCDM: Friedberg & Lee, PRD 15, 1694 (1977) and PRD 18, 2623 (1978).
+ENJL: Xia, PRD 110, 014022 (2024).
 
-**SFHo:**
-- Steiner, Hempel & Fischer, ApJ 774, 17 (2013)
-- Fortin et al. Astronomical Society of Australia (2018)
+**Phase transitions** — Constantinou, Guerrini, Zhao, Han & Prakash, PRD 112,
+094014 (2025); Constantinou et al., PRD 107, 074013 (2023).
 
-**Zhao-Lattimer:**
-- Zhao & Lattimer, PRD 102, 023021 (2020)
-
-**ABPR:**
-- Alford, Braby, Paris & Reddy, ApJ 629, 969 (2005)
-
-### Phase Transitions
-- Constantinou, Guerrini, Zhao, Han, Prakash Phys.Rev.D 112 (2025) 9, 094014
-- Constantinou et al. Phys.Rev.D 107 (2023) 7, 074013
-
-### A summary of the models and all the references can be found in:
-- M. Guerrini, PhD Thesis, University of Ferrara (2026) - Chapter 2
-
----
-
-## Future Development
-
-- DD2+vMIT hybrid model with hyperons
-- Improved crust models and matching procedures
-- Tidal deformability (k₂ and Λ) in TOV solver
-- Response functions (heat capacities, susceptibilities, speed of sound)
-- Quark matter nucleation rates
-- Hydrodynamic hadron-quark conversion flames
+Every citation, with the equation it backs, is in the model documents and in
+`docs/eos.bib`. A summary is in M. Guerrini, PhD thesis,
+University of Ferrara (2026), Chapter 2.
 
 ---
 
-## Main Collaborators
 
-- **A. Drago** (University of Ferrara) - PhD supervisor
-- **G. Pagliara** (University of Ferrara) - PhD supervisor
-- **C. Constantinou** (ECT* Trento)
-- **A. Lavagno** (Politecnico di Torino)
-- **T. Zhao** (N3AS, Berkeley)
-- **S. Han** (Tsung-Dao Lee Institute, Shanghai)
 
+This is a 2026 Python rewrite of code originally written in Mathematica and Python during my PhD (2022–2026). It is mainly for personal use, but if you need help using it, please get in touch. I used Claude Code for this new version.
