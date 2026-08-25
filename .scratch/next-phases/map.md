@@ -109,8 +109,17 @@ by running them against a detached worktree at HEAD carrying the pre-rename
   strangeness residual" below as much as with the generator.
 
 **A ticket reporting "0 added failures" means 14, unchanged.** Compare against
-`output/_audit/pytest_before_with_crust.txt`. Both causes are Stage 7 report
-material, not diffs.
+`output/_audit/pytest_after_ticket45.txt` — a full run on `main` at
+`66b1051`, which is the current pair with `pytest_before_ticket45.txt` and
+supersedes `pytest_before_with_crust.txt` (that file predates the 14 and reads
+`1 failed, 1648 passed`). The two ticket-45 files have a **byte-identical set
+of assertion messages**, so a diff of their `^E ` lines is the cheapest
+added-failure check there is. Both causes are Stage 7 report material, not
+diffs.
+
+The crust no longer needs `EOS_CRUST_DIR`: [ticket 39](issues/39-crust-silent-fallback.md)
+shipped the tables in `eos/astro/tov/data/`, so a bare run gets 15 skipped and
+no crust failure.
 
 **Do not run the full suite concurrently with another session** —
 `test/dd2/test_dd2_speed.py` is a timing test and goes flaky under CPU
@@ -548,9 +557,61 @@ against this file, not against the earlier `pytest_before*.txt`.
   so dd2 has no `thermo_from_mu` at all and both pairs name what dd2 actually
   has, flagging it for [ticket 48](issues/48-rename-did-surface.md).
 
+- [Apply the approved renames — eos/sfho](issues/45-rename-sfho.md): 8 renames,
+  15 files, **0 added failures, `test/baseline/` unmoved, sfho's `verify/` green
+  on all eight invariants**. The keys `named()` takes are the five strings each
+  set ALREADY carried in its `name` field, so `Parameters.named(p.name)`
+  round-trips and no stored string moves; `default()` is `SFHo_Nucleonic`.
+  **A third spelling of the same five existed** — `table.py`'s legacy
+  `TableSettings` short strings — and is now an alias table deferring to
+  `named`, so there is one registry. `PUBLISHED_SETS` holds **builders, not
+  instances**, which is §6 rather than style: a `Parameters` carries mutable
+  coupling maps and the builders mutate them, so a module-level dict of
+  instances would be the global mutable state §6 forbids — the old
+  `get_all_parametrizations()` escaped it only by rebuilding on every call.
+  **The collision check earned itself a fourth time, on a collision the rename
+  INTRODUCED**: converting `test/mixed/test_phase_pairs.py:111` to
+  `Parameters` put a function-local sfho import under the module-level
+  `from eos.dd2 import Parameters`. Shape 3 across the whole tree is clean —
+  sfho already carried the §3 mode names, so it did not become a third package
+  converging on those words. **Two things reported, not fixed**: dd2 never took
+  its half of ticket 36's ruling (ticket 44 carried the instruction and its 19
+  renames omit it), now on [ticket 48](issues/48-rename-did-surface.md); and
+  **`nucleation` cannot import `eos` today** — five modules gone, two names
+  gone, every one a Phase 3/4 MOVE rather than a Phase 5 rename, now on
+  [ticket 23](issues/23-phase6-respec.md).
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
+
+- **The model documents are unverified in two ways, and both were caught by
+  chance rather than by a check.** Found while tickets 35 and 45 ran
+  concurrently, one on each side of the same files.
+
+  *Signs.* `zl.tex` PASSED the document audit 14/14 and still had the
+  neutrality row backwards in one of three modes — the code writes
+  `n_C - n_e` in both beta modes and `n_e - n_C` in `fixed_YC`, and the
+  document stated one row. `vmit`'s R6/R7 swap between its two beta modes is
+  the same shape. Two of two checked were wrong, so the remaining ten pairs'
+  residual-row signs should be assumed unchecked rather than clean.
+
+  *Dispositions.* A document says of each gap whether it is deferred, a
+  defect, or by design — and that label is a claim about `CLAUDE.md` and the
+  triage rulings, not about the code. `sfho.md`/`.tex` shipped
+  `thermal_neutrinos` + trapped as a ledgered §4 gap pointing at
+  `docs/DEFERRED.md`, when [ticket 11](issues/11-conformance-triage.md):135
+  had ruled the row (b)+(a), [ticket 22](issues/22-phase5-claudemd.md) had
+  ALREADY landed §4's "a model must not raise on the combination", and
+  [ticket 54](issues/54-signature-corrections.md) deletes the raise. The
+  pointer named a `DEFERRED.md` entry that does not exist. Corrected in
+  `463278a`. The structural cause is that the document tickets run against a
+  specification other tickets are concurrently editing, so verifying a
+  document against the CODE is only half the check.
+
+  Whether this is one sweep, one ticket per pair, or a check added to the
+  `verify/` suites is not decidable until someone measures how many of the
+  twelve are affected.
 
 - **The 46 MB of `notebooks/eos_tables_DD2vMIT/`.** [Ticket 03](issues/03-stage0-removals.md)
   removed everything that produced it but held the folder itself: it is gitignored
