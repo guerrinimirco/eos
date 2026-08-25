@@ -12,6 +12,7 @@
 \newcommand{\SigR}{\Sigma^{R}}
 \newcommand{\mueff}[1]{\mu^{\mathrm{eff}}_{#1}}
 \newcommand{\meff}[1]{m^{*}_{#1}}
+\newcommand{\hc}{(\hbar c)^3}
 
 \begin{document}
 
@@ -371,8 +372,100 @@ spectator to $\SigR$. The gas carries electric charge and strangeness ---
 under this sign convention $K^-$ and $\bar K^0$ carry $S=+1$ --- and those
 densities \emph{enter the equilibrium constraints}: charge neutrality and the
 fixed-$Y_C$/$Y_S$ conditions are imposed on baryons and mesons together. The
-gas carries no baryon number and does not source the field equations. Its
-$P$, $\varepsilon$, $s$ and $\sum_j \mu^{*}_j n_j$ join the totals and the
+gas carries no baryon number and does not source the field equations.
+
+\subsection{The Bose thermodynamics of one meson species}
+
+Each species is an ideal Bose gas of mass $m_j$, degeneracy $g_j$ and
+effective potential $\mu^*_j$, with its antiparticle carried as a
+\emph{separate} species at $-\mu^*_j$ rather than through an antiparticle term
+inside the integral:
+%
+\begin{align}
+n_j &= \frac{g_j}{2\pi^2 \hc} \int_0^\infty \! dk\, k^2\, b(E_k - \mu^*_j) ,
+      & E_k &= \sqrt{k^2 + m_j^2} ,
+\label{eq:nmeson} \\
+P_j &= \frac{g_j}{6\pi^2 \hc} \int_0^\infty \! dk\, \frac{k^4}{E_k}\,
+       b(E_k - \mu^*_j) ,
+\label{eq:Pmeson} \\
+\varepsilon_j &= \frac{g_j}{2\pi^2 \hc} \int_0^\infty \! dk\, k^2 E_k\,
+       b(E_k - \mu^*_j) ,
+\label{eq:epsmeson} \\
+s_j &= \frac{\varepsilon_j + P_j - \mu^*_j n_j}{T} ,
+\label{eq:smeson}
+\end{align}
+%
+with the Bose occupation $b(x) = [e^{x/T} - 1]^{-1}$. Eq.~\eqref{eq:smeson} is
+the one-species Euler relation again, at the \emph{effective} potential --- the
+same identity Eq.~\eqref{eq:nsandS} uses for a baryon, which is why the gas
+joins the Hugenholtz--Van Hove sum through $\sum_j \mu^*_j n_j$ and not
+through a physical potential. These integrals come from
+\texttt{eos.general.bose\_integrals}, evaluated by the same
+Johns--Ellis--Lattimer construction as the Fermi ones. There is no $T = 0$
+branch: the gas is defined only at $T > 0$ and returns zero below it.
+
+The active species, their masses (MeV), charges, strangeness under this
+repository's $S = +1$ per $s$ quark, and degeneracies:
+%
+\begin{center}
+\begin{tabular}{lrrrr@{\qquad}lrrrr}
+\toprule
+species & $m_j$ & $Q_j$ & $S_j$ & $g_j$ &
+species & $m_j$ & $Q_j$ & $S_j$ & $g_j$ \\
+\midrule
+$\pi^+$    & $139.57039$ & $+1$ & $0$  & $1$ &
+$\rho^+$   & $775.26$    & $+1$ & $0$  & $3$ \\
+$\pi^-$    & $139.57039$ & $-1$ & $0$  & $1$ &
+$\rho^-$   & $775.26$    & $-1$ & $0$  & $3$ \\
+$\pi^0$    & $134.9768$  & $0$  & $0$  & $1$ &
+$\rho^0$   & $775.26$    & $0$  & $0$  & $3$ \\
+$K^+$      & $493.677$   & $+1$ & $-1$ & $1$ &
+$\omega$   & $782.66$    & $0$  & $0$  & $3$ \\
+$K^-$      & $493.677$   & $-1$ & $+1$ & $1$ &
+$K^{*+}$   & $891.67$    & $+1$ & $-1$ & $3$ \\
+$K^0$      & $497.611$   & $0$  & $-1$ & $1$ &
+$K^{*-}$   & $891.67$    & $-1$ & $+1$ & $3$ \\
+$\bar K^0$ & $497.611$   & $0$  & $+1$ & $1$ &
+$K^{*0}$   & $891.67$    & $0$  & $-1$ & $3$ \\
+$\eta$     & $547.862$   & $0$  & $0$  & $1$ &
+$\bar K^{*0}$ & $891.67$ & $0$  & $+1$ & $3$ \\
+$\eta'$    & $957.78$    & $0$  & $0$  & $1$ &
+$\phi$     & $1019.461$  & $0$  & $0$  & $3$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+The left column is \texttt{thermal\_mesons}; the right is the optional vector
+nonet, which reuses the same three potentials, because the shift depends on
+the quark content and vector and pseudoscalar partners share it. Note
+$g = 1$ for a pseudoscalar and $g = 3$ for a vector, and that antiparticles
+are separate rows: a gas of $\pi^+$ and $\pi^-$ at $\pm\mu^*$ is two species,
+not one with an antiparticle term.
+
+\subsection{Condensation is refused, not approximated}
+
+Eqs.~\eqref{eq:nmeson}--\eqref{eq:smeson} describe the gas only while
+$|\mu^*_j| < m_j$ for every species. At $|\mu^*_j| = m_j$ the species
+condenses: the particles beyond the critical density go into the $k = 0$
+state, carrying charge and $\varepsilon = m_j n_{\rm cond}$ with \emph{no}
+pressure and \emph{no} entropy, and $n_{\rm cond}$ becomes a new unknown
+rather than a function of $\mu^*_j$. None of that is implemented. So the
+package computes the diagnostic
+%
+\begin{equation}
+\text{condensation} \;=\; \max_j \frac{|\mu^*_j|}{m_j}
+\label{eq:condensation}
+\end{equation}
+%
+and \textbf{refuses any state with condensation $\ge 1$}, raising rather than
+returning it. The refusal is not defensive tidiness: the underlying integral
+routine \emph{caps} $\mu^*$ at $m$, so past the threshold the gas silently
+stops absorbing charge and the entropy it reports drifts --- turning negative
+by $|\mu^*|/m \simeq 3$. A returned state there would be wrong rather than
+approximate. \texttt{eos.sfho} refuses the same condition, there as a status
+because its solvers report rather than raise.
+
+Its $P$, $\varepsilon$, $s$ and $\sum_j \mu^{*}_j n_j$ join the totals and the
 Hugenholtz--Van Hove sum.
 
 \section{Equilibrium modes and their closures}
@@ -464,11 +557,70 @@ temperature is accepted, entropy per baryon $s/\nB$ is accepted in its place
 through an outer 1-D solve for $T$ (monotone at fixed $\nB$, so the bracket
 is well posed).
 
-For nucleons-only beta equilibrium the system reduces to
-$x = [\sigma, \rho_0, \mueff{n}, \muC]$: $\omega_0$ is eliminated
-algebraically at the target density, and
-$\mueff{p} = \mueff{n} + \muC - 2\,\Gamma_\rho \rho_0$ under the
-$\tau_3 = \pm 1$ convention.
+\subsection{The reduced nucleon-only system}
+\label{sec:reduced}
+
+For nucleons-only beta equilibrium the package carries a \emph{second} system,
+with its own unknown vector, because eliminating $\omega_0$ collapses two
+unknowns into none: $x = [\sigma, \rho_0, \mueff{n}, \muC]$, four unknowns and
+four rows. $\omega_0$ is eliminated algebraically at the target density ---
+which works only while every species shares the nucleon couplings, and is
+exactly why the octet system above cannot do it --- and
+%
+\begin{equation}
+\mueff{p} = \mueff{n} + \muC
+            - \big(\tau_3^{(p)} - \tau_3^{(n)}\big)\, \Gamma_\rho \rho_0
+          = \mueff{n} + \muC - 2\,\Gamma_\rho \rho_0
+\end{equation}
+%
+under the $\tau_3 = \pm 1$ convention. The four rows, in the order assembled
+and each already dimensionless:
+%
+\begin{align}
+\bar R_1 &= \Big[ \sigma
+   - \Gamma_\sigma \big( n^s_n + n^s_p \big) \big/ m_\sigma^2 \Big]
+   \big/ \bar m , \\
+\bar R_2 &= \Big[ \rho_0
+   - \Gamma_\rho \big( \tau_3^{(n)} n_n + \tau_3^{(p)} n_p \big)
+     \big/ m_\rho^2 \Big] \big/ \bar m , \\
+\bar R_3 &= \frac{n_n + n_p}{\nB} - 1 , \\
+\bar R_4 &= \frac{n_p - n_e - n_\mu}{\nB} ,
+\end{align}
+%
+with $\bar m$ the mean nucleon mass, $\mu_e = -\muC$ and
+$\mu_\mu = \mu_e$. $\bar R_1$ and $\bar R_2$ are the $\sigma$ and $\rho$ field
+equations, $\bar R_3$ baryon number, $\bar R_4$ electric neutrality. The
+system is guarded rather than allowed to wander: if either effective mass goes
+non-positive the residual returns $[10^6, 0, 0, 0]$, which pushes the root
+finder back inside the physical domain instead of letting it evaluate a Fermi
+integral at an imaginary mass.
+
+\subsection{The phase-adapter residual}
+\label{sec:adapter}
+
+A third system exists, and it is not a mode: it is what \texttt{eos/mixed}
+consumes across the phase-adapter contract. Given
+$(\tilde\mu_B, \muC, \muS, T)$ --- the potentials as \emph{inputs} --- it
+solves for
+%
+\begin{equation}
+x = [\sigma, \omega_0, \rho_0, (\phi_0), \nB] ,
+\end{equation}
+%
+the field equations plus one baryon-density self-consistency row. \textbf{The
+density is an unknown here}, unlike in every mode above, because for one phase
+of a mixture only the \emph{average} density is prescribed; and because DD2's
+couplings are density-dependent, $\Gamma_i(\nB)$ is re-evaluated at the
+current $\nB$ on every iteration, which is what makes this a coupled system
+rather than a field solve at fixed couplings.
+
+\textbf{There is no charge, strangeness or neutrality row.} That absence is the
+content of the contract: the potentials are given, so nothing here chooses a
+composition, and \emph{that} is what makes this thermodynamics rather than a
+mode. Imposing neutrality on one phase of a Gibbs construction would be wrong
+in any case --- global neutrality is the engine's condition, not the phase's.
+A non-positive $\nB$ iterate returns a large residual on every row, the same
+guard as Sec.~\ref{sec:reduced}.
 
 \section{Nuclear-matter parameters}
 
@@ -524,6 +676,85 @@ thresholds, scalar-collapse boundaries) are bisected so the predictor stays
 in the corrector's basin. Solved states report residual norms and are gated
 at $10^{-10}$; the regression suite pins the symmetric-matter golden point at
 $\nB = 0.16\ \mathrm{fm}^{-3}$ and the published DD2 neutron-star properties.
+
+\section{What \texttt{eos\_response} returns}
+\label{sec:response}
+
+A second derivative is only defined once one says what is held fixed, so the
+conditioning is an explicit argument and each named freeze expands to a
+statement about which reactions are faster than the perturbation. Two are
+implemented; every other combination raises \texttt{NotImplementedError}
+naming itself.
+
+\paragraph{\texttt{frozen='equilibrium'}} Everything re-equilibrates. Wired for
+\texttt{beta\_eq\_neutrinoless} only, and computed from the \emph{analytic}
+Jacobian rather than by differencing solved points:
+%
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+key & quantity & availability \\
+\midrule
+\texttt{cs2\_eq} & $c_s^2 = (\partial P/\partial\varepsilon)$ along the
+                   mode's own sequence & always \\
+\texttt{chi}     & $\chi_{ab} = \partial n_a/\partial\mu_b$,
+                   $a,b \in (B, C, S)$ & always \\
+\texttt{C\_V}    & $C_V = (T/\nB)\,(\partial s/\partial T)_{\nB}$ & $T > 0$
+                   only \\
+\texttt{C\_P}    & $C_P = (T/\nB)\,(\partial s/\partial T)_{P}$ & $T > 0$
+                   only \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+$C_V$ and $C_P$ are absent at $T = 0$ rather than returned as zero: they are
+not defined there, and a zero would be indistinguishable from a computed one.
+
+\paragraph{\texttt{frozen='composition'}} Every particle fraction held fixed,
+i.e.\ reactions slow compared with the perturbation. This is the freeze that
+takes a target: the proton fraction \texttt{Y\_p} is a named argument of
+\texttt{eos\_response}, and it is a \emph{freeze target}, not one of the
+mode's conditions --- which is why it is not among $\nB, T, Y_C, Y_S,
+Y_{L_e}$. It returns the adiabatic sound speed and the adiabatic index
+$\Gamma$ at that proton fraction, for nucleonic matter.
+
+\paragraph{What raises.} \texttt{frozen='equilibrium'} in any mode but
+\texttt{beta\_eq\_neutrinoless}; the frozen conserved fractions; and the
+leptonic re-neutralization variants. Each names itself and points at
+\texttt{docs/DEFERRED.md}.
+
+\paragraph{Isothermal against adiabatic.} A returned name says which thermal
+variable is held: \texttt{cs2\_eq} is the equilibrium sound speed along the
+sequence, and the \texttt{composition} freeze's is the adiabatic one. The two
+differ at $T > 0$ by the factor $C_P/C_V$, which is why no quantity in this
+package is called a bare \texttt{cs2}.
+
+\section{Masses}
+\label{sec:masses}
+
+The baryon and lepton masses are not DD2 parameters --- they come from the
+shared particle table and a parametrization overrides one only through its own
+\texttt{Parameters} fields, which for DD2 is the two nucleon masses of
+Table~\ref{tab:params}. For completeness, in MeV:
+%
+\begin{center}
+\begin{tabular}{lrl@{\qquad}lrl}
+\toprule
+species & mass & $g_i$ & species & mass & $g_i$ \\
+\midrule
+$n$        & $939.56536$  & $2$ & $\Xi^-$      & $1321.71$   & $2$ \\
+$p$        & $938.27203$  & $2$ & $\Xi^0$      & $1314.86$   & $2$ \\
+$\Lambda$  & $1115.683$   & $2$ & $\Delta$ quartet & $1232.00$ & $4$ \\
+$\Sigma^-$ & $1197.449$   & $2$ & $e^-$        & $0.510999$  & $2$ \\
+$\Sigma^0$ & $1192.642$   & $2$ & $\mu^-$      & $105.6584$  & $2$ \\
+$\Sigma^+$ & $1189.370$   & $2$ & & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+%
+The $\Delta$ degeneracy is $4$ because the quartet member carries spin $3/2$;
+every octet baryon and both leptons carry $2$. The meson-gas masses and
+degeneracies are in Sec.~\ref{sec:gas}.
 
 \bibliography{../../docs/eos}
 
