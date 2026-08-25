@@ -769,6 +769,20 @@ against this file, not against the earlier `pytest_before*.txt`.
   `test/` edits (6 sites in did's tests, 4 in dd2's) are gitignored and live
   only in the working copy.
 
+- [Which Python/numpy/scipy stack is canonical](issues/57-canonical-stack.md):
+  **python.org 3.14** — 3.9 is end-of-life and both `pyproject.toml` files say
+  `requires-python = ">=3.9"` while `nucleation` heads for a public remote, so
+  pinning 3.9 would ship a library needing a dead interpreter. The cause was
+  measured, not attributed to version numbers: the two stacks compute on
+  **different BLAS** — anaconda on OpenBLAS 0.3.23, 3.14 on Apple Accelerate —
+  plus scipy 1.13→1.17 solver internals and numpy 1.26→2.3. Each is ~1e-16 at the
+  operation, but an iterative solve at a 1e-10 residual lets a last-bit difference
+  flip its stopping iteration, so the answer moves at the scale of the gate —
+  which is why only `test/baseline/` fails. Execution graduated to
+  [ticket 62](issues/62-regenerate-baselines-py314.md), with a stop condition:
+  any difference larger than round-off halts the regeneration rather than being
+  absorbed into a new ground truth.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:

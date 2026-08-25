@@ -1,7 +1,7 @@
 # Which Python/numpy/scipy stack is canonical, and do the baselines regenerate on it?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: -
 Parent: ../map.md
 
