@@ -119,3 +119,19 @@ Three prose sites carry the claim and all three change when this lands
 `SPECIES_FLAGS` `#:` comment (`7c5b7a9`), and this test's docstring. The edit
 differs by resolution — giving dd2 the two names DELETES those paragraphs, a
 raise that names the gap REWRITES them.
+
+**The exemption is a TWO-WAY gate, and this paragraph is the durable copy of
+that fact.** The check exempting `dd2` does not merely skip it: it asserts
+that dd2 IS still missing the names, so the moment this ticket gives dd2 the
+two flags the test goes red rather than green, and its message names what has
+to move with it. Closing this ticket therefore requires **three edits in one
+change** — delete the `dd2` entry from the exemption dict, delete `README.md`'s
+"One model does not yet carry two of the six" paragraph, and delete the
+corresponding `#:` block above `SPECIES_FLAGS` in `eos/__init__.py`. Do them
+together or the suite stays red, which is the point.
+
+Recorded here rather than left to the failing assertion because **`test/` is
+gitignored**: a fresh clone, a `git worktree`, or another machine has no such
+test, so the assertion cannot reach whoever works this ticket there. The
+ticket body is the only artifact that survives the checkout. (Where `test/`
+does exist, the enforcement is real and will catch a partial close.)
