@@ -2,6 +2,7 @@
 \usepackage{amsmath,amssymb,bm}
 \usepackage[margin=2.5cm]{geometry}
 \usepackage{booktabs}
+\usepackage{longtable}
 \usepackage{hyperref}
 
 \title{The chiral colour-dielectric model \\
@@ -12,6 +13,7 @@
 \newcommand{\phib}{\bar\varphi}
 \newcommand{\Mstar}{M^{*}}
 \newcommand{\mustar}{\mu^{*}}
+\newcommand{\code}[1]{\texttt{#1}}
 
 \begin{document}
 \maketitle
@@ -24,26 +26,41 @@ the medium's transparency to colour and divides the quark masses, so that as
 the condensate reaches its vacuum value the effective masses diverge and the
 quarks leave the medium entirely. This document states every equation the code
 solves and every quantity it returns. The implementation specification is
-\texttt{docs/ccdm\_implementation.md} and is the authority wherever it and this
+\code{docs/ccdm\_implementation.md} and is the authority wherever it and this
 document differ, with the two exceptions recorded in \S\ref{sec:corrections},
 which are places where the specification contradicts the thermodynamic audit
-it itself mandates.
+it itself mandates. The model descends from the soliton and dielectric
+Lagrangians of Friedberg and Lee \cite{FriedbergLee1977,FriedbergLee1978},
+Nielsen and Patk\'os \cite{NielsenPatkos1982} and Mack \cite{Mack1984},
+reviewed by Birse \cite{Birse1990} and Pirner \cite{Pirner1992}, in the
+three-flavour chiral form of Drago, Fiolhais and Tambini
+\cite{DragoFiolhaisTambini1996} and Ghosh and Phatak \cite{GhoshPhatak1995},
+applied to strangelets in \cite{AlbericoDragoRatti2002} and to hybrid stars in
+\cite{Maieron2004};
+the pairing sector follows Buballa \cite{Buballa2005} and Alford
+\emph{et al.} \cite{Alford2008}.
 \end{abstract}
+
+\tableofcontents
 
 \section{Conventions}
 
 Natural units $\hbar=c=k_B=1$ throughout the physics; masses, chemical
 potentials and the dilaton in MeV, densities in MeV$^3$, $\Omega$, $P$ and
 $\varepsilon$ in MeV$^4$. The public boundary of the code is fm-based, with
-$\hbar c = 197.3269804$ MeV\,fm.
+$\hbar c = 197.3269804$ MeV\,fm: at that boundary $n$ is in fm$^{-3}$, $T$ and
+every $\mu$ in MeV, $\varepsilon$ and $P$ in MeV\,fm$^{-3}$ and $s$ in
+fm$^{-3}$. The conversion is by $(\hbar c)^3 = 7.6835057\times10^{6}$
+MeV$^3$\,fm$^3$ and is applied once, at that boundary.
 
 Flavour $f\in\{u,d,s\}$, colour $a\in\{r,g,b\}$, and the nine colour--flavour
-modes $j=(f,a)$ indexed flavour-major. Electric charges $q_u=+\tfrac23$,
-$q_d=q_s=-\tfrac13$. \textbf{Strangeness is $S=+1$ per $s$ quark}, the opposite
-of the PDG sign and the convention used consistently in this repository.
-$C$ is the electric charge of strongly interacting matter only: the leptons are
-excluded from it and enter through the separate condition of total electric
-neutrality.
+modes $j=(f,a)$ indexed flavour-major, $j = 3\,i_f + i_a$. Electric charges
+$q_u=+\tfrac23$, $q_d=q_s=-\tfrac13$. \textbf{Strangeness is $S=+1$ per $s$
+quark}, the opposite of the PDG sign and the convention used consistently in
+this repository. $C$ is the electric charge of strongly interacting matter
+only: the leptons are excluded from it and enter through the separate
+condition of total electric neutrality. Fractions are per baryon,
+$Y_C=n_C/n_B$ and $Y_S=n_S/n_B$.
 
 Colour generators are taken in the normalisation
 \begin{equation}
@@ -54,7 +71,7 @@ Colour generators are taken in the normalisation
 i.e. $T_8=\lambda_8/\sqrt3$. Three normalisations are in circulation in the
 colour-superconductivity literature and mixing them corrupts $\mu_8$ by factors
 between $1.15$ and $1.7$; the conversions are documented in
-\texttt{eos.general.pairing}.
+\code{eos.general.pairing}.
 
 \section{The Lagrangian}
 
@@ -75,6 +92,8 @@ $\omega_\mu$ and the diquark interaction:
  \left|\bar q\,i\gamma_5 C\,\epsilon^{ab\eta}\epsilon_{ij\eta}\,\bar q^{\,T}\right|^2,
 \qquad \eta=1,2,3 \leftrightarrow (ds),(us),(ud).
 \end{align}
+The dilaton potential $U$ is the one the scale anomaly fixes
+\cite{Schechter1980,MigdalShifman1982}; it is written in \eqref{eq:U}.
 
 \subsection{The dielectric, and why the fourth power}
 
@@ -123,6 +142,10 @@ U = B_g\left[\Phi(\ln\Phi-1)+1\right],
 \frac{\mathrm dU}{\mathrm d\Phi} = B_g\ln\Phi .
 \label{eq:U}
 \end{equation}
+$U(1)=0$ at the physical vacuum and $U(0)=B_g$ at the perturbative point,
+which is what makes $B_g$ the glue part of the effective bag constant
+(\S\ref{sec:bag}). The limit $\Phi\ln\Phi\to0$ is taken explicitly at
+$\Phi=0$; without it the perturbative point returns NaN.
 
 \textbf{$\varphi$ is the field; $\Phi$ is the solve variable.} $\Phi$ cannot be
 the Lagrangian field: its kinetic term
@@ -137,6 +160,22 @@ $\phib^{\,3}$ --- so it vanishes there for \emph{any} scalar density. It is an
 artefact of the parametrisation: the Jacobian $\mathrm d\Phi/\mathrm d\phib =
 4\phib^{\,3}$ vanishes, not the physics. In $\Phi$, where
 $\mathrm dU/\mathrm d\Phi=B_g\ln\Phi\to-\infty$, no such root exists.
+
+$\Phi$ is evaluated only inside
+\begin{equation}
+\Phi\in\left[\Phi_{\min},\,\Phi_{\max}\right],
+\qquad \Phi_{\min}=10^{-14},\qquad \Phi_{\max}=1-10^{-13},
+\label{eq:phiguard}
+\end{equation}
+a clamp and not a physical bound. A Newton step may propose a dilaton outside
+$[0,1]$, where the residual is NaN and the solve dies with no information;
+evaluating at the edge instead leaves $\mathrm dU/\mathrm d\Phi$ strongly
+signed, which pushes the next step back inside. The ceiling is not
+$1-10^{-9}$: $\Phi=1$ exactly is where the \emph{confined} branch's solution
+genuinely sits (with no quarks $R_1$ reduces to $B_g\ln\Phi$, whose only root
+is $\Phi=1$), so the ceiling must be close enough that $|\ln\Phi|=10^{-13}$
+falls inside the residual gate, and far enough that $\Mstar=2.8\times10^{15}$
+MeV stays an ordinary double. $1-10^{-13}$ is both.
 
 \subsection{Mean fields}
 
@@ -171,6 +210,11 @@ $v$ and $v_\zeta$ are constants, not fields: the Mexican-hat radii before
 explicit breaking, and not observables. The linear terms shift the true minima
 to $\sigma_0,\zeta_0$.
 
+A state whose effective masses are not all positive is marked invalid and
+dropped by the enumeration rather than ranked: the Mexican hat admits its
+reflected minimum, $\sigma<0$, which solves \eqref{eq:dV} and is not physical
+matter.
+
 \subsection{The diquark condensate}
 
 The three condensates
@@ -194,9 +238,11 @@ convention since the phases are unobservable in a homogeneous condensate.
 \textbf{The sign of each $\Delta_\eta$ is a gauge.} $\Omega$ is invariant under
 flipping any subset of the three gaps and each gap kernel flips with its own
 gap, so $-\Delta_\eta$ is a root whenever $\Delta_\eta$ is. The code reports
-magnitudes.
+magnitudes; the signed values stay on the internal state and in the unknown
+vector, which is what a warm start is built from.
 
 \section{Chemical potentials}
+\label{sec:mu}
 
 In the conserved-charge basis, with the colour potentials present only where
 pairing is,
@@ -219,9 +265,41 @@ flips the $u$--$d$ ordering: at $\mu_B=1200$, $\mu_C=-53.15$ MeV the correct
 values are $\mu_u=364.6<\mu_d=417.7$ MeV, whereas the wrong sign gives
 $\mu_u=435.4>\mu_d=382.3$ MeV.
 
-Leptons are free Fermi gases at $\mu_\ell=\mu_{L_\ell}-\mu_C$, with masses
-$m_e=0.510999$ and $m_\mu=105.658$ MeV and degeneracy $g=2$. Trapped neutrinos
-carry $g=1$, not $2$: they are left-handed only.
+\subsection{The lepton sector}
+\label{sec:leptons}
+
+Leptons feel no field the quarks feel, carry no colour and no $C$ in the sense
+of \S1, and are free Fermi gases of \code{eos.general.thermodynamics\_leptons}.
+Masses $m_e=0.5109989$ MeV, $m_\mu=105.6584$ MeV, degeneracy $g=2$ with
+antiparticles included; trapped neutrinos are massless with $g=1$, not $2$,
+because they are left-handed only. Their thermodynamics is the same ideal gas
+as \S\ref{sec:integrals} at $\Mstar\to m_\ell$, $\mustar\to\mu_\ell$ and with
+that degeneracy.
+
+The potentials follow from the reactions that are fast:
+\begin{equation}
+\mu_e = \mu_{\nu_e} - \mu_C \quad (n+\nu_e\leftrightarrow p+e),
+\qquad
+\mu_\mu = \mu_e - \mu_{\nu_e} \quad (\mu^-\leftrightarrow e^-\bar\nu_e\nu_\mu),
+\label{eq:leptonmu}
+\end{equation}
+with $\mu_{\nu_e}=0$ where the neutrinos free-stream --- which is what
+free-streaming \emph{means} here: no lepton number and no pressure of their
+own. Only the electron family is ever trapped; the muon neutrinos escape,
+which is why $\mu_\mu = \mu_e - \mu_{\nu_e}$ rather than $\mu_e$.
+
+In a mode that \emph{holds} $Y_C$ (\S\ref{sec:modes}), $\mu_e$ is not given by
+\eqref{eq:leptonmu} at all: with \code{leptons=True} the neutralizing leptons
+are solved \emph{after} the matter, from the single condition
+\begin{equation}
+n_e(\mu_e,T) + n_\mu(\mu_e,T) = n_C,
+\label{eq:neutralizing}
+\end{equation}
+because nothing about them feeds back into the quark sector. They are
+therefore not a row of the residual. With \code{leptons=False} there are no
+leptons at all and the phase is electrically charged --- which is what a
+mixed-phase construction needs of each pure phase before imposing
+\emph{global} neutrality.
 
 \section{The vector coupling and its rearrangement}
 \label{sec:vector}
@@ -234,7 +312,18 @@ g_\omega(n_B) = \frac{\bar g_\omega}{1+(n_B/n_c)^2},
  = -\frac{2\bar g_\omega\,n_B/n_c^2}{\left[1+(n_B/n_c)^2\right]^2}.
 \label{eq:gomega}
 \end{equation}
-Its field equation is sourced by the \textbf{quark} number density
+with $n_c$ stored in fm$^{-3}$ --- a density a reader holds in fm --- and
+converted to MeV$^3$ where $n_B$ is, so a caller never has to remember which
+side of the boundary it is on.
+A repulsion that dies off at high density is what keeps the sound speed away
+from the causal limit without a hand-placed ceiling: the vector energy grows as
+$g_\omega^2 n_q^2$, so a coupling falling as $n_B^{-2}$ turns it into a term
+that stops growing at all. The derivative is negative everywhere, which is also
+why the innermost fixed point on $\omega_0$ converges monotonically.
+$\bar g_\omega=0$ switches the whole sector off, exactly (no $\omega_0$, no
+$\Sigma_R$, and no $\Sigma_V$ row in the unknown vector).
+
+The field equation is sourced by the \textbf{quark} number density
 $n_q=3n_B$, because the coupling in $\mathcal L_{\rm vec}$ is to
 $\bar q\gamma^\mu q$; using $n_B$ understates $\omega_0$ by a factor three and
 the repulsive energy by nine:
@@ -263,6 +352,7 @@ $\Sigma_V$ --- changes sign there; this is a property of the coupling form
 The diquark coupling may be dressed by the dielectric,
 \begin{equation}
 G_D \longrightarrow G_D/\chi^{\,q},\qquad q\in\{0,1\},
+\label{eq:GDdress}
 \end{equation}
 $q=1$ being the exponent a gluon-exchange origin gives and the largest that
 leaves the pairing channel confined, the criterion being $q\le p$ because the
@@ -270,6 +360,7 @@ critical coupling for vacuum diquark condensation grows only linearly in
 $\Mstar\propto\chi^{-p}$.
 
 \section{The ideal-gas integrals}
+\label{sec:integrals}
 
 Every momentum integral in this model is a relativistic ideal gas of one
 colour--flavour mode with spin degeneracy $g=2$. With
@@ -309,13 +400,43 @@ They satisfy, per mode and to machine precision,
 Note that the single-mode Euler relation carries $T\mathcal S$ and \emph{not}
 $\Mstar\mathcal R_s$: the scalar density is a response, not a conserved charge.
 
+$\mathcal S$ is \emph{integrated}, through \eqref{eq:S}, and not obtained from
+$\mathcal S=(\mathcal E+\mathcal P-\mustar\mathcal N)/T$. The two are equal
+identically --- the identity holds integrand by integrand, so it even survives
+the cutoff --- but the Euler route is a difference of three numbers of order
+$10^{9}$ divided by $T$, and in a cold nearly degenerate gas, where
+$\mathcal S$ is genuinely $10^{-8}$ of them, the cancellation eats every
+significant digit. Integrating costs one more array in the same quadrature
+pass and leaves \eqref{eq:modeeuler} available as a \emph{check} rather than
+spending it as a definition.
+
+$\mathcal P$ is the \textbf{logarithm} form of \eqref{eq:P} and not the
+$k^4/E$ form
+$\tfrac{g}{6\pi^2}\int\mathrm dk\,(k^4/E_k)(f^+_k+f^-_k)$. The two differ by
+the boundary term of the integration by parts,
+\begin{equation}
+\mathcal P_{\log} - \mathcal P_{k^4}
+ = \frac{g}{6\pi^2}k_{\max}^3\,T\sum_\pm
+ \ln\left(1+e^{-(E_{k_{\max}}\mp\mustar)/T}\right),
+\end{equation}
+which does not vanish when the integral is cut and is not small: $0.1\%$ of
+$\mathcal P$ at $(\Mstar,\mustar,T)=(100,500,20)$ MeV, $10.5\%$ at
+$(40,590,30)$ and $39.9\%$ at $(140,700,50)$. At $T=0$ with $k_F<k_{\max}$ the
+two agree, which is exactly why the error would hide until a table was built
+at finite temperature.
+
 \textbf{The medium integrals are unregularised.} $k_{\max}$ is a numerical
 ceiling at which the integrand has died,
-$k_{\max}=\max(|\mustar|,\Mstar)+45T+12\Mstar+200$ MeV, and not a parameter;
-the cutoff $\Lambda$ of \S\ref{sec:pairing} applies to the \emph{pairing}
-integral alone. This is why a sharp cutoff is admissible here, and it implies
-the validity ceiling $\mu_{\max}=\sqrt{\Lambda^2+\Mstar{}^2}$ for the pairing
-sector, which the code declares rather than exceeds.
+\begin{equation}
+k_{\max}=\max(|\mustar|,\Mstar)+45\,T+12\,\Mstar+200\ \text{MeV},
+\label{eq:kmax}
+\end{equation}
+and not a parameter; the $12\Mstar$ term is what covers the antiparticle tail
+of a heavy confined mode, whose integrand decays on the scale of $\Mstar$
+rather than of $T$. The cutoff $\Lambda$ of \S\ref{sec:pairing} applies to the
+\emph{pairing} integral alone. This is why a sharp cutoff is admissible here,
+and it implies the validity ceiling $\mu_{\max}=\sqrt{\Lambda^2+m_s^2}$ for the
+pairing sector, which the code declares rather than exceeds.
 
 \subsection{Quadrature, and confinement}
 
@@ -332,7 +453,12 @@ All five integrals \eqref{eq:N}--\eqref{eq:S} return exactly $0$, not a small
 number. This is the confinement mechanism itself: as $\phib\to1$ the dielectric
 closes, $\Mstar$ diverges through \eqref{eq:masses}, and the quarks leave the
 medium. Smoothing the threshold destroys the pinning that makes the
-deconfinement transition first order.
+deconfinement transition first order. At $T>0$ the same statement is a
+threshold rather than an identity, and the code applies it where
+$\Mstar-|\mustar| > 60\,T$: the occupation there is $e^{-60}\sim10^{-26}$, so
+it is exact well inside double precision, and it exists because the confined
+branch drives $\Mstar$ to $10^{15}$ MeV, where integrating is not wrong but
+pointless.
 
 At $T=0$ and $\mustar>\Mstar$ the closed forms are
 \begin{align}
@@ -348,12 +474,27 @@ At $T=0$ and $\mustar>\Mstar$ the closed forms are
 \mathcal E &= \frac{g}{16\pi^2}\left[2k_F^3\mustar
  + \Mstar{}^2\left(\mustar k_F - \Mstar{}^2\ln\frac{k_F+\mustar}{\Mstar}\right)\right].
 \end{align}
+The code reaches them as the $T\to0$ limit of the same quadrature --- the
+occupations become step functions and the upper limit becomes $k_F$ --- rather
+than by a separate branch, so the two agree by construction.
+
+The photon gas, where the \code{photons} flag enables it, is the massless
+$\mu=0$ boson with $g=2$:
+\begin{equation}
+\mathcal P_\gamma = \frac{\pi^2}{45}T^4,\qquad
+\mathcal E_\gamma = 3\mathcal P_\gamma,\qquad
+\mathcal S_\gamma = \frac{4\pi^2}{45}T^3,
+\label{eq:photon}
+\end{equation}
+carrying no conserved charge.
 
 \section{The pairing sector}
 \label{sec:pairing}
 
-The pairing machinery is shared with the NJL model of this repository and is
-stated here in full so that this document is self-contained.
+The pairing machinery is shared with the NJL model of this repository
+(\code{eos.general.pairing}) and is stated here in full so that this document
+is self-contained. It follows \cite{Buballa2005,Alford2008,Ruester2005}, with
+the neutrality treatment of \cite{Steiner2002}.
 
 \subsection{The gap matrix and the BdG problem}
 
@@ -382,16 +523,21 @@ diagonalises
 \boxed{\;
 H_{\rm BdG}(k) = \begin{pmatrix} \xi(k) & \mathcal G \\ \mathcal G & -\xi(k)\end{pmatrix},
 \qquad
-\xi(k) = \mathrm{diag}\left(E_{k,f(j)} - r\,\mustar_j\right)_{j=1}^{9},\;}
+\xi^{(j),r}(k) = E_{k,f(j)} - r\,\mustar_j,\;}
 \label{eq:bdg}
 \end{equation}
 an $18\times18$ real symmetric matrix, once for particles ($r=+1$) and once for
-antiparticles ($r=-1$). The nine quasiparticle energies $E^{(j),r}_\Delta(k)$
-are the \textbf{non-negative half of the signed spectrum},
+antiparticles ($r=-1$), with $\xi=\mathrm{diag}(\xi^{(j),r})_{j=1}^{9}$. The
+nine quasiparticle energies $E^{(j),r}_\Delta(k)$ are the \textbf{non-negative
+half of the signed spectrum},
 $\mathrm{sort}(\mathrm{eigvalsh})[9{:}]$, and not the nine largest in modulus:
 the two agree in value, but only the first is smooth through a gapless window,
 and that smoothness is what makes the Hellmann--Feynman derivatives below carry
-the correct branch sign.
+the correct branch sign. Write $\mathcal V^{(j),r}(k)$ for the corresponding
+$18$-component eigenvector and split it as
+$\mathcal V = (\mathcal V^{\rm top},\mathcal V^{\rm bot})$ into its two
+$9$-component halves; the matrix is real, so
+$|\mathcal V^{\rm top}_{ib}|^2$ is simply its square.
 
 \subsection{The pairing potential, as a correction}
 
@@ -401,25 +547,34 @@ the correct branch sign.
 \label{eq:Omegaquark}\\
 \delta\Omega_{\rm pair} &= -\frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2
  \sum_{r=\pm}\sum_{j=1}^{9}
- \Bigl\{\left(E^{(j),r}_\Delta - \left|\xi^{(j),r}\right|\right)
- + 2T\Bigl[\ln\bigl(1+e^{-E^{(j),r}_\Delta/T}\bigr)
- - \ln\bigl(1+e^{-|\xi^{(j),r}|/T}\bigr)\Bigr]\Bigr\}.
-\label{eq:dOmega}
+ \left[\phi\!\left(E^{(j),r}_\Delta\right)
+ - \phi\!\left(\left|\xi^{(j),r}\right|\right)\right],
+\label{eq:dOmega}\\
+\phi(x) &\equiv x + 2T\ln\left(1+e^{-x/T}\right),
+\qquad \phi'(x) = \tanh\frac{x}{2T},
+\qquad \frac{\partial\phi}{\partial T}
+ = 2\ln\left(1+e^{-x/T}\right) + \frac{2x/T}{e^{x/T}+1}.
+\label{eq:phi}
 \end{align}
 Written as a \emph{correction} --- a difference from the unpaired spectrum ---
-every brace vanishes identically at $\Delta_\eta=0$, so $\delta\Omega_{\rm
+every bracket vanishes identically at $\Delta_\eta=0$, so $\delta\Omega_{\rm
 pair}=0$ there exactly and the whole expression reduces to the unpaired one
-mode by mode. The alternative "replacement" form, in which the paired modes'
+mode by mode. The alternative ``replacement'' form, in which the paired modes'
 Fermi integrals are dropped and the $|E|$ integral put in their place, differs
 by a $\Delta$-independent but $\Lambda$-dependent constant of about 2\% of the
-term: the gap comes out right and the equation of state is wrong.
+term: the gap comes out right and the equation of state is wrong. In the clean
+weak-coupling limit \eqref{eq:dOmega} obeys the BCS logarithm,
+$-\delta\Omega_{\rm pair}/[\mu^2\Delta^2(\ln(2\Lambda/\Delta)-\tfrac12)]
+\to 2/\pi^2$, approached from below as $\Delta$ falls.
 
 \textbf{The antiparticle branches are not optional.} At $T=0$ they contribute
 $8.8\%$ of the pairing potential at $\Lambda=600$ MeV and $17.1\%$ at
 $\Lambda=1000$ MeV, so omitting them is a cutoff-dependent error that cancels
-nowhere. The thermal logarithm is computed as
-$2T\,\mathrm{logaddexp}(0,-|E|/T)$, never as $2T\ln(1+e^{-|E|/T})$, which
-overflows for $|E|/T\gtrsim700$.
+nowhere. Every logarithm in \eqref{eq:phi} is computed as
+$T\,\mathrm{logaddexp}(0,-x/T)$ and every occupation through $\tanh$, never as
+$\ln(1+e^{-x/T})$ or $1/(1+e^{x/T})$ directly, which overflow for
+$x/T\gtrsim700$ --- a $T=1$ MeV point with a $300$ MeV branch reaches that
+immediately.
 
 \subsection{The three gap equations}
 
@@ -441,40 +596,91 @@ $\partial H_{\rm BdG}/\partial\Delta_\eta$ is the constant matrix
 $\mathcal B_\eta$ in the off-diagonal blocks, assembled once.
 
 \textbf{This is never the $\Delta/|E|$ form}, which is obtained by
-differentiating $|E|$ as though every branch were positive. That form is wrong
-by a factor $12$ in the gapless window, and it makes the gap \emph{grow} with
-the Fermi-surface mismatch --- the opposite of the physics.
+differentiating $|E|$ as though every branch were positive. Against finite
+differences of $\delta\Omega_{\rm pair}$ at $\mu_u=400$, $\mu_d=500$ MeV that
+form is wrong by a factor $12.0$ at $\Delta=40$ MeV, $1.7$ at $60$ and $1.3$
+at $80$, and it makes the gap \emph{grow} with the Fermi-surface mismatch ---
+the opposite of the physics.
 
-\subsection{Paired densities and entropy}
+\subsection{Paired densities, scalar densities and entropy}
+\label{sec:paired}
 
 For the modes the gap touches, the densities are \emph{not} the unpaired Fermi
-integrals: pairing redistributes occupation around the Fermi surface, so
+integrals: pairing redistributes occupation around the Fermi surface. Every
+paired quantity is again a \emph{correction}, so it is added to the unpaired
+sum without a second code path,
 \begin{equation}
-n_j = -\frac{\partial\Omega_{\rm quark}}{\partial\mu_j},
-\qquad
-\rho_{s,j} = -\frac{\partial\Omega_{\rm quark}}{\partial\Mstar_j},
+n_j = \mathcal N_j + \delta n_j,\qquad
+\rho_{s,f} = \sum_{j\in f}\mathcal R_{s,j} + \delta\rho_{s,f},\qquad
+s_{\rm quark} = \sum_j \mathcal S_j + \delta s_{\rm pair},
+\label{eq:pairedsums}
 \end{equation}
-taken by Hellmann--Feynman on \eqref{eq:bdg} in the same quadrature pass.
-Substituting the unpaired formula is a $15\%$ density error at a realistic gap
-and breaks neutrality and Euler simultaneously. The entropy is built from the
-quasiparticle occupations $n^{(j),r}_k=[1+e^{E^{(j),r}_\Delta/T}]^{-1}$; using
-the unpaired entropy in a gapped phase is a four-orders-of-magnitude error at
-low $T$. The suppression is a property of the \emph{spectrum}: at matched Fermi
-surfaces the entropy ratio is $2.0\times10^{-4}$ at $T=5$ MeV and
-$\Delta=60$ MeV, while at $\Mstar_s=300$ MeV the mismatch pushes the lowest
-branch from $60$ to $11.9$ MeV and the ratio only to $0.20$.
+and each correction is the Hellmann--Feynman derivative of \eqref{eq:dOmega},
+taken on \eqref{eq:bdg} in the same quadrature pass:
+\begin{align}
+\delta n_j &= -\frac{\partial\,\delta\Omega_{\rm pair}}{\partial\mu_j}
+ = \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{r=\pm}\left[
+ -r\sum_{b=1}^{9}\tanh\frac{E^{(b),r}_\Delta}{2T}
+ \left(\left|\mathcal V^{{\rm top},(b),r}_{j}\right|^2
+      -\left|\mathcal V^{{\rm bot},(b),r}_{j}\right|^2\right)
+ + r\tanh\frac{\xi^{(j),r}}{2T}\right],
+\label{eq:dn}\\
+\delta\rho_{s,f} &= -\frac{\partial\,\delta\Omega_{\rm pair}}{\partial\Mstar_f}
+ = -\frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{r=\pm}
+ \sum_{j\in f}\frac{\Mstar_f}{E_{k,f}}\left[
+ \sum_{b=1}^{9}\tanh\frac{E^{(b),r}_\Delta}{2T}
+ \left(\left|\mathcal V^{{\rm top},(b),r}_{j}\right|^2
+      -\left|\mathcal V^{{\rm bot},(b),r}_{j}\right|^2\right)
+ - \tanh\frac{\xi^{(j),r}}{2T}\right],
+\label{eq:drhos}\\
+\delta s_{\rm pair} &= -\frac{\partial\,\delta\Omega_{\rm pair}}{\partial T}
+ = \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{r=\pm}\sum_{j=1}^{9}
+ \left[\frac{\partial\phi}{\partial T}\!\left(E^{(j),r}_\Delta\right)
+ - \frac{\partial\phi}{\partial T}\!\left(\left|\xi^{(j),r}\right|\right)\right],
+\label{eq:ds}
+\end{align}
+with $\partial\phi/\partial T$ from \eqref{eq:phi}. Note the sign of
+\eqref{eq:drhos}: the scalar density is $\rho_s=+\partial\Omega/\partial\Mstar$
+(equivalently $-\partial P/\partial\Mstar$, which is \eqref{eq:modeeuler}), so
+the correction carries the opposite sign to $\delta n_j$; \emph{substituting
+the unpaired formula for either is a $15\%$ density error at a realistic gap
+and breaks neutrality and Euler simultaneously.} Using the unpaired entropy in
+a gapped phase is a four-orders-of-magnitude error at low $T$: the suppression
+is a property of the \emph{spectrum}, and at matched Fermi surfaces the entropy
+ratio is $2.0\times10^{-4}$ at $T=5$ MeV and $\Delta=60$ MeV, while at
+$\Mstar_s=300$ MeV the mismatch pushes the lowest branch from $60$ to $11.9$
+MeV and the ratio only to $0.20$.
+
+$T=0$ is a branch of \eqref{eq:phi}, not a limit of it: in a fully gapped phase
+every Taylor coefficient in $T$ vanishes, so
+$\phi(x)\to x$, $\phi'(x)\to\mathrm{sign}(x)$ and $\partial\phi/\partial T\to0$
+are substituted rather than approached.
+
+A state is flagged \textbf{gapless} when the smallest quasiparticle energy on
+the quadrature grid has collapsed relative to the gap scale,
+\begin{equation}
+\min_{k,j,r} E^{(j),r}_\Delta < 10^{-3}\max_\eta\left|\Delta_\eta\right| .
+\label{eq:gapless}
+\end{equation}
+A gapless solution is a real physical state, but it is not a stationary point
+of the same functional as a fully gapped one, so comparing $\Omega$ across one
+is not valid --- which is why it is \emph{reported} rather than silently
+ranked.
 
 Colour neutrality is imposed \emph{within} the pattern:
 \begin{equation}
 n_3 = \sum_f\left(n_{(f,r)}-n_{(f,g)}\right)=0,
 \qquad
-n_8 = \sum_f\left(n_{(f,r)}+n_{(f,g)}-2n_{(f,b)}\right)=0 .
+n_8 = \sum_f\left(n_{(f,r)}+n_{(f,g)}-2 n_{(f,b)}\right)=0 .
 \label{eq:colour}
 \end{equation}
-In an \emph{unpaired} region $n_3$ and $n_8$ vanish identically at
-$\mu_3=\mu_8=0$ whatever else the state does, so the colour potentials are
-unconstrained there and are pinned rather than solved for; a paired phase's
-$\mu_8$ cannot be inherited from an unpaired solution.
+These are the generator densities up to the constant factors $\tfrac12$ and
+$\tfrac13$ of $T_3$ and $T_8$; a row that must vanish does not care about its
+own normalisation, and this is the form the literature states. In an
+\emph{unpaired} region $n_3$ and $n_8$ vanish identically at $\mu_3=\mu_8=0$
+whatever else the state does, so the colour potentials are unconstrained there
+and are pinned rather than solved for; a paired phase's $\mu_8$ cannot be
+inherited from an unpaired solution.
 
 \section{Assembly}
 \label{sec:assembly}
@@ -483,31 +689,34 @@ Write the mode sums
 $S_{\mathcal P}=\sum_j\mathcal P_j$, $S_{\mathcal E}=\sum_j\mathcal E_j$,
 $S_{\mathcal S}=\sum_j\mathcal S_j$, the pairing cost
 $D=\sum_\eta\Delta_\eta^2/4G_D$, and the vector field energy
-$W=\tfrac12 m_\omega^2\omega_0^2$. Then
+$W=\tfrac12 m_\omega^2\omega_0^2$. The \textbf{matter block} --- quarks and
+fields only, which is what a phase owns and what \code{eos.mixed} consumes ---
+is
 \begin{align}
-\boxed{\;\Omega = U(\Phi) + V(\sigma,\zeta) - W - \Sigma_R\,n_q
- - S_{\mathcal P} + \delta\Omega_{\rm pair} + D
- - \sum_\ell\mathcal P_\ell - \mathcal P_\gamma\;}
+\boxed{\;\Omega_{\rm matter} = U(\Phi) + V(\sigma,\zeta) - W - \Sigma_R\,n_q
+ - S_{\mathcal P} + \delta\Omega_{\rm pair} + D\;}
 \label{eq:Omega}\\
-\boxed{\;\varepsilon = S_{\mathcal E} + U + V + W + \varepsilon_{\rm pair}
- + \sum_\ell\mathcal E_\ell + \mathcal E_\gamma\;}
+\boxed{\;\varepsilon_{\rm matter} = S_{\mathcal E} + U + V + W
+ + \varepsilon_{\rm pair}\;}
 \label{eq:eps}
 \end{align}
-with $P=-\Omega$,
+with $P_{\rm matter}=-\Omega_{\rm matter}$,
 \begin{equation}
 \varepsilon_{\rm pair} = \delta\Omega_{\rm pair} + D
  + T\,\delta s_{\rm pair} + \sum_j \mustar_j\,\delta n_j,
 \qquad
-s = S_{\mathcal S} + \delta s_{\rm pair}
- + \sum_\ell\mathcal S_\ell + \tfrac{4}{45}\pi^2T^3,
+s_{\rm matter} = S_{\mathcal S} + \delta s_{\rm pair},
+\qquad
+\sum_j\mu_jn_j
 \end{equation}
-$\mathcal P_\gamma=\pi^2T^4/45$ and $\mathcal E_\gamma=3\mathcal P_\gamma$.
-The conserved-charge sums are
+the last being taken over the \emph{physical} mode potentials \eqref{eq:mu},
+not the shifted ones. The conserved-charge sums are
 \begin{equation}
 n_f = \sum_a n_{(f,a)},\qquad
-n_B = \tfrac13\sum_f n_f,\qquad
+n_B = \tfrac13\sum_f n_f = \tfrac13 n_q,\qquad
 n_C = \sum_f q_f n_f,\qquad
 n_S = n_s .
+\label{eq:sums}
 \end{equation}
 
 \textbf{The signs.} $U+V$ enter $\varepsilon$ positively and $P$ negatively;
@@ -516,18 +725,69 @@ term $\Sigma_R n_q$ enters $P$ only. No vacuum subtraction appears anywhere,
 because $U$ and $V$ both vanish at the physical vacuum by construction
 (\S\ref{sec:parameters}).
 
-The audit that must hold at every solved point, and does to machine precision:
+The audit that must hold at every solved point, on the matter block, and does
+to machine precision (measured $-7.0\times10^{-16}$ relative at
+$n_B=1.5$ fm$^{-3}$, $T=0$, beta equilibrium) is
 \begin{equation}
-\boxed{\;\varepsilon + P = Ts + \sum_j \mu_j n_j\;}
+\boxed{\;\varepsilon_{\rm matter} + P_{\rm matter}
+ = T s_{\rm matter} + \sum_j \mu_j n_j\;}
 \label{eq:euler}
 \end{equation}
-together with $f=\varepsilon-Ts=-P+\sum_j\mu_jn_j$ and $P=-\Omega$ computed
-from the two assemblies independently.
+together with $f=\varepsilon-Ts=-P+\sum_j\mu_jn_j$ and
+$P=-\Omega$ computed from the two assemblies independently.
+
+\subsection{The totals}
+\label{sec:totals}
+
+The sectors that are shared by the system rather than owned by the phase ---
+leptons, photons, and the neutrino flavours not tracked in the composition ---
+are added on top of the matter block:
+\begin{align}
+P &= P_{\rm matter} + \sum_\ell \mathcal P_\ell
+ + [\gamma]\,\mathcal P_\gamma + [\nu]\,N_\nu\,\mathcal P_{\nu}(0,T),
+\label{eq:Ptot}\\
+\varepsilon &= \varepsilon_{\rm matter} + \sum_\ell \mathcal E_\ell
+ + [\gamma]\,3\mathcal P_\gamma + [\nu]\,N_\nu\,\mathcal E_{\nu}(0,T),
+\\
+s &= s_{\rm matter} + \sum_\ell \mathcal S_\ell
+ + [\gamma]\,\tfrac{4}{45}\pi^2T^3 + [\nu]\,N_\nu\,\mathcal S_{\nu}(0,T),
+\qquad f = \varepsilon - Ts .
+\label{eq:stot}
+\end{align}
+$[\gamma]$ and $[\nu]$ are the \code{photons} and \code{thermal\_neutrinos}
+flags of \S\ref{sec:flags}, and the sum over $\ell$ runs over the electrons,
+the muons where \code{muons} is set, and the trapped electron neutrinos where
+$\mu_{\nu_e}\neq0$; every one of those is the ideal gas of
+\S\ref{sec:leptons}. $N_\nu$ is the number of \emph{untracked} massless
+$\mu=0$ neutrino flavours,
+\begin{equation}
+N_\nu = \begin{cases} 3 & \text{free-streaming } (\mu_{\nu_e}=0),\\
+                      2 & \text{trapped},\end{cases}
+\end{equation}
+two in the trapped case because the electron flavour is then already counted
+at its own potential. These carry no conserved charge and enter $P$,
+$\varepsilon$ and $s$ only.
+
+\subsection{The scalar density, and why it is not a trace identity}
+
+The model returns per-flavour scalar densities $\rho_{s,f}$, and they are the
+integral \eqref{eq:Rs} plus the pairing correction \eqref{eq:drhos}, computed
+directly. \textbf{The identity $n_s = (\varepsilon-3P)/m^{*}$ does not apply
+here} and is not used: it holds for a single ideal Fermi gas, whereas
+$\varepsilon$ and $P$ of \eqref{eq:Omega}--\eqref{eq:eps} carry $U$, $V$, $W$,
+$\Sigma_R n_q$ and the pairing terms, and there are three distinct $\Mstar_f$
+rather than one $m^{*}$ to divide by. What replaces it as the audit is
+\eqref{eq:euler} together with the per-mode relations \eqref{eq:modeeuler},
+which is the stronger statement: $\rho_{s,f}$ is checked as
+$-\partial\mathcal P/\partial\Mstar_f$, at every flavour, rather than as one
+combination of totals. The quantity called $n_S$ in this model is
+\emph{strangeness}, \eqref{eq:sums}, not a scalar density; the collision of
+names is why this paragraph exists.
 
 \subsection{Two corrections to the specification}
 \label{sec:corrections}
 
-\texttt{docs/ccdm\_implementation.md} is the authority for this model, and two
+\code{docs/ccdm\_implementation.md} is the authority for this model, and two
 places in its assembly do not survive the audit \eqref{eq:euler} that its own
 \S9.6 mandates.
 
@@ -559,11 +819,14 @@ The unknown vector, in the order the solver assembles it, is
 \vec X = \bigl(\Phi,\ \sigma,\ \zeta,\ [\Sigma_V],\
  [\Delta_\eta]_{\eta\in\rm free},\ [\mu_3,\mu_8],\
  \mu_B,\ \mu_C,\ [\mu_S],\ [\mu_{\nu_e}]\bigr),
+\label{eq:unknowns}
 \end{equation}
 the bracketed entries being present only where the model or the mode has them:
 $\Sigma_V$ where $\bar g_\omega\neq0$, the gaps as the pairing pattern
 declares, the colour potentials whenever the pattern pairs at all, $\mu_S$ iff
-the mode holds $Y_S$, and $\mu_{\nu_e}$ iff it holds $Y_{L_e}$.
+the mode holds $Y_S$, and $\mu_{\nu_e}$ iff it holds $Y_{L_e}$. Where $\mu_S$
+is \emph{not} an unknown it is zero, because strangeness-changing weak
+reactions are fast on any astrophysical timescale.
 
 The rows, in the same order:
 \begin{align}
@@ -577,11 +840,28 @@ R_3 &= \frac{\partial V}{\partial\zeta}
 \label{eq:R3}\\
 R_4 &= \Sigma_V - \left[g_\omega(n_B)\,\omega_0 + \Sigma_R\right] &&\text{vector}
 \label{eq:R4}\\
-R_{\Delta_\eta} &= \text{Eq.~\eqref{eq:gapeq}} &&\text{one per free gap}\\
-R_{n_3},\ R_{n_8} &= \text{Eq.~\eqref{eq:colour}} &&\text{colour neutrality}\\
+R_{\Delta_\eta} &= \frac{\Delta_\eta}{2G_D} - \mathcal K_\eta
+ \quad\text{[Eq.~\eqref{eq:gapeq}]} &&\text{one per free gap}\\
+R_{n_3} = n_3,\quad R_{n_8} &= n_8
+ \quad\text{[Eq.~\eqref{eq:colour}]} &&\text{colour neutrality}\\
 R_{n_B} &= n_B - n_B^{\rm target} &&\text{the density}\\
-&\quad\text{+ the mode's charge rows (\S\ref{sec:modes})}. \nonumber
+&\quad\text{+ the mode's charge rows, \eqref{eq:chargerows}}. \nonumber
 \end{align}
+with $\mathcal K_\eta$ the Hellmann--Feynman kernel of \eqref{eq:gapeq}. The
+charge rows are, in this order and only where the mode has them,
+\begin{equation}
+\begin{aligned}
+&\text{$C$ held:}    &&n_C - Y_C\,n_B, &&\qquad
+ \text{$C$ equilibrated:} &&n_C - \left[n_e(\mu_e,T)+n_\mu(\mu_\mu,T)\right],\\
+&\text{$S$ held:}    &&n_S - Y_S\,n_B, &&\qquad
+ \text{$L_e$ held:} &&n_e(\mu_e,T)+n_{\nu_e}(\mu_{\nu_e},T) - Y_{L_e}\,n_B,
+\end{aligned}
+\label{eq:chargerows}
+\end{equation}
+with $\mu_e,\mu_\mu$ from \eqref{eq:leptonmu}. Exactly one of the two $C$ rows
+is present. In a fixed-fraction mode the neutralizing leptons of
+\eqref{eq:neutralizing} are \emph{not} a row: they are solved after the matter,
+from the charge the matter turned out to carry.
 
 Equation \eqref{eq:R1} is $\partial\Omega/\partial\Phi$, obtained from
 $\partial\Omega/\partial\phib$ by dividing out the Jacobian $4\phib^{\,3}$;
@@ -600,14 +880,114 @@ this repository's declared convention for a density-dependent coupling: the
 unknown vector uses the effective potentials, so the rearrangement and the
 large vector shift cancel out of the iteration.
 
-Each row is divided by the scale of the quantity it balances before the
-residual norm is taken: $R_1$ by $B_g$, $R_2$ and $R_3$ by $\epsilon_\sigma$
-and $\epsilon_\zeta$, $R_4$ by $\mu_B/3$, the gap and colour rows by
-$(\mu_B/3)^3/\pi^2$, and the density and charge rows by $n_B$. Unscaled, the
-rows span twenty-two orders of magnitude and the norm would report whichever
-carries the largest units.
+\subsection{Row scales and the convergence gate}
+\label{sec:scales}
+
+Each row is divided by the scale of the quantity it balances \emph{before} it
+reaches the root finder, so the vector handed to it is dimensionless:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+row & scale & what it is \\
+\midrule
+$R_1$ & $B_g$ & an energy density \\
+$R_2,R_3$ & $|\epsilon_\sigma|,\ |\epsilon_\zeta|$
+ & scalar densities, against what they balance in vacuum \\
+$R_4$ & $\max(|\mu_B|,1)/3$ & a chemical potential \\
+$R_{\Delta_\eta},R_{n_3},R_{n_8}$ & $\max\!\left[(\mu_B/3)^3/\pi^2,\,1\right]$
+ & densities in MeV$^3$, against the quark scale \\
+$R_{n_B}$, charge rows & $\max(n_B,10^{-3})$ & baryon densities in fm$^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Unscaled, the rows span twenty-two orders of magnitude --- the dilaton row is
+an energy density in MeV$^4$ against a charge row in fm$^{-3}$ --- and the
+norm would report whichever carries the largest units.
+
+The solve is Powell's hybrid method, then Levenberg--Marquardt, then (when a
+warm start was given) one more hybrid attempt from the mode's own cold guess,
+each with a bounded iteration count; the root finder's own tolerance is
+$10^{-13}$, and \code{converged} is the separate repository-wide gate
+\begin{equation}
+\max_i \left|R_i\right|/\text{scale}_i < 10^{-10},
+\end{equation}
+so that ``converged'' means one thing in every model of this repository.
+\textbf{Non-convergence is a return value}, never an exception and never a
+hang: the returned point carries the best iterate reached and a status the
+caller tests.
+
+\subsection{The cold start}
+\label{sec:guess}
+
+With $n_q = \max(3n_B (\hbar c)^3, 1)$ MeV$^3$ and
+$\mu_q=\max\!\left[(\tfrac12\pi^2 n_q)^{1/3},50\right]$ MeV --- the free
+massless relation at one flavour per colour, floored so a vanishing density
+does not give a vanishing potential --- the default guess is
+\begin{equation}
+\begin{aligned}
+(\Phi,\sigma,\zeta) &= \text{the branch seed of Table~\ref{tab:branches}}, &
+\Sigma_V &= 0, \\
+\Delta_\eta &= \text{the pattern seed} \times \max(0.1\mu_q,20), &
+(\mu_3,\mu_8) &= (0,\,-0.02\mu_q), \\
+\mu_B &= 3\mu_q, &
+\mu_C &= \begin{cases}0 & \text{CFL}\\ -0.05\mu_q & \text{otherwise,}\end{cases}\\
+\mu_S &= -0.6\,\mu_q\left[1-\min(Y_S,1)\right], &
+\mu_{\nu_e} &= 0.3\mu_q .
+\end{aligned}
+\end{equation}
+Three of these are choices rather than conveniences. $\Sigma_V=0$ because
+$R_4$ is nearly linear in $\omega_0$, so the first Newton step lands close and
+a nonzero seed only risks starting on the far side of the density the coupling
+is evaluated at. $\mu_C=0$ in CFL because CFL matter is electrically neutral
+\emph{without} electrons, and seeded with an electron-bearing potential a CFL
+solve converges to a spurious point. $\mu_S$ is seeded on the sign that
+\emph{suppresses} strangeness: with $S=+1$ per $s$ quark the $s$ modes sit at
+$\mustar_s = \mu_B/3-\mu_C/3+\mu_S-\Sigma_V$, so a negative $\mu_S$ is what
+pushes them below their own effective mass, and seeded at zero the strange
+sector starts fully populated.
+
+That seed does \emph{not} make $Y_S=0$ converge and is not meant to. Once
+$\Mstar_s$ rises above $\mustar_s$ the strange density is identically zero, the
+strangeness row is satisfied for a whole \emph{range} of $\mu_S$, and its
+column of the Jacobian vanishes, so the solve stalls on the threshold with
+$\mu_S$ wherever its path reached. That is the general statement that a
+potential is only pinned as tightly as its conjugate density responds, and it
+is recorded in \code{docs/DEFERRED.md}.
+
+A warm start replaces this seed with a converged neighbour's unknown vector.
+The fields are \textbf{not} carried across a branch --- a branch \emph{is} a
+choice of field root, so seeding the restored branch from the confined one's
+fields hands it the very root it is meant to be an alternative to --- and a
+seed belongs to the layout it was solved in, since a 2SC vector has one gap in
+it and a CFL vector three.
+
+\section{The internal system: the phase-adapter surface}
+\label{sec:internal}
+
+\code{eos.mixed} couples this model to a hadronic one through one function,
+which maps $(\mu_B,\mu_C,\mu_S,T)$ to a thermodynamic block. That function
+solves the model's own \emph{internal} self-consistency at those fixed
+potentials and nothing else: the unknowns are
+\begin{equation}
+\vec X_{\rm int} = \bigl(\Phi,\ \sigma,\ \zeta,\ [\Sigma_V],\
+ [\Delta_\eta]_{\eta\in\rm free},\ [\mu_3,\mu_8]\bigr),
+\end{equation}
+and the rows are $R_1,R_2,R_3,[R_4]$, the free gap equations and, where the
+pattern pairs, the two colour-neutrality rows --- that is,
+\S\ref{sec:residual} without the density row and without any charge row. The
+scales are those of \S\ref{sec:scales} with $\mu_B$ the given potential.
+
+Colour neutrality stays \emph{inside}: it is a structural property of a
+colour-superconducting phase rather than a condition a caller chooses, so the
+engine never learns that $\mu_3$, $\mu_8$ or a dilaton exist. The branch and
+the pattern are \emph{declared} to this function, not discovered by it;
+choosing between them is a comparison across separate self-consistent solves
+and belongs to the caller (\S\ref{sec:branches}).
 
 \section{Branches and patterns: what is enumerated}
+\label{sec:branches}
 
 Neither the chiral/dielectric \textbf{branch} nor the pairing \textbf{pattern}
 is a mode: both are decided by which candidate minimises the free energy.
@@ -619,38 +999,76 @@ has collapsed and the quarks are present. \textbf{A solver that alternates
 between updating $\sigma$ and $\omega_0$ two-cycles between them} and exits
 with a mixed state --- $\sigma$ from one branch, $\omega_0$ from the other ---
 which reads as a spuriously deep minimum at zero quark density. So each branch
-is seeded separately, solved to self-consistency, and compared by $\Omega$; a
-branch that fails to converge is reported missing, never replaced by a
+is seeded separately, solved to self-consistency, and compared; a branch that
+fails to converge is reported missing, never replaced by a
 neighbour, because substituting a converged neighbouring point is how a fake
 phase boundary appears.
 
 \begin{table}[h]
 \centering
-\begin{tabular}{lll}
+\caption{The three chiral/dielectric branch seeds, as
+$(\Phi,\ \sigma/\sigma_0,\ \zeta/\zeta_0)$. The fractions are of the
+\emph{vacuum} condensates, so a parameter point with a different $m_\sigma$ or
+$f_K$ is seeded to its own vacuum rather than to the shipped one.}
+\label{tab:branches}
+\begin{tabular}{llll}
 \toprule
-branch & seed $(\Phi,\sigma,\zeta)$ & \\
+branch & seed & at fixed $\mu$ & at fixed $n_B$ \\
 \midrule
-confined & $(1^-,\ f_\pi,\ \zeta_0)$ & the vacuum: $n_B=0$, $P=0$ exactly \\
-restored & $(0.4^4,\ 0,\ 0)$ & \\
-partial & $(0.4^4,\ 0.5f_\pi,\ 0.7\zeta_0)$ & \\
+\code{confined} & $(1-10^{-6},\ 1,\ 1)$ & yes & \textbf{no} \\
+\code{restored} & $(0.4^4,\ 0,\ 0)$ & yes & yes \\
+\code{partial}  & $(0.4^4,\ 0.5,\ 0.7)$ & yes & yes \\
 \bottomrule
 \end{tabular}
 \end{table}
 
+The confined seed sits just inside the guard \eqref{eq:phiguard}: starting
+exactly at $\Phi=1$ overflows $\Mstar$ rather than approaching it. The
+partially restored seed exists because the transition is first order and the
+intermediate root is a real one over a window of densities, not because the
+other two sometimes fail.
+
 The confined branch is enumerated at fixed \emph{potential}, where it is what
-the deconfined branch must beat and the crossing is the deconfinement onset,
+the deconfined branch must beat --- it carries no quarks, so its pressure is
+exactly zero, and the onset is where the deconfined pressure crosses it ---
 and \emph{not} at fixed density: with the dielectric closed $n_B=0$
 identically, so no nonzero density row can be met and the Jacobian's field
 columns all vanish.
 
-The pairing patterns --- unpaired, 2SC, uSC, dSC, CFL, and one asymmetric free
-seed --- are declarations of which $\Delta_\eta$ are unknowns. The gap equation
-has three roots at any Fermi-surface mismatch (zero, a barrier maximum, and the
-physical BCS root), so which root a solve lands on is decided by the seed;
-enumerating the seeds is what makes the answer an answer rather than one solve
-repeated. Gapless states, $\min_k E^{(j)}_\Delta<0$, are \emph{flagged} rather
-than ranked: they are not stationary points of the same functional and
-comparing $\Omega$ across one is not valid.
+\textbf{Which potential decides depends on what is held.} At fixed potential
+the winner is the largest $P$, i.e. the smallest $\Omega$; at fixed density the
+winner is the smallest $f=\varepsilon-Ts$, which is the right potential there.
+The code uses each in its own place, and a candidate that did not converge is
+dropped rather than substituted.
+
+\begin{table}[h]
+\centering
+\caption{The pairing patterns: which $\Delta_\eta$ are unknowns, and the
+relative seed each is given. $\eta=1,2,3$ pair $(ds),(us),(ud)$. The default
+enumeration at \code{csc=True} is \code{unpaired}, \code{2SC}, \code{CFL},
+\code{free}; with \code{csc=False} only \code{unpaired} exists.}
+\label{tab:patterns}
+\begin{tabular}{lll}
+\toprule
+pattern & free gaps & seed $(\Delta_1,\Delta_2,\Delta_3)/\Delta_{\rm scale}$ \\
+\midrule
+\code{unpaired} & none                     & $(0,0,0)$ \\
+\code{2SC}      & $\Delta_3$               & $(0,0,1)$ \\
+\code{uSC}      & $\Delta_2,\Delta_3$      & $(0,0.6,1)$ \\
+\code{dSC}      & $\Delta_1,\Delta_3$      & $(0.6,0,1)$ \\
+\code{CFL}      & $\Delta_1,\Delta_2,\Delta_3$ & $(1,1,1)$ \\
+\code{free}     & $\Delta_1,\Delta_2,\Delta_3$ & $(0.3,0.6,1)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A pattern is a declaration of which $\Delta_\eta$ are unknowns, and it adds no
+code. The gap equation has three roots at any Fermi-surface mismatch (zero, a
+barrier maximum, and the physical BCS root), so which root a solve lands on is
+decided by the seed; enumerating the seeds is what makes the answer an answer
+rather than one solve repeated. \code{free} is the asymmetric seed that lets a
+CFL-layout solve fall to something that is not CFL. Gapless states,
+\eqref{eq:gapless}, are \emph{flagged} rather than ranked.
 
 The candidate set of a fixed-density solve is the \emph{product} of the two
 enumerations, because which pattern survives depends on the strange quark's
@@ -661,52 +1079,120 @@ point where the deconfined branch turns around, $\mathrm dP/\mathrm dn_B<0$:
 the mechanically unstable side. A raw branch may carry it; a construction
 (Maxwell, Gibbs, or the $\eta$-mixed phase) removes it before any table reaches
 a structure solver. Sound speeds must be taken one-sided on each branch, never
-across the transition.
+across the transition. At the shipped parameter point the deconfined pressure
+crosses zero near $n_B\simeq1.35$ fm$^{-3}$; below the onset there is no
+deconfined root at fixed density at all, and a solve there returns a status
+rather than a fabricated state.
+
+\section{Species flags}
+\label{sec:flags}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+flag & default & what it does \\
+\midrule
+\code{csc} & \code{False}
+ & the three gaps become unknowns, $\delta\Omega_{\rm pair}$ and all the \\
+ & & corrections of \S\ref{sec:paired} enter, and $\mu_3,\mu_8$ are solved
+ from \eqref{eq:colour} \\
+\code{muons} & \code{True} & the muon family, at \eqref{eq:leptonmu} \\
+\code{thermal\_neutrinos} & \code{False}
+ & the untracked flavours as $\mu=0$ gases; $P,\varepsilon,s$ only \\
+\code{photons} & \code{False} & \eqref{eq:photon}; $P,\varepsilon,s$ only \\
+\midrule
+\code{hyperons} & \code{False} & fixed: there are no baryons here to be strange \\
+\code{deltas} & \code{False} & fixed: no baryon resonances in a quark model \\
+\code{thermal\_mesons} & \code{False}
+ & fixed: $\sigma$, $\bm\pi$, $\zeta$ and $\varphi$ \emph{are} the mean \\
+ & & fields that give the quarks their masses \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The three fixed flags \textbf{raise} if set otherwise; they are never quietly
+ignored. Giving the scalars a thermal population would double-count the
+condensate they already are, and the mesonic fluctuations that would populate
+them are beyond mean field.
 
 \section{Modes}
 \label{sec:modes}
 
-The closure rows of the specification map onto the repository's four modes:
+The closure rows of the specification map onto the repository's four modes.
+\textbf{The specification labels them $R1\ldots R5$; they are relabelled
+$M1\ldots M5$ here}, because $R_1\ldots R_4$ are the residual rows of
+\S\ref{sec:residual} and one document cannot carry two meanings of one symbol.
 
 \begin{table}[h]
 \centering
-\begin{tabular}{lllp{6.2cm}}
+\begin{tabular}{lllp{5.6cm}}
 \toprule
-row & mode & variables & conditions \\
+ & mode & variables & rows added to \eqref{eq:R1}--\eqref{eq:R4} and $R_{n_B}$ \\
 \midrule
-R1 & \texttt{beta\_eq\_neutrinoless} & $(n_B,T)$ &
- $n_C=n_e+n_\mu$; $\mu_e=-\mu_C$; $\mu_S=0$ \\
-R3 & \texttt{beta\_eq\_neutrino\_trapped} & $(n_B,Y_{L_e},T)$ &
- as R1 plus $n_{L_e}=Y_{L_e}n_B$; $\nu$ with $g=1$ \\
-R2 & \texttt{fixed\_YC}, \texttt{leptons=True} & $(n_B,Y_C,T)$ &
- $n_C=Y_Cn_B$ and $n_C=n_e+n_\mu$; \textbf{no} weak equilibrium \\
-R4 & \texttt{fixed\_YC\_YS}, \texttt{leptons=False} & $(n_B,Y_C,Y_S,T)$ &
- $n_C=Y_Cn_B$, $n_S=Y_Sn_B$; no leptons \\
-R5 & \texttt{fixed\_YC\_YS} at $Y_C=\tfrac12,Y_S=0$ & $(n_B,T)$ &
- symmetric matter \\
+M1 & \code{beta\_eq\_neutrinoless} & $(n_B,T)$ &
+ $n_C=n_e+n_\mu$. $\mu_S=0$, $\mu_e=-\mu_C$, no $\mu_{\nu_e}$ \\
+M3 & \code{beta\_eq\_neutrino\_trapped} & $(n_B,Y_{L_e},T)$ &
+ $n_C=n_e+n_\mu$ and $n_e+n_{\nu_e}=Y_{L_e}n_B$; $\mu_{\nu_e}$ joins
+ \eqref{eq:unknowns}; $\nu$ with $g=1$ \\
+M2 & \code{fixed\_YC}, \code{leptons=True} & $(n_B,Y_C,T)$ &
+ $n_C=Y_Cn_B$; the leptons then solve \eqref{eq:neutralizing} \emph{after}
+ the matter. \textbf{No} weak equilibrium \\
+M4 & \code{fixed\_YC\_YS}, \code{leptons=False} & $(n_B,Y_C,Y_S,T)$ &
+ $n_C=Y_Cn_B$ and $n_S=Y_Sn_B$; $\mu_S$ joins \eqref{eq:unknowns}; no leptons
+ at all \\
+M5 & \code{fixed\_YC\_YS} at $Y_C=\tfrac12,Y_S=0$ & $(n_B,T)$ &
+ as M4: symmetric matter is a parameter choice, not a fifth mode \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-R2 is the one to state twice: it imposes total electric neutrality
+M2 is the one to state twice: it imposes total electric neutrality
 \emph{without} imposing beta equilibrium, which is what merger and
 core-collapse matter is on a dynamical timescale. \textbf{Weak equilibrium is a
 per-row closure, never an identity built into $\Omega$}; hardwiring it would
-make such matter unrepresentable. Fractions are per baryon, $Y_C=n_C/n_B$ and
-$Y_S=n_S/n_B$, which differ by a factor three from the per-quark
-$n_s/(3n_B)$ often plotted.
+make such matter unrepresentable. $Y_C$ and $Y_S$ are per baryon, which differ
+by a factor three from the per-quark $n_s/(3n_B)$ often plotted.
+
+\code{leptons=False} is refused in the two beta modes, which are \emph{defined}
+by their leptons. The muon lepton family is not available as a conserved
+charge: \code{beta\_eq\_neutrino\_trapped} takes $(n_B,Y_{L_e},T)$ and a
+$Y_{L_\mu}$ raises (\code{docs/DEFERRED.md}); the muon \emph{species} is
+available through the flag.
 
 Wherever a temperature is accepted, entropy per baryon is accepted in its
-place, through an outer one-dimensional solve for $T$.
+place, through an outer one-dimensional solve for $T$ of $s/n_B = (s/n_B)_{\rm
+target}$, since $s$ is not a variable the residual carries.
 
 \section{Parameters}
 \label{sec:parameters}
 
-\subsection{Fixed by vacuum data}
+Three tiers, and the split is what makes the model usable in an inference run:
+tier 1 is fixed by vacuum data and never sampled, tier 2 is structural and
+declared per run, tier 3 is the Bayesian vector. Everything is an argument;
+nothing is module state.
 
-$f_\pi=93$, $m_\pi=138$, $f_K=113$, $m_K=496$, $m_{u,d}=5$, $m_s=95$,
-$m_\zeta=980$, $m_\varphi=1600$ (lattice scalar glueball), $m_\omega=783$ MeV.
-Everything below follows in closed form:
+\subsection{Tier 1: fixed by vacuum data}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+symbol & value & what it is & source \\
+\midrule
+$f_\pi$    & $93$ MeV   & pion decay constant & \cite{ParticleDataGroup2024} \\
+$m_\pi$    & $138$ MeV  & pion mass (isospin average) & \cite{ParticleDataGroup2024} \\
+$f_K$      & $113$ MeV  & kaon decay constant & \cite{ParticleDataGroup2024} \\
+$m_K$      & $496$ MeV  & kaon mass & \cite{ParticleDataGroup2024} \\
+$m_u,m_d$  & $5$ MeV    & current masses & \cite{ParticleDataGroup2024} \\
+$m_s$      & $95$ MeV   & current mass & \cite{ParticleDataGroup2024} \\
+$m_\zeta$  & $980$ MeV  & the strange scalar, $f_0(980)$ & \cite{ParticleDataGroup2024} \\
+$m_\varphi$& $1600$ MeV & the scalar glueball & \cite{DragoFiolhaisTambini1996} \\
+$m_\omega$ & $783$ MeV  & the vector meson & \cite{ParticleDataGroup2024} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Everything below follows in closed form, so the scalar sector has no free
+normalisation left once tier 1 and $(m_\sigma, B_g)$ are chosen:
 \begin{align}
 \sigma_0 &= f_\pi, &
 \zeta_0 &= \sqrt2 f_K - \frac{f_\pi}{\sqrt2}, &
@@ -718,87 +1204,281 @@ v^2 &= f_\pi^2 - \frac{m_\pi^2}{\lambda}, & & \\
 \lambda_\zeta &= \frac{m_\zeta^2-\epsilon_\zeta/\zeta_0}{2\zeta_0^2}, &
 v_\zeta^2 &= \zeta_0^2 - \frac{\epsilon_\zeta}{\lambda_\zeta\zeta_0}, & &
 \end{align}
-and $C_0$ from $V(\sigma_0,\zeta_0)=0$. Numerically at $m_\sigma=550$ MeV:
-$\zeta_0=94.045$ MeV, $\lambda=16.387$, $v=86.527$ MeV,
-$\lambda_\zeta=31.414$, $v_\zeta^2=-4039.3$ MeV$^2$,
-$C_0=2.4352\times10^{9}$ MeV$^4$, $\varphi_0=56.25$ MeV.
+and $C_0$ from $V(\sigma_0,\zeta_0)=0$. Numerically at the shipped
+$m_\sigma=550$ MeV and $B_g^{1/4}=150$ MeV:
+$\sigma_0=93$ MeV, $\zeta_0=94.0452$ MeV,
+$\epsilon_\sigma=1.77109\times10^{6}$ MeV$^3$,
+$\epsilon_\zeta=3.80625\times10^{7}$ MeV$^3$,
+$\lambda=16.3866$, $v^2=7486.83$ MeV$^2$ ($v=86.5265$ MeV),
+$\lambda_\zeta=31.4135$, $v_\zeta^2=-4039.30$ MeV$^2$,
+$C_0=2.43517\times10^{9}$ MeV$^4$, $\varphi_0=56.25$ MeV,
+$B_g=5.0625\times10^{8}$ MeV$^4$.
 
 \textbf{$v_\zeta^2$ is negative} at the baseline $m_\zeta$: the strange quartic
 is convex, explicit breaking dominating, so the strange sector does not break
 chirally on its own in this truncation. The sign flips between $m_\zeta=1100$
 and $1150$ MeV. Never assume it is positive and never write $v_\zeta$ as a
-square root.
+square root --- it appears only inside the bracket of \eqref{eq:V}, squared off.
+
+\subsection{Tier 2: structural}
+
+$p=1$, \textbf{locked} --- $\chi$ and $p$ are meaningful only as the pair
+$\chi^p$, and squaring the bracket silently doubles the confining-end exponent;
+any other value raises. $q\in\{0,1\}$, shipped at $q=0$: the dielectric
+dressing \eqref{eq:GDdress} of the diquark coupling, declared per run rather
+than sampled, with $q=1$ the gluon-exchange exponent and the largest that
+$q\le p$ admits.
+
+\subsection{Tier 3: the sampled vector, and the shipped values}
+
+\begin{center}
+\begin{tabular}{lllp{5.3cm}}
+\toprule
+symbol & shipped & prior support & status \\
+\midrule
+$B_g^{1/4}$ & $150$ MeV & $120$--$250$ MeV
+ & the glue bag scale; sets $\varphi_0$ and the onset \\
+$g_q$ & $3.0$ & $3$--$6$
+ & \textbf{pinned}: the specification's \S10 table quotes
+   $\Mstar_{u,d}=826$ MeV at $\phib=0.90$ and $1531$ MeV at $0.95$ in the
+   confined branch, and both invert to $g_q=3.00$ \\
+$g_s$ & $3.0$ & $3$--$8$
+ & \emph{not} pinned; $3.0$ is the flavour-symmetric choice $g_s=g_q$ \\
+$m_\sigma$ & $550$ MeV & $450$--$700$ MeV & fixes $\lambda$ and $v$ \\
+$\bar g_\omega$ & $4.0$ & $0$--$12$
+ & \emph{not} pinned; mid-prior. $0$ switches the vector sector off (the
+   L1 $\to$ L0 reduction) \\
+$n_c$ & $1.0$ fm$^{-3}$ & $0.3$--$3$ fm$^{-3}$
+ & \emph{not} pinned; mid-prior \\
+$G_D$ & $5\times10^{-6}$ MeV$^{-2}$ & (with $\Lambda$) 
+ & calibrated here, not quoted: at this value the gap sits inside the
+   specification's $20$--$150$ MeV window at $\mu_q\simeq450$ MeV --- $30.0$
+   MeV in 2SC and $119.4$ MeV in CFL at $\mu_B=1450$, $\mu_C=-30$ MeV,
+   $T=0$. Below $\sim4.5\times10^{-6}$ the 2SC gap equation has no root but
+   the trivial one there \\
+$\Lambda$ & $600$ MeV & $550$--$800$ MeV
+ & the \textbf{pairing} cutoff only; nearly degenerate with $G_D$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Three of these eight are calibration knobs at mid-prior values rather than
+measurements, and the code says so rather than dressing them otherwise.
+$m_\omega$ is a normalisation convention, only $g_\omega/m_\omega$ entering;
+$m_\varphi$ cancels from the bulk equation of state at fixed $B_g$, pricing
+gradients and the glueball spectrum instead.
+
+$\Lambda$ implies a declared validity ceiling for the pairing sector,
+\begin{equation}
+\mu_{\rm ceiling} = \sqrt{\Lambda^2+m_s^2} = 607.47\ \text{MeV},
+\end{equation}
+above which the paired Fermi surface has left the region the sharp cutoff
+describes. A point past it is \emph{flagged and returned}, not refused: the
+unpaired thermodynamics is untouched by it, and a sampler must be able to score
+the point.
+
+\subsection{The published sets}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+name & what it is \\
+\midrule
+\code{baseline} & the shipped default above; \code{Parameters.default()} \\
+\code{novector} & $\bar g_\omega=0$: the L1 $\to$ L0 reduction \\
+\code{dressed}  & $q=1$: the gluon-exchange dressing \eqref{eq:GDdress} \\
+\code{stiff}    & $B_g^{1/4}=190$ MeV: a heavier glue scale, later onset \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The four levels the specification names are what the flags and a zero coupling
+select, not separate models: L0 quarks in the dielectric with no vector and no
+pairing, L1 adds the density-dependent repulsion ($\bar g_\omega\neq0$), L2 is
+L1 at finite temperature, L3 adds colour superconductivity (\code{csc=True}).
 
 \subsection{The effective bag constant}
+\label{sec:bag}
 
 Not an input. At the physical vacuum the field energy is zero by construction;
 at the perturbative point it is
 \begin{equation}
 B_{\rm eff} = \underbrace{U(0)-U(\varphi_0)}_{B_g}
- + \underbrace{V(0,0)-V(f_\pi,\zeta_0)}_{B_\chi}.
+ + \underbrace{V(0,0)-V(f_\pi,\zeta_0)}_{B_\chi},
 \end{equation}
-At $B_g^{1/4}=150$, $m_\sigma=550$, $m_\zeta=980$ MeV this gives
-$B_\chi^{1/4}=229.9$ MeV and
-$B_{\rm eff}=(239.7\ \mathrm{MeV})^4=429.4$ MeV\,fm$^{-3}$.
+with $U$ from \eqref{eq:U} and $V$ from \eqref{eq:V}, both written out above,
+so nothing here is named without being defined. At $B_g^{1/4}=150$,
+$m_\sigma=550$, $m_\zeta=980$ MeV this gives $B_\chi^{1/4}=229.89$ MeV and
+$B_{\rm eff}=(239.66\ \mathrm{MeV})^4=429.39$ MeV\,fm$^{-3}$.
 \textbf{The chiral sector supplies the larger part}: quoting $B_g$ alone as
-"the bag constant" of this model is wrong by a factor of six in energy density.
+``the bag constant'' of this model is wrong by a factor of six in energy
+density.
 
-\subsection{Free parameters}
+\section{What is returned}
+\label{sec:returns}
 
-$B_g^{1/4}$ (120--250 MeV), $g_q$ (3--6), $g_s$ (3--8), $m_\sigma$
-(450--700 MeV), $\bar g_\omega$ (0--12), $n_c$ (0.3--3 fm$^{-3}$), and at L3
-$G_D$ and $\Lambda$ (550--800 MeV, nearly degenerate with $G_D$). The discrete
-choices $p=1$ and $q\in\{0,1\}$ are declared per run, not sampled.
-$m_\omega$ is a normalisation convention, only $g_\omega/m_\omega$ entering;
-$m_\varphi$ cancels from the bulk equation of state at fixed $B_g$, pricing
-gradients and the glueball spectrum instead.
+\subsection{One point}
 
-$g_q=3.0$ is pinned by the specification's \S10 table, which quotes
-$\Mstar_{u,d}=826$ MeV at $\phib=0.90$ and $1531$ MeV at $\phib=0.95$ in the
-confined branch; both invert to $g_q=3.00$. $g_s$, $\bar g_\omega$ and $n_c$
-are calibration knobs and the shipped values are mid-prior rather than
-measurements; the code says so. $G_D=5\times10^{-6}$ MeV$^{-2}$ is calibrated
-here so that the gap falls inside the specification's 20--150 MeV window at
-$\mu_q\simeq450$ MeV.
+A point carries a convergence status first --- \code{ok}, a message, and the
+point itself, which is present even when \code{ok} is false so that a caller
+can see where the solve got to. The point carries:
+
+\begin{center}
+\begin{longtable}{lll}
+\toprule
+group & fields & units \\
+\midrule
+\endhead
+status & \code{converged}, \code{error} (the scaled residual of
+ \S\ref{sec:scales}), \code{mode} & \\
+state point & \code{n\_B}, \code{T}, \code{Y\_C}, \code{Y\_S}, \code{Y\_L}
+ & fm$^{-3}$, MeV, --- \\
+the answer & \code{branch}, \code{pattern}, \code{Delta} $=(|\Delta_\eta|)$,
+ \code{gapless}, \code{beyond\_cutoff} & MeV \\
+fields & \code{phi\_bar} $=\Phi^{1/4}$, \code{chi}, \code{sigma},
+ \code{zeta}, \code{omega\_0}, \code{Sigma\_R} & ---, MeV \\
+masses & \code{M\_star} $=(\Mstar_u,\Mstar_d,\Mstar_s)$ & MeV \\
+potentials & \code{mu\_B}, \code{mu\_C}, \code{mu\_S}, \code{mu\_3},
+ \code{mu\_8}, \code{mu\_e}, \code{mu\_nu} & MeV \\
+densities & \code{n\_u}, \code{n\_d}, \code{n\_s}, \code{n\_e},
+ \code{n\_mu}, \code{n\_nu} & fm$^{-3}$ \\
+totals & \code{P\_total}, \code{e\_total}, \code{f\_total} $=\varepsilon-Ts$;
+ \code{s\_total} & MeV\,fm$^{-3}$; fm$^{-3}$ \\
+fractions & \code{Y\_u}, \code{Y\_d}, \code{Y\_s}, \code{Y\_e}, \code{Y\_nu}
+ & --- \\
+internals & \code{state} (the matter block below), \code{x} (the unknown
+ vector \eqref{eq:unknowns}, the warm start) & \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+Five of those are part of the \emph{answer} rather than diagnostics.
+\code{branch} and \code{pattern} say which candidate won; \code{Delta} are the
+gap magnitudes, zero where the pattern does not pair; \code{gapless} says
+\eqref{eq:gapless} fired, so ranking by $\Omega$ across this point is not
+valid; \code{beyond\_cutoff} says $\max_j|\mustar_j| > \mu_{\rm ceiling}$.
+
+The matter block on \code{state} carries, in natural units, everything of
+\S\ref{sec:assembly} before the leptons: $T$, $\Phi$, $\phib$, $\chi$,
+$\sigma$, $\zeta$, $\omega_0$, $\Sigma_V$, $\Sigma_R$, $\Mstar_f$,
+$\Delta_\eta$, the five conserved-charge potentials, the nine $\mu_j$ and
+$\mustar_j$, $\rho_{s,f}$, the nine $n_j$, the three $n_f$, $n_q$, $n_B$,
+$n_C$, $n_S$, $n_3$, $n_8$, $U$, $V$, $\Omega$, $P$, $\varepsilon$, $s$,
+$\sum_j\mu_jn_j$, the residual arrays $(R_1,\ldots,R_4)$ and
+$R_{\Delta_\eta}$, the branch and pattern it was solved in, \code{gapless},
+\code{valid} (all $\Mstar_f>0$), $\delta\Omega_{\rm pair}$ and $D$; plus the
+fm-based conversions of $n_B$, $n_C$, $n_S$, $P$, $\varepsilon$, $s$ and the
+Euler residual \eqref{eq:euler} as a callable audit.
+
+\subsection{A table}
+
+A table is a set of \emph{lines} --- one per temperature (or entropy per
+baryon) and per combination of the fractions the mode fixes --- each swept
+along the baryon density with a warm start, the winning candidate's seed
+carried forward and the others left cold, so that a candidate seeded only from
+itself can never fail to be displaced. A missed density step is bisected back
+towards the last solved point, at most six times; the thresholds that earn it
+are the strange quark's onset, the pairing onset, and the branch change, where
+the fields move discontinuously. A non-converged point is dropped from its line
+rather than aborting the table, which is what the sub-onset densities need.
+
+Each row carries \code{n\_B}, \code{T}, \code{chi} $=1$ and \code{phase}
+$=$ \code{'Q'} (the shared mixed-phase columns: this matter is entirely
+deconfined), \code{P}, \code{eps}, \code{s}, \code{S\_per\_B}, \code{mu\_B},
+\code{mu\_C}, \code{mu\_S}, \code{mu\_e}, \code{Y\_C}, \code{Y\_S},
+\code{Y\_u}, \code{Y\_d}, \code{Y\_s}, \code{Y\_e}, \code{Y\_mu-},
+\code{M\_u}, \code{M\_d}, \code{M\_s}, \code{branch}, \code{pattern},
+\code{gapless}, \code{beyond\_cutoff}, \code{phi\_bar}, \code{chi\_diel},
+\code{sigma}, \code{zeta}, \code{omega\_0}, \code{Sigma\_R}, \code{Delta\_1},
+\code{Delta\_2}, \code{Delta\_3}, \code{mu\_3}, \code{mu\_8}, and where the
+neutrinos are trapped \code{Y\_nue} and \code{mu\_nue}. \textbf{\code{chi} in a
+table row is the mixed-phase quark volume fraction}, the column name every
+quark and hadronic table shares; this model's dielectric is \code{chi\_diel},
+and the collision is why it carries a suffix.
+
+Progress is reported through the repository's shared callback, once per
+completed line, with the dictionary
+\{\code{mode}, \code{line}, \code{n\_lines}, \code{temp\_key}, \code{temp},
+\code{fracs}, \code{n\_solved}, \code{n\_requested}, \code{elapsed\_s}\}
+and two keys added here, \code{branch} and \code{pattern} --- which phase a
+line ended in is the thing a reader of this table wants first. Deep solver code
+never prints.
+
+\subsection{Response functions}
+\label{sec:response}
+
+The quantities are those of the CompOSE manual \cite{TypelCompOSE2015}
+\S3.6. They are taken by central differences along re-solved sequences:
+every neighbour of the stencil re-runs the whole equilibrium \emph{and both
+enumerations}. Only one conditioning is implemented, \code{frozen='equilibrium'}
+--- nothing is held, the composition and both enumerations re-equilibrate ---
+and any other raises. With $\varsigma\equiv s/n_B$ the entropy per baryon, and
+every partial derivative taken along the mode's own sequence,
+\begin{align}
+c_{s,\rm iso}^2 &= \left(\frac{\partial P}{\partial n_B}\right)_T
+ \Big/ \left(\frac{\partial\varepsilon}{\partial n_B}\right)_T,
+&
+C_V &= T\left(\frac{\partial\varsigma}{\partial T}\right)_{n_B},
+\\
+C_P &= T\left[\left(\frac{\partial\varsigma}{\partial T}\right)_{n_B}
+ - \left(\frac{\partial P}{\partial T}\right)_{n_B}
+ \frac{(\partial\varsigma/\partial n_B)_T}{(\partial P/\partial n_B)_T}\right],
+&
+c_{s,\rm ad}^2 &= \frac{C_P}{C_V}\,c_{s,\rm iso}^2,
+\\
+\Gamma_{\rm th} &= 1 + \frac{P(n_B,T)-P(n_B,0)}
+ {\varepsilon(n_B,T)-\varepsilon(n_B,0)}. & &
+\end{align}
+Both sound speeds are named for the thermal variable they hold, never as a
+bare $c_s^2$ whose meaning would depend on the arguments. At $T=0$ the ratio
+$C_P/C_V$ is $1$ by construction and the two coincide, so the cold limit needs
+no special case; $C_V$, $C_P$ and $\Gamma_{\rm th}$ are returned at $T>0$ only.
+$\Gamma_{\rm th}$ returns NaN where the hot and cold states are on different
+candidates, since the difference is then not a thermal one at all.
+
+A sixth quantity is returned, and it is a warning rather than a number:
+\code{branch\_changed} says whether the density stencil straddled a branch or
+pattern change, in which case every value above is a \emph{chord across a
+first-order jump} rather than a tangent and the derivative should be retaken
+one-sided by restricting the enumeration. There is no way to see that from the
+returned number alone, which is why it is returned rather than left to the
+caller to suspect. In a fully gapped phase $C_V$ is exponentially small at low
+$T$ --- the paired entropy goes as $e^{-\Delta/T}$ --- and that suppression is
+physics, not a numerical failure: it is what makes a colour superconductor cool
+differently from unpaired quark matter.
+
+$c_{s,\rm iso}^2$ \emph{may come out negative} on a raw branch between the
+onset and the turnaround, because $\mathrm dP/\mathrm dn_B$ is genuinely
+negative there. That is the mechanically unstable side of the first-order
+transition, and what removes it is a construction, applied before any table
+reaches a structure solver.
+
+The composition freezes of the repository's response contract --- held $Y_i$,
+held $Y_C$, held $\Delta_\eta$, held fields --- and the susceptibility matrix
+$\chi_{ab}=\partial n_a/\partial\mu_b$ are \textbf{not} implemented here and
+are recorded in \code{docs/DEFERRED.md}: holding a composition needs the
+species fractions carried through the solve as constraints, and holding the
+gaps or the fields needs them fixed against their own equations.
 
 \section{What is not in the model}
 
 The dilaton gradient and finite-size terms (this is a bulk, homogeneous mean
-field). The de Carvalho contact coupling $h(\varphi)$ as a replacement for
-$G_D$: their construction is sound --- integrating out the confining field's
-fluctuation at Gaussian order gives a contact interaction, which is why
-$\mathcal L_{\rm pair}$ is a legitimate leading term rather than an ad hoc
-addition, and it gives "zero range" the physical meaning $1/M_\chi$ --- but
-what it predicts is a coupling negligible where the quarks are light and
-enormous where they are heavy, which removes pairing from the deconfined phase
-where a star's core lives and would condense a diquark in the confining vacuum.
-It carries $q=4$ at $p=1$, violating $q\le p$. What is taken from it is the
-argument, not the number.
+field). The de Carvalho contact coupling $h(\varphi)$ \cite{deCarvalho2010} as
+a replacement for $G_D$: their construction is sound --- integrating out the
+confining field's fluctuation at Gaussian order gives a contact interaction,
+which is why $\mathcal L_{\rm pair}$ is a legitimate leading term rather than
+an ad hoc addition, and it gives ``zero range'' the physical meaning $1/M_\chi$
+--- but what it predicts is a coupling negligible where the quarks are light
+and enormous where they are heavy, which removes pairing from the deconfined
+phase where a star's core lives and would condense a diquark in the confining
+vacuum. It carries $q=4$ at $p=1$, violating $q\le p$. What is taken from it is
+the argument, not the number.
 
-\section{References}
+The muon lepton family as a conserved charge (\S\ref{sec:modes}), and every
+response conditioning but \code{equilibrium} (\S\ref{sec:response}). Both are
+in \code{docs/DEFERRED.md}.
 
-\begin{itemize}
-\item Friedberg, Lee, \emph{Phys. Rev. D} \textbf{15} (1977) 1694;
- \textbf{16} (1977) 1096; \textbf{18} (1978) 2623.
-\item Nielsen, Patk\'os, \emph{Nucl. Phys. B} \textbf{195} (1982) 137.
-\item Mack, \emph{Nucl. Phys. B} \textbf{235} (1984) 197.
-\item Pirner, \emph{Prog. Part. Nucl. Phys.} \textbf{29} (1992) 33.
-\item Birse, \emph{Prog. Part. Nucl. Phys.} \textbf{25} (1990) 1.
-\item Drago, Fiolhais, Tambini, arXiv:hep-ph/9503462.
-\item Ghosh, Phatak, \emph{J. Phys. G} \textbf{18} (1992) 755;
- \emph{Phys. Rev. C} \textbf{52} (1995) 2195, arXiv:nucl-th/9509017.
-\item Alberico, Drago, Ratti, arXiv:hep-ph/0110091.
-\item Maieron, Baldo, Burgio, Schulze, arXiv:nucl-th/0404089.
-\item de Carvalho, Malheiro et al., \emph{Nucl. Phys. B Proc. Suppl.}
- \textbf{199} (2010) 308.
-\item Buballa, \emph{Phys. Rept.} \textbf{407} (2005) 205, arXiv:hep-ph/0402234.
-\item Alford, Schmitt, Rajagopal, Sch\"afer, \emph{Rev. Mod. Phys.}
- \textbf{80} (2008) 1455, arXiv:0709.4635.
-\item Steiner, Reddy, Prakash, \emph{Phys. Rev. D} \textbf{66} (2002) 094007,
- arXiv:hep-ph/0205201.
-\item R\"uster, Werth, Buballa, Shovkovy, Rischke, \emph{Phys. Rev. D}
- \textbf{72} (2005) 034004, arXiv:hep-ph/0503184.
-\item Typel, Oertel, Kl\"ahn et al., CompOSE manual, arXiv:2203.03209.
-\end{itemize}
+\bibliographystyle{unsrt}
+\bibliography{../../docs/eos}
 
 \end{document}
