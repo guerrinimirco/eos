@@ -26,12 +26,18 @@ Three parts.
    floor, the full headline treatment is not required. Whatever is skipped for
    runtime is printed, not silently dropped.
 
-**The comparison ticket 05 promised.** `output_old/eos_tables_DD2vMIT_from_notebooks/`
-holds the 32 tables and 42 figures the retired `DD2vMIT_general1oPT.ipynb`
-produced, at least some of which are published. Compare the regenerated DD2+vMIT
-figures against the held ones and say in the answer whether they agree — that is
-what discharges ticket 03's held-until condition as a measurement rather than an
-assertion. Do not delete the held folder under this ticket; report and let the
-user rule.
+**The comparison ticket 05 promised is now OPTIONAL, and its target has moved.**
+Ticket 05 held `notebooks/eos_tables_DD2vMIT/` — 32 tables, 42 figures from the
+retired `DD2vMIT_general1oPT.ipynb` — because a replacement had to be measured
+against it rather than asserted. Two things have since changed: **the user has
+confirmed none of the 42 figures is published**, so nothing downstream depends on
+reproducing them exactly; and the folder left the repo with `output_old/`, so its
+current path is not known here.
+
+So ticket 03's held-until condition is **discharged**: nothing is waiting on this
+notebook to regenerate anything. If the user can point at where `output_old/`
+went, an eyeball comparison of the DD2+vMIT figures is still worth ten minutes —
+it is the cheapest end-to-end check that the engine gives the same physics it
+gave before the refactor. If they cannot, say so and move on; do not hunt for it.
 
 Resolved when the notebook executes end to end and the comparison is reported.

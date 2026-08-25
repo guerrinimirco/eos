@@ -68,10 +68,11 @@ default is deliberately overridden here: tickets 12–25 build and run things.
 - Every ticket reports failures **added** against `output/_audit/pytest_before.txt`
   and never silently fixes or deletes a pre-existing one.
 - **Commit with explicit pathspecs. Never `git add -A`, never `git commit -a`.**
-  Always the rule for concurrent sessions; now load-bearing rather than
-  hygienic, because `output_old/` is **24 GB and not gitignored** —
-  `.gitignore:37` ignores `output/` and the rename walked out from under it, so
-  a single `git add -A` would try to stage all of it.
+  The rule for concurrent sessions, and it earned itself: for part of this
+  session a 24 GB `output_old/` sat untracked in the tree, because
+  `.gitignore:37` ignores `output/` and a rename walked out from under it. The
+  user has since removed the folder — the repo is 646 MB with 0 untracked files
+  — so the hazard is gone and the rule stands on the concurrency alone.
 - **An `output/_audit/` file names its interpreter in its FILENAME**, not only
   in prose: `_py39` (anaconda 3.9.7 / numpy 1.26.4 / scipy 1.13.1) or `_py314`
   (python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0). Per
@@ -832,48 +833,6 @@ In scope, not yet sharp enough to ticket:
   Whether this is one sweep, one ticket per pair, or a check added to the
   `verify/` suites is not decidable until someone measures how many of the
   twelve are affected.
-
-- **`output_old/` is 24 GB and is not gitignored.** `.gitignore:37` ignores
-  `output/`; the rename to `output_old/` walked out from under it, so every
-  session now sees 24 GB of untracked files in `git status`. Whether the folder
-  is ignored, pruned or moved off the repo is the user's call and was not part
-  of [ticket 05](issues/05-notebook-coverage.md).
-- **`output/public/` curation.** §11 makes it the one tracked output folder. The
-  new notebooks will produce tables with standardised names; which of them belong
-  in the tracked folder is not decidable until the tables exist.
-- **`docs/DEFERRED.md` updates.** The three notebooks each report the gaps they
-  hit. Whether those are new entries, corrections to existing ones, or closures
-  is not knowable before the notebooks run.
-- **What the 56 failing docstrings cost to fix.** Ticket 07 lists them but rewriting
-  a docstring into the model document's notation requires that document to be
-  settled first — so this waits on the document audit and the `.tex`/`.md` ruling.
-  Whether it is one ticket per model or one sweep is not decidable yet. Now also
-  entangled with the renames: tickets 42–45 rewrite the very signatures those
-  docstrings describe, so the sweep is cheapest immediately AFTER them, not before.
-- **The 6 mis-ordered files and the 9 dense comprehensions.** Reordering
-  `eos/dd2/solver.py` and `eos/sfho/thermodynamics.py` is the serious half and
-  touches solver internals, so it may need its own gate; the rest is cosmetic.
-  The rename ruling has now landed (ticket 10), and both serious files are ones
-  tickets 44 and 45 rewrite anyway — so the open question narrows to whether the
-  reorder rides along with those renames or is gated separately from them.
-- **A `test/baseline/` comparison needs the .npz generation, and nothing records
-  it.** Sharper than the interpreter rule above and NOT closed by it. `test/` is
-  gitignored (§11), so the `.npz` files have no history: when
-  [ticket 56](issues/56-baseline-empty-sector-gate.md) dropped 34 keys from four
-  of them, every earlier `output/_audit/` file silently became a measurement
-  against a key set that no longer exists and cannot be reconstructed. So two
-  audit files can agree on the interpreter and still be incomparable on their
-  `test_baseline[*]` rows. The honest minimum today is that a resolution touching
-  `test/baseline/` says so loudly. A cheap real mechanism, unpriced: have the
-  baseline generator stamp a fingerprint — sorted key names hashed, plus the
-  generating interpreter — into the audit file's header, so a listing carries its
-  own denominator. **Two stamps, not one**: a hash over the key names alone would
-  flag ticket 56's change as a mismatch, correctly, but indistinguishably from a
-  moved number — and those need opposite responses, since dropping 34
-  undetermined potentials is a fix while a changed value is a defect. So the key
-  set and the values are fingerprinted separately or the stamp answers the wrong
-  question. Whether that lives in the generator (gitignored, so it would
-  be lost again) or in `eos/` is the same question as the entry below.
 
 - **Several real fixes now live outside version control.** `.gitignore:75`
   excludes `/test/` entirely (§11), so ticket 39's helper skip, ticket 40's
