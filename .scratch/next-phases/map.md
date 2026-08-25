@@ -632,6 +632,23 @@ against this file, not against the earlier `pytest_before*.txt`.
   `output_old/eos_tables_DD2vMIT_from_notebooks/`, so ticket 59 can compare
   against the published figures instead of asserting a replacement.
 
+- [The shared notebook skeleton: knobs cell, gap handling, table naming](issues/04-notebook-skeleton.md):
+  delivered as [research/notebook_skeleton.py](research/notebook_skeleton.py),
+  self-check passing. **The ticket's premise that a knobs cell can hold §4's six
+  flags is false**: `SpeciesFlags(**six)` raises `TypeError` on **dd2**, which
+  lacks `thermal_mesons` (split into `include_pseudoscalars` +
+  `include_thermal_vectors`) and `thermal_neutrinos` (genuinely unwired — its
+  `neutrinos` field is the matter-composition one), and no conformance row
+  covered it. Now [ticket 61](issues/61-dd2-species-flags.md), blocking 12, 15, 18
+  and 58. The other two shapes: the gap pattern keeps **three** failure modes
+  distinct — a refusal (`NotImplementedError`/`ValueError`, caught), a
+  non-convergence (§6 return value, no `except` sees it, tested via `.ok`) and a
+  `TypeError` (the notebook's own bug, deliberately not caught); and table names
+  are `standard_name()` in `eos/general/table_io.py`, landing under ticket 12,
+  writing to `output/tables/<model>/` (§11's per-model split, over the ticket's
+  flat `output/tables/`). `use_nmp_inversion` ships off — zl refuses by design and
+  dd2's inversion is ticket 47 — so **12 is now also blocked by 47**.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
