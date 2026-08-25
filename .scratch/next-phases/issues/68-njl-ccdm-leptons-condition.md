@@ -135,7 +135,7 @@ actually decides. It is not the smuggling this ticket retires (nothing reads
 the flag out of the bag; the bag's copy is discarded), but it is a §4 silent
 no-op on the same name, and it is one line in each model.
 
-### The related row, now [ticket 69](69-leptons-on-a-beta-mode.md)
+### The related row, now [ticket 70](70-leptons-on-a-beta-mode.md)
 
 Measured on the current tree rather than restated: `njl` and `ccdm` **accept**
 `leptons=True` on a beta mode and **raise** on `leptons=False`

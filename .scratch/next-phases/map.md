@@ -1017,7 +1017,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   nothing in `eos/` reads it out of a condition bag any more. The effective
   default was **`True`** in both — not the `False` sfho/dd2/did use — and was
   kept, so no number moved. The beta-mode half is now
-  [ticket 69](issues/69-leptons-on-a-beta-mode.md), with njl/ccdm's answer
+  [ticket 70](issues/70-leptons-on-a-beta-mode.md), with njl/ccdm's answer
   measured as the OPPOSITE of sfho/dd2's on both values rather than the
   "whatever `solve` does" 54 recorded.
 
