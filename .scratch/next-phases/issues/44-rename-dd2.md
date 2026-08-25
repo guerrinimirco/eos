@@ -96,3 +96,25 @@ All three also rewrite `test/baseline/generate_baseline.py`. Run them one at a
 time. The document tickets (30, 31, 32, 33, 35, 36) ARE disjoint from these and
 from each other, and need no pytest run, so they parallelise freely — their only
 shared file is `docs/eos.bib`, which is append-only.
+
+## Added by ticket 36 (quark-engine documents)
+
+**The phase-adapter surface is named, and this package is one of the three that
+must follow.** [Ticket 10](10-rename-approvals.md) deferred
+`thermo_at_potentials` vs `thermo_from_mu` to `mixed.tex`, which has now ruled:
+
+- the §5 contract surface — `(baryon potential, mu_C, mu_S, T) -> PhaseThermo`,
+  solving the phase's own self-consistency — is **`thermo_from_mu`**, in every
+  model;
+- a lower evaluation layer that additionally takes the solved mean fields is
+  **`thermo_from_fields`**, because the name should say what the function takes,
+  and that is the distinction between the two layers.
+
+7 of the 10 models already spell the surface `thermo_from_mu`. Apply the pair of
+renames here, with the AST collision check tickets 43-45 already carry: this is
+exactly the shape that bit ticket 42 (`mixed/api.py`'s local `solve`) and
+ticket 43 (`vmit/table.py`'s local `warm_start`) — a rename ONTO a name the
+package already uses at another layer.
+
+`dd2` has only `thermo_at_potentials` (`thermodynamics.py:571`); the rename is
+one name, with no lower layer to re-spell.
