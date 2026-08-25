@@ -116,7 +116,28 @@ count in this block and in `output/_audit/` is a measurement of an interpreter,
 not of the code — including "0 added failures" claims checked against it.**
 Report which interpreter you ran with.
 
-The block below is kept as written, and is accurate FOR THE 3.14 STACK.
+**Superseded again by [ticket 56](issues/56-baseline-empty-sector-gate.md).**
+Current measured state, both stacks, current tree:
+
+    anaconda 3.9.7   1650 passed, 15 skipped, 0 failed   GREEN
+                     output/_audit/pytest_after_ticket56_py39.txt
+    python.org 3.14  12 failed, 1638 passed, 15 skipped
+                     output/_audit/pytest_after_ticket56_py314.txt
+
+Collection is **1665**, not 1663 — ticket 20 added two import tests. On 3.14 the
+count fell 14 -> 12 because ticket 56 dropped the undetermined potentials that
+`sfho` and `vmit` were failing on; the `^E ` diff against
+`pytest_after_ticket45.txt` is **pure deletion, 19 lines, nothing added or
+changed**, so that is 0 added failures. The remaining 12 on 3.14 are all
+[ticket 57](issues/57-canonical-stack.md).
+
+**`pytest_after_ticket45.txt` is no longer a valid before-image for
+`test_baseline[*]`**: four `.npz` were regenerated after it, and `test/` is
+gitignored so the key set it was measured against cannot be reconstructed.
+Compare baseline rows against `pytest_after_ticket56_py314.txt` instead.
+
+The block below is kept as written, and was accurate FOR THE 3.14 STACK before
+ticket 56.
 
 **14 failed, 1634 passed, 15 skipped at HEAD.** Expect 14, not 0. All fourteen
 are **pre-existing and not physics regressions** — verified twice, independently,
@@ -173,6 +194,24 @@ against this file, not against the earlier `pytest_before*.txt`.
 ## Decisions so far
 
 <!-- one line per closed ticket: gist + link -->
+
+- [The baseline's empty-sector gate is absolute where the physics is relative](issues/56-baseline-empty-sector-gate.md):
+  **fixed — the gates now read fractions, and the suite is GREEN on the stack
+  that made the baselines** (1650 passed, 15 skipped, 0 failed). `Y_E_EMPTY =
+  1e-8` sits in an 81,220x gap; `Y_S_EMPTY = 1e-6` is deliberately permissive
+  because no threshold in Y_S separates free from imposed — the `mu_S != 0` test
+  does that, as the ticket reasoned. Both are strictly more permissive than the
+  old absolute gate, so the change can only drop a key. **The ticket
+  under-predicted the blast radius: 34 keys, not 13** — `did` lost 18 (all
+  exactly `0.0`) because the first gate pops `mu_S` BEFORE the second gate judges
+  whether it was free, which the ticket's "did survives" argument had not
+  accounted for. Every survivor bit-identical by *exact equality*, zero added,
+  nine files not regenerated at all. On 3.14: **0 added failures, 2 cleared**
+  (`sfho`, `vmit`), `^E ` diff pure deletion. A second, more principled gate
+  change was rejected as out of scope — it would RESTORE 31 keys in `mixed`/`njl`.
+  **None of this is in git** (§11 gitignores `test/`): the first instance of
+  losing DATA §12 calls ground truth rather than recoverable logic, which is now
+  the sharpest argument for [ticket 21](issues/21-phase5-structure.md).
 
 - [dd2's NMP inversion misses its targets](issues/47-dd2-nmp-inversion.md):
   **a report, and the ticket's premise was false — the stack DID move.** Two

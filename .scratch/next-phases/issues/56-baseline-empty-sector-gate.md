@@ -1,7 +1,8 @@
 # The baseline's empty-sector gate is absolute where the physics is relative
 
 Type: task
-Status: open
+Status: resolved
+Assignee: session 9616271c
 Parent: ../map.md
 
 ## Question
@@ -153,3 +154,123 @@ the strangeness-residual scaling rather than here.
   the record; it does not widen the gate that pins the rest.
 - Coordinate the suite run — `test/dd2/test_dd2_speed.py` goes flaky under CPU
   contention, so do not run a full suite concurrently with another session.
+
+
+## Resolution
+
+**Fix (2) applied — the gates now read fractions.** Fix (1), tightening the
+n = 0.16 solve, is NOT done and belongs with the strangeness-residual scaling
+as the ticket suspected; fix (3), gating on the residual's sensitivity, remains
+the honest criterion and remains unbuilt.
+
+`test/baseline/generate_baseline.py` gains two named constants with the
+measurement behind each, and `row()` judges emptiness on `n_X/n_B`:
+
+    Y_E_EMPTY = 1e-8     # log-midpoint of an 81,220x gap; 4 orders clear either side
+    Y_S_EMPTY = 1e-6     # deliberately permissive: the mu_S != 0 test discriminates
+
+Both are strictly more permissive than the old absolute `1e-12` over every
+density in the suite (`Y * n_B` spans 4e-10 to 1.3e-6), so the change can only
+ever drop a key, never restore one. That is what makes the §12 check clean.
+
+### The ticket under-predicted the blast radius: 34 keys, not 13
+
+Measured on the stored files before regenerating, then confirmed by the
+regeneration:
+
+| model | dropped | what |
+|---|---|---|
+| `sfho` | **13** | the free `mu_S = 8.4496` + its 12 derived `mu_i`/`mu_eff_i` |
+| `did` | **18** | `mu_S`, every one of them exactly `0.0` |
+| `vmit` | **2** | `mu_e` in the flakiness band |
+| `alphabag` | **1** | `mu_e`, same band |
+| other nine | 0 | unaffected |
+
+**`did`'s 18 were not predicted, and the ticket's reasoning for why it would be
+untouched does not survive contact with the code.** The ticket argued did's rows
+survive "because their `mu_S` is zero" and the second gate keeps them. That is
+true of the SPECIES potentials but not of `mu_S` itself: `generate_baseline.py`
+pops `mu_S` inside the first gate, BEFORE the `abs(mu_S) > 1e-12` test runs, so
+a more permissive first gate drops it regardless of whether it was free. The
+"234 good numbers" the generator's comment defends are the species potentials,
+and those are untouched — verified.
+
+Dropping did's 18 costs nothing: every one is exactly `0.0`, imposed by the
+mode rather than solved, so freezing it asserted nothing. But it is a key-set
+change to a §12 file that nobody authorised in advance, and it is recorded here
+rather than discovered later.
+
+A second, more principled change was considered and **rejected as out of
+scope**: making the first gate pop `mu_S` only where the second gate finds it
+free. That is what the ticket assumed the code already did, and it would
+preserve did's 18 — but it would also RESTORE 29 keys in `mixed` and 2 in `njl`
+that the current gate drops (all exactly `0.0`, measured). Restoring keys is a
+different act from dropping them and belongs to whoever rules on it.
+
+### §12: every survivor bit-identical, nothing added
+
+Regenerated on **anaconda 3.9.7 / numpy 1.26.4 / scipy 1.13.1** — the stack
+that produced these files ([ticket 47](47-dd2-nmp-inversion.md)), and therefore
+the only stack on which "drop keys and change nothing else" is a meaningful
+claim:
+
+    sfho      3087 -> 3074   dropped 13  added 0  survivors not bit-identical: 0
+    did       4479 -> 4461   dropped 18  added 0  survivors not bit-identical: 0
+    vmit      1121 -> 1119   dropped  2  added 0  survivors not bit-identical: 0
+    alphabag  1159 -> 1158   dropped  1  added 0  survivors not bit-identical: 0
+
+Checked with `np.array_equal` — **exact equality, not rtol = 1e-10**. The other
+nine files were not regenerated at all, so they cannot have moved.
+
+### Suite
+
+**anaconda 3.9.7 — GREEN.** `1650 passed, 15 skipped, 0 failed` in 53:38
+(`output/_audit/pytest_after_ticket56_py39.txt`). 1650 + 15 = 1665, which is the
+map's 1663 plus ticket 20's two new import tests, so nothing fell out of
+collection.
+
+**python.org 3.14.2 — 0 added failures, 2 cleared.**
+`12 failed, 1638 passed, 15 skipped` (`pytest_after_ticket56_py314.txt`)
+against ticket45's `14 failed, 1634 passed, 15 skipped`. The `^E ` diff the map
+recommends is **pure deletion — 19 lines removed, none added, none changed** —
+and the two removals are precisely this ticket's targets:
+
+    sfho: 13 quantities changed (rtol=1e-10)
+          ycys.n0.16.matter.mu_S           rel 2.210e-07, abs 1.867e-06
+          ... mu_i/mu_eff_i Lambda..Xi-,  Xi at EXACTLY 2x Lambda (3.734e-06)
+    vmit: 2 baseline quantities are no longer produced
+          ['yc.lep.YC0.n0.8.mu_e', 'ycys.n0.8.mu_e']
+
+The Xi = 2 x Lambda ratio is the linear `S_i` fingerprint the ticket predicted
+before the run, and vmit's is the key-set mismatch rather than a value change —
+the two failure modes that SHOULD clear on a regeneration that only removes
+undetermined numbers. `alphabag`'s single dropped key was never causing a
+failure, so its absence from the cleared list is correct.
+
+### Where this lives, and the exposure
+
+**`test/` is gitignored (`.gitignore:75`, per CLAUDE.md §11), so NONE of this is
+in git** — not the generator fix, not the four regenerated `.npz`. This is the
+third instance of the map's standing "fixes outside version control" problem and
+the first of a different kind: tickets 39 and 40 lost recoverable LOGIC, this
+loses **DATA that §12 designates ground truth**. Lose this checkout and the
+absolute-vs-relative gate returns AND brings the 34 keys with it, and what is
+gone is the reference that adjudicates every future disagreement.
+
+Both images are held in this session's scratchpad (`npz_before/`,
+`npz_after_ticket56/`, 13 MB) — **session-scoped, dies with the conversation,
+and is therefore insurance for the hour, not an answer.** A durable out-of-repo
+copy was offered to the user and not taken unilaterally: the destination is
+outside this session's working directories, and a peer cannot widen that.
+Whether the baselines belong somewhere tracked is [ticket 21](21-phase5-structure.md).
+
+### Caveats on the measurement
+
+- Neither run measured a clean tree: ticket 20's uncommitted `__init__.py` work
+  (163 lines, later `fe68f20`) was present in both. Import-surface only, no
+  solver or parameter module touched.
+- `eos/__init__.py` was edited at 16:15:03, three minutes into the 3.14 run.
+  Verified comment-only (7 `#:` lines, `7c5b7a9`) and unreachable by a running
+  interpreter; the run stands.
+- A concurrent pytest overlapped the 3.9 run 15:28–15:52.
+  `test/dd2/test_dd2_speed.py` passed regardless.
