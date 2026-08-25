@@ -159,6 +159,29 @@ changed path is on its route. `test/baseline/` was never written to.
 mixed. The tenth, `eos.general.verify.run_full_check`, DOES NOT EXIST — see
 below.
 
+### One measurement was retaken, on the committed tree
+
+The other session committed `eos/dd2/species.py`, `eos/dd2/thermodynamics.py`,
+`eos/dd2/solver.py` and `eos/mixed/adapters.py` (`03ee45b`, 19:31) INSIDE this
+ticket's measurement window, and `eos/mixed` imports `eos.dd2.species`. The
+first `test/mixed` figure was therefore taken against their uncommitted tree —
+the contamination ticket 45 paid for, arriving from the other direction.
+
+Retaken on the committed HEAD after both commits here: **289 passed in 347s**,
+`test/mixed` (277) plus this ticket's own check (12), zero failed. That is the
+number reported above. The two changes compose: nothing in the section 6 fix
+interacts with the six-flag `SpeciesFlags` work.
+
+The other nine suites do not import `eos.dd2` and are unaffected either way.
+
+### A ticket-number collision, for whoever reads this next
+
+`62-regenerate-baselines-py314.md` (graduated by ticket 57) and
+`62-species-flag-defaults.md` (created by the other session in `42cc7f5`) both
+exist. Not renumbered from here — the second is another session's live work and
+renaming it under them is how two sessions lose a ticket. This ticket's own
+additions are 63 and 64, which are clear.
+
 ### Three tests changed, and why that is not loosening a tolerance
 
     test/abpr/test_abpr_modes.py:132   assert set(out) == {"cs2_isothermal"}
