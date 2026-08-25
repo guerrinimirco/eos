@@ -752,7 +752,8 @@ against this file, not against the earlier `pytest_before*.txt`.
   `table.py`, because nothing in it iterates — which also settles ticket 07's row
   as "the physics has no such part"), and `astro/*` has no `eos_table` at all.
   `notebooks/eos_tables_DD2vMIT/` was **moved, not deleted**, to
-  `output_old/eos_tables_DD2vMIT_from_notebooks/`, so ticket 59 can compare
+  `eos_tables_DD2vMIT/`, TRACKED at the repository root and in HEAD (the
+  `output_old/` premise was wrong), so ticket 59 can compare
   against the published figures instead of asserting a replacement.
 
 - [The shared notebook skeleton: knobs cell, gap handling, table naming](issues/04-notebook-skeleton.md):
@@ -1099,6 +1100,75 @@ against this file, not against the earlier `pytest_before*.txt`.
   that. Noticed alongside: `standard_name`'s `_span` uses `%.1f`, so a grid
   starting at 0.05 renders `nB0.1` and two grids differing only below 0.1 fm^-3
   would collide — ticket 04's to fix.
+
+- [notebooks/hybrid_eos — skeleton, knobs, the pairing choice and the tables](issues/58-hybrid-skeleton.md):
+  **recovered, not written here.** The session that did the work marked the
+  ticket resolved and stopped without committing; both files sat untracked for
+  two hours. Committed AS FOUND in `bbf07f9` after executing the `.py` in an
+  archive copy of HEAD (12 code cells, **0 errors**), so the rescue is
+  distinguishable from a rewrite, and the answer reconstructed in `9de1b98`
+  and marked as such. The done-when holds: DD2 + vMIT converges, 11 in-window
+  rows, windows carried into the file through `save_table(windows=...)`. Two
+  claims of the original outcome did NOT survive re-measurement — `hadronic_eos`
+  does not still write under `notebooks/output/` (ticket 13 closed it), and the
+  one table that had landed there came from a draft run predating the `root=`
+  fix by five minutes.
+
+- [notebooks/hybrid_eos — figures, the TOV pass, and the swap cell](issues/59-hybrid-figures.md):
+  **shipped as sections 8-11**, commit `156384f`, 26 code cells **0 errors**.
+  Four figure families with the panels as the *eta* selection; the §8 gate
+  returning a status before integration (P tested **non-decreasing**, since a
+  Maxwell window is an exact plateau and a strict test would reject the most
+  clearly correct construction) then M_max = 2.249/2.339/2.343 M_sun; DID+NJL
+  and DID+CCDM swapped with the skipped depth printed.
+  **This ticket's premise was stale and the comparison is now numeric.** The
+  retired tables never left: `eos_tables_DD2vMIT/` is tracked at the repository
+  root, in HEAD. Each CSV carries the run's full provenance in a
+  `# key = value` header whose keys map 1:1 onto `eos.dd2.Parameters` fields —
+  a CUSTOM parametrisation, not a published one — so the inputs are rebuilt
+  exactly and **the engine reproduces the retired transition boundaries to
+  under 0.5% at all three eta**. That is a far stronger end-to-end check than
+  the eyeball the ticket settled for, and it discharges ticket 05's comparison.
+
+- [notebooks/enjl — step-by-step treatment and benchmarks](issues/19-enjl-stepwise.md):
+  **shipped as sections 9 and 10 of `notebooks/enjl_eos.py`**, commits `5aae00b`
+  + `f8a0c79`; verified by `jupytext --execute` in an archive copy of the
+  COMMITTED tree at `f8a0c79` with the kernel in `notebooks/` (76 cells, 38
+  code, **0 error outputs**, 1 min 52 s), `test/enjl test/test_imports.py`
+  **319 collected, 319 passed** in a second archive copy, python.org 3.14.2, no
+  library file touched.
+  **Ticket 16's five steps: ENJL has three, answers one with a different object
+  and has nothing for one.** No diquark channel in the functional, so no gap to
+  map and no pattern to select — proved by listing the parameter and species
+  fields and scanning them, whose one hit is `deltas`, the Delta(1232) flag, a
+  false positive printed rather than filtered. `M_u` and `chi` are mapped over
+  `(n_B, T)` where `Delta` would be, and the chiral **bracket** is reported per
+  temperature rather than an interpolated crossing, because `M_u` falls 200 MeV
+  between adjacent grid densities.
+  **A branch pair is not a pairing pattern** — two roots of one set of
+  stationarity conditions, not two ansaetze — and at fixed `(mu_B, T)` the
+  criterion is the higher `P`. That is a DIFFERENT criterion from section 5's
+  `eps` at fixed `n_B`, and the two land in **adjacent grid intervals in every
+  set**: the gap between them is the coexistence window, where neither pure
+  branch is stable. Ticket 18's trap recurred here in a new dress: a naive
+  crossing hunt printed **22 "Maxwell conditions" for one set** from
+  interpolation wiggles above the transition, fixed by restricting to section
+  5's distinct-state densities. Under it, `mu_B` is **not monotone** along a
+  branch through the transition (the swallowtail), so nothing may be sorted by
+  it; the cell prints which branches walk backwards.
+  **The benchmark carries an axis its two siblings do not: the branch.** `"up"`
+  and `"down"` differ by ~20x in wall clock (0.24-0.40 s against 3-10 s for the
+  same 24-point line) and every non-converged point in the whole section is on a
+  `"down"` line. **Cold vs warm is a difference in kind for a continuation
+  model**: the cold start fails in a BAND between 0.6 and 1.0 fm^-3 — sharper
+  than the docstring's "around 0.5" — and converges again above it. Bottleneck:
+  **84,833 residual evaluations for 24 densities** under
+  `approx_derivative`; `eos/enjl` ships no `backends/`, which is checked, and
+  that IS the reason.
+  Findings reported not fixed: `eos/enjl/api.py:106` documents
+  `eos.enjl.solver.UNKNOWNS`, which does not exist (it is `BASE_UNKNOWNS`) —
+  belongs with [ticket 54](issues/54-signature-corrections.md); and `fq0.5_B1`
+  at fixed `Y_C` on the `"down"` branch misses an INTERIOR density band.
 
 ## Not yet specified
 
