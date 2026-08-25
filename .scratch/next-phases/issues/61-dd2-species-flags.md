@@ -276,7 +276,7 @@ and False in four, `thermal_neutrinos` True in `alphabag` alone. The answer is
 not obvious — unifying on all-False is the cleanest reading of §4 and would
 strip the photon gas from every T > 0 call that relies on the default, moving
 `test/baseline/` numbers §12 calls ground truth. So it is
-[ticket 62](62-species-flag-defaults.md), with the full measured table, and it
+[ticket 65](65-species-flag-defaults.md), with the full measured table, and it
 does **not** block the notebooks: the knobs cell passes all six explicitly.
 
 ### 7. The gate

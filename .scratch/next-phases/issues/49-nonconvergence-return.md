@@ -176,11 +176,14 @@ The other nine suites do not import `eos.dd2` and are unaffected either way.
 
 ### A ticket-number collision, for whoever reads this next
 
-`62-regenerate-baselines-py314.md` (graduated by ticket 57) and
-`62-species-flag-defaults.md` (created by the other session in `42cc7f5`) both
-exist. Not renumbered from here — the second is another session's live work and
-renaming it under them is how two sessions lose a ticket. This ticket's own
-additions are 63 and 64, which are clear.
+**Resolved.** `62-regenerate-baselines-py314.md` (graduated by ticket 57) and a
+second `62-species-flag-defaults.md` (created by the 60/61 session in `42cc7f5`)
+both existed for a while. This ticket correctly declined to renumber the second
+— it was another session's live work, and renaming a ticket under a session
+still writing to it is how two sessions lose one. That session renumbered its
+own to **65** and fixed its three inbound references, so 62 is unambiguously the
+baseline regeneration. This ticket's own additions, 63 and 64, were never
+affected.
 
 ### Three tests changed, and why that is not loosening a tolerance
 

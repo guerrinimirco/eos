@@ -237,7 +237,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   was already in place, so `enjl` and `abpr` stopped being skipped for nothing.
   Defaults measured and NOT changed as instructed — the divergence is
   **three-way** (`muons` 5/5, `photons` 6/4, `thermal_neutrinos` True in
-  `alphabag` alone), graduated to [ticket 62](issues/62-species-flag-defaults.md),
+  `alphabag` alone), graduated to [ticket 65](issues/65-species-flag-defaults.md),
   which does not block the notebooks because the knobs cell passes all six
   explicitly. AST check for `{thermal_mesons, thermal_vectors,
   thermal_neutrinos}` clean before and after; no positional `SpeciesFlags`
