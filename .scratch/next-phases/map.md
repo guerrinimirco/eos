@@ -929,6 +929,45 @@ against this file, not against the earlier `pytest_before*.txt`.
   UPPER bracket cannot be exhausted by any finite target, since it opens at twice
   the T = 0 estimate.
 
+- [The public-signature corrections §5 and §3 require](issues/54-signature-corrections.md):
+  **all five rows landed, 0 added failures, `test/baseline/` unmoved.**
+  `leptons` is a named argument on all three entry points in dd2, sfho and did,
+  and **`fixed_YC_neutral` / `fixed_YC_YS_neutral` no longer exist anywhere in
+  the repository** — the flag rides beside the mode (`takes_leptons` in `MODES`,
+  a `leptons` field on both `TableSpec`s), so ticket 20's condition is met on its
+  own terms and **ticket 12's one-line change is now unblocked**. `mode` lost its
+  default at nine sites in njl/ccdm/enjl (abpr keeps `"cfl"`); an AST sweep finds
+  0 call sites left without one. `zl.thermo_from_n` takes `(n_n, n_p, T, params)`
+  and the §5 purity grep over `eos/*/thermodynamics.py` now returns no
+  non-docstring hit. `TC_COEFF` is `Parameters.tc_coeff`, threaded through the six
+  CFL gap functions so the override reaches T_c.
+  **Item 5 needed the COUNT, not just the raise.** Deleting sfho's and did's
+  refusal alone would have shipped the double-count it warned about: the three
+  conformant models multiply by `3 - (1 if the mode holds Y_Le)`, so adopting
+  their answer means adopting their count. Both models now do. `sfho.md`/`.tex`
+  already described this resolution as due — they only had to catch up.
+  **Measured as an isolated PAIR**, because ticket 52 held three files in the
+  live tree for most of the session (since landed, `ffae9db`/`f1484b6`): control
+  = HEAD `407c984`, mine = HEAD + this ticket's 22 files. **3 failed / 1291
+  passed** against **3 failed / 1297 passed**, failure sets identical node id by
+  node id, the three being ticket 47's dd2 NMP stack artifact; `test/baseline/`
+  6 failed / 10 passed in both. The +6 are this ticket's own new tests. Eight
+  `verify/` suites green. python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0,
+  collection **1692**.
+  **Bit-identity proved, not assumed**, for all three number-touching items:
+  `leptons=True` reproduces `fixed_YC_neutral` 12/12 hex rows in dd2 AND sfho;
+  zl's `thermo_from_n`/`nuclear_matter`/`compute_nmp` 52/52; alphabag's whole
+  CFL sector 33/33 on the `tc_coeff` default.
+  **The `_check` guard caught a live caller on its first run** —
+  `test/dd2/test_photons_flag.py` was passing `fixed=dict(Y_C=0.1, leptons=True)`,
+  the exact smuggling ticket 20 predicted, forced because `eos_table` had nowhere
+  else to take it.
+  **Two findings NOT fixed**, per the hard rule: njl and ccdm carry item 1's
+  defect too (the audit read `njl:122`, which is `eos_table`, and both models'
+  `eos_table` IS conformant), and `leptons=True` on a beta mode still gets three
+  different answers across six models. Both are
+  [ticket 68](issues/68-njl-ccdm-leptons-condition.md).
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
