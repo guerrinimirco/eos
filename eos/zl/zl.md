@@ -18,6 +18,22 @@ potentials they generate,
 
     mu_Hv_i = dV/dn_i     mu_eff_i = mu_i - mu_Hv_i     n_i = n_i(mu_eff_i, T, m_i)
 
+Differentiating `V` at the other density fixed, with `du/dn_i = 1/n0`:
+
+    mu_Hv_p = 4 n_n [a0/n0 + (b0/n0) u^(gamma-1)]
+            - 2 (n_n - n_p) [a1/n0 + (b1/n0) u^(gamma1-1)]
+            + 4 b0 n_p n_n (gamma-1) u^(gamma-2) / n0^2
+            + b1 (n_n - n_p)^2 (gamma1-1) u^(gamma1-2) / n0^2
+
+    mu_Hv_n = 4 n_p [a0/n0 + (b0/n0) u^(gamma-1)]
+            + 2 (n_n - n_p) [a1/n0 + (b1/n0) u^(gamma1-1)]
+            + 4 b0 n_p n_n (gamma-1) u^(gamma-2) / n0^2
+            + b1 (n_n - n_p)^2 (gamma1-1) u^(gamma1-2) / n0^2
+
+The two differ only in their first two terms; the last two, which come from
+differentiating the powers of `u = n_B/n0`, are common to both, because `u`
+depends on the densities only through their sum.
+
 Per baryon, with delta = (n_n-n_p)/n_B,
 
     V/n_B = (1-delta^2) [a0 u + b0 u^gamma] + delta^2 [a1 u + b1 u^gamma1]
@@ -28,10 +44,25 @@ cross interaction, not an isoscalar one, and its potential part is
 symmetry energy is the standard way to misread the functional, and gives the
 wrong sign.
 
-**Parameters.** `n0` (a reference density of the functional, not the
-saturation density it predicts), `a0, b0, gamma`, `a1, b1, gamma1`, and the
-two nucleon masses, both 939.5 MeV — the kinetic term has no isospin
-splitting. All are fields of `Parameters` and are arguments everywhere.
+**Parameters.** Eight numbers, all fields of `Parameters` and arguments
+everywhere — nothing in the package reads a module-level coupling.
+
+| symbol | code | value | meaning |
+|---|---|---|---|
+| `n0` | `n0` | 0.16 fm^-3 | reference density of the functional |
+| `a0` | `a0` | -96.64 MeV | cross term, linear in `u` |
+| `b0` | `b0` | +58.85 MeV | cross term, proportional to `u^gamma` |
+| `gamma` | `gamma` | 1.40 | exponent of the cross term |
+| `a1` | `a1` | -26.06 MeV | isovector term, linear in `u` |
+| `b1` | `b1` | +7.34 MeV | isovector term, proportional to `u^gamma1` |
+| `gamma1` | `gamma1` | 2.45 | exponent of the isovector term |
+| `m_p`, `m_n` | `m_p`, `m_n` | 939.5 MeV | nucleon masses |
+
+`Parameters.default()` returns exactly this set — the one used in Constantinou
+et al. (2021, 2023, 2025). Both nucleons carry the SAME mass: the model has no
+isospin splitting of the kinetic term, and the asymmetry enters only through
+`V`. And `n0` is a **parameter of the functional**, not the saturation density
+the functional predicts; the two differ by 0.3 % (below).
 
 **Single-nucleon thermodynamics.** Each species is a free Fermi gas of mass
 `m_i` and degeneracy `g = 2` (spin), evaluated at its effective potential
@@ -102,15 +133,65 @@ physical potentials.
 `mu_C = mu_p - mu_n`, and `mu_S` is reported as zero by convention — no
 equation of any mode responds to it.
 
-**Modes.** Every mode imposes the two self-consistency equations
-`n_i(mu_eff_i, T, m_i) = n_i`. Then:
+## Equilibrium modes and their residuals
 
-| mode | unknowns | conditions added |
-|------|----------|------------------|
-| `beta_eq_neutrinoless`     | `mu_p, mu_n, mu_e, n_p, n_n`         | `n_p+n_n = n_B`, `mu_C + mu_e = 0`, `n_p = n_e` |
-| `beta_eq_neutrino_trapped` | `mu_p, mu_n, mu_e, mu_nue, n_p, n_n` | the same, with `mu_C + mu_e - mu_nue = 0` and `(n_e+n_nue)/n_B = Y_Le` |
-| `fixed_YC`                 | `mu_p, mu_n` (`, mu_e`)              | `n_p, n_n` are known from `Y_C`; with leptons, `n_e = n_p` |
-| `fixed_YC_YS`              | —                                    | RAISES: `n_S = 0` identically, so the mode is meaningless here |
+Every mode imposes the two self-consistency equations
+`n_i(mu_eff_i, T, m_i) = n_i`. The unknown vector always carries the physical
+potentials, and carries `(n_p, n_n)` as well wherever the composition is not
+fixed in advance. Keeping the densities as unknowns rather than substituting
+the self-consistency into `mu_Hv_i(n_p, n_n)` is a conditioning choice: it
+keeps the residual polynomial in the interaction potentials instead of nesting
+Fermi integrals inside them. It is not a statement about the state, which is
+`(mu_p, mu_n, T)` with `mu_Hv_i` playing the part a mean field plays elsewhere.
+
+**`beta_eq_neutrinoless`**, conditions `(n_B, T)` —
+`x = [mu_p, mu_n, mu_e, n_p, n_n]`, five rows in the order assembled:
+
+    r1 = n_p(mu_eff_p, T, m_p) - n_p
+    r2 = n_n(mu_eff_n, T, m_n) - n_n
+    r3 = n_p + n_n - n_B
+    r4 = mu_n - mu_p - mu_e          (= -mu_C - mu_e)
+    r5 = n_C - n_e(mu_e, T)          (= n_p - n_e)
+
+    scales  (n_B, n_B, n_B, mu_B, n_B)
+
+`r4` is beta equilibrium with free-streaming neutrinos (`mu_nue = 0`), `r5`
+total electric neutrality.
+
+**`beta_eq_neutrino_trapped`**, conditions `(n_B, Y_Le, T)` —
+`x = [mu_p, mu_n, mu_e, mu_nue, n_p, n_n]`, six rows: `r1, r2, r3, r5`
+unchanged, with
+
+    r4 = mu_n - mu_p - mu_e + mu_nue      (= -mu_C - mu_e + mu_nue)
+    r6 = (n_e + n_nue)/n_B - Y_Le
+
+    scales  (n_B, n_B, n_B, mu_B, n_B, 1)
+
+— `r6` is already dimensionless. The muon family is not tracked, so `Y_Lmu`
+raises.
+
+**`fixed_YC`**, conditions `(n_B, Y_C, T)`. Here the composition is known
+before the solve — `n_p = Y_C n_B`, `n_n = (1 - Y_C) n_B` — so both densities
+leave the unknown vector and rows `r3` and `r4` are not needed:
+
+    leptons=True    x = [mu_p, mu_n, mu_e]   rows r1, r2, r5'
+    leptons=False   x = [mu_p, mu_n]         rows r1, r2
+
+    r5' = n_e(mu_e, T) - n_C
+
+    scales  (n_B, ...) — every row of this mode balances a density
+
+**The neutrality row's SIGN differs between modes in the code**: it is
+`n_C - n_e` in the two beta-equilibrium modes and `n_e - n_C` in `fixed_YC`.
+The root is of course unchanged; the residual is not, so each mode's row is
+given here as the code assembles it rather than picking one spelling and
+implying the other matches.
+
+**`fixed_YC_YS`** raises `NotImplementedError`. The mode is not unimplemented
+but meaningless here: `n_S = 0` for any state of the model, so the only `Y_S`
+it could satisfy is zero and any other request has no solution. Silently
+ignoring `Y_S` would return symmetric nuclear matter under a name that promised
+a strangeness condition.
 
 `leptons=True/False` applies to `fixed_YC`: without leptons the result is
 charged nucleonic matter, which is what a mixed phase needs per pure phase
@@ -155,6 +236,94 @@ structural cross-constraint; nothing in Constantinou et al. singles out a member
 of ZL's family. Closing it needs either a sixth imposed datum (`Q_sat`, or an
 effective mass) or one coupling held fixed, and until one is chosen the function
 raises saying so rather than returning an arbitrary member.
+
+## What a solved point returns
+
+A solve returns an `EoSPoint` carrying every quantity below; nothing is omitted
+because nothing downstream consumes it.
+
+| field | symbol | unit / meaning |
+|---|---|---|
+| `converged` | — | the status a caller must test first |
+| `error` | — | largest scaled residual, dimensionless |
+| `n_B`, `T` | n_B, T | fm^-3, MeV: the conditions |
+| `Y_C`, `Y_S`, `Y_L` | Y_C, Y_S, Y_Le | the fractions; `Y_S = 0` always |
+| `mu_p`, `mu_n` | mu_p, mu_n | MeV, *physical* potentials (not `mu_eff_i`) |
+| `mu_e`, `mu_nu` | mu_e, mu_nue | MeV |
+| `mu_B`, `mu_C`, `mu_S`, `mu_L` | mu_B, mu_C, mu_S, mu_L | MeV; `mu_S = 0` by convention |
+| `n_p`, `n_n`, `n_e`, `n_nu` | n_p, n_n, n_e, n_nue | fm^-3 |
+| `P_total` | P | MeV/fm^3 |
+| `e_total` | eps | MeV/fm^3 |
+| `s_total` | s | fm^-3 |
+| `Y_p`, `Y_n`, `Y_e` | n_i/n_B | per-species fractions |
+
+When `converged` is False every other field holds the best iterate reached,
+which is not a physical state.
+
+**`s`** is the sum of the sectors' entropy densities, each obtained through the
+free-gas Euler identity at that sector's EFFECTIVE potential. The interaction
+never enters `s`, because `V` depends on the densities and not on `T`. The
+model therefore does not compute `s` from the total Euler relation, which is
+what leaves that relation available as an independent check.
+
+**There is no scalar density `n_s`** — see above. This is the one
+returned-quantity requirement the model discharges by not having the quantity.
+
+`eos_table` flattens each solved point into the long-format row
+`eos.general.table_io` writes, keyed so a nucleonic table and a hybrid table
+concatenate without renaming.
+
+## The API surface
+
+Three entry points, the same three every model exposes, with the parameters
+always first and the mode always required:
+
+- `eos_point(par, mode, species, n_B=, T= | SnB=, leptons=, **conditions)` —
+  one state, returned inside a `PointResult` carrying `ok`, a `message` and the
+  `point`. Exactly one of `T` and `SnB`.
+- `eos_table(par, mode, species, axes, fixed=, leptons=, progress=, verbose=)`
+  — a solved grid over `{n_B} x {T} x` the fraction axes the mode fixes, the
+  density axis warm-started. `progress` is called once per completed line with
+  `{mode, line, n_lines, temp_key, temp, fracs, n_solved, n_requested,
+  elapsed_s}`, the same dictionary in every model. Deep solver code never
+  prints.
+- `eos_response(par, mode, species, frozen='equilibrium', n_B=, T=, leptons=,
+  rel_step=, **conditions)` — second derivatives.
+
+`eos_response` implements `frozen='equilibrium'` and nothing else. Both
+quantities are central differences over a relative step `rel_step` (default
+1e-3) in the variable differentiated:
+
+    cs2_eq = (dP/deps)_T                     key `cs2_eq`
+    C_V    = (T/n_B) (ds/dT)_n_B             key `C_V`, at T > 0 only
+
+Every other freeze — frozen composition, frozen conserved fractions, the
+leptonic re-neutralization variants — and the susceptibility matrix `chi_ab`
+raise `NotImplementedError` naming the gap.
+
+## The `verify/` suite
+
+Ten physics invariants, each returning a structured pass/fail with the largest
+error it saw:
+
+1. **Euler relation** `eps + P = T s + sum_i mu_i n_i`, at 1e-8 relative.
+2. **Free energy** `f = eps - Ts = -P + sum_i mu_i n_i`, at 1e-8.
+3. **Interaction identities**: the two expressions for `P_int` agree, and
+   `mu_Hv_i` is the numerical derivative of `V`.
+4. **Mode closures**: each mode's own conditions at its own solution, at 1e-8.
+5. **Free-gas limit**: with `a0 = b0 = a1 = b1 = 0` the solved state is two
+   free Fermi gases at the physical potentials, at 1e-10.
+6. **Isospin symmetry**: at `Y_C = 0.5` symmetric matter comes back with
+   `mu_p = mu_n`, i.e. `mu_C = 0`, and `n_p = n_n`, at 1e-10. Both nucleons
+   carry the same mass and `V` is symmetric under `n_p <-> n_n`, so this must
+   hold exactly; it catches a sign slip in the isovector term, which is
+   otherwise invisible in the totals.
+7. **Residual gate**: every state the suite solved is inside 1e-10.
+8. **Causality**: `0 <= c_s^2 <= 1` along the cold beta-equilibrium sequence.
+9. **No strangeness**: `n_S = 0` and `mu_S = 0` in every returned state, and
+   `fixed_YC_YS` raises.
+10. **Nuclear-matter parameters**: the five published values reproduce at the
+    precision they are published to.
 
 **Numerics.** Two to six equations, Powell hybrid then Levenberg-Marquardt,
 with one further cold-start attempt when a warm start was supplied and failed.

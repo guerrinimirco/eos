@@ -340,13 +340,18 @@ r_1 &= n_p(\mueff{p}, T, m_p) - n_p , \qquad
 &r_2 &= n_n(\mueff{n}, T, m_n) - n_n , \\
 r_3 &= n_p + n_n - \nB , \qquad
 &r_4 &= \mu_n - \mu_p - \mu_e \;\;(= -\muC - \mu_e) , \\
-r_5 &= n_e(\mu_e, T) - n_p . &&
+r_5 &= \nC - n_e(\mu_e, T) \;\;(= n_p - n_e) . &&
 \end{aligned}
 \label{eq:residual_beta}
 \end{equation}
 %
 Row $r_4$ is beta equilibrium with free-streaming neutrinos ($\munue = 0$),
-$r_5$ total electric neutrality.
+$r_5$ total electric neutrality. \textbf{The neutrality row is written
+$\nC - n_e$ in the two $\beta$-equilibrium modes and $n_e - \nC$ in
+\texttt{fixed\_YC}}, which is the same condition with the sign reversed. The
+root is of course unchanged; the residual is not, and this document states each
+mode's row as the code assembles it rather than picking one spelling and
+implying the other matches.
 
 \paragraph{\texttt{beta\_eq\_neutrino\_trapped}} $(\nB, Y_{L_e}, T)$; unknowns
 $x = [\mu_p, \mu_n, \mu_e, \munue, n_p, n_n]$, six rows: $r_1, r_2, r_3, r_5$
@@ -364,10 +369,12 @@ The muon family is not tracked, so $Y_{L_\mu}$ raises.
 before the solve --- $n_p = Y_C \nB$, $n_n = (1 - Y_C)\nB$ --- so both
 densities leave the unknown vector and rows $r_3$ and $r_4$ are not needed.
 With \texttt{leptons=True}, $x = [\mu_p, \mu_n, \mu_e]$ and the rows are
-$r_1, r_2$ and $r_5$; with \texttt{leptons=False}, $x = [\mu_p, \mu_n]$ and
-the rows are $r_1, r_2$ alone, the result being electrically charged nucleonic
-matter --- what a mixed-phase construction needs per pure phase before global
-neutrality is imposed.
+$r_1$, $r_2$ and $r_5' = n_e(\mu_e, T) - \nC$ --- the neutrality condition
+with the sign it carries in this mode; with \texttt{leptons=False},
+$x = [\mu_p, \mu_n]$ and the rows are $r_1, r_2$ alone, the result being
+electrically charged nucleonic matter --- what a mixed-phase construction
+needs per pure phase before global neutrality is imposed. All rows of this
+mode balance a density, so all of their scales are $\nB$.
 
 \paragraph{\texttt{fixed\_YC\_YS}} raises \texttt{NotImplementedError}. The
 mode is not unimplemented but meaningless here: $\nS \equiv 0$ for any state
@@ -448,6 +455,142 @@ effective mass) or one coupling held fixed --- $\gamma_1$ is the natural
 candidate, being the least constrained by the isoscalar sector --- and until one
 is chosen the function raises saying which, rather than returning an arbitrary
 member.
+
+\section{What a solved point returns}
+\label{sec:returns}
+
+A solve returns an \texttt{EoSPoint} carrying every quantity below; nothing is
+omitted because nothing downstream consumes it.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+field & symbol & unit / meaning \\
+\midrule
+\texttt{converged} & --- & the status a caller must test first \\
+\texttt{error}     & --- & largest scaled residual, dimensionless \\
+\midrule
+\texttt{n\_B}, \texttt{T} & $\nB$, $T$ & $\mathrm{fm}^{-3}$, MeV: the
+                                          conditions \\
+\texttt{Y\_C}, \texttt{Y\_S}, \texttt{Y\_L}
+   & $Y_C, Y_S, Y_{L_e}$ & the fractions; $Y_S \equiv 0$ always \\
+\midrule
+\texttt{mu\_p}, \texttt{mu\_n} & $\mu_p, \mu_n$ & MeV, \emph{physical}
+                                                  potentials \\
+\texttt{mu\_e}, \texttt{mu\_nu} & $\mu_e, \munue$ & MeV \\
+\texttt{mu\_B}, \texttt{mu\_C}, \texttt{mu\_S}, \texttt{mu\_L}
+   & $\muB, \muC, \muS, \mu_{L}$ & MeV; $\muS = 0$ by convention \\
+\midrule
+\texttt{n\_p}, \texttt{n\_n}, \texttt{n\_e}, \texttt{n\_nu}
+   & $n_p, n_n, n_e, n_{\nu_e}$ & $\mathrm{fm}^{-3}$ \\
+\midrule
+\texttt{P\_total}, \texttt{e\_total}, \texttt{s\_total}
+   & $P$, $\varepsilon$, $s$ & $\mathrm{MeV\,fm^{-3}}$, $\mathrm{MeV\,fm^{-3}}$,
+                               $\mathrm{fm}^{-3}$ \\
+\midrule
+\texttt{Y\_p}, \texttt{Y\_n}, \texttt{Y\_e} & $n_i/\nB$ & per-species
+                                                          fractions \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+When \texttt{converged} is \texttt{False} every other field holds the best
+iterate reached, which is not a physical state.
+
+Two of these deserve a sentence of their own.
+
+\textbf{$s$} is the sum of the sectors' entropy densities, each obtained
+through Eq.~\eqref{eq:si}, the free-gas Euler identity at that sector's
+\emph{effective} potential. The interaction never enters $s$, because $V$
+depends on the densities and not on $T$. The model therefore does not compute
+$s$ from the total Euler relation, which is what leaves
+Eq.~\eqref{eq:euler} available as an independent check.
+
+\textbf{There is no scalar density $n_s$}, and its absence is physics rather
+than an omission. A scalar density is what a scalar field couples to; ZL has
+no scalar field and no Dirac effective mass, so the identity
+$n_s = (\varepsilon - 3P)/m^*$ has no $m^*$ to divide by and the quantity is
+not defined. This is the one returned-quantity requirement of the repository
+conventions that this model discharges by not having the quantity.
+
+\subsection{A table row}
+
+\texttt{eos\_table} flattens each solved point into the long-format row
+\texttt{eos.general.table\_io} writes, keyed so that a nucleonic table and a
+hybrid table concatenate without renaming.
+
+\section{The API surface}
+\label{sec:api}
+
+Three entry points, the same three every model exposes, with the parameters
+always the first argument and the mode always required:
+%
+\begin{itemize}
+\item \texttt{eos\_point(par, mode, species, n\_B=, T= \textbar\ SnB=,
+      leptons=, **conditions)} --- one state, returned inside a
+      \texttt{PointResult} carrying \texttt{ok}, a \texttt{message} and the
+      \texttt{point}. Exactly one of \texttt{T} and \texttt{SnB}.
+\item \texttt{eos\_table(par, mode, species, axes, fixed=, leptons=,
+      progress=, verbose=)} --- a solved grid over
+      $\{\nB\} \times \{T\} \times$ the fraction axes the mode fixes, the
+      density axis warm-started. \texttt{progress} is called once per
+      completed line with $\{$\texttt{mode}, \texttt{line}, \texttt{n\_lines},
+      \texttt{temp\_key}, \texttt{temp}, \texttt{fracs}, \texttt{n\_solved},
+      \texttt{n\_requested}, \texttt{elapsed\_s}$\}$, the same dictionary in
+      every model. Deep solver code never prints.
+\item \texttt{eos\_response(par, mode, species, frozen='equilibrium', n\_B=,
+      T=, leptons=, rel\_step=, **conditions)} --- second derivatives.
+\end{itemize}
+
+\texttt{eos\_response} implements \texttt{frozen='equilibrium'} and nothing
+else. Both quantities are central differences over a relative step
+\texttt{rel\_step} (default $10^{-3}$) in the variable differentiated:
+%
+\begin{equation}
+c_{s,\rm eq}^2 = \left.\frac{\partial P}{\partial\varepsilon}\right|_{T}
+\quad\text{under \texttt{cs2\_eq}} ,
+\qquad
+C_V = \frac{T}{\nB}\left.\frac{\partial s}{\partial T}\right|_{\nB}
+\quad\text{under \texttt{C\_V}, at $T > 0$ only.}
+\end{equation}
+%
+Every other freeze of the specification --- frozen composition, frozen
+conserved fractions, the leptonic re-neutralization variants --- and the
+susceptibility matrix $\chi_{ab}$ raise \texttt{NotImplementedError} naming
+the gap.
+
+\section{The \texttt{verify/} suite}
+\label{sec:verify}
+
+Ten physics invariants, each returning a structured pass/fail with the largest
+error it saw:
+%
+\begin{enumerate}
+\item \textbf{Euler relation}, Eq.~\eqref{eq:euler}, at $10^{-8}$ relative.
+\item \textbf{Free energy}, $f = \varepsilon - Ts = -P + \sum_i \mu_i n_i$, at
+      $10^{-8}$.
+\item \textbf{Interaction identities}: the two expressions for
+      $P_{\mathrm{int}}$ in Eq.~\eqref{eq:Pint} agree, and $\muHv{i}$ is the
+      numerical derivative of $V$.
+\item \textbf{Mode closures}: each mode's own conditions at its own solution,
+      at $10^{-8}$.
+\item \textbf{Free-gas limit}: with the interaction switched off the solved
+      state is two free Fermi gases at the physical potentials, at $10^{-10}$.
+\item \textbf{Isospin symmetry}: at $Y_C = 0.5$ symmetric matter comes back
+      with $\mu_p = \mu_n$, i.e.\ $\muC = 0$, and $n_p = n_n$, at $10^{-10}$.
+      Both nucleons carry the same mass and Eq.~\eqref{eq:V} is symmetric
+      under $n_p \leftrightarrow n_n$, so this must hold exactly; it catches a
+      sign slip in the isovector term, which is otherwise invisible in the
+      totals.
+\item \textbf{Residual gate}: every state the suite solved is inside
+      $10^{-10}$.
+\item \textbf{Causality}: $0 \le c_s^2 \le 1$ along the cold
+      $\beta$-equilibrium sequence.
+\item \textbf{No strangeness}: $\nS = 0$ and $\muS = 0$ in every returned
+      state, and \texttt{fixed\_YC\_YS} raises.
+\item \textbf{Nuclear-matter parameters}: the five published values of
+      Sec.~\ref{sec:nmp} reproduce at the precision they are published to.
+\end{enumerate}
 
 \section{Numerics}
 
