@@ -574,7 +574,16 @@ field & symbol & note \\
 %
 The CFL record carries the same fields and adds \texttt{Delta0} and
 \texttt{Delta} --- the parameter and its value at $T$, Eq.~\eqref{eq:gap} ---
-and reports no electrons, since the phase has none.
+and \emph{drops} \texttt{n\_e} and \texttt{n\_nu}, since the phase has no
+leptons; \texttt{mu\_e}, \texttt{mu\_nu}, \texttt{Y\_e} and \texttt{Y\_nu}
+are present and stay at zero. (\texttt{CFLPoint}'s own docstring says
+\texttt{Y\_e} is absent as well; it is not.)
+
+There is no scalar density in this model and therefore no identity
+$n_s = (\varepsilon - 3P)/m^*$ to state: the quark masses are parameters and
+there is no gap equation, so nothing here plays the part $m^*$ plays in a
+mean-field model. The \texttt{n\_s} of the returns table is the strange-quark
+number density.
 
 The entropy density is worth a word because nothing in the residual derives
 from it and it is therefore easy to leave unstated. It is not integrated
@@ -583,6 +592,52 @@ Eq.~\eqref{eq:s0}, for a massive one it is Eq.~\eqref{eq:sF} --- the Euler
 relation of the free gas, which is exact --- plus the correction of
 Eq.~\eqref{eq:massive}, and in the paired phase it carries the further term of
 Eq.~\eqref{eq:scfl}. The gluon, photon and lepton entropies are added on top.
+
+\section{The API surface}
+\label{sec:api}
+
+Three entry points, with the signatures every model in this repository carries:
+%
+\begin{verbatim}
+eos_point(par, mode, species, n_B=, T=|SnB=, leptons=, x0=, **conditions)
+eos_table(par, mode, species, axes=, fixed=, leptons=, skip_errors=,
+          rows=, progress=, verbose=)
+eos_response(par, mode, species, frozen="equilibrium", n_B=, T=,
+             leptons=, rel_step=1e-3, **conditions)
+\end{verbatim}
+%
+\texttt{par} comes first and is never optional. \texttt{eos\_point} returns a
+\texttt{PointResult} whose \texttt{.ok} must be tested before \texttt{.point}
+is read; non-convergence is a return value, not an exception.
+\texttt{eos\_table} takes \texttt{axes=\{'nB': grid, 'T': grid\}} plus the
+mode's own fraction axis (\texttt{Y\_C}, \texttt{Y\_S}, \texttt{Y\_Le}, or
+\texttt{Delta0} for the paired phase) and returns arrays consumable by
+\texttt{eos.astro.tov} with no adapter; its \texttt{progress} callback is
+invoked once per completed line with the repository's standard dictionary
+\texttt{\{mode, line, n\_lines, temp\_key, temp, fracs, n\_solved,
+n\_requested, elapsed\_s\}}, and \texttt{verbose=True} installs the built-in
+printer. Deep solver code never prints.
+
+\texttt{eos\_response} implements one freeze,
+\texttt{frozen="equilibrium"}: everything re-equilibrates under the
+perturbation, so the derivatives are taken along the mode's own sequence,
+%
+\begin{equation}
+c_{s,\rm eq}^2 = \left. \frac{\partial P}{\partial \varepsilon} \right|_{T} ,
+\qquad
+C_V = \frac{T}{\nB} \left. \frac{\partial s}{\partial T} \right|_{\nB} ,
+\label{eq:response}
+\end{equation}
+%
+both by central differences over a relative step \texttt{rel\_step} in the
+variable differentiated, since the residual of this model has no analytic
+Jacobian in this repository. $C_V$ is returned only at $T > 0$, where it is
+defined. The remaining freezes of the specification --- frozen per-species
+composition, frozen conserved fractions, the leptonic re-neutralization
+variants --- raise \texttt{NotImplementedError} naming the gap, and are
+recorded in \texttt{docs/DEFERRED.md}. With
+\texttt{frozen="equilibrium"} there is no isothermal/adiabatic ambiguity left
+to name: Eq.~\eqref{eq:response} is taken at fixed $T$ and its name says so.
 
 \section{Numerics}
 \label{sec:numerics}
