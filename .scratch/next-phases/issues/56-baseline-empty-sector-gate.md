@@ -56,23 +56,86 @@ This also corrects a guess made while the finding was being passed around:
 **`dd2` does not carry the same thing and could not**, its `mu_S` being imposed
 in every stored record. Only `sfho` was ever exposed.
 
-## What to decide
+## Measured: the lepton side and the strange side do NOT have the same shape
 
-The one-line version is "test whether the sector is empty relative to `n_B`
-rather than against an absolute `1e-12`", but the threshold is a real choice and
-should be argued rather than picked:
+Both gates were then measured across all nine baselines — every `n_e`/`mu_e`
+and `n_S`/`mu_S` pair, expressed as a fraction of that record's own `n_B`.
 
-- `Y_S < 1e-12`? Then sfho's row (1.6e-08) is still kept. Too tight to fix it.
-- `Y_S < 1e-6`? Fires on sfho and on all twenty did rows; did's survive the
-  second gate. This is the smallest threshold that closes the measured case with
-  room, and it has a physical reading: below one strange baryon per million.
-- Or drop the density test entirely and gate on the **residual's sensitivity** —
-  the honest criterion, since what makes `mu_S` free is a singular Jacobian
-  column, not a small number. More faithful, and more work.
+**The lepton side has a clean gap, so a relative gate works.** Sorting all 579
+lepton rows by `Y_e = n_e/n_B`:
 
-`mu_e` at `Y_C = 0` is the same class (`:198`, the same absolute `1e-12` against
-`n_e`) and should be ruled the same way in the same pass. It was not measured
-here; measure it before changing it.
+    empty cluster      0  ...  6.929e-11      (the largest "empty" row)
+                       ---- gap: x81,220 ----
+    populated cluster  5.627e-06  ...         (the smallest real electron gas)
+
+Nothing lives in between. **The absolute gate at `n_e < 1e-12` sits inside the
+empty cluster rather than inside the gap**, which is why it is flaky: six rows
+straddle it, and three sit ABOVE it by less than a factor of 70 —
+`vmit ycys.n0.8` (n_e = 1.168e-12, **1.17x the gate**),
+`vmit yc.lep.YC0.n0.8` (3.012e-12) and `alphabag yc.lep.YC0.n0.45` (3.118e-11).
+Those three keep `mu_e` today; a recomputation that moves `n_e` by a factor of
+two drops it, and the baseline then fails on **"quantity no longer produced"**,
+a key-set mismatch rather than a value change. That is vmit's current failure,
+and its "2 quantities" is exactly the two vmit rows above. A gate placed in the
+gap — `Y_e < 1e-8`, the log-midpoint — has four orders of margin on each side
+and no row within reach of it.
+
+**The strange side has no such gap, and this is the finding that matters.**
+sfho's free row does not sit at the edge of a cluster; it is *bracketed* by
+did's rows on both sides:
+
+    Y_S = 4.538e-09   did   yc.nolep.YC0.5.n0.08     mu_S = 0  (imposed)
+    Y_S = 5.544e-09   did   yc.lep.YC0.5.n0.16       mu_S = 0  (imposed)
+    Y_S = 1.558e-08   sfho  ycys.n0.16               mu_S = 8.4496   <-- FREE
+    Y_S = 2.222e-08   did   yc.lep.YC0.3.n0.08       mu_S = 0  (imposed)
+    Y_S = 4.597e-08   did   beta.Y.T10.n0.04         mu_S = 0  (imposed)
+
+**No threshold in `Y_S` separates the one free row from the imposed ones** —
+they interleave. So the magnitude proxy that works for leptons cannot work for
+strangeness, and two of the three thresholds this ticket originally proposed are
+dead on arrival for the sector that motivated it.
+
+What rescues it is that **the first gate does not need to discriminate.** The
+second gate (`:190`, `abs(mu_S) > 1e-12`) already separates free from imposed
+*exactly* — an imposed `mu_S` is identically `0.0`, never nearly zero — and it
+is doing that job correctly today. The first gate's only job is to be permissive
+enough to admit every empty-sector row for the second gate to judge. Read that
+way, `Y_S < 1e-6` is fine: it fires on sfho and on most of did's rows, and every
+one of did's survives.
+
+## The root cause is upstream of both gates
+
+sfho's three `fixed_YC_YS` rows all target `Y_S = 0`. Compare how tightly each
+closed the strangeness row:
+
+    n_B = 0.160    n_S = 2.4921e-09    <-- seven orders looser than its siblings
+    n_B = 0.320    n_S = 3.9248e-16
+    n_B = 0.640    n_S = 3.0107e-16
+
+Same model, same mode, same target. **The n = 0.16 solve closed the strangeness
+row seven orders less tightly than the other two**, which is why it alone landed
+above a gate that caught its siblings correctly. The gate's units are wrong, but
+what put this row on the wrong side of it is solver conditioning — the map's
+open "Scaling the strangeness residual" question, which measured that a 1e-10
+residual gate admits 0.079 MeV of `mu_S`.
+
+So there are three fixes at three depths, and they are not alternatives:
+
+1. **Tighten the solve** so n = 0.16 closes like n = 0.32 and n = 0.64. Then the
+   existing gate catches it, nothing else changes, and the row stops being
+   special. This is the root cause and the only one that fixes the physics
+   rather than the bookkeeping.
+2. **Put the gates in the gap**: `Y_e < 1e-8` on the lepton side, which removes
+   the flakiness band entirely and is what vmit's failure actually needs;
+   `Y_S < 1e-6` on the strange side, permissive by design, with the second gate
+   doing the discrimination.
+3. **Gate on the residual's sensitivity** rather than on any density — the
+   honest criterion, since what makes a potential free is a singular Jacobian
+   column and a small density is only a symptom. Correct, and the most work.
+
+(2) is what makes the suite deterministic and is cheap. (1) is what makes the
+question go away. They are worth doing in that order, and (1) may belong with
+the strangeness-residual scaling rather than here.
 
 ## Constraints
 

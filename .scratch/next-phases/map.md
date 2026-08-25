@@ -431,7 +431,21 @@ against this file, not against the earlier `pytest_before*.txt`.
   (Y_S = 1.6e-08, nine orders above the gate) with a free `mu_S = 8.4496` frozen
   at rtol = 1e-10. `did`'s twenty tiny-`n_S` rows and all twelve of `dd2`'s carry
   `mu_S = 0` exactly — imposed, not solved — so the generator's second gate keeps
-  them correctly and the fix cannot cost them.
+  them correctly and the fix cannot cost them. **Measuring both gates across all
+  nine baselines then changed the ticket twice.** The lepton side has a clean
+  gap — empty tops out at `Y_e = 6.9e-11`, populated starts at `5.6e-06`, nothing
+  between — and the absolute gate sits INSIDE the empty cluster, not in the gap,
+  which is why vmit flakes: three rows sit above it by less than a factor of 70,
+  and vmit's two are its "2 quantities no longer produced". The strange side has
+  **no such gap** — sfho's one free row at `Y_S = 1.56e-08` is bracketed by did's
+  imposed rows at 5.5e-09 and 2.2e-08, so no magnitude threshold separates them
+  and two of the ticket's three original options are dead there. What rescues it
+  is that the first gate need not discriminate at all: the second gate is exact,
+  since an imposed `mu_S` is identically zero. And the root cause is upstream of
+  both — sfho's `ycys` at n = 0.16 closed the strangeness row to 2.49e-09 where
+  its own siblings at 0.32 and 0.64 reached 3.9e-16 and 3.0e-16, **seven orders
+  tighter, same model and mode** — which ties this to the map's open
+  "Scaling the strangeness residual" question rather than to the gate alone.
 
 ## Not yet specified
 
@@ -474,8 +488,12 @@ In scope, not yet sharp enough to ticket:
   reintroduces all three bugs. Whether some of that logic
   belongs in `eos/` where it would be tracked, or whether the layout rule should
   bend, is worth settling during [ticket 21](issues/21-phase5-structure.md).
-- **Scaling the strangeness residual.** Ticket 40 measured that a 1e-10 gate
-  admits 0.079 MeV of `mu_S` — three orders of magnitude looser than the
+- **Scaling the strangeness residual.** Now has a second, sharper witness:
+  [ticket 56](issues/56-baseline-empty-sector-gate.md) measured sfho's three
+  `fixed_YC_YS` rows closing the same residual to 2.49e-09, 3.92e-16 and
+  3.01e-16 — seven orders of spread across one density sweep of one model, which
+  is what put the n = 0.16 row on the wrong side of the baseline's gate.
+  Ticket 40 measured that a 1e-10 gate admits 0.079 MeV of `mu_S` — three orders of magnitude looser than the
   baseline's tolerance implied — and the `mu_e` sibling at Y_C = 0 shares it.
   That is solver conditioning, not a baseline question, and it is no longer
   urgent now the suite is green. What scaling to use, and whether it touches
