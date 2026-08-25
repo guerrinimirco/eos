@@ -219,8 +219,8 @@ def hadronic_seed(par, flags, T, n_B_guess):
     Returns [sigma, omega0, rho0, (phi0), nB_nat]; the density is in natural
     units, the rest in MeV.
     """
-    fields_only = replace(flags, include_pseudoscalars=False,
-                          include_thermal_vectors=False)
+    fields_only = replace(flags, thermal_mesons=False,
+                          thermal_vectors=False)
     base = solve_beta_eq_neutrinoless(par, n_B_guess, fields_only, T=T,
                                include_photons=False, check_consistency=False)
     fields = base.matter.fields
@@ -578,8 +578,8 @@ def dd2_phase(par, flags):
         # A charge-neutral beta-equilibrium solve: physical by construction
         # and independent of the charge potentials. The meson gas is switched
         # off for the same reason `hadronic_seed` switches it off.
-        seed_flags = replace(flags, include_pseudoscalars=False,
-                             include_thermal_vectors=False)
+        seed_flags = replace(flags, thermal_mesons=False,
+                             thermal_vectors=False)
         base = solve_beta_eq_neutrinoless(par, n_B, seed_flags, T=T,
                                    include_photons=False,
                                    check_consistency=False)

@@ -130,12 +130,14 @@ with the flag, never implicitly. A model may add flags of its own for physics
 only it has: `phi_field` and `sigma_star` for the hidden-strange mesons,
 `gluons` in a bag model, `csc` for colour superconductivity.
 
-One model does not yet carry two of the six. `dd2` — and `eos.mixed`, which
-reuses its flags — splits `thermal_mesons` into `include_pseudoscalars` and
-`include_thermal_vectors`, and has no `thermal_neutrinos` at all: its
-`neutrinos` field is the matter-composition one of the trapped modes, not the
-thermal tau gas. Pass those names to `dd2` and the six shared ones to the
-other nine.
+All ten models carry all six names, so the same six keywords construct a
+`SpeciesFlags` anywhere. Carrying a name is not the same as wiring the sector:
+`dd2` — and `eos.mixed`, which reuses its flags — raises
+`NotImplementedError` on `thermal_neutrinos=True`, because the flavours a mode
+does not track are unwired there and its own `neutrinos` field is the
+matter-composition electron neutrino of the trapped modes, a different sector.
+`dd2` splits section 4's "optionally the vector nonet" off into a secondary
+`thermal_vectors`, leaving `thermal_mesons` as the pi, K gas.
 
 ### Conventions
 

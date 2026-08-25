@@ -764,11 +764,11 @@ def solve(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     # Thermal meson gas: additive Bose gas on top of the mean
     # field, evaluated at the converged charge/strange potentials and vector
     # fields. mu*_j n_j joins the HVH sum (the gas satisfies e+P = Ts+mu* n).
-    if (flags.include_pseudoscalars or flags.include_thermal_vectors) and T > 0:
+    if (flags.thermal_mesons or flags.thermal_vectors) and T > 0:
         mg = thermal_meson_thermo(
             par, n_B, st["mu_C"], st["mu_S"], st["omega0"], st["rho0"], T,
-            include_pseudoscalars=flags.include_pseudoscalars,
-            include_thermal_vectors=flags.include_thermal_vectors)
+            include_pseudoscalars=flags.thermal_mesons,
+            include_thermal_vectors=flags.thermal_vectors)
         st["eps"] += mg["e"] * hc3
         st["P"] += mg["P"] * hc3
         st["s"] += mg["s"] * hc3

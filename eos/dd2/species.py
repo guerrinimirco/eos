@@ -8,9 +8,15 @@ zero": if a species is absent, its flag is False. Setting a flag that is not
 yet wired raises rather than silently doing nothing, so a table can never
 quietly omit a sector the caller asked for.
 
-Currently wired: hyperons, Delta isobars, muons, trapped neutrinos, photons,
-the hidden-strange vector phi, and the thermal pseudoscalar / vector meson
-gases. The hidden-strange scalar sigma* is not.
+All six names of CLAUDE.md section 4 are carried. Five are wired: hyperons,
+Delta isobars, muons, photons and thermal_mesons -- the last being section 4's
+"pi, K", with the optional vector nonet behind the secondary flag
+thermal_vectors. `thermal_neutrinos` is carried and RAISES: the flavours a
+mode does not track are not wired here, and dd2's own `neutrinos` is the
+matter-composition electron neutrino of the trapped modes, a different sector.
+
+Also wired, as dd2's own physics: trapped neutrinos and the hidden-strange
+vector phi. The hidden-strange scalar sigma* is not.
 """
 from dataclasses import dataclass
 
@@ -22,19 +28,29 @@ class SpeciesFlags:
     hyperons: bool = False              # Λ, Σ, Ξ octet
     deltas: bool = False                # Δ quartet
     muons: bool = True                  # e always on; μ optional
-    neutrinos: bool = False             # only trapped / fixed-Y_Le modes
+    thermal_mesons: bool = False        # thermal π,K,η,η' Bose gas
+    thermal_neutrinos: bool = False     # the ν flavours a mode does NOT track
+                                        # (the τ family): unwired here, raises
     photons: bool = True                # radiation (matters only at T>0)
+    neutrinos: bool = False             # matter-composition ν_e of the trapped
+                                        # modes — NOT thermal_neutrinos above
     phi_field: bool = True              # hidden-strange VECTOR φ (DD2Y default)
     sigma_star: bool = False            # hidden-strange SCALAR σ* (later)
-    include_pseudoscalars: bool = False  # thermal π,K,η,η' Bose gas (M7)
-    include_thermal_vectors: bool = False  # thermal ρ,ω,K*,φ Bose gas (M7)
+    thermal_vectors: bool = False       # thermal ρ,ω,K*,φ Bose gas: section 4's
+                                        # "optionally the vector nonet"
 
     def __post_init__(self):
-        # neutrinos are wired (M6 trapped Y_Le mode; use
-        # solve_beta_eq_neutrino_trapped).
+        # `neutrinos` is wired: it is the trapped-Y_Le mode's electron
+        # neutrino, reached through solve_beta_eq_neutrino_trapped.
         if self.sigma_star:
             raise NotImplementedError(
                 "SpeciesFlags: sigma_star (hidden-strange scalar) is not wired")
+        if self.thermal_neutrinos:
+            raise NotImplementedError(
+                "SpeciesFlags: thermal_neutrinos -- the neutrino flavours a "
+                "mode does not track, carried as mu = 0 gases -- is not wired "
+                "in dd2. It is NOT `neutrinos`, which is the "
+                "matter-composition electron neutrino of the trapped modes")
 
     @property
     def has_strange_baryons(self):

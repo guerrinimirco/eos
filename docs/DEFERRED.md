@@ -922,12 +922,15 @@ decision that cannot be made before the tables exist.
   `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) and Y_Lmu raises.
 - `fixed_YC_YS` with neutralizing leptons (`leptons=True`) is not wired; the
   flag applies to `fixed_YC` only.
-- Species-flag naming: the spec calls the meson switch `thermal_mesons`;
-  dd2's `SpeciesFlags` carries the finer `include_pseudoscalars` /
-  `include_thermal_vectors` pair (and `neutrinos` for the trapped mode, where
-  the spec name `thermal_neutrinos` means the untracked mu = 0 gas, which dd2
-  does not implement). Unifying the names across models is deferred until the
-  other models reach the spec API, so it lands as one rename, not five.
+- The `thermal_neutrinos` sector is not wired. The FLAG is carried, so the six
+  §4 names construct a dd2 `SpeciesFlags` the way they construct every other
+  model's, but setting it True raises `NotImplementedError`: the neutrino
+  flavours a mode does not track are not carried as mu = 0 gases here. dd2's
+  own `neutrinos` is a different sector — the matter-composition electron
+  neutrino of the trapped modes — and stays.
+  (The naming half of this entry is closed: `include_pseudoscalars` and
+  `include_thermal_vectors` are now `thermal_mesons` and the secondary
+  `thermal_vectors`, §4's "pi, K (and optionally the vector nonet)".)
 
 ### did
 - The low-density nuclear-statistical-equilibrium sector is not implemented.

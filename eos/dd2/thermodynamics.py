@@ -286,6 +286,19 @@ def build_baryon_specs(par, flags):
             xs, xw, xr, xphi = (par.x_Delta_sigma, par.x_Delta_omega,
                                 par.x_Delta_rho, 0.0)
         else:
+            if b.name not in hyp:
+                # NotImplementedError, not ValueError: `api.eos_point`
+                # turns ValueError into a non-converged STATUS and re-raises
+                # this one -- and an unwired request must never be a status
+                # (CLAUDE.md section 4).
+                raise NotImplementedError(
+                    f"SpeciesFlags(hyperons=True) with a parameter set that "
+                    f"carries no couplings for {b.name} "
+                    f"(par.hyperon_couplings is empty or partial). DD2 and "
+                    f"DD2Y are different published parameterisations, not one "
+                    f"set read through two flag settings, so the octet has no "
+                    f"answer from the nucleonic couplings. Use "
+                    f"Parameters.named('DD2Y').")
             mass, xs, xw, xr, xphi = hyp[b.name]
         if b.t3 is None:
             raise ValueError(f"baryon {b.name} has no t3 set (needed for rho)")
@@ -344,8 +357,8 @@ def build_matter_ctx(par, n_B, flags, T=0.0):
         m_e=Electron.mass, m_mu=Muon.mass, T=T,
         include_muons=flags.muons,
         has_phi=flags.phi_field and flags.hyperons,
-        include_pseudoscalars=flags.include_pseudoscalars,
-        include_thermal_vectors=flags.include_thermal_vectors,
+        include_pseudoscalars=flags.thermal_mesons,
+        include_thermal_vectors=flags.thermal_vectors,
         x_omega_L=lambda_omega_ratio(par),
     )
 
