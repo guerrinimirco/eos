@@ -997,17 +997,19 @@ for mode, T, conditions in BENCH_CONFIGS:
 # %% [markdown]
 # **What the spread says.** These four are not four variations on one cost. A
 # closed-form bag model (`alphabag`) and a bag model with a vector coupling
-# (`vmit`) solve a point in a fraction of a millisecond; `njl` pays about 60 ms
-# for the same point, because its constituent masses come out of a gap equation
-# that has to be re-solved at every residual evaluation; and `ccdm` pays more
-# again, because on top of the gap equation it *enumerates* candidates — the
-# chiral/dielectric branch and the pairing pattern — and solves each.
+# (`vmit`) solve a point in a fraction of a millisecond; `njl` pays tens of
+# milliseconds for the same point, because its constituent masses come out of a
+# gap equation that has to be re-solved at every residual evaluation; and `ccdm`
+# pays more again, because on top of the gap equation it *enumerates*
+# candidates — the chiral/dielectric branch and the pairing pattern — and solves
+# each.
 #
 # The `warm` column for `ccdm` is the one to read carefully, and it is why cold
 # and warm are reported separately rather than as one number. Its cold point is
-# 94–159 ms, but its warm figure is 14–19 **seconds** per point: a hundred times
-# its own cold cost, where every other model's warm and cold numbers sit within
-# a factor of three of each other. Nothing about the solved points got slower.
+# around a tenth of a second, but its warm figure is ten seconds and more per
+# point — of order a hundred times its own cold cost, where every other model's
+# warm and cold numbers sit within a factor of three of each other. Nothing
+# about the solved points got slower.
 # The line simply spends most of its wall clock on the points it never solves —
 # each miss is retried through up to `MAX_BISECT = 6` halved steps back towards
 # the last solved point, and every one of those retries enumerates the
