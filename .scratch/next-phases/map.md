@@ -496,6 +496,27 @@ against this file, not against the earlier `pytest_before*.txt`.
   `### astro/tov`'s crust-path bullet is stale, closed by
   [ticket 39](issues/39-crust-silent-fallback.md) — Stage 7 material.
 
+- [vmit.md and vmit.tex to §11 standard](issues/33-vmit-documents.md): the only
+  pair where both files failed is closed — `.md` 82 → 707 lines, `.tex`
+  265 → 992, compiling clean at 10 pages, no `.py` touched. **The ordering
+  defect was not one wrong statement but two half-right ones**: there are TWO
+  unknown layouts (`mu_e` in slot four in the beta modes, appended last in the
+  fixed-fraction ones) and each file had generalised the one the other got
+  wrong — which is why neither read as broken. Both now carry the layout table
+  and every residual row by row, including that **`R6` and `R7` swap between
+  the two beta modes**. Four gaps beyond the audit's list: the finite-T
+  integrals were **missing their `(hbar c)^3`** (the sfho defect class again),
+  the totals equation **omitted leptons and photons entirely**, there were no
+  `T = 0` forms in a model whose strange onset IS a `T = 0` threshold, and
+  nothing on returns, table keys, API or cold starts. Three claims the code
+  decided: `B/(hbar c)^3 = 136.63`, the light flavours are ultra-relativistic
+  to 5e-4 rather than 3e-4, and **`verify/` runs EIGHT checks, not the seven
+  its own docstring enumerates** (reported, not fixed). `n_s` discharged with
+  its reason — no scalar sector, so the trace identity has no meaning and
+  `n_s` is the strange-quark number density. Ticket 27's carried-in
+  `eos_response` claim was already gone, taken by `2844a9a`. `eos.bib`
+  untouched; the `.md`'s own reference list was corrected against it.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
