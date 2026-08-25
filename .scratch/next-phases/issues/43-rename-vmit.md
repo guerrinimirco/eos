@@ -102,3 +102,19 @@ land too.
 
 Checked and CLEAN: `eos/dd2` and `eos/sfho` have no such collision for their
 planned renames.
+
+## Do NOT run 43, 44 and 45 concurrently
+
+Measured, not assumed. The three rename sets touch overlapping files, so two
+sessions in one checkout will corrupt each other:
+
+    44 (dd2) n 43 (vmit)   15 files   incl. eos/mixed/adapters.py, hybrid.py,
+                                      responses.py, solver.py, table.py and
+                                      9 test/mixed files
+    44 (dd2) n 45 (sfho)    3 files   incl. eos/sfho/parameters.py
+    43 (vmit) n 45 (sfho)   2 files   incl. eos/sfho/solver.py
+
+All three also rewrite `test/baseline/generate_baseline.py`. Run them one at a
+time. The document tickets (30, 31, 32, 33, 35, 36) ARE disjoint from these and
+from each other, and need no pytest run, so they parallelise freely — their only
+shared file is `docs/eos.bib`, which is append-only.
