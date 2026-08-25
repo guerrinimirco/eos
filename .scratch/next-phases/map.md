@@ -85,6 +85,21 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
+**CORRECTED by [ticket 47](issues/47-dd2-nmp-inversion.md): the 14 are a
+STACK artifact, not a code state.** This machine carries two Python stacks —
+anaconda `python` (3.9.7 / numpy 1.26.4 / scipy 1.13.1) and python.org 3.14
+(3.14.2 / numpy 2.3.5 / scipy 1.17.0). Every `test/baseline/*.npz` was made on
+the first; every file in `output/_audit/` was made on the second. **The fourteen
+failing node ids pass on anaconda in one invocation — `14 passed in 182.66s` —
+and fail on 3.14.** So the two "root causes" below are one cause, and it is not
+in `eos/`. `pyproject.toml:5` admits both stacks and picks neither; the ruling
+is [ticket 57](issues/57-canonical-stack.md). **Until 57 is ruled, every failure
+count in this block and in `output/_audit/` is a measurement of an interpreter,
+not of the code — including "0 added failures" claims checked against it.**
+Report which interpreter you ran with.
+
+The block below is kept as written, and is accurate FOR THE 3.14 STACK.
+
 **14 failed, 1634 passed, 15 skipped at HEAD.** Expect 14, not 0. All fourteen
 are **pre-existing and not physics regressions** — verified twice, independently,
 by running them against a detached worktree at HEAD carrying the pre-rename
@@ -140,6 +155,24 @@ against this file, not against the earlier `pytest_before*.txt`.
 ## Decisions so far
 
 <!-- one line per closed ticket: gist + link -->
+
+- [dd2's NMP inversion misses its targets](issues/47-dd2-nmp-inversion.md):
+  **a report, and the ticket's premise was false — the stack DID move.** Two
+  Python stacks live on this machine and `python` resolves to the one that did
+  NOT run the audits; all 14 failures (ticket 47's six AND
+  [ticket 56](issues/56-baseline-empty-sector-gate.md)'s eight) pass on
+  anaconda 3.9 and fail on python.org 3.14. The earlier determinism checks were
+  sound but varied every axis except that one, and the install-date check could
+  not discriminate because BOTH stacks predate every `.npz`. The physics ruling
+  asked for is **No**: the published DD2 couplings are not a root of the 5x5
+  closure — they miss its own cross-constraint by 2.200718e-03, so four rows
+  vanish there and the cross row does not, and reaching the true root moves
+  `b_sigma`/`c_sigma` (Q_sat's coefficients) to predict Q_sat 117.49. scipy 1.13
+  only appeared to confirm the docstring by returning the seed after ZERO
+  iterations, which `ISO_GATE = 2e-2` waves through as ok=True. Corrected in
+  `5644ed0` (docstrings only, no number moves). The `abs=0.2` Q_sat tolerances
+  are confirmed below their noise floor and deliberately **not** touched (§12).
+  Stack ruling graduated to [ticket 57](issues/57-canonical-stack.md).
 
 - [Where do the models deviate from §13's names, order and docstrings?](issues/07-naming-sweep.md):
   56 failing `thermodynamics.py` docstrings, 74 name deviations (58 public), 6

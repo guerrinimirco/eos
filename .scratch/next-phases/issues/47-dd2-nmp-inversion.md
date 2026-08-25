@@ -1,7 +1,8 @@
 # dd2's NMP inversion misses its targets — regression, or a tolerance asserting below the noise?
 
 Type: grilling
-Status: open
+Status: resolved
+Assignee: session 9616271c
 Blocked by: -
 Parent: ../map.md
 
@@ -110,3 +111,120 @@ across history:
     inv, status = invert_nmp(six)
     assert status.ok                                    # passes
     assert abs(status.predictions["Q_sat"] - nmp["Q_sat"]) < 0.2   # 51.5090
+
+
+## Resolution
+
+**A report, not a fix — and the ticket's central premise is false.** All six
+failures, the seventh `dd2` baseline symptom, and the eight failures the map
+assigns to [ticket 56](56-baseline-empty-sector-gate.md) are ONE cause: the
+audits were run on an interpreter that did not produce the golden references.
+
+### There are two Python stacks on this machine
+
+| | anaconda3 (`python`, `python3`) | python.org 3.14 |
+|---|---|---|
+| Python | 3.9.7 | 3.14.2 |
+| numpy | 1.26.4 | 2.3.5 |
+| scipy | 1.13.1 | 1.17.0 |
+| numba | 0.60.0 | 0.63.1 |
+| matplotlib | 3.4.3 | 3.10.9 |
+
+`python` in a bare shell resolves to anaconda 3.9; `output/_audit/` was
+produced with `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3`.
+`pyproject.toml:5` says `requires-python = ">=3.9"`, which admits both and
+picks neither. **That undeclared choice is the defect.** `eos` is not installed
+into either site-packages, so `conftest.py`'s `sys.path` insert is what both
+interpreters import — no shadowing is involved.
+
+**Measured, decisively.** The fourteen failing node ids of
+`pytest_after_ticket45.txt`, run as a single invocation on the anaconda stack:
+
+    14 passed, 1 warning in 182.66s
+
+and every one of them fails on 3.14. The forward map is bit-stable *within* a
+stack and differs *between* them:
+
+    compute_nmp(Parameters.default())
+      3.9  / scipy 1.13.1   Q_sat 168.65250604853313   <- equals the stored dd2.npz
+      3.14 / scipy 1.17.0   Q_sat 169.00335695659044   <- equals the audit
+
+Repeated runs, `OMP_NUM_THREADS=1` and `NUMBA_DISABLE_JIT=1` all reproduce
+168.65250604853313 exactly on 3.9. So the ticket's determinism checks were
+sound but uninformative: they varied every axis except the one that mattered.
+The install-date check compared the 3.14 packages against the `.npz` dates —
+but BOTH stacks were installed in Feb 2026 and both predate every `.npz`
+(Aug 2026), so that check could not have discriminated. And the 13-commit walk
+held the stack fixed while varying the code, which is the wrong axis.
+
+### The four questions
+
+**1. Should the default 5x5 closure return to DD2's own basin? NO, and it
+cannot.** This is the physics ruling the ticket asked for, and it is
+stack-independent.
+
+The published DD2 couplings violate the closure's own cross-constraint
+`f''_sigma(1) = f''_omega(1)` by **2.200718e-03** — measured identically on
+both stacks. The 5x5 system has five exact conditions; the published table
+satisfies four and misses the fifth. **The published point is therefore a
+stationary point of the residual norm, not a zero of it**, and no seed
+recovers it because it is not a root.
+
+    scipy 1.13.1   iso residual 2.201e-03   couplings bit-identical to published
+    scipy 1.17.0   iso residual 6.686e-11   cross row -1.23e-12
+                     b_sigma -0.0250   c_sigma -0.0269   (Q_sat's coefficients)
+                     -> predicted Q_sat 117.4944
+
+The old behaviour was `hybr` returning the seed after zero iterations, and
+`ISO_GATE = 2e-2` — sized to admit exactly this 2.2e-3 — waving it through as
+`ok=True`. So `test_api.py:127` encodes a solver artifact as a requirement,
+and `nmp.py`'s "the round trip returns the published couplings unchanged" was
+never a statement about the closure. **Corrected in `5644ed0`** (docstrings and
+comments only; no number moves).
+
+`nmp.py:70`'s "spurious basin" is also mis-described for this case: 117.49 is
+not a spurious basin, it is *the* root of the stated 5x5 system.
+
+**2. Better seed, the pin, or N_RESTARTS? None of them.** Not a seed problem.
+The restart loop is irrelevant twice over — it fires only on a gate miss, and
+the gate is MET on both stacks.
+
+**3. What tolerance is honest for a third finite difference?** This is the
+"report, not a fix" shape, and it is the **6x6** test
+(`test_inversion_with_Q_sat_still_imposes_it`: 168.6459 against 169.0034,
+diff 0.357, asserted `abs=0.2`). The ticket's own h-sweep spans 166.29–169.00
+— a 2.7 MeV band — while the docstring names ~0.1 MeV at h = 1e-4 and the
+shipped h is the outlier of that sweep. `abs=0.2` asserts below the floor.
+**Not touched**: §12 forbids loosening it, and the honest alternative (moving
+h to the 3e-4–1e-3 optimum in BOTH directions together per `nmp.py:85`, then
+regenerating) is a golden-reference change. It belongs to the stack ruling
+below, since the tolerance must be re-derived on whichever stack wins.
+
+**4. Does Q_sat belong in a frozen rtol=1e-10 baseline? No** — ticket 40's
+`mu_S` defect in a different hat: a quantity with a documented >=0.1 MeV noise
+floor pinned at ten digits. But this is now **secondary**: on a fixed stack
+`dd2.npz` reproduces exactly, so the ten-digit pin is only violated when the
+stack moves. A latent defect, not what broke the suite.
+
+### One correction the 6x6 path earns
+
+A worry raised and **disproved**: if `hybr` never left the seed, the tov tests
+would be integrating a DD2-default star while believing it soft and
+Delta-rich. Measured on 3.9 for the tov sample (K_sat 250, Q_sat 100,
+L_sym 30): the 6x6 path does move, returning K_sat 249.187 and Q_sat 100.995
+— within the gate's 1e-2-scaled 2 MeV. The stall is specific to the 5x5 path
+at DD2's own NMPs, where four rows are already exactly zero. On 3.14 the same
+call returns `None` with `isoscalar residual 8.12e-02`, which is the tov
+failure the ticket quotes.
+
+### What changed
+
+`eos/dd2/nmp.py` docstrings and comments only (`5644ed0`). No equation,
+tolerance, `.npz` or returned number touched. **0 added failures** on the
+anaconda stack: `test/dd2` + `test/test_imports.py` = 394 passed.
+
+### Graduated
+
+The stack ruling is now sharp enough to ticket and is NOT mine to make — it
+decides whether 13 `.npz` files regenerate. See
+[ticket 57](57-canonical-stack.md).
