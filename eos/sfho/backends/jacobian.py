@@ -59,7 +59,7 @@ def kinetic_derivs(mu_eff, T, m, g):
 
     At T = 0 these are closed forms of the degenerate gas, with the
     antiparticle branch (mu_eff < -m) carried by |mu_eff| and the sign of
-    mu_eff, exactly as `_compute_exact_T0` builds n itself. Note the
+    mu_eff, exactly as `solve_fermi_t0` builds n itself. Note the
     Maxwell-like symmetry dns/dmu_eff = -dn/dm*: both are
     sign(mu) g kF m*/(2 pi^2 (hbar c)^3). A massless species (the neutrino)
     has no scalar response at all.

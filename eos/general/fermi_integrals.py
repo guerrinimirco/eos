@@ -217,11 +217,28 @@ def _compute_thermo_single(f_val, T, m, g):
 # ANALYTIC LIMITING CASES
 # =============================================================================
 @njit(fastmath=True, cache=True)
-def _compute_exact_T0(mu, m, g, include_antiparticles):
+def solve_fermi_t0(mu, m, g, include_antiparticles=True):
     """
     Exact analytical results for T=0 (degenerate) Fermi gas.
-    
-    Valid when T << |μ - m|.
+
+    The third solver of this module, alongside `solve_fermi_jel` and
+    `solve_fermi_gl` and returning the same (n, P, e, s, ns) in the same fm
+    units -- this is the T = 0 door CLAUDE.md §7 requires ("all Fermi and Bose
+    integrals, at T = 0 and finite T, come from eos/general"). It is the
+    general T = 0 case, not one model's call shapes: with mu the FULL kinetic
+    potential (mu_eff where a mean field shifts it), any mass and any
+    degeneracy, and `include_antiparticles=False` reproducing the common
+    convention that a mode with mu < 0 is simply absent.
+
+    With kF = sqrt(mu^2 - m^2) and mu > m:
+
+        n   = g kF^3 / (6 pi^2)
+        n_s = (g m / 4 pi^2) [kF mu - m^2 ln((kF + mu)/m)]
+        P   = (g / 48 pi^2) [(2 kF^3 - 3 m^2 kF) mu + 3 m^4 ln((kF + mu)/m)]
+        eps = (g / 16 pi^2) [(2 kF^3 + m^2 kF) mu -   m^4 ln((kF + mu)/m)]
+
+    and s = 0 identically. Valid when T << |μ - m|; `solve_fermi_jel` is the
+    validated finite-T implementation these are the limit of.
     """
     mu_abs = np.abs(mu)
     
@@ -326,7 +343,7 @@ def calculate_jel_fast(mu, T, m, g_deg, psi_grid, f_grid,
     
     # Zero temperature limit
     if T < 1.0e-4:
-        res = _compute_exact_T0(mu, m, g_deg, include_antiparticles)
+        res = solve_fermi_t0(mu, m, g_deg, include_antiparticles)
         if return_error:
             return np.array([res[0], res[1], res[2], res[3], res[4], 0.0])
         return np.array(res)
@@ -464,11 +481,17 @@ def solve_fermi_gl(mu, T, m, g, include_antiparticles=True):
         return _compute_ur_limit(mu, T, g)
     
     if T < 1.0e-4:
-        return _compute_exact_T0(mu, m, g, include_antiparticles)
+        return solve_fermi_t0(mu, m, g, include_antiparticles)
     
     return _fermi_gauss_laguerre_kernel(
         mu, T, m, g, _GL_NODES, _GL_WEIGHTS, include_antiparticles
     )
+
+
+#: Bracket-expansion steps allowed in `invert_fermi_density`. At *1.5 (or
+#: *0.5) a step, 200 covers 35 decades either way -- past any potential the
+#: physics has, and past overflow for a target that is not finite.
+_MAX_BRACKET_STEPS = 200
 
 
 def invert_fermi_density(n_target: float, T: float, m: float, g: float,
@@ -491,7 +514,9 @@ def invert_fermi_density(n_target: float, T: float, m: float, g: float,
         tol: Convergence tolerance
         
     Returns:
-        mu: Chemical potential (MeV) that gives the target density
+        mu: Chemical potential (MeV) that gives the target density, or NaN if
+            the target could not be bracketed within `_MAX_BRACKET_STEPS`
+            (CLAUDE.md §6: non-convergence is a return value)
     """
     from scipy.optimize import brentq
 
@@ -514,16 +539,30 @@ def invert_fermi_density(n_target: float, T: float, m: float, g: float,
         mu_lo = -max(mu_estimate * 2.0, m + 500.0)
         mu_hi = -m * 0.5
     
-    # Adjust bounds if needed
+    # Adjust bounds if needed. Both brackets expand GEOMETRICALLY, so any
+    # finite target is bracketed in a handful of steps and the cap is never
+    # approached by physics -- what reaches it is a non-finite n_target, which
+    # no expansion can bracket. It is here because CLAUDE.md §6 requires every
+    # solver to have a bounded iteration count, and exhaustion is REPORTED,
+    # not raised: NaN travels out through the caller's residual and is read as
+    # non-convergence at the public boundary.
+    steps = 0
     n_hi = solve_fermi_jel(mu_hi, T, m, g, include_antiparticles=include_antiparticles)[0]
-    while n_hi < n_target:
+    while n_hi < n_target and steps < _MAX_BRACKET_STEPS:
         mu_hi *= 1.5
         n_hi = solve_fermi_jel(mu_hi, T, m, g, include_antiparticles=include_antiparticles)[0]
-    
+        steps += 1
+    if n_hi < n_target:
+        return np.nan
+
+    steps = 0
     n_lo = solve_fermi_jel(mu_lo, T, m, g, include_antiparticles=include_antiparticles)[0]
-    while n_lo > n_target:
+    while n_lo > n_target and steps < _MAX_BRACKET_STEPS:
         mu_lo *= 0.5 if mu_lo > 0 else 1.5
         n_lo = solve_fermi_jel(mu_lo, T, m, g, include_antiparticles=include_antiparticles)[0]
+        steps += 1
+    if n_lo > n_target:
+        return np.nan
     
     try:
         mu = brentq(density_residual, mu_lo, mu_hi, xtol=tol)
