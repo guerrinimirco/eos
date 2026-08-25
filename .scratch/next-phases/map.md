@@ -1287,3 +1287,33 @@ In scope, not yet sharp enough to ticket:
   Gates: `test/test_imports.py test/general` **329/329 passed**; `test/baseline`
   6 failed / 10 passed, **byte-identical to `pytest_after_ticket61_baseline_py314.txt`,
   zero added**; python.org 3.14.2.
+
+- [Four missing verify/ invariants, and who owes the delivery gate](issues/51-verify-invariants.md):
+  **all five shipped**, nothing outside `eos/*/verify/` touched, no number moved.
+  dd2 gains free energy + rearrangement + the delivery gate, `mixed` free energy,
+  `ccdm` causality and monotonicity, and `njl`'s causality check now runs by
+  default (`--sound` inverted to `--no-sound`; cost measured at **0.6 s**, so it
+  is not `slow` and the ledger gains nothing).
+  **The delivery gate is stated against n_B, not against the row order, and that
+  is the whole content of it**: both `build_core_table`s end in
+  `order = np.argsort(P)`, so `np.diff(P) >= 0` is monotone BY CONSTRUCTION and
+  cannot fail. The sort does not repair the density column — proved by injecting
+  a softening and re-sorting exactly as the builder does, which passes a
+  `diff(P)` test and fails `diff(nB)`. `enjl`'s implementation does not have the
+  problem because a constructed table is already ordered by density; the two
+  builders that sort do.
+  dd2's rearrangement check is ccdm's, copied not reinvented, with DD2's assembly
+  substituted: both identities hold to 1.9e-16 and **Sigma^R carries 4.1% of eps**
+  at n_B = 0.5, so neither passes by being small. All thirteen new checks proved
+  able to FAIL (table in the ticket, including a **1 ppm** break caught in mixed
+  and the ccdm nan guard from ticket 63).
+  Gates: **twelve verify entry points, 134 checks, 0 FAIL** (121/eleven before
+  this ticket and 64); `test/{dd2,did,ccdm,njl,mixed,general}
+  test/test_imports.py` **1032 collected, 1029 passed, 3 failed** — the same
+  three dd2 NMP-inversion node ids as `pytest_after_ticket61_dd2_py314.txt`,
+  **zero added**, ticket 47's stack artifact; `test/baseline` 6 failed / 10
+  passed, identical to the same before-image. python.org 3.14.2.
+  Finding, reported not fixed: dd2's verify module docstring still lists a "TOV
+  cross-check" as item 3 that the suite does not run — the list was already
+  wrong and this ticket renumbered around it rather than editing a line it was
+  not asked to touch.

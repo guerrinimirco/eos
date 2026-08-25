@@ -581,12 +581,19 @@ def check_sound_speed(par, tol=0.05):
                        f"conformal limit needs lambda > 1)")
 
 
-def run_all(par=None, include_csc=True, include_sound=False):
+def run_all(par=None, include_csc=True, include_sound=True):
     """Run every check and return the report.
 
     `include_csc` adds the paired states, which are the expensive half (a
-    paired solve diagonalises an 18x18 matrix at every quadrature node);
-    `include_sound` adds the conformal-limit sweep.
+    paired solve diagonalises an 18x18 matrix at every quadrature node).
+
+    `include_sound` adds the density-ceiling and sound-speed checks and is ON:
+    causality is an invariant (CLAUDE.md section 8), and an invariant that only
+    runs when a CLI flag is passed is not one. It used to default to False. Cost
+    is not the reason to keep it off and was measured before the default moved:
+    the two together are about 6 s against the suite's 3 s, so they are not
+    `slow` either. The flag survives so a caller re-running the cheap invariants
+    in a loop can still say so, and `--no-sound` is its command line.
     """
     par = par if par is not None else Parameters.default()
     states = _states(par, include_csc=include_csc)
@@ -621,4 +628,4 @@ if __name__ == "__main__":
     import sys
 
     print(run_all(include_csc="--no-csc" not in sys.argv,
-                  include_sound="--sound" in sys.argv))
+                  include_sound="--no-sound" not in sys.argv))

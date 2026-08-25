@@ -87,6 +87,7 @@ import math
 
 import numpy as np
 
+from eos.ccdm.api import eos_response
 from eos.ccdm.parameters import Parameters
 from eos.ccdm.solver import solve_beta_eq_neutrinoless, solve_fixed_yc
 from eos.ccdm.species import SpeciesFlags
@@ -580,6 +581,65 @@ def check_residual_gate(par, states):
                        f"gate is {RESIDUAL_TOL:g}, over {len(errors)} states")
 
 
+#: Densities [fm^-3] for the causality sequence: above the deconfinement
+#: onset (~1.34) and below where the deconfined branch terminates.
+CAUSALITY_GRID = (1.5, 1.8, 2.1, 2.4)
+
+
+def check_causality(par, tol=0.0):
+    """0 <= c_s^2 <= 1 and P non-decreasing in n_B, cold beta equilibrium.
+
+    Section 8's pair of invariants, on the one sequence this model has above
+    its deconfinement onset. CCDM is colour-superconducting and a wrong gap
+    contribution shows up in the sound speed first -- the gap enters Omega
+    through a term whose density derivative is what c_s^2 is made of, so a
+    contribution left out of P but kept in Omega is nearly invisible in eps
+    and loud here.
+
+    The response is read as `cs2_isothermal`, the name this model returns
+    (CLAUDE.md section 5 forbids a bare `cs2` whose meaning depends on the
+    arguments); at T = 0 it coincides with the adiabatic one.
+
+    A density the response cannot reach comes back as nan rather than raising
+    (section 6), and nan loses every comparison -- so a `max` would absorb it
+    and the check would pass over a sequence it never evaluated. It is failed
+    explicitly instead, naming the density.
+
+    THE MONOTONICITY HALF IS NOT SECTION 8'S DELIVERY GATE and is not a
+    substitute for it: `eos.ccdm.table` builds no `EOSTable_for_TOV`, so this
+    model hands no table to a structure solver and owes no gate. What is
+    checked here is the raw branch, which for a single deconfined phase above
+    its onset has no first-order transition inside it and so has no licence to
+    fall.
+    """
+    values = []
+    pressures = []
+    for n_B in CAUSALITY_GRID:
+        cs2 = eos_response(par, "beta_eq_neutrinoless", SpeciesFlags(),
+                           n_B=n_B, T=0.0)["cs2_isothermal"]
+        if not np.isfinite(cs2):
+            return CheckResult(
+                "causality", False, float("inf"),
+                f"c_s^2 is not finite at n_B = {n_B:.2f} fm^-3: the response "
+                f"did not converge there, so this sequence was not evaluated")
+        values.append(cs2)
+        point = solve_beta_eq_neutrinoless(n_B, 0.0, par=par,
+                                           flags=SpeciesFlags())
+        if not point.converged:
+            return CheckResult("causality", False, float("inf"),
+                               f"the reference solve at n_B = {n_B:.2f} "
+                               f"fm^-3 did not converge")
+        pressures.append(point.P_total)
+    dP = np.diff(pressures)
+    violation = max(max(-v for v in values), max(values) - 1.0,
+                    -float(dP.min()), 0.0)
+    return CheckResult(
+        "causality", violation <= tol, violation,
+        f"c_s^2 in [{min(values):.3f}, {max(values):.3f}], P rises "
+        f"{pressures[0]:.1f} -> {pressures[-1]:.1f} MeV/fm^3 over "
+        f"n_B = {CAUSALITY_GRID[0]}-{CAUSALITY_GRID[-1]} fm^-3")
+
+
 def check_glue_scale_stiffens(par, tol=0.0):
     """A larger glue bag scale costs pressure: P(B_g = 190) < P(B_g = 150).
 
@@ -639,6 +699,7 @@ def run_all(par=None, include_csc=True, include_onset=False):
         check_mode_closures(par, states),
         check_charge_basis(par, states),
         check_residual_gate(par, states),
+        check_causality(par),
     ]
     if include_csc:
         report.results += [

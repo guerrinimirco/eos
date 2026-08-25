@@ -11,7 +11,8 @@ These are invariants the engine must satisfy on its own terms — it is validate
 by physics, not by agreement with any earlier implementation:
 
   1. Euler / Hugenholtz-Van Hove: eps + P = T s + sum_i mu_i n_i for the whole
-     mixture, recomputed independently of the solver's own bookkeeping;
+     mixture, recomputed independently of the solver's own bookkeeping, and
+     the free-energy identity f = eps - T s = -P + sum_i mu_i n_i beside it;
   2. mechanical equilibrium: the phase pressures balance, each carrying its own
      local lepton pressure, everywhere in the window;
   3. the two limiting constructions: eta=0 gives a Gibbs mixed phase whose
@@ -69,14 +70,14 @@ class FullCheckReport:
         return "\n".join(lines)
 
 
-def _euler_resid(r):
-    """|eps + P - T s - sum_i mu_i n_i| / eps for one solved point.
+def _mu_dot_n(r):
+    """sum_i mu_i n_i for one solved point, rebuilt from scratch.
 
     Deliberately rebuilds the chemical-potential sum from the solved potentials
     and species densities rather than reading the solver's own bookkeeping, so
-    this is an independent oracle and not the same code path twice. Each
-    charged-lepton species is counted at its own potential: mu_e for electrons,
-    mu_mu = mu_e - mu_nue for muons.
+    the identities below are an independent oracle and not the same code path
+    twice. Each charged-lepton species is counted at its own potential: mu_e
+    for electrons, mu_mu = mu_e - mu_nue for muons.
     """
     chi, eta, T = r.chi, r.eta, r.T
     p, e = r.potentials, r.extras
@@ -95,7 +96,17 @@ def _euler_resid(r):
         mdn += (1.0 - eta) * lepton_sum(e["G"], p["mu_eG"])
     if e["nu"] is not None:
         mdn += mu_nue * e["nu"].n
-    return abs(r.eps + r.P - T * r.s - mdn) / abs(r.eps)
+    return mdn
+
+
+def _euler_resid(r):
+    """|eps + P - T s - sum_i mu_i n_i| / eps for one solved point."""
+    return abs(r.eps + r.P - r.T * r.s - _mu_dot_n(r)) / abs(r.eps)
+
+
+def _free_energy_resid(r):
+    """|(eps - T s) - (-P + sum_i mu_i n_i)| / eps for one solved point."""
+    return abs((r.eps - r.T * r.s) - (-r.P + _mu_dot_n(r))) / abs(r.eps)
 
 
 def _window(par, flags, vp, grid, eta, T=0.0):
@@ -110,6 +121,35 @@ def _check_euler(par, flags, vp, grid):
             worst = max(worst, _euler_resid(r))
     return CheckResult("euler/HVH", worst < 1e-8, worst,
                        "eps+P = Ts + sum mu_i n_i over window (eta=0,0.5)")
+
+
+def _check_free_energy(par, flags, vp, grid):
+    """f = eps - T s = -P + sum_i mu_i n_i across the mixed window.
+
+    CLAUDE.md section 8 lists this beside the Euler relation, and the engine
+    owes it for the reason its hadronic phase is DD2: a density-dependent RMF
+    carries a rearrangement self-energy, which enters mu and P and never eps,
+    so every term of this identity is one the mixture has to split between two
+    phases and a lepton domain. The sum is rebuilt species by species by
+    `_mu_dot_n`, at each phase's own potentials and each lepton domain's own
+    mu_e, so a mixture that assembled f from one phase's bookkeeping and the
+    other's pressure fails here.
+
+    At T = 0 -- the window this suite sweeps -- it is the Euler relation
+    rearranged, and the value of running both is that they are read from
+    opposite sides of the same assembly: a sign error in the entropy term
+    shows up in exactly one of them at T > 0, and neither is free to drift
+    while the other passes.
+    """
+    worst = 0.0
+    n_rows = 0
+    for eta in (0.0, 0.5):
+        for r in _window(par, flags, vp, grid, eta):
+            n_rows += 1
+            worst = max(worst, _free_energy_resid(r))
+    return CheckResult("free energy", worst < 1e-8, worst,
+                       f"f = eps - Ts = -P + sum mu_i n_i over {n_rows} rows "
+                       f"(eta=0,0.5)")
 
 
 def _check_mechanical(par, flags, vp, grid):
@@ -248,6 +288,7 @@ def run_full_check(par=None, flags=None, vmit_params=None, grid=None,
 
     report = FullCheckReport()
     report.results.append(_check_euler(par, flags, vp, grid))
+    report.results.append(_check_free_energy(par, flags, vp, grid))
     report.results.append(_check_mechanical(par, flags, vp, grid))
     report.results.append(_check_gibbs_maxwell(par, flags, vp, grid))
     report.results.append(_check_cross_mode(par, flags, vp))

@@ -409,6 +409,43 @@ def check_causality(par, tol=0.0):
                        f"(paper: 0.71 at 0.66)")
 
 
+def check_delivered_table(par, flags=None):
+    """The table this model hands a structure solver is deliverable.
+
+    CLAUDE.md section 8: P non-decreasing in n_B and 0 <= c_s^2 <= 1, checked
+    BEFORE integration and owed by whoever builds the table -- which
+    `eos.did.table.build_core_table` does. Building one is the model's side of
+    the contract and imports no `astro/`; running a sequence over it is astro's
+    and stays in `test/did/`.
+
+    IT IS STATED AGAINST n_B, NOT AGAINST THE ROW ORDER. `build_core_table`
+    returns its rows sorted by P (`np.argsort(P)`, because TOV interpolates on
+    a monotone P grid), so `np.diff(P) >= 0` holds by construction and would be
+    a check that cannot fail. What the sort does not repair is the density
+    column: a branch whose P falls with n_B comes back with n_B out of order,
+    and that permutation is what this looks for. It matters more here than in a
+    nucleonic model -- DID's hyperon onsets are where a softening would appear,
+    and `build_core_table` DROPS a density it cannot solve rather than stopping,
+    so a gap in the sweep must not be able to pass as a smooth table.
+    """
+    from eos.did.table import build_core_table
+
+    flags = flags if flags is not None else SpeciesFlags(hyperons=True)
+    table = build_core_table(par, flags)
+    if len(table.P) < 3:
+        return CheckResult("delivered table", False, float("inf"),
+                           f"only {len(table.P)} rows built")
+    dn = np.diff(table.nB)
+    cs2 = np.diff(table.P) / np.diff(table.epsilon)
+    worst_n = abs(min(dn.min(), 0.0))
+    worst_cs = max(-cs2.min(), cs2.max() - 1.0, 0.0)
+    passed = bool(dn.min() >= 0.0 and cs2.min() >= 0.0 and cs2.max() <= 1.0)
+    return CheckResult(
+        "delivered table", passed, max(worst_n, worst_cs),
+        f"{len(table.P)} rows, n_B = {table.nB[0]:.3f}-{table.nB[-1]:.3f} "
+        f"fm^-3, c_s^2 in [{cs2.min():.3f}, {cs2.max():.3f}]")
+
+
 def check_residual_gate(par, states):
     """Every state solved here is inside the tolerance the model accepts at."""
     worst, where = 0.0, ""
@@ -447,6 +484,7 @@ def run_all(par=None):
         check_mode_closures(par, states),
         check_charge_basis(par, states),
         check_causality(par),
+        check_delivered_table(par),
         check_residual_gate(par, states),
     ]
 
