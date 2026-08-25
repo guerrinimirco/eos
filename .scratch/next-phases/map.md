@@ -1263,3 +1263,27 @@ In scope, not yet sharp enough to ticket:
 - **The `zlvmit` legacy pair.** CLAUDE.md §5 exempts `eos/zlvmit/` from the
   uniform API, and Stage 0 keeps both `ZLvMIT_hybrid.ipynb` and
   `zlvmit_test.ipynb`. Kept for published results, not brought into conformance.
+
+- [eos/general/ has no verify/, which CLAUDE.md §5 states it has](issues/64-general-verify-suite-missing.md):
+  **shipped** — `eos/general/verify/{__init__,run_full_check}.py`, five checks,
+  all PASS, and every one of them proved able to FAIL on a deliberately broken
+  `general/` (12-row table in the ticket). Section 5's three named checks became
+  five because the meson gas earns its own and the integrals split Fermi/Bose.
+  **One of the three was already done and is deliberately NOT repeated**:
+  `test/general/test_fermi_gauss.py::test_agrees_with_jel` IS the split-panel
+  validated against JEL, so the suite took the two alternatives nothing checked
+  — Gauss-Laguerre and the entire Bose family — and says so in its docstring.
+  **The T -> 0 check is a T^2 ladder, not a magnitude test**: a wrong CONSTANT in
+  a closed form passes any loose magnitude tolerance and dies on the ratio, and a
+  2e-5 offset was caught by the ratio alone. JEL is not the finite-T side there —
+  its own 1e-4 error floors the ladder and hides that signature.
+  **Finding, reported not fixed**: `solve_fermi_gl` falls back to the analytic
+  forms only below `T < 1e-4` MeV but breaks down around `T/(mu-m) ~ 0.08` — at
+  T = 0.5 MeV it silently returns a density **three orders of magnitude wrong**,
+  while its docstring claims "higher accuracy than JEL". No solve path calls it,
+  so no model number is affected; raising the threshold is a one-line change
+  somebody should own. Second finding: the split-panel entropy is 1.1% off JEL at
+  (m = 939, mu = 960, T = 1) MeV, not a k_max artifact.
+  Gates: `test/test_imports.py test/general` **329/329 passed**; `test/baseline`
+  6 failed / 10 passed, **byte-identical to `pytest_after_ticket61_baseline_py314.txt`,
+  zero added**; python.org 3.14.2.
