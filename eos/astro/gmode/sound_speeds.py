@@ -173,7 +173,7 @@ def cs2_frozen_point(par, flags, result, vmit_params=None,
     """Frozen c_ad^2 at one solved mixed-phase state, under either convention.
 
     par, flags  : the DD2 `Parametrization` and `SpeciesFlags` the state used
-    result      : a `MixedResult` from `eos.mixed.solve_mixed`; pure phases
+    result      : a `Result` from `eos.mixed.solve`; pure phases
                   (chi <= 0 or chi >= 1) are handled and give the pure-phase
                   value under either convention
     vmit_params : the `Parameters` the state used

@@ -25,7 +25,7 @@ from eos.did.couplings import (
 )
 from eos.did.species import SpeciesFlags, active_baryons
 from eos.did.thermodynamics import (
-    Fields, Matter, Species, cold_start, evaluate, field_estimate,
+    Fields, Matter, Species, cold_start, baryon_kinetics, field_estimate,
     kinetic_thermo, mean_fields, meson_potentials, single_particle_potential,
     species_table, thermal_meson_thermo, thermo_at_potentials, thermo_from_mu,
 )
@@ -52,7 +52,7 @@ __all__ = [
     "E_ISOSPIN", "ALPHA_IDEAL", "TAN_THETA_IDEAL", "Z_SU6",
     "SpeciesFlags", "active_baryons",
     "Fields", "Matter", "Species", "species_table", "kinetic_thermo",
-    "mean_fields", "evaluate", "field_estimate", "cold_start",
+    "mean_fields", "baryon_kinetics", "field_estimate", "cold_start",
     "meson_potentials", "thermal_meson_thermo", "single_particle_potential",
     "thermo_from_mu", "thermo_at_potentials",
     "EoSPoint", "System", "MODE_FRACTIONS", "unknown_names", "residual",

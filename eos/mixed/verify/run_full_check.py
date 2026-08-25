@@ -38,8 +38,8 @@ from eos.vmit.parameters import get_vmit_default
 from eos.mixed import beta_eq_neutrinoless, fixed_YC, fixed_YC_YS
 from eos.general.modes import Conservation, ModeSpec
 from eos.mixed.charges import ChargeSpec, Regime
-from eos.mixed.solver import solve_mixed
-from eos.mixed.solver import sweep_mixed
+from eos.mixed.solver import solve
+from eos.mixed.solver import sweep
 from eos.mixed.solver import build_mixed_ctx, residual, mixed_slots
 from eos.mixed.backends.jacobian import mixed_jacobian
 from eos.mixed.hybrid import build_mixed_eos_table
@@ -99,7 +99,7 @@ def _euler_resid(r):
 
 
 def _window(par, flags, vp, grid, eta, T=0.0):
-    return [r for r in sweep_mixed(par, flags, grid, eta, beta_eq_neutrinoless(),
+    return [r for r in sweep(par, flags, grid, eta, beta_eq_neutrinoless(),
                                    vmit_params=vp, T=T) if r.in_mixed_phase]
 
 
@@ -135,11 +135,11 @@ def _check_gibbs_maxwell(par, flags, vp, grid):
 
 
 def _check_cross_mode(par, flags, vp, n_B=0.65):
-    rA = solve_mixed(par, flags, n_B, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
+    rA = solve(par, flags, n_B, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
     Y_C = ((1 - rA.chi) * rA.th_H.n_C + rA.chi * rA.th_Q.n_C) / rA.n_B
     Y_S = ((1 - rA.chi) * rA.th_H.n_S + rA.chi * rA.th_Q.n_S) / rA.n_B
-    rC = solve_mixed(par, flags, n_B, 0.0, fixed_YC(Y_C, leptons=True), vmit_params=vp)
-    rD = solve_mixed(par, flags, n_B, 0.0,
+    rC = solve(par, flags, n_B, 0.0, fixed_YC(Y_C, leptons=True), vmit_params=vp)
+    rD = solve(par, flags, n_B, 0.0,
                      ChargeSpec(ModeSpec(S=Conservation.FIXED,
                                          targets={"Y_S": Y_S})),
                      vmit_params=vp)
@@ -152,7 +152,7 @@ def _check_cross_mode(par, flags, vp, n_B=0.65):
 def _check_jacobian(par, flags, vp, n_B=0.6):
     worst = 0.0
     for eta in (0.0, 0.5):
-        r = solve_mixed(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
+        r = solve(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
                         check_consistency=False)
         slots = mixed_slots(beta_eq_neutrinoless(), eta)
         x = np.array([r.potentials[s] for s in slots])
@@ -173,11 +173,11 @@ def _check_jacobian(par, flags, vp, n_B=0.6):
 def _check_backend_parity(par, flags, vp, n_B=0.6):
     worst = 0.0
     for eta in (0.0, 0.5):
-        r = solve_mixed(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
+        r = solve(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
                         check_consistency=False)
         slots = mixed_slots(beta_eq_neutrinoless(), eta)
         x0 = [r.potentials[s] for s in slots]
-        ra = solve_mixed(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
+        ra = solve(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
                          check_consistency=False, analytic_jac=True, x0=x0)
         worst = max(worst, abs(ra.P / r.P - 1.0), abs(ra.chi - r.chi))
     return CheckResult("backend parity", worst < 1e-6, worst,
@@ -204,7 +204,7 @@ def _check_sound_speeds(par, flags, vp, grid):
     """
     from eos.mixed.responses import sound_speed_eq, frozen_along
     from eos.mixed.boundaries import locate_window
-    from eos.mixed.solver import sweep_mixed
+    from eos.mixed.solver import sweep
 
     spec = beta_eq_neutrinoless()
     window = locate_window(par, flags, grid, 1.0, spec, vmit_params=vp)
@@ -212,7 +212,7 @@ def _check_sound_speeds(par, flags, vp, grid):
         return CheckResult("sound speeds", False, float("nan"),
                            "no eta=1 window on this grid")
     inside = grid[(grid >= window.n_onset) & (grid <= window.n_offset)]
-    rs = sweep_mixed(par, flags, inside, 1.0, spec, vmit_params=vp)
+    rs = sweep(par, flags, inside, 1.0, spec, vmit_params=vp)
     P = np.array([r.P for r in rs])
     eps = np.array([r.eps for r in rs])
     c_eq = sound_speed_eq(P, eps)

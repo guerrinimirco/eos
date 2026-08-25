@@ -4,7 +4,7 @@ mixed/boundaries.py
 Location of the mixed-phase window: where the first-order transition sits on a
 density line.
 
-*Public API* (re-exported from `eos.mixed`): `MixedWindow`, `locate_window`.
+*Public API* (re-exported from `eos.mixed`): `Window`, `locate_window`.
 
 Solving the mixed system at a density that turns out to be pure phase is
 wasted work, and most of a realistic grid is pure phase. `locate_window` finds
@@ -34,7 +34,7 @@ from scipy.optimize import brentq, root
 from eos.mixed.thermodynamics import charged_leptons
 from eos.mixed.solver import (
     RESIDUAL_TOL, build_mixed_ctx, default_guess, mixed_slots, residual,
-    result_from_root, sweep_mixed, warm_start,
+    result_from_root, sweep, warm_start,
 )
 
 #: Most single-tolerance steps `locate_window` will take when it has to walk to
@@ -43,7 +43,7 @@ MAX_WALK = 64
 
 
 @dataclass
-class MixedWindow:
+class Window:
     """Where the first-order transition sits on one density line.
 
     n_onset  : density at which chi reaches 0 — the last hadronic point
@@ -134,7 +134,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     """
     grid = np.asarray(n_B_grid, dtype=float)
     if grid.size < 2:
-        return MixedWindow(np.nan, np.nan, [])
+        return Window(np.nan, np.nan, [])
     if tol is None:
         tol = 0.5 * float(np.min(np.diff(np.sort(grid))))
     slots = mixed_slots(spec, eta, flags, pair=phases)
@@ -142,7 +142,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     def scan(lo, hi, count):
         """Solve at `count` densities across [lo, hi], warm-started along the way.
 
-        Delegates to `sweep_mixed` so the probes get the same continuation a
+        Delegates to `sweep` so the probes get the same continuation a
         table sweep gets: a step that misses is bisected rather than dropped,
         and the warm start survives a point that is skipped anyway.
 
@@ -155,7 +155,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         last probe that happened to converge -- a boundary that then jumps
         around from one temperature to the next.
         """
-        return sweep_mixed(par, flags, np.unique(np.linspace(lo, hi, count)),
+        return sweep(par, flags, np.unique(np.linspace(lo, hi, count)),
                            eta, spec, vmit_params=vmit_params, T=T, x0=x0,
                            analytic_jac=analytic_jac, phases=phases,
                            muons=muons)
@@ -181,7 +181,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         probes += scan(sub_lo, sub_hi, 3 * min(n_probe, grid.size))
 
     if not probes:
-        return MixedWindow(np.nan, np.nan, [])
+        return Window(np.nan, np.nan, [])
 
     def bisect(target, lo, hi):
         """Density at which chi crosses `target`, bracketed by (lo, hi).
@@ -202,7 +202,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         r_lo, r_hi = lo, hi
         while (r_hi.n_B - r_lo.n_B) > tol:
             n_mid = 0.5 * (r_lo.n_B + r_hi.n_B)
-            stepped = sweep_mixed(par, flags, [r_lo.n_B, n_mid], eta, spec,
+            stepped = sweep(par, flags, [r_lo.n_B, n_mid], eta, spec,
                                   vmit_params=vmit_params, T=T,
                                   x0=warm_start(r_lo, slots),
                                   nH0=r_lo.th_H.n_B,
@@ -239,7 +239,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         """Step from the nearest mixed probe towards the chi = `target`
         crossing, one `tol` at a time, when the probe set never bracketed it.
 
-        This covers the case the probe scan is blind to. `sweep_mixed` drops a
+        This covers the case the probe scan is blind to. `sweep` drops a
         density it cannot solve, and below the onset the mixed system has no
         solution at all, so the probe set that comes back can *begin above the
         onset* with every chi > 0. `crossing` then finds no sign change and a
@@ -268,7 +268,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
             n_next = r.n_B + direction * tol
             if not (lo <= n_next <= hi):
                 return np.nan                  # ran off the grid, not a crossing
-            stepped = sweep_mixed(par, flags, [r.n_B, n_next], eta, spec,
+            stepped = sweep(par, flags, [r.n_B, n_next], eta, spec,
                                   vmit_params=vmit_params, T=T,
                                   x0=warm_start(r, slots), nH0=r.th_H.n_B,
                                   analytic_jac=analytic_jac, phases=phases,
@@ -312,7 +312,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         if (not np.isfinite(n_offset) and reached[-1] >= hi - tol
                 and not any(r.chi >= 1.0 for r in probes)):
             n_offset = mixed[-1]
-    window = MixedWindow(float(n_onset), float(n_offset), probes)
+    window = Window(float(n_onset), float(n_offset), probes)
     if refine == "exact":
         window = refine_window(window, par, flags, eta, spec,
                                vmit_params=vmit_params, T=T, phases=phases,
@@ -328,7 +328,7 @@ def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
     """The density at which the mixed system has volume fraction `chi`:
     chi is IMPOSED and the total density n_B is solved for.
 
-    Same residual as `solve_mixed` with one slot swapped
+    Same residual as `solve` with one slot swapped
     (`mixed_slots(..., fixed_chi=True)`), so chi = 0 returns the onset and
     chi = 1 the offset of the coexistence window, each in one solve, exactly —
     no grid resolution enters the answer. The idea is salvaged from the
@@ -343,7 +343,7 @@ def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
            far away, which is why the scan of `locate_window` stays the
            cold-start finder and this solve is its finisher.
 
-    Returns a `MixedResult` whose `n_B` is the located boundary; raises
+    Returns a `Result` whose `n_B` is the located boundary; raises
     RuntimeError when no guess meets the residual gate.
     """
     if n_B0 is None:
@@ -395,7 +395,7 @@ def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0,
     accelerator on top of the scan, never a second opinion against it. A
     boundary the scan never located (nan) is left alone.
 
-    Returns a new `MixedWindow` carrying `onset_state` / `offset_state` for
+    Returns a new `Window` carrying `onset_state` / `offset_state` for
     the boundaries that were refined.
     """
     mixed = [p for p in window.probes if p.in_mixed_phase]
@@ -451,7 +451,7 @@ def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0,
         if offset_state is not None:
             n_offset = offset_state.n_B
 
-    return MixedWindow(float(n_onset), float(n_offset), window.probes,
+    return Window(float(n_onset), float(n_offset), window.probes,
                        onset_state, offset_state)
 
 
@@ -665,7 +665,7 @@ def locate_windows(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     two-phase engine, and each call of this function is one pair.
 
     `**kw` passes `locate_window`'s tuning through (n_probe, tol, refine, ...).
-    Returns a list of `MixedWindow`, possibly empty.
+    Returns a list of `Window`, possibly empty.
     """
     grid = np.asarray(n_B_grid, dtype=float)
     if grid.size < 2:

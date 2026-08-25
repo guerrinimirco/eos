@@ -85,9 +85,13 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
-**1660 passed, 15 skipped, 0 failed** (`pytest test/ -q`, `EOS_CRUST_DIR`
-UNSET — a plain checkout, no environment setup), recorded in
-`output/_audit/pytest_final.txt`.
+**1648 passed, 15 skipped, 0 failed** (`pytest test/ -q`, `EOS_CRUST_DIR`
+UNSET — a plain checkout, no environment setup), measured after Stage 0 and
+recorded in `output/_audit/pytest_after_stage0.txt`. The count fell from 1660
+because [ticket 03](issues/03-stage0-removals.md) deleted
+`test/dd2/test_notebook_api.py` and its 12 tests with the module they smoke-test;
+collection fell by the same 12. **0 added failures.** The pre-Stage-0 reference
+is `output/_audit/pytest_final.txt`.
 
 The session began at 4 failures on a bare checkout, against an inherited note
 claiming 12. None of the four was a physics defect: three were the BPS crust
@@ -227,6 +231,19 @@ against this file, not against the earlier `pytest_before*.txt`.
   only consumer is the out-of-scope and currently-unopenable ZLvMIT notebook.
   Also corrected `DEFERRED.md`'s vmit entry, which claimed DONE while naming 2 of
   ~23 unconverted names.
+
+- [Apply the approved renames — eos/mixed and eos/did](issues/42-rename-internal.md):
+  9 renames, 16 files, **0 added failures and `test/baseline/` unmoved at
+  rtol = 1e-10** — a rename that changes a number is not a rename. But the
+  rehearsal earned itself: **the renames were not mechanical and the failure was
+  silent.** `mixed/api.py` had a local `def solve(...)` adapter beside the imported
+  `solve_mixed`; renaming one onto the other made it call itself, and since
+  `RecursionError` subclasses `RuntimeError` the existing `except` swallowed it
+  into a returned "did not converge" — 12 tests red with no traceback naming the
+  cause. The pattern is systematic: this repo already used §13's vocabulary for
+  LOCAL adapters, which is what the public names are being renamed TO. An AST
+  check now rides on tickets 43–45 and has already found the next one,
+  `vmit/table.py:188`, before any code moved.
 
 ## Not yet specified
 

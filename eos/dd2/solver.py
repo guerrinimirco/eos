@@ -865,7 +865,7 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
                    include_photons=True, **fracs):
     """
     One hadronic point in a NAMED equilibrium mode — the counterpart of
-    `eos.mixed.solve_mixed`, so both engines are driven the same way.
+    `eos.mixed.solve`, so both engines are driven the same way.
 
     mode  : one of `eos.dd2.MODES` — 'beta_eq_neutrinoless',
             'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_neutral',

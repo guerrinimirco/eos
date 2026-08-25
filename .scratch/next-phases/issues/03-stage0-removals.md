@@ -111,3 +111,12 @@ import edge (`notebook_api` reaching for `eos.sfho.table`), and the
 `notebooks/` now holds only the two `zlvmit` files until tickets 12--19 land the
 three grouped notebooks. That window is the point of Stage 0: it stops 12--19
 copying the old shape, and git is the undo for every tracked file removed.
+
+### Suite, measured after the removals
+
+**1648 passed, 15 skipped, 0 failed** in 42:26 (`pytest test/ -q`, `EOS_CRUST_DIR`
+unset), saved to `output/_audit/pytest_after_stage0.txt`. Against
+`output/_audit/pytest_final.txt` (1660 passed) that is **0 added failures**: the
+12-test drop is exactly `test/dd2/test_notebook_api.py`, and collection fell by
+the same 12 (1675 -> 1663). `test/test_imports.py` passes 188/188 with
+`_EXEMPT_FILES` empty.

@@ -8,7 +8,7 @@ Reading and writing generated EoS tables.
 
 Engine-neutral: nothing here knows about hadrons, quarks or mixed phases. A
 table is a list of dicts — the long format that `eos.dd2.build_table(rows=True)`
-and `eos.mixed.build_mixed_table` both return — plus metadata describing how it
+and `eos.mixed.build_table` both return — plus metadata describing how it
 was made. HDF5 is the working format: one dataset per column, metadata in file
 attributes. That keeps large multi-axis grids compact and lets a Bayesian
 pipeline memory-map a single column without reading the rest.
@@ -83,7 +83,7 @@ def save_table(rows, path, meta=None, windows=None):
 
     meta    : dict of anything describing the run — pass the Parametrization,
               SpeciesFlags, Parameters, mode name and eta.
-    windows : the {axis key: MixedWindow} dict `build_mixed_table` returns; the
+    windows : the {axis key: Window} dict `build_table` returns; the
               onset/offset densities are stored as a table of their own so the
               phase boundaries survive without re-solving.
     """

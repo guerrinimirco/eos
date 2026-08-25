@@ -68,7 +68,7 @@ from eos.general.thermodynamics_leptons import (
 from eos.did.parameters import Parameters
 from eos.did.species import SpeciesFlags, active_baryons
 from eos.did.thermodynamics import (
-    Fields, G_NU, N_NEUTRINO_FLAVOURS, evaluate, mean_fields, species_table,
+    Fields, G_NU, N_NEUTRINO_FLAVOURS, baryon_kinetics, mean_fields, species_table,
     thermal_meson_thermo, thermo_from_mu,
 )
 
@@ -406,7 +406,7 @@ def residual(x, sys: System):
     """
     fields, mu_tilde_B, mu_C, mu_S, mu_nue, T = _unpack(x, sys)
     try:
-        matter = evaluate(sys.par, sys.specs, fields, mu_tilde_B, mu_C, mu_S, T)
+        matter = baryon_kinetics(sys.par, sys.specs, fields, mu_tilde_B, mu_C, mu_S, T)
     except (ValueError, FloatingPointError):
         return [1.0e6] * len(x)
 
@@ -484,7 +484,7 @@ def assemble(x, sys: System) -> EoSPoint:
     are stated against this order.
     """
     fields, mu_tilde_B, mu_C, mu_S, mu_nue, T = _unpack(x, sys)
-    matter = evaluate(sys.par, sys.specs, fields, mu_tilde_B, mu_C, mu_S, T)
+    matter = baryon_kinetics(sys.par, sys.specs, fields, mu_tilde_B, mu_C, mu_S, T)
     block = thermo_from_mu(sys.par, sys.flags, fields, mu_tilde_B, mu_C, mu_S,
                            T, matter=matter)
 

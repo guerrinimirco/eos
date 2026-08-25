@@ -61,7 +61,7 @@ and two models in it:
 
 A mixed table is rows PLUS windows: the phase boundaries found on each line are
 part of the answer, not something to recover afterwards from the rows.
-`MixedTableSpec` / `build_mixed_table` remain available underneath for a table
+`TableSpec` / `build_table` remain available underneath for a table
 described as an object rather than as arguments.
 
 Units are fm-based on every public boundary: densities fm^-3, pressure and
@@ -89,22 +89,22 @@ from eos.mixed.construction import (
 
 # --- solving one point, and sweeping density -------------------------------
 from eos.mixed.solver import (
-    MixedResult, solve_mixed, sweep_mixed, find_mixed_window, seed_across_eta,
+    Result, solve, sweep, find_mixed_window, seed_across_eta,
     solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
     solve_fixed_yc, solve_fixed_yc_ys,
 )
 from eos.mixed.boundaries import (
-    MixedWindow, locate_window, locate_windows, refine_window,
+    Window, locate_window, locate_windows, refine_window,
     solve_fixed_chi,
 )
 
 # --- generating, stitching and storing tables ------------------------------
 from eos.mixed.table import (
-    MixedTableSpec, build_mixed_table, solve_mixed_at_entropy,
+    TableSpec, build_table, solve_at_entropy,
     make_charge_spec, composition_row, MODE_FRACTIONS,
 )
 from eos.mixed.hybrid import (
-    MixedEoSTable, build_mixed_eos_table, mass_radius_mixed,
+    EoSTable, build_mixed_eos_table, mass_radius_mixed,
 )
 from eos.general.table_io import save_table, load_table, export_csv
 
@@ -142,17 +142,17 @@ __all__ = [
     "CONSTRUCTION_PAIRS", "Coexistence", "enjl_coexistences",
     "ccdm_phase", "did_phase", "did_seed", "njl_phase",
     # solving
-    "solve_mixed", "MixedResult",
+    "solve", "Result",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",
-    "sweep_mixed", "locate_window", "locate_windows", "find_mixed_window",
-    "MixedWindow",
+    "sweep", "locate_window", "locate_windows", "find_mixed_window",
+    "Window",
     "solve_fixed_chi", "refine_window",
     "seed_across_eta",
-    "solve_mixed_at_entropy",
+    "solve_at_entropy",
     # tables
-    "MixedTableSpec", "build_mixed_table", "composition_row",
-    "MixedEoSTable", "build_mixed_eos_table", "mass_radius_mixed",
+    "TableSpec", "build_table", "composition_row",
+    "EoSTable", "build_mixed_eos_table", "mass_radius_mixed",
     "save_table", "load_table", "export_csv",
     # the uniform model API
     "eos_point", "eos_table", "eos_response", "PointResult",

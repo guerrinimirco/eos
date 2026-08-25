@@ -3,7 +3,7 @@ mixed/backends/jacobian.py
 ==========================
 Hand-assembled analytic Jacobian of the mixed-phase residual.
 
-*Internal module.* Supplied to the root finder by `eos.mixed.solve_mixed`
+*Internal module.* Supplied to the root finder by `eos.mixed.solve`
 when `analytic_jac=True`; the numeric-Jacobian path remains the correctness
 oracle (CLAUDE.md §4), and a finite-difference agreement test guards this file.
 Like every backends/ module it is deletable: without it `analytic_jac=True`

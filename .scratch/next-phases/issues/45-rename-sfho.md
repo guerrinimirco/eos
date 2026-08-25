@@ -29,3 +29,38 @@ NOT in this ticket — [ticket 46](46-api-changes.md): `get_sfho_general(...)` a
 isentropic solvers folding into `SnB=`.
 
 Resolved when sfho is renamed and the added-failure count is reported.
+
+## Warning from ticket 42 (the rehearsal), binding on this ticket
+
+**A rename onto a §13 vocabulary name can collide with a local adapter already
+using that name, and the failure is SILENT.** Found the hard way in
+[ticket 42](42-rename-internal.md): `eos/mixed/api.py` imported `solve_mixed`
+and separately defined a nested `def solve(temperature)` adapter. Renaming
+`solve_mixed` -> `solve` made that function call itself — and because
+`RecursionError` subclasses `RuntimeError`, the surrounding
+`except (RuntimeError, ValueError)` swallowed it into a returned
+"did not converge" rather than a crash. Twelve tests failed with no traceback
+pointing at the cause.
+
+The pattern is systematic, not bad luck: this codebase already used §13's
+vocabulary for *local adapters* (`solve`, `warm_start`, `sweep`), which is
+exactly what the public names are being renamed TO.
+
+**Run this before renaming, and again after:**
+
+    python3 - <<'PY'
+    import ast, pathlib
+    NEW = {...the names this ticket introduces...}
+    for f in list(pathlib.Path("eos").rglob("*.py")) + list(pathlib.Path("test").rglob("*.py")):
+        try: tree = ast.parse(f.read_text(encoding="utf-8"))
+        except SyntaxError: continue
+        imported = {(a.asname or a.name) for n in ast.walk(tree)
+                    if isinstance(n, ast.ImportFrom) for a in n.names}
+        defined  = {n.name for n in ast.walk(tree)
+                    if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef))}
+        if (imported & defined) & NEW: print(f, sorted((imported & defined) & NEW))
+    PY
+
+A hit means one of the two has to be renamed. In ticket 42 the local adapter
+was the one that moved (`solve` -> `point_at`), since the public vocabulary name
+is the one §13 fixes.

@@ -57,7 +57,7 @@ from eos.general.particles import get_particle
 from eos.general.solve import RESIDUAL_TOL
 from eos.did import (
     MULTIPLET_OF, Parameters, SpeciesFlags, Z_SU6, compute_nmp, eos_response,
-    evaluate, nuclear_matter, single_particle_potential, solve_beta_eq_neutrinoless,
+    baryon_kinetics, nuclear_matter, single_particle_potential, solve_beta_eq_neutrinoless,
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
     species_table, su3_vector_ratios, tau3, warm_start,
 )
@@ -168,7 +168,7 @@ def check_rearrangement(par, tol=1.0e-10):
         point = solve_beta_eq_neutrinoless(par, n_B, flags, T=0.0)
         fields = point.fields()
         mu_tilde_B = point.mu_B - point.Sigma_r
-        matter = evaluate(par, specs, fields, mu_tilde_B, point.mu_C,
+        matter = baryon_kinetics(par, specs, fields, mu_tilde_B, point.mu_C,
                           point.mu_S, point.T)
         block = thermo_from_mu(par, flags, fields, mu_tilde_B, point.mu_C,
                                point.mu_S, point.T, matter=matter)

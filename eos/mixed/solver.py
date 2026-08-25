@@ -3,8 +3,8 @@ mixed/solver.py
 ===============
 The mixed-phase equilibrium conditions and the solves that close them.
 
-*Public API* (re-exported from `eos.mixed`): `MixedResult`, `solve_mixed`,
-`sweep_mixed`, `seed_across_eta`, `find_mixed_window`.
+*Public API* (re-exported from `eos.mixed`): `Result`, `solve`,
+`sweep`, `seed_across_eta`, `find_mixed_window`.
 
 At fixed (n_B, T, eta) plus whatever fractions the mode fixes, hadron-quark
 coexistence is one nonlinear system. Its unknown vector and its residual list
@@ -83,7 +83,7 @@ HVH_RTOL = 1.0e-8
 
 
 @dataclass
-class MixedResult:
+class Result:
     """One solved mixed-phase state.
 
     P, eps, s are the TOTALS: both matter phases volume-averaged, plus the
@@ -580,7 +580,7 @@ def _jac_with_fallback(ctx):
     return jac
 
 
-def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
+def solve(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
                 x0=None, n_B_guess=None, check_consistency=True,
                 analytic_jac=False, phases=None, muons=None):
     """Solve the mixed phase at (n_B, T, eta) for the regime assignment `spec`.
@@ -604,7 +604,7 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
                   it defaults to False, because no phase can answer a
                   question about the shared leptons.
 
-    Returns a `MixedResult`; raises RuntimeError if the residual gate is not
+    Returns a `Result`; raises RuntimeError if the residual gate is not
     met from any guess, so non-convergence is never silent.
     """
     if phases is None and vmit_params is None:
@@ -640,10 +640,10 @@ def solve_mixed(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
 
 
 def result_from_root(x, ctx, res_max, check_consistency=True):
-    """A `MixedResult` from a residual root, in either slot layout.
+    """A `Result` from a residual root, in either slot layout.
 
     Assembles the totals, refuses a Bose-condensed state, and asserts the
-    consistency identities. Shared by `solve_mixed` and by the fixed-chi
+    consistency identities. Shared by `solve` and by the fixed-chi
     boundary solve in `eos.mixed.boundaries`, whose only difference is which
     of (n_B, chi) was the unknown.
     """
@@ -657,7 +657,7 @@ def result_from_root(x, ctx, res_max, check_consistency=True):
         chi, eta, th_H, th_Q, L_H, L_Q, G, nu,
         mu_nue=d.get("mu_nue", 0.0), T=T)
 
-    result = MixedResult(
+    result = Result(
         converged=True, error=res_max, n_B=n_B, T=T, eta=eta, chi=chi,
         th_H=th_H, th_Q=th_Q, potentials=d, mu_B=th_H.mu_B,
         P=P_total, eps=eps_total, s=s_total, extras=extras)
@@ -700,17 +700,17 @@ def result_from_root(x, ctx, res_max, check_consistency=True):
 # the modes (CLAUDE.md section 3, named per section 13)
 # ---------------------------------------------------------------------------
 # Each is the general solve at the ChargeSpec its mode factory declares — the
-# residual is never duplicated per mode. `**kw` passes solve_mixed's tuning
+# residual is never duplicated per mode. `**kw` passes solve's tuning
 # (vmit_params, x0, n_B_guess, check_consistency, analytic_jac) through.
 
 def solve_beta_eq_neutrinoless(par, flags, n_B, eta, T=0.0, **kw):
     """Beta equilibrium, free-streaming neutrinos, charge neutral: (n_B, T)."""
-    return solve_mixed(par, flags, n_B, eta, beta_eq_neutrinoless(), T=T, **kw)
+    return solve(par, flags, n_B, eta, beta_eq_neutrinoless(), T=T, **kw)
 
 
 def solve_beta_eq_neutrino_trapped(par, flags, n_B, Y_Le, eta, T=0.0, **kw):
     """Beta equilibrium with trapped neutrinos: (n_B, Y_Le, T)."""
-    return solve_mixed(par, flags, n_B, eta, beta_eq_neutrino_trapped(Y_Le),
+    return solve(par, flags, n_B, eta, beta_eq_neutrino_trapped(Y_Le),
                        T=T, **kw)
 
 
@@ -720,14 +720,14 @@ def solve_fixed_yc(par, flags, n_B, Y_C, eta, T=0.0, leptons=True, **kw):
     leptons=True adds electrons (and muons if enabled) enforcing total
     neutrality; leptons=False is a charged, eta-independent slice.
     """
-    return solve_mixed(par, flags, n_B, eta, fixed_YC(Y_C, leptons=leptons),
+    return solve(par, flags, n_B, eta, fixed_YC(Y_C, leptons=leptons),
                        T=T, **kw)
 
 
 def solve_fixed_yc_ys(par, flags, n_B, Y_C, Y_S, eta, T=0.0, leptons=True,
                       **kw):
     """Fixed charge and strangeness fractions: (n_B, Y_C, Y_S, T)."""
-    return solve_mixed(par, flags, n_B, eta,
+    return solve(par, flags, n_B, eta,
                        fixed_YC_YS(Y_C, Y_S, leptons=leptons), T=T, **kw)
 
 
@@ -735,7 +735,7 @@ def solve_fixed_yc_ys(par, flags, n_B, Y_C, Y_S, eta, T=0.0, leptons=True,
 # the density sweep
 # ---------------------------------------------------------------------------
 
-def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
+def sweep(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                 max_bisect=6, x0=None, analytic_jac=False,
                 mixed_only=False, nH0=None, phases=None, muons=None):
     """Warm-started sweep over `n_B_grid` at fixed eta.
@@ -745,7 +745,7 @@ def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     warm-started along n_B, and when a step misses, it is bisected rather than
     abandoned — the same continuation tactic `eos/dd2/solver.sweep_octet` uses.
 
-    Returns a list of `MixedResult` in grid order. Each solved point seeds the
+    Returns a list of `Result` in grid order. Each solved point seeds the
     next; a missed step is bisected up to `max_bisect` levels, and a density
     that still fails is skipped, leaving a hole rather than aborting the sweep.
 
@@ -763,7 +763,7 @@ def sweep_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         # phase's density, NOT the total: deep in the window the low-density
         # phase thins out and stops tracking n_B at all, and seeding it at
         # the total density walks it towards collapse and stalls the solve.
-        return solve_mixed(par, flags, n_B, eta, spec, vmit_params=vmit_params,
+        return solve(par, flags, n_B, eta, spec, vmit_params=vmit_params,
                            T=T, x0=seed, n_B_guess=(nH if nH is not None else n_B),
                            check_consistency=False, analytic_jac=analytic_jac,
                            phases=phases, muons=muons)
@@ -798,6 +798,6 @@ def find_mixed_window(par, flags, n_B_grid, eta, spec, vmit_params=None,
     the boundaries; `eos.mixed.boundaries.locate_window` is much cheaper when
     only the boundaries are needed.
     """
-    return sweep_mixed(par, flags, n_B_grid, eta, spec,
+    return sweep(par, flags, n_B_grid, eta, spec,
                        vmit_params=vmit_params, T=T, mixed_only=True,
                        phases=phases)

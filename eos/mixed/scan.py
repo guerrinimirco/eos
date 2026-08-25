@@ -358,7 +358,7 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
     when the solve raised — which is itself a finding, so it is recorded, not
     raised.
 
-    When there is no usable window the status is `MixedWindow.reason`, which
+    When there is no usable window the status is `Window.reason`, which
     names *which* of the four ways it failed: 'no_transition' (a physics
     outcome), 'onset_unbracketed', 'offset_unbracketed' or
     'crossings_out_of_order' (all three locator failures). These were once a

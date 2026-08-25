@@ -199,7 +199,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
     attached per line.
 
     rows=True instead returns `(rows, {})` in the long format
-    `eos.mixed.build_mixed_table` returns — one flat dict per converged point,
+    `eos.mixed.build_table` returns — one flat dict per converged point,
     ready for `eos.general.table_io`. The empty second element is where that
     function returns its phase windows, which purely hadronic matter has none
     of; it is returned anyway so the two calls unpack the same way.
@@ -285,7 +285,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
 
 def rows_from_result(result):
     """A solved `TableResult` to the long-format rows `eos.general.table_io`
-    writes — the same shape `eos.mixed.build_mixed_table` returns.
+    writes — the same shape `eos.mixed.build_table` returns.
 
     Separate from `build_table` so a table already solved for its `TableResult`
     can be written out without being solved a second time.

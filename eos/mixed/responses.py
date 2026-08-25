@@ -76,7 +76,7 @@ def sound_speed_eq(P, eps):
     """Equilibrium c_s^2 = dP/deps along a solved sequence.
 
     `P` and `eps` are arrays in MeV/fm^3, ascending in density — a
-    `MixedEoSTable`'s `.P` and `.eps`, or the stitched columns a notebook
+    `EoSTable`'s `.P` and `.eps`, or the stitched columns a notebook
     assembles. A central finite difference on the sequence itself, so it needs
     no extra solves; the sequence must be dense enough that the derivative is
     meaningful, which through a transition window means resolving the window.
@@ -145,7 +145,7 @@ def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
 
     par, flags   : the DD2 `Parametrization` and `SpeciesFlags` the state was
                    solved with
-    result       : a `MixedResult` from `solve_mixed` — pure phases included,
+    result       : a `Result` from `solve` — pure phases included,
                    chi = 0 and chi = 1 are handled and give the pure-phase
                    frozen sound speed
     vmit_params  : the `Parameters` the state was solved with
@@ -180,7 +180,7 @@ def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
 def _clipped(result, chi):
     """A shallow copy of `result` with chi clamped into [0, 1].
 
-    `solve_mixed` deliberately does not clamp chi — its sign is what classifies
+    `solve` deliberately does not clamp chi — its sign is what classifies
     a density as pure or mixed — but a frozen sound speed at chi < 0 or chi > 1
     is not defined, and the physical answer there is the pure phase.
     """

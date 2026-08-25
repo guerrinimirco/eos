@@ -246,7 +246,7 @@ def build_table(spec: TableSpec, skip_errors: bool = False,
     order `TableResult.combos` records.
 
     rows=True instead returns `(rows, {})` in the long format
-    `eos.dd2.build_table` and `eos.mixed.build_mixed_table` return -- one flat
+    `eos.dd2.build_table` and `eos.mixed.build_table` return -- one flat
     dict per CONVERGED point, ready for `eos.general.table_io`. The empty
     second element is where the mixed builder returns its phase windows, which
     purely hadronic matter has none of; it is returned anyway so the two calls

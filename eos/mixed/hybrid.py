@@ -4,7 +4,7 @@ mixed/hybrid.py
 The stellar-core equation of state across a first-order transition, and its
 TOV integration.
 
-*Public API* (re-exported from `eos.mixed`): `MixedEoSTable`,
+*Public API* (re-exported from `eos.mixed`): `EoSTable`,
 `build_mixed_eos_table`, `mass_radius_mixed`.
 
 `build_mixed_eos_table` produces one monotone (n_B, P, eps) table made of three
@@ -44,11 +44,11 @@ import numpy as np
 
 from eos.mixed.adapters import default_pair
 from eos.mixed.boundaries import locate_window
-from eos.mixed.solver import sweep_mixed
+from eos.mixed.solver import sweep
 
 
 @dataclass
-class MixedEoSTable:
+class EoSTable:
     """A monotone core equation of state. Feed `.to_tov()` to `eos/astro/tov/`."""
     n_B: np.ndarray          # fm^-3, ascending
     P: np.ndarray            # MeV/fm^3
@@ -124,11 +124,11 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
     The wings are each phase's OWN per-mode pure solve, the `wing_sweep`
     capability of its `Phase`; a pairing in which a phase carries none raises
     naming the phase, before any solve. Locates the transition first (or
-    reuses a `MixedWindow` passed as `window`), then solves each segment only
+    reuses a `Window` passed as `window`), then solves each segment only
     where it applies. If there is no transition on this grid the whole table
     is pure hadronic.
 
-    Returns a `MixedEoSTable` sorted ascending in n_B.
+    Returns a `EoSTable` sorted ascending in n_B.
     """
     grid = np.asarray(n_B_grid, dtype=float)
     if phases is None:
@@ -172,7 +172,7 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
     if window.exists:
         win_grid = grid[(grid >= n_lo) & (grid <= n_hi)]
         if win_grid.size:
-            for r in sweep_mixed(par, flags, win_grid, eta, spec,
+            for r in sweep(par, flags, win_grid, eta, spec,
                                  vmit_params=vmit_params, T=T,
                                  analytic_jac=analytic_jac,
                                  phases=None if par is not None else phases,
@@ -199,7 +199,7 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
     P_trans = (float(np.mean(P[mixed_rows]))
                if window.exists and eta > 0.999 and mixed_rows.any()
                else np.nan)
-    return MixedEoSTable(n_B=n_B, P=P, eps=eps, chi=chi, phase=phase,
+    return EoSTable(n_B=n_B, P=P, eps=eps, chi=chi, phase=phase,
                          eta=eta, T=T, n_onset=window.n_onset,
                          n_offset=window.n_offset, P_trans=P_trans)
 
@@ -217,7 +217,7 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
 
     This is a convenience wrapper, not a separate TOV implementation: the
     integration is `eos.astro.tov`'s, and the equation of state reaches it through
-    `MixedEoSTable.to_tov()`, which is the contract to use directly when you
+    `EoSTable.to_tov()`, which is the contract to use directly when you
     want to drive `eos.astro.tov` yourself.
 
     backend       : 'fast' (default) is the Numba solver; 'scipy' is the

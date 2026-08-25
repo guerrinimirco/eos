@@ -212,7 +212,7 @@ def mean_fields(par, sources):
             src_phi * hc3 / par.m_phi ** 2)
 
 
-def evaluate(par, specs, fields, mu_tilde_B, mu_C, mu_S, T=0.0):
+def baryon_kinetics(par, specs, fields, mu_tilde_B, mu_C, mu_S, T=0.0):
     """One pass over the baryons at the given state -> `Matter`.
 
     The couplings are evaluated at the state's (n_B, beta) -- the density the
@@ -377,7 +377,7 @@ def thermo_from_mu(par, flags, fields, mu_tilde_B, mu_C, mu_S=0.0, T=0.0,
     """
     specs = species_table(flags)
     if matter is None:
-        matter = evaluate(par, specs, fields, mu_tilde_B, mu_C, mu_S, T)
+        matter = baryon_kinetics(par, specs, fields, mu_tilde_B, mu_C, mu_S, T)
     eps_fields, P_fields = field_eps_P(par, fields)
     gas = thermal_meson_thermo(par, fields, mu_C, mu_S, T,
                                thermal_mesons=flags.thermal_mesons)
@@ -463,7 +463,7 @@ def self_consistency_residual(x, par, specs, mu_tilde_B, mu_C, mu_S, T):
     if fields.n_B <= 0.0:
         return [1.0e6] * len(x)
     try:
-        matter = evaluate(par, specs, fields, mu_tilde_B, mu_C, mu_S, T)
+        matter = baryon_kinetics(par, specs, fields, mu_tilde_B, mu_C, mu_S, T)
     except (ValueError, FloatingPointError):
         return [1.0e6] * len(x)
     implied = mean_fields(par, (matter.src_sigma, matter.src_omega,

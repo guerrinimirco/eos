@@ -3,10 +3,10 @@ mixed/table.py
 ==============
 Multi-axis EoS table generation for every equilibrium mode.
 
-*Public API* (re-exported from `eos.mixed`): `MixedTableSpec`,
-`build_mixed_table`, `solve_mixed_at_entropy`.
+*Public API* (re-exported from `eos.mixed`): `TableSpec`,
+`build_table`, `solve_at_entropy`.
 
-One `MixedTableSpec` describes a whole table: the parametrization and species,
+One `TableSpec` describes a whole table: the parametrization and species,
 the equilibrium mode, and the axes to sweep. The mode decides which fractions
 are meaningful axes, so all four modes generate tables through this one path:
 
@@ -39,9 +39,9 @@ from eos.mixed.charges import (
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
 )
 from eos.mixed.solver import mixed_slots
-from eos.mixed.solver import solve_mixed
-from eos.mixed.boundaries import MixedWindow, locate_window, solve_fixed_chi
-from eos.mixed.solver import sweep_mixed
+from eos.mixed.solver import solve
+from eos.mixed.boundaries import Window, locate_window, solve_fixed_chi
+from eos.mixed.solver import sweep
 
 #: The fraction axes a table may sweep, in the canonical order they are keyed
 #: in. Fixing the order here rather than reading it off the caller's dict is
@@ -72,7 +72,7 @@ def make_charge_spec(mode, fracs, leptons=True):
 
 
 def composition_row(r):
-    """Flatten one `MixedResult` into a dict row.
+    """Flatten one `Result` into a dict row.
 
     Carries the bulk thermodynamics and the GLOBAL composition, i.e. each
     species weighted by its phase's volume fraction, Y_i = w n_i / n_B with
@@ -130,7 +130,7 @@ def composition_row(r):
     return row
 
 
-def solve_mixed_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
+def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
                            x0=None, T_lo=0.5, T_hi=50.0, T_cap=250.0,
                            xtol=1e-4, phases=None, muons=None):
     """Mixed solve at fixed entropy per baryon S = s/n_B.
@@ -143,7 +143,7 @@ def solve_mixed_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
     from scipy.optimize import brentq
 
     def point(T):
-        return solve_mixed(par, flags, n_B, eta, spec, vmit_params=vmit_params,
+        return solve(par, flags, n_B, eta, spec, vmit_params=vmit_params,
                            T=T, x0=x0, check_consistency=False, phases=phases,
                            muons=muons)
 
@@ -167,7 +167,7 @@ def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
     out, x0 = [], None
     for n in n_B_grid:
         try:
-            r = solve_mixed_at_entropy(par, flags, float(n), SnB, eta, spec,
+            r = solve_at_entropy(par, flags, float(n), SnB, eta, spec,
                                        vmit_params=vmit_params, x0=x0,
                                        phases=phases, muons=muons)
         except (RuntimeError, ValueError):
@@ -179,7 +179,7 @@ def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
 
 
 @dataclass
-class MixedTableSpec:
+class TableSpec:
     """One multi-axis mixed-EoS table request.
 
     par, flags : DD2 `Parametrization` and `SpeciesFlags`
@@ -241,7 +241,7 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
     first-generation hybrids used, docs/SALVAGE.md section 3); only converged
     states enter `history`, so a failed isotherm cannot poison it.
 
-    Returns the marched `MixedWindow`, or None when the march does not apply
+    Returns the marched `Window`, or None when the march does not apply
     (fewer than two converged isotherms) or its solves fail or land outside
     the grid in the wrong order — the caller then falls back to the scan.
     """
@@ -275,7 +275,7 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
         return None
     if not (lo <= on.n_B < off.n_B <= hi):
         return None
-    return MixedWindow(float(on.n_B), float(off.n_B), [], on, off)
+    return Window(float(on.n_B), float(off.n_B), [], on, off)
 
 
 def _locate_chained(spec, nB, cs, vp, T, hint, history=()):
@@ -320,12 +320,12 @@ def _locate_chained(spec, nB, cs, vp, T, hint, history=()):
     return locate_window(spec.par, spec.flags, nB, spec.eta, cs, **kw)
 
 
-def build_mixed_table(spec, progress=None, verbose=False):
-    """Solve a `MixedTableSpec` over the product of its temperature and
+def build_table(spec, progress=None, verbose=False):
+    """Solve a `TableSpec` over the product of its temperature and
     fraction axes, warm-started along n_B within each combination.
 
     Returns `(rows, windows)`: the long-format rows, and a dict mapping each
-    (temperature value, fraction values) key to the `MixedWindow` found there —
+    (temperature value, fraction values) key to the `Window` found there —
     which is what the phase-boundary curves T(n_B) are made of.
 
     `progress` is an optional callable invoked once per line — one temperature
@@ -408,7 +408,7 @@ def build_mixed_table(spec, progress=None, verbose=False):
                         x0=[x_on[name] for name in slots_n],
                         nH0=window.onset_state.th_H.n_B)
                 inside = nB[(nB >= window.n_onset) & (nB <= window.n_offset)]
-                results = sweep_mixed(spec.par, spec.flags, inside,
+                results = sweep(spec.par, spec.flags, inside,
                                       spec.eta, cs, vmit_params=vp,
                                       T=float(tv),
                                       analytic_jac=spec.analytic_jac,
@@ -419,7 +419,7 @@ def build_mixed_table(spec, progress=None, verbose=False):
                 results, n_requested = [], 0
             windows[key] = window
         else:
-            results = sweep_mixed(spec.par, spec.flags, nB, spec.eta, cs,
+            results = sweep(spec.par, spec.flags, nB, spec.eta, cs,
                                   vmit_params=vp, T=float(tv),
                                   analytic_jac=spec.analytic_jac,
                                   phases=spec.phases, muons=spec.muons)

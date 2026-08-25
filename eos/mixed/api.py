@@ -48,10 +48,10 @@ from eos.general.tabulate import temperature_at_entropy
 from eos.dd2.species import SpeciesFlags
 from eos.mixed.responses import sound_speed_frozen
 from eos.mixed.solver import mixed_slots
-from eos.mixed.solver import MixedResult, solve_mixed
-from eos.mixed.hybrid import MixedEoSTable, build_mixed_eos_table
+from eos.mixed.solver import Result, solve
+from eos.mixed.hybrid import EoSTable, build_mixed_eos_table
 from eos.mixed.table import (
-    MODE_FRACTIONS, MixedTableSpec, build_mixed_table, make_charge_spec,
+    MODE_FRACTIONS, TableSpec, build_table, make_charge_spec,
 )
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ class PointResult:
     """
     ok: bool
     message: str
-    point: MixedResult = None
+    point: Result = None
 
 
 def _engine_fractions(mode, conditions):
@@ -148,17 +148,17 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
     fracs = _engine_fractions(mode, conditions)      # caller errors raise here
     spec = make_charge_spec(mode, fracs, leptons=leptons)
 
-    def solve(temperature):
-        return solve_mixed(par, species, float(n_B), float(eta), spec,
-                           vmit_params=vmit_params, T=float(temperature),
-                           x0=x0, analytic_jac=analytic_jac,
-                           check_consistency=check_consistency,
-                           phases=phases, muons=muons)
+    def point_at(temperature):
+        return solve(par, species, float(n_B), float(eta), spec,
+                     vmit_params=vmit_params, T=float(temperature),
+                     x0=x0, analytic_jac=analytic_jac,
+                     check_consistency=check_consistency,
+                     phases=phases, muons=muons)
 
     try:
         if SnB is not None:
-            T = temperature_at_entropy(lambda t: solve(t).s / n_B, float(SnB))
-        point = solve(T)
+            T = temperature_at_entropy(lambda t: point_at(t).s / n_B, float(SnB))
+        point = point_at(T)
     except NotImplementedError:
         raise                       # an unwired request must never be a status
     except (RuntimeError, ValueError) as err:
@@ -173,12 +173,12 @@ def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
     """A solved grid over {n_B} x {T or SnB} [x fraction axes], with the phase
     boundaries found on each line.
 
-    Returns `(rows, windows)`: the long-format rows, and the `MixedWindow` per
+    Returns `(rows, windows)`: the long-format rows, and the `Window` per
     (temperature, fraction) line. A mixed table is rows plus windows, and the
     windows are part of the result rather than something the caller recovers by
     scanning for where chi crosses 0 and 1 (CLAUDE.md section 5).
 
-    axes follows `MixedTableSpec`: {'nB': grid, exactly one of 'T'/'SnB': grid,
+    axes follows `TableSpec`: {'nB': grid, exactly one of 'T'/'SnB': grid,
     and optionally any of 'Y_C'/'Y_S'/'Y_Le' to sweep that fraction}. The
     density axis is warm-started within each line.
 
@@ -203,12 +203,12 @@ def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
         raise ValueError(f"eta must lie in [0, 1], got {eta}")
     axes = dict(axes or {})
     fixed = dict(fixed or {})
-    spec = MixedTableSpec(par=par, flags=species, mode=mode, axes=axes,
+    spec = TableSpec(par=par, flags=species, mode=mode, axes=axes,
                           eta=float(eta), vmit_params=vmit_params, fixed=fixed,
                           leptons=leptons, window_only=window_only,
                           analytic_jac=analytic_jac, refine=refine,
                           phases=phases, muons=muons)
-    return build_mixed_table(spec, progress=progress, verbose=verbose)
+    return build_table(spec, progress=progress, verbose=verbose)
 
 
 @dataclass(frozen=True)
@@ -221,7 +221,7 @@ class HybridResult:
     """
     ok: bool
     message: str
-    table: MixedEoSTable = None
+    table: EoSTable = None
 
 
 def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
@@ -235,7 +235,7 @@ def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
     beta-equilibrium wings. Only eta is specific to the mixed region.
 
     Parameters are those of `eos_point`, with `n_B_grid` in place of `n_B`;
-    `window` optionally reuses an already-located `MixedWindow`. If there is
+    `window` optionally reuses an already-located `Window`. If there is
     no transition on the grid the table is pure hadronic.
 
     Returns a `HybridResult` — test `.ok` before using `.table`, whose
