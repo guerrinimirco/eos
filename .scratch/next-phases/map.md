@@ -306,14 +306,49 @@ against this file, not against the earlier `pytest_before*.txt`.
   suite is **14 failed, 1634 passed, 15 skipped** at HEAD, and all 14 predate
   ticket 43 — verified against a worktree at HEAD carrying the pre-rename
   `eos/`, where the same 14 fail with byte-identical messages. Two root causes,
-  neither ticketed: **dd2's NMP inversion no longer converges** (isoscalar
-  residual 8.12e-02 against a 2e-02 floor), which is 3 `test/dd2` + 3
-  `test/tov` failures AND the `dd2` baseline's `nmp.K_sat`/`Q_sat`/`K_sym`
-  drift — one defect, seven tests; and **round-off drift in `test/baseline/`**
+  now [ticket 47](issues/47-dd2-nmp-inversion.md): **dd2's NMP inversion misses
+  its targets** — 3 `test/dd2` + 3 `test/tov` failures AND the `dd2` baseline's
+  `nmp.K_sat`/`Q_sat`/`K_sym` drift, one function, seven tests. Diagnosed and
+  **it is not a regression**: bit-identical at all 13 commits since
+  `eos/dd2/nmp.py` was created, `compute_nmp` deterministic and independent of
+  numba and threads, and numpy/scipy/python predate every `.npz`. Two of the
+  three shapes are a tolerance asserting below the documented stencil noise;
+  the third is real — the default 5x5 closure lands in the spurious basin
+  `nmp.py:70` describes, Q_sat 117.49 against 169.00. Also
+  **round-off drift in `test/baseline/`**
   for quantities the generator's own docstring calls round-off (`ccdm`'s
   `field_residual`, `sfho`'s `mu_S` at Y_S = 0, the tov sequences, and vmit's
   `n_e` at Y_C = 0 straddling the 1e-12 gate at 1.7e-13 against a stored
   3.0e-12). Both are Stage 7 report material, not diffs.
+
+- [ZLvMIT_hybrid.ipynb is corrupt JSON and cannot be opened](issues/41-corrupt-notebooks.md):
+  repaired forward rather than reverted — 48 cells, 29 code, 0 stored outputs,
+  the same shape `d9f8eec^` had. The first defect was not a string swap at all:
+  the commit SPLIT one import into three because `load_crust_table` had moved to
+  `crust.py` and `EOSTable_for_TOV` to `general/state.py`, and emitted the three
+  with real newlines inside one JSON string. `add_crust` now comes from
+  `eos.astro.tov.crust`, where it is defined, rather than through `solver.py`'s
+  re-export. `notebooks/zlvmit_test.ipynb`, the third notebook `d9f8eec`
+  touched, was checked and is valid, so the KEEP list is entirely loadable.
+
+- [alphabag, abpr, enjl and mixed document pairs to §11](issues/36-quark-engine-documents.md):
+  eight documents, all four `.tex` compiling clean, no `.py` touched. **The
+  largest single gap was `enjl.md`'s five naming-not-defining failures
+  compounding**: with the quantum-number table absent, `J_rho`, `Sigma^R_b` and
+  three residual rows could not be evaluated from the page at all. **`n_s` is
+  settled and the answer is not §11's identity** — `eps - 3P = M n_s` holds
+  identically per species for ENJL's MEDIUM terms (verified to round-off) and
+  fails once the Dirac sea is subtracted, since `eps^vac != M n_s^vac`; the
+  other three have no scalar density at all. `mixed` gained the five missing
+  `PhaseThermo` fields (`mu_dot_n` among them — what its own 1e-8 Euler check
+  consumes), eight named-but-never-given constants, the `Window` reason labels
+  and the API surface; its `.md`'s asserted row order was wrong, and ticket 29's
+  unconditional photon gas is now in both files. `abpr`'s parameter tables gave
+  wrong code names in the one column a reader would copy from. **The name ticket
+  10 deferred here is ruled**: the §5 adapter surface is `thermo_from_mu`
+  everywhere, a lower layer that also takes the fields is `thermo_from_fields`;
+  applied by tickets [44](issues/44-rename-dd2.md), [45](issues/45-rename-sfho.md)
+  and the new [48](issues/48-rename-did-surface.md), not here.
 
 ## Not yet specified
 
