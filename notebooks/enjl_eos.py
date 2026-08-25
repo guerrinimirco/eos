@@ -911,9 +911,12 @@ plt.show()
 # `figure_style.particle_style` so a quark curve is the same colour here as
 # anywhere else in the repository.
 #
-# **(b)** The residual of section 6, per set, on a log axis. This is the figure
-# the golden references earn: agreement over the reproduced window, and the
-# density where the worst row sits.
+# **(b)** The residual of section 6 in `P`, per set, on a log axis — all five
+# reference sets, not only the three the notebook swept. This is the figure the
+# golden references earn: the agreement falls as `P` grows, because the
+# residual is an absolute agreement of order 1e-6 MeV/fm^3 divided by a
+# pressure that starts below 1, and it turns back up at the top of the window
+# where that set's own coexistence endpoint is being approached.
 
 # %%
 fig, axes = fs.paper_grid("1x2", "double", aspect=1.2, placeholder=False,
@@ -935,6 +938,12 @@ for label, column in COMP_SPECIES:
                  label=label)
 ax_Y.set_yscale("log")
 ax_Y.set_ylim(1e-4, 5.0)
+# The decade labels go through `figure_style.log_decades`. Matplotlib writes
+# its own log tick labels as mathtext and resolves them through the TEXT font,
+# which is CMU Serif and has no U+2212 glyph, so the exponent's minus comes out
+# a hollow box — the one place the paper style's ASCII-minus rcParam cannot
+# reach. This is the repository's guard for it and not a local workaround.
+fs.log_decades(ax_Y, "y")
 ax_Y.set_xlabel(r"$n_B$ [fm$^{-3}$]")
 ax_Y.set_ylabel(r"$Y_i = n_i / n_B$")
 ax_Y.set_title(COMP_SET)
@@ -942,21 +951,21 @@ ax_Y.legend(loc="lower right", ncol=2)
 fs.apply_style(ax_Y, legend=False)
 fs.panel_label(ax_Y, "(a)", corner="upper left")
 
+REFERENCE_COLOR = dict(zip(sorted(REFERENCE_FILES), fs.OKAB_CAT))
+
 if residuals:
-    for set_name, (densities, errors) in residuals.items():
+    for set_name in sorted(residuals):
+        densities, errors = residuals[set_name]
         ax_res.plot(densities, errors["P"], "-",
-                    color=SET_COLOR.get(set_name, "0.4"),
-                    label=f"{set_name}, P")
-        ax_res.plot(densities, errors["eps"], "--",
-                    color=SET_COLOR.get(set_name, "0.4"),
-                    label=f"{set_name}, eps")
+                    color=REFERENCE_COLOR[set_name], label=set_name)
     ax_res.set_yscale("log")
-    ax_res.legend(loc="best", ncol=1)
+    fs.log_decades(ax_res, "y")
+    ax_res.legend(loc="lower left", ncol=2)
 else:
     ax_res.text(0.5, 0.5, "author tables absent", ha="center", va="center",
                 transform=ax_res.transAxes)
 ax_res.set_xlabel(r"$n_B$ [fm$^{-3}$]")
-ax_res.set_ylabel("relative residual against the author")
+ax_res.set_ylabel(r"relative residual in $P$")
 fs.apply_style(ax_res, legend=False)
 fs.panel_label(ax_res, "(b)", corner="upper right")
 
