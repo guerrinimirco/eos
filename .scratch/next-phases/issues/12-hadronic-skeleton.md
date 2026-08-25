@@ -117,11 +117,19 @@ thing ticket 26 made truer than the prompt's "zl has no nmp.py".
 argument, or neither name goes"), open and in flight in another session.
 
 Passing it to two models and not the other two would be exactly the per-model
-translation table ticket 04 blocked this ticket to avoid. So the flag governs
-`eos_point` (where all four take it today) and the table cell says in one line
-that the grids are built at each model's own default treatment. **When 54 lands,
-that is a one-line change**: add `leptons=KNOBS.leptons` to the `build` closure
-and delete the paragraph.
+translation table ticket 04 blocked this ticket to avoid. So the flag governed
+`eos_point` only, and the table cell said in one line that the grids were built
+at each model's own default treatment.
+
+**Ticket 54 landed in `4434768` before this session ended, and the follow-through
+is done (`16181e6`).** All four `eos_table` now take `leptons=`, so the `build`
+closure names it under the same §3 rule as the points — for the fixed-fraction
+modes, left unsaid for beta equilibrium — and the paragraph is gone. That rule
+also sidesteps a divergence 54 did not level: with `leptons=True` on a beta-eq
+mode `sfho` and `dd2` raise while `zl` and `did` accept it, so a notebook that
+passed the flag unconditionally would report two of four as refusals.
+Re-verified against HEAD carrying 54: 24 cells, **0 error outputs**; targeted
+tests **327 collected, 327 passed** (up 4 from 323 — ticket 54's new files).
 
 ### Gaps cross-checked against `docs/DEFERRED.md`
 

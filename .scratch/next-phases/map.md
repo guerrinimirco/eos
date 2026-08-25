@@ -887,8 +887,12 @@ against this file, not against the earlier `pytest_before*.txt`.
   **`leptons` governs `eos_point` only**: `eos_table` takes it in zl and did and
   `TypeError`s in sfho and dd2, and passing it to two of four would be exactly
   the per-model translation table ticket 04 blocked this ticket to avoid — so it
-  waits on [ticket 54](issues/54-signature-corrections.md) item 1 and is a
-  one-line change when that lands.
+  waited on [ticket 54](issues/54-signature-corrections.md) item 1, **which
+  landed in `4434768` and the follow-through with it (`16181e6`)**: the `build`
+  closure names the flag under the same §3 rule as the points. That rule also
+  sidesteps a divergence 54 did not level — on a beta-eq mode `sfho` and `dd2`
+  raise for `leptons=True` where `zl` and `did` accept it. Re-verified against
+  HEAD carrying 54: 0 error outputs, 327 collected / 327 passed.
   **Four real unrecorded gaps, none fixed**: did reports meson condensation as
   `residual 5.684e-15 above the gate` when its gate is 1e-10 (the cause is
   `condensation >= 1.0` at `did/solver.py:574`, and `did/api.py:99` prints the
