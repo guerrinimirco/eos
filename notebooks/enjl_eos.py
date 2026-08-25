@@ -1343,10 +1343,12 @@ plt.show()
 # against `T` at fixed `n_B`.
 #
 # The set mapped is the **first** of the knobs cell rather than the last one the
-# figures above use, and for a measured reason printed by the cell: it is the set
-# whose `"up"` branch shows *both* order parameters moving over this density
-# window. At larger `f_q` the deconfined fraction stays at the percent level
-# along this branch and only the chiral parameter moves.
+# figures above use, and for a measured reason: it is the set whose `"up"` branch
+# shows *both* order parameters moving over this density window. The `chi`
+# column of section 4's grids is that statement already in printed form — at the
+# top of the density window it falls set by set as `f_q` rises, until at the
+# largest `f_q` the deconfined fraction is at the percent level along this
+# branch and only the chiral parameter moves.
 #
 # The thermal sectors that carry no conserved charge are on for the whole map,
 # `photons` and `thermal_neutrinos` together, so one flag set spans it; both are
@@ -1633,6 +1635,11 @@ plt.show()
 # — deliberately, since that is where a continuation started from the deconfined
 # side has nothing to find and the non-convergence counter reports the real
 # thing rather than a column of zeros.
+#
+# **This section is the expensive part of the notebook**, about a minute of the
+# two the whole of it takes, and nearly all of that is the `"down"` lines and
+# the profile below them. That is not an accident of the grid: it is the
+# measurement.
 
 # %%
 import cProfile
@@ -1850,7 +1857,9 @@ print(internal.getvalue())
 # `trf_bounds` → `approx_derivative`, and what `approx_derivative` spends it on
 # is the model's own `solver.residual` → `state_at` → `thermodynamics`, the
 # constituent masses and the kinetic integrals rebuilt from scratch on every
-# residual call. `state_at` is also the largest single entry by *internal* time.
+# residual call. In the internal-time list `state_at` is the largest entry that
+# belongs to this repository at all; the one entry above it is SciPy's own
+# trust-region bookkeeping, which is the other side of the same finding.
 #
 # The call counts are the other half of the reading, and they are the reason
 # this is the expensive branch: of order **eighty thousand residual evaluations
