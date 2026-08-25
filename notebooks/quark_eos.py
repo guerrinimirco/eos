@@ -52,6 +52,8 @@
 #    not with an empty mass–radius panel.
 # 9. **Benchmarks** — what each model costs, where its lines do not converge,
 #    and what the profile says dominates.
+# 10. **The pairing sector, step by step** — `njl` and `ccdm` with colour
+#    superconductivity on: the gaps, the patterns, and which phase wins where.
 #
 # Units are the ones every public boundary uses: densities in fm^-3,
 # temperatures and chemical potentials in MeV, pressure and energy density in
@@ -282,8 +284,8 @@ def lepton_kwargs(mode):
 # value they are left at. `alphabag`'s thermal gluons and the pairing sector of
 # `njl` and `ccdm` are real sectors that the six-flag knob does not reach, so
 # they run at their own defaults throughout — stated here rather than left for a
-# reader to discover from a number that does not add up. The pairing sector is
-# the subject of the step-by-step NJL/CCDM section, which is a separate ticket.
+# reader to discover from a number that does not add up. `csc` is the flag
+# section 10 turns on; the rest are left where the model puts them throughout.
 
 # %%
 PROBE_N_B = 1.0
@@ -1224,3 +1226,1190 @@ if bench_rows:
                                   "leptons": KNOBS.leptons,
                                   "repeat": BENCH_REPEAT})
     print("wrote", bench_path)
+
+# %% [markdown]
+# ## 10. The pairing sector, step by step: `njl` and `ccdm`
+#
+# The two models above that condense diquarks, taken apart one step at a time.
+# Section 2 printed their seventh flag and left it at its default; this section
+# is that flag turned on.
+#
+# **`csc` is one flag that changes the equations rather than adding a sector.**
+# With it off, `njl` is ordinary three-flavour NJL and `ccdm` is the unpaired
+# colour-dielectric model: no gap matrix, no Bogoliubov-de Gennes problem, and
+# the two colour chemical potentials `mu_3`, `mu_8` are zero identically. With
+# it on, the three gaps `Delta_1, Delta_2, Delta_3` become unknowns, colour
+# neutrality becomes two more rows of the residual, and the pairing correction
+# enters `Omega`, `eps`, `s` and every density.
+#
+# **A pairing pattern is not a mode.** Which condensates survive is an outcome
+# decided by free energy among the enumerated candidates, not a condition a
+# caller declares — so it is not in the knobs cell's `modes` and it is not in
+# `conditions()`. `patterns=('2SC',)` is a *restriction on the enumeration*,
+# which is what draws a branch that is not the ground state; every cell below
+# that names one pattern is doing exactly that, and the cells that do not name
+# one let the model choose.
+#
+# The gap matrix, the BdG problem, the pairing correction and the
+# Hellmann-Feynman gap kernels are `eos.general.pairing`, shared by both
+# models, so the three patterns below mean the same thing in each:
+#
+# | pattern | free gaps | what pairs |
+# |---|---|---|
+# | `unpaired` | none | nothing; `Delta = 0` and `mu_3 = mu_8 = 0` |
+# | `2SC` | `Delta_3` | u with d, in two colours; the s quark and the third colour stay unpaired |
+# | `CFL` | all three | every flavour with every colour, `Delta_1 = Delta_2 ~ Delta_3` |
+#
+# The five steps: the unpaired model at one point, the same point one pattern
+# at a time, the three phases compared, the gap over the `(n_B, T)` plane, and
+# the composition, sound speed and phase boundary that go with them.
+#
+# **Cost.** This section re-solves both models a few hundred times: about five
+# minutes on the machine it was written on, against section 9's ten, and most
+# of both is `ccdm` — the same three orders of magnitude section 9 measured,
+# now paid with a pairing sector on top. Every sweep below is warm-started for
+# that reason, which for `njl`'s 2SC line at T = 0 is the difference between
+# 0.9 s and 9 s. The two slowest cells are the neutrality map of 10.3a and the
+# sweep of 10.3b, in that order.
+
+# %%
+# This section's own knobs. The knobs cell above is not touched: `csc` is the
+# seventh flag, which section 2 reported that the library's six cannot reach,
+# and the grids here are the pairing sector's own — a gap needs densities well
+# above the knobs cell's grid before it opens at all.
+from eos.general.physics_constants import hc3   # MeV^3 fm^3, the unit bridge
+
+CSC_MODELS = ("njl", "ccdm")
+CSC_MODE = "beta_eq_neutrinoless"
+CSC_PATTERNS = ("unpaired", "2SC", "CFL")
+GAP_PATTERNS = ("2SC", "CFL")   # the two that have a gap to map
+
+CSC_N_B_GRID = np.linspace(1.0, 2.4, 8)         # fm^-3
+CSC_T_GRID = np.array([0.0, 20.0, 40.0, 60.0])  # MeV
+CSC_MU_B_GRID = np.linspace(1450.0, 2050.0, 7)  # MeV
+CSC_CS2_N_B = (1.4, 1.8, 2.2)                   # fm^-3, where the response is taken
+
+# The one-point probe is TAKEN FROM the grid rather than written again: every
+# lookup below is keyed by a float, and a probe written as 1.6 beside a grid
+# point that is 1.5999999999999999 misses silently.
+CSC_N_B = float(CSC_N_B_GRID[3])                # 1.6 fm^-3
+CSC_T = float(CSC_T_GRID[0])                    # 0 MeV
+
+PATTERN_COLOR = dict(zip(CSC_PATTERNS, fs.OKAB_CAT))
+MODEL_DASH = {"njl": "-", "ccdm": "--"}         # linestyle says which model
+
+
+def csc_flags(name, csc):
+    """The knobs cell's six sectors, plus this section's own `csc`.
+
+    The six named sectors still come from the knobs cell, so nothing below
+    silently runs a different physical system from the sections above it.
+    """
+    return model(name).SpeciesFlags(csc=csc, **KNOBS.species)
+
+
+def show(title, rows):
+    """One block of labelled quantities: symbol, value, unit, what it is."""
+    print(f"  {title}")
+    for symbol, value, unit, meaning in rows:
+        cell = (f"{value:>13.6g}" if isinstance(value, (int, float))
+                else f"{value:>13s}")
+        print(f"    {symbol:16s} = {cell}  {unit:10s} {meaning}")
+
+
+def csc_point(name, csc=True, n_B=CSC_N_B, T=CSC_T, pattern=None, x0=None,
+              label=None):
+    """One `eos_point`, optionally restricted to a single pairing pattern."""
+    def solve(name=name):
+        return model(name).eos_point(
+            parameters_for(name), CSC_MODE, csc_flags(name, csc),
+            n_B=float(n_B), T=float(T),
+            patterns=(pattern,) if pattern is not None else None, x0=x0)
+
+    return run(label or f"{name} {pattern or 'enumerated'}", solve)
+
+
+print(f"probe point: n_B = {CSC_N_B} fm^-3, T = {CSC_T} MeV, "
+      f"mode = {CSC_MODE}")
+print(f"density grid  {CSC_N_B_GRID[0]:.2f} to {CSC_N_B_GRID[-1]:.2f} fm^-3, "
+      f"{CSC_N_B_GRID.size} points")
+print(f"thermal grid  {[float(t) for t in CSC_T_GRID]} MeV")
+print(f"mu_B grid     {CSC_MU_B_GRID[0]:.0f} to {CSC_MU_B_GRID[-1]:.0f} MeV, "
+      f"{CSC_MU_B_GRID.size} points")
+for name in CSC_MODELS:
+    print(f"  [{name}] flags with pairing on: {csc_flags(name, True)}")
+
+# %% [markdown]
+# ### 10.1 The model without colour superconductivity
+#
+# `csc=False`: the parameters, the equations that close the model, and the
+# thermodynamics at one `(n_B, T)` point, each quantity labelled with its
+# symbol and its units.
+#
+# **NJL.** The parameters are a cutoff and three dimensionless couplings; the
+# constituent masses are *not* parameters but come out of three coupled gap
+# equations,
+#
+#     M_f = m_f - 4 G_S phi_f + 2 K phi_g phi_h        (f, g, h) all different
+#
+# with `phi_f = <q-bar_f q_f>` the condensate of flavour `f`. The 't Hooft term
+# is what ties the three flavours together: `M_u` depends on the strange
+# condensate. The residual printed below is what the solver drove to zero, so a
+# reader can see the equations are satisfied rather than take it on trust. The
+# effective bag constant is likewise derived — a vacuum pressure difference —
+# and not an input.
+
+# %%
+name = "njl"
+par = parameters_for(name)
+
+header(f"{name}, csc=False, at n_B = {CSC_N_B} fm^-3, T = {CSC_T} MeV")
+show("parameters (arguments, never module state)", [
+    ("Lambda", par.Lambda, "MeV", "three-momentum cutoff"),
+    ("G_S Lambda^2", par.GS_Lambda2, "-", "scalar four-fermion coupling"),
+    ("K Lambda^5", par.K_Lambda5, "-", "'t Hooft determinant coupling"),
+    ("m_u = m_d", par.m_u, "MeV", "current light quark mass"),
+    ("m_s", par.m_s, "MeV", "current strange quark mass"),
+    ("eta_D = G_D/G_S", par.eta_D, "-", "diquark coupling; used only at csc=True"),
+    ("eta_V = G_V/G_S", par.eta_V, "-", "vector coupling"),
+    ("vector_form", par.vector_form, "", "how G_V depends on the state"),
+])
+
+status, result = csc_point(name, csc=False)
+if status == "ok":
+    point = result.point
+    state = point.state
+    show("the gap equations  M_f = m_f - 4 G_S phi_f + 2 K phi_g phi_h", [
+        ("phi_u", float(state.phi[0]), "MeV^3", "condensate <u-bar u>"),
+        ("phi_d", float(state.phi[1]), "MeV^3", "condensate <d-bar d>"),
+        ("phi_s", float(state.phi[2]), "MeV^3", "condensate <s-bar s>"),
+        ("M_u", float(state.M[0]), "MeV", "constituent mass"),
+        ("M_d", float(state.M[1]), "MeV", "constituent mass"),
+        ("M_s", float(state.M[2]), "MeV", "constituent mass"),
+        ("max|R_mass|", float(np.max(np.abs(state.mass_residual))), "MeV",
+         "largest gap-equation residual at the solution"),
+    ])
+    show("the grand potential and the thermodynamics", [
+        ("Omega", state.Omega / hc3, "MeV/fm^3",
+         "= -P of the matter, vacuum-subtracted"),
+        ("P (matter)", state.P_fm, "MeV/fm^3", "quarks only, no leptons"),
+        ("P", point.P_total, "MeV/fm^3", "matter + leptons + thermal sectors"),
+        ("eps", point.e_total, "MeV/fm^3", "energy density"),
+        ("s", point.s_total, "fm^-3", "entropy density"),
+        ("f = eps - T s", point.f_total, "MeV/fm^3", "free-energy density"),
+        ("mu_B", point.mu_B, "MeV", "baryon chemical potential"),
+        ("mu_C", point.mu_C, "MeV", "= mu_p - mu_n; beta equilibrium is mu_C + mu_e = 0"),
+        ("mu_e", point.mu_e, "MeV", "electron chemical potential"),
+        ("n_u", point.n_u, "fm^-3", "flavour densities"),
+        ("n_d", point.n_d, "fm^-3", ""),
+        ("n_s", point.n_s, "fm^-3", ""),
+        ("n_e", point.n_e, "fm^-3", ""),
+        ("Y_u", point.Y_u, "-", "= n_u/n_B"),
+        ("Y_d", point.Y_d, "-", ""),
+        ("Y_s", point.Y_s, "-", ""),
+        ("Y_e", point.Y_e, "-", ""),
+        ("B_eff^(1/4)", model(name).bag_constant(par) ** 0.25, "MeV",
+         "derived vacuum pressure difference, not an input"),
+        ("Euler residual", state.euler_residual(), "-",
+         "(eps + P - T s - sum_i mu_i n_i)/eps"),
+        ("pattern", point.pattern, "", "no pairing sector exists at csc=False"),
+        ("Delta", str(tuple(round(float(g), 3) for g in point.Delta)), "MeV",
+         "zero by construction here"),
+    ])
+
+# %% [markdown]
+# **CCDM.** A different closure: four coupled mean-field equations for the
+# dilaton `Phi = phi-bar^4`, the two chiral condensates `sigma`, `zeta` and the
+# vector field `omega_0`. The dielectric `chi = (1 - Phi)^p` sits in the
+# *denominator* of the effective masses,
+#
+#     M*_u,d = (g_q sigma + m_u,d)/chi ,      M*_s = (g_s zeta + m_s)/chi
+#
+# so as the condensate reaches its vacuum value the medium goes opaque, the
+# masses diverge and the quarks leave it entirely. That is this model's
+# confinement, and it is why the chiral/dielectric *branch* is a second thing
+# the solver has to enumerate, printed below beside the fields.
+
+# %%
+name = "ccdm"
+par = parameters_for(name)
+derived = par.derived
+
+header(f"{name}, csc=False, at n_B = {CSC_N_B} fm^-3, T = {CSC_T} MeV")
+show("parameters (arguments, never module state)", [
+    ("f_pi", par.f_pi, "MeV", "pion decay constant; fixes sigma_0"),
+    ("f_K", par.f_K, "MeV", "kaon decay constant; fixes zeta_0"),
+    ("m_sigma", par.m_sigma, "MeV", "light scalar mass"),
+    ("m_zeta", par.m_zeta, "MeV", "strange scalar mass"),
+    ("m_phi", par.m_phi, "MeV", "scalar glueball mass (lattice)"),
+    ("m_omega", par.m_omega, "MeV", "vector meson mass"),
+    ("B_g^(1/4)", par.B_g_quarter, "MeV", "glue bag scale"),
+    ("g_q", par.g_q, "-", "quark-sigma coupling"),
+    ("g_s", par.g_s, "-", "quark-zeta coupling"),
+    ("gbar_omega", par.gbar_omega, "-", "vector coupling"),
+    ("G_D", par.G_D, "MeV^-2", "diquark coupling; used only at csc=True"),
+    ("Lambda", par.Lambda, "MeV", "pairing cutoff"),
+    ("p", par.p, "-", "dielectric exponent, chi = (1 - phi-bar^4)^p"),
+])
+show("derived from the vacuum, not input", [
+    ("sigma_0", derived.sigma_0, "MeV", "light condensate in vacuum"),
+    ("zeta_0", derived.zeta_0, "MeV", "strange condensate in vacuum"),
+    ("phi_0", derived.phi_0, "MeV", "vacuum dilaton"),
+    ("B_eff^(1/4)", model(name).bag_constant(par) ** 0.25, "MeV",
+     "= B_g + B_chi; the chiral part is the larger one"),
+])
+
+status, result = csc_point(name, csc=False)
+if status == "ok":
+    point = result.point
+    state = point.state
+    show("the field equations R_1..R_4 (dilaton, sigma, zeta, omega_0)", [
+        ("branch", point.branch, "", "the chiral/dielectric root that won"),
+        ("Phi", state.Phi, "-", "dilaton solve variable, = phi-bar^4"),
+        ("phi-bar", state.phi_bar, "-", "dilaton, in units of its vacuum value"),
+        ("chi", state.chi, "-", "the dielectric, (1 - Phi)^p"),
+        ("sigma", state.sigma, "MeV", "light chiral condensate"),
+        ("zeta", state.zeta, "MeV", "strange chiral condensate"),
+        ("omega_0", state.omega_0, "MeV", "vector mean field"),
+        ("Sigma_R", state.Sigma_R, "MeV", "rearrangement self-energy"),
+        ("M*_u", float(state.M_star[0]), "MeV", "= (g_q sigma + m_u)/chi"),
+        ("M*_d", float(state.M_star[1]), "MeV", ""),
+        ("M*_s", float(state.M_star[2]), "MeV", "= (g_s zeta + m_s)/chi"),
+        ("max|R_field|", float(np.max(np.abs(state.field_residual))), "-",
+         "largest field-equation residual at the solution"),
+    ])
+    show("the grand potential and the thermodynamics", [
+        ("U", state.U / hc3, "MeV/fm^3", "glue potential"),
+        ("V", state.V / hc3, "MeV/fm^3", "chiral potential"),
+        ("Omega", state.Omega / hc3, "MeV/fm^3", "= -P of the matter"),
+        ("P (matter)", state.P_fm, "MeV/fm^3", "quarks and fields, no leptons"),
+        ("P", point.P_total, "MeV/fm^3", "matter + leptons + thermal sectors"),
+        ("eps", point.e_total, "MeV/fm^3", ""),
+        ("s", point.s_total, "fm^-3", ""),
+        ("f = eps - T s", point.f_total, "MeV/fm^3", ""),
+        ("mu_B", point.mu_B, "MeV", ""),
+        ("mu_C", point.mu_C, "MeV", "= mu_p - mu_n"),
+        ("mu_e", point.mu_e, "MeV", ""),
+        ("n_u", point.n_u, "fm^-3", ""),
+        ("n_d", point.n_d, "fm^-3", ""),
+        ("n_s", point.n_s, "fm^-3", ""),
+        ("n_e", point.n_e, "fm^-3", ""),
+        ("Y_u", point.Y_u, "-", "= n_u/n_B"),
+        ("Y_d", point.Y_d, "-", ""),
+        ("Y_s", point.Y_s, "-", ""),
+        ("Y_e", point.Y_e, "-", ""),
+        ("Euler residual", state.euler_residual(), "-",
+         "(eps + P - T s - sum_i mu_i n_i)/eps"),
+        ("pattern", point.pattern, "", "no pairing sector exists at csc=False"),
+        ("beyond_cutoff", str(point.beyond_cutoff), "",
+         "whether the largest mode potential passed the pairing cutoff"),
+    ])
+
+# %% [markdown]
+# ### 10.2 The same point with pairing on, one pattern at a time
+#
+# `csc=True`, and the enumeration restricted to a single candidate so that each
+# pattern can be looked at on its own. Three quantities are new and belong to
+# the answer rather than to diagnostics:
+#
+# * **`Delta_1, Delta_2, Delta_3`** — the gaps [MeV]. `Delta_eta` pairs the two
+#   flavours and the two colours that `eta` is *not*, so `Delta_3` is the 2SC
+#   gap (u with d) and CFL is all three nonzero.
+# * **`mu_3, mu_8`** — the colour chemical potentials that colour neutrality
+#   fixes. They exist only where pairing does: in an unpaired region `n_3` and
+#   `n_8` vanish identically at `mu_3 = mu_8 = 0`, so they are pinned there and
+#   never solved for. The generator normalisation is `T_8 = diag(1, 1, -2)/3`;
+#   two other normalisations are in circulation and a comparison with a paper
+#   has to convert (`eos.general.pairing` documents the factors).
+# * **`gapless`** — whether a quasiparticle branch has reached zero. A gapless
+#   state is perfectly physical, but *comparing candidates by `Omega` across
+#   one is not*, so it is reported rather than silently ranked.
+#
+# The pairing pieces of the potential are printed beside them: `delta_Omega`,
+# the correction that the condensate makes to the quasiparticle spectrum, and
+# the condensation cost `sum_eta Delta_eta^2/(4 G_D)`. The correction form is
+# used deliberately — it vanishes identically, not merely to quadrature
+# accuracy, when `Delta = 0`, which is why the `unpaired` row below reads
+# exactly zero.
+
+# %%
+for name in CSC_MODELS:
+    header(f"{name}, csc=True, one pattern at a time, "
+           f"n_B = {CSC_N_B} fm^-3, T = {CSC_T} MeV")
+    for pattern in CSC_PATTERNS:
+        status, result = csc_point(name, csc=True, pattern=pattern)
+        if status != "ok":
+            continue
+        point = result.point
+        state = point.state
+        show(f"pattern = {pattern!r}", [
+            ("Delta_1", float(point.Delta[0]), "MeV", "pairs d with s"),
+            ("Delta_2", float(point.Delta[1]), "MeV", "pairs u with s"),
+            ("Delta_3", float(point.Delta[2]), "MeV", "pairs u with d (the 2SC gap)"),
+            ("mu_3", point.mu_3, "MeV", "colour potential, T_3 = diag(1,-1,0)/2"),
+            ("mu_8", point.mu_8, "MeV", "colour potential, T_8 = diag(1,1,-2)/3"),
+            ("gapless", str(point.gapless), "",
+             "a quasiparticle branch has reached zero"),
+            ("delta_Omega", state.delta_omega / hc3, "MeV/fm^3",
+             "the pairing correction alone; exactly 0 when Delta = 0"),
+            ("pair cost", state.pair_cost / hc3, "MeV/fm^3",
+             "sum_eta Delta_eta^2/(4 G_D)"),
+            ("Omega", -state.P_fm, "MeV/fm^3", "= -P of the matter"),
+            ("P", point.P_total, "MeV/fm^3", ""),
+            ("eps", point.e_total, "MeV/fm^3", ""),
+            ("s", point.s_total, "fm^-3", ""),
+            ("f = eps - T s", point.f_total, "MeV/fm^3",
+             "what the enumeration compares at fixed n_B"),
+            ("mu_B", point.mu_B, "MeV", ""),
+            ("mu_C", point.mu_C, "MeV", ""),
+            ("mu_e", point.mu_e, "MeV", ""),
+            ("Y_e", point.Y_e, "-", "= n_e/n_B"),
+            ("Euler residual", state.euler_residual(), "-",
+             "holds paired as well as unpaired"),
+        ])
+
+# %% [markdown]
+# **What the three rows say at this point.** The gaps are of order a hundred
+# MeV, which is the scale the diquark coupling sets; the colour potentials are
+# small but not zero wherever a pattern pairs, and are exactly zero where it
+# does not; and `Y_e` collapses towards zero as the pairing gets more
+# symmetric, because a phase that pairs every flavour with every colour is
+# electrically neutral *without* electrons. The Euler relation holds to machine
+# precision in every row — the pairing correction enters `Omega`, `eps` and `s`
+# consistently, which is the one check that catches an assembly error in this
+# sector.
+#
+# `f` is the number the enumeration ranks at fixed density, and it is the one
+# to compare across the three rows: the mode fixes `n_B`, so the candidates are
+# compared by free energy and not by pressure. At fixed `mu_B` the comparison
+# is by pressure instead, and the two agree — which is what 10.3 shows.
+
+# %% [markdown]
+# ### 10.3 Unpaired against 2SC against CFL
+#
+# Two comparisons, because there are two ways to hold the state and they answer
+# different questions.
+#
+# #### 10.3a The grand potential at fixed `(mu_B, T)`
+#
+# At fixed chemical potential the favoured phase is the one with the lowest
+# `Omega`, equivalently the highest pressure. Getting this comparison right
+# needs one more condition than the pattern: **the matter has to be electrically
+# neutral**, or the answer is decided by a charge nobody is paying for. So for
+# each pattern the electron potential is tied to the charge potential by beta
+# equilibrium, `mu_e = -mu_C`, and `mu_C` is solved from
+#
+#     n_C(mu_B, mu_C, T) = n_e(-mu_C, T)
+#
+# with `n_C` the charge of the strongly-interacting matter only — the leptons
+# are excluded from it, exactly as in the knobs cell's `Y_C`. `mu_S = 0`
+# throughout: these are free-streaming-neutrino beta equilibria, where
+# strangeness is not conserved.
+#
+# The phase surface used here is `thermo_from_mu`, the phase-adapter contract
+# both models expose and the surface `eos.mixed` consumes: it maps
+# `(mu_B, mu_C, mu_S, T)` and one declared pattern to a block, solving the
+# model's own internal self-consistency at those potentials. It is the right
+# entry point for a fixed-potential question, and the only one in this section
+# that is not `eos_point` / `eos_table` / `eos_response`.
+#
+# **Two declared restrictions**, both stated rather than left to be noticed.
+# `ccdm` also enumerates a chiral/dielectric branch, and the map below declares
+# `'restored'` rather than enumerating: above `mu_B ~ 1550` MeV the `restored`
+# and `partial` seeds converge to the same root to every printed digit, and
+# below it neither converges, so on this grid the branch enumeration has
+# nothing to decide. And the confined branch carries no quarks and has
+# `Omega = 0` identically, so **a positive `Omega` in the table below means the
+# confining vacuum wins there and there is no deconfined phase at all** — that
+# is this model's deconfinement transition, not a solver failure.
+
+# %%
+from scipy.optimize import brentq
+
+from eos.general.thermodynamics_leptons import electron_thermo
+
+MU_C_BRACKET = (-400.0, 0.0)     # MeV; n_C - n_e is increasing in mu_C
+
+# The neutrality root is located to half an MeV and no further, which is not a
+# loosened tolerance but the stationarity of the potential being used: at
+# neutrality dOmega/dmu_C = -n_C + n_e = 0, so an error in mu_C costs Omega
+# only at second order. Tightening it to 1e-3 MeV changes no printed digit of
+# the table below and roughly doubles the cost of this cell.
+MU_C_XTOL = 0.5                  # MeV
+
+
+def phase_block(name, par, mu_B, mu_C, T, pattern):
+    """One phase at fixed potentials, through the phase-adapter surface.
+
+    Returns `(state, converged)`. The two models spell the extra argument of
+    that surface differently — `njl` takes a cached vacuum solution, `ccdm` a
+    declared chiral branch — which is the whole of the adaptation.
+    """
+    module = model(name)
+    if name == "njl":
+        state, ok, _ = module.thermo_from_mu(par, mu_B, mu_C, 0.0, T,
+                                             pattern=pattern)
+    else:
+        state, ok, _ = module.thermo_from_mu(par, mu_B, mu_C, 0.0, T,
+                                             branch="restored",
+                                             pattern=pattern)
+    return state, bool(ok)
+
+
+def neutral_phase(name, par, mu_B, T, pattern):
+    """`Omega` [MeV/fm^3] of one pattern at fixed (mu_B, T), made neutral.
+
+    The neutrality root is bracketed rather than iterated from a guess, so a
+    failure is a *reported* failure and never a wrong root. CFL is the case
+    that needs saying: it is neutral without electrons, so its root sits at
+    `mu_C = 0` and no bracket contains a sign change — that is checked first
+    and is a physics statement, not a special case for the solver's comfort.
+    """
+    def charge_excess(mu_C):
+        state, _ = phase_block(name, par, mu_B, float(mu_C), T, pattern)
+        return state.n_C_fm - electron_thermo(-float(mu_C), T).n
+
+    try:
+        if abs(charge_excess(0.0)) < 1.0e-8:
+            mu_C = 0.0
+        else:
+            mu_C = float(brentq(charge_excess, *MU_C_BRACKET,
+                                xtol=MU_C_XTOL))
+    except (ValueError, RuntimeError) as err:
+        return dict(ok=False, reason=str(err)[:60], pattern=pattern)
+
+    state, ok = phase_block(name, par, mu_B, mu_C, T, pattern)
+    electrons = electron_thermo(-mu_C, T)
+    return dict(ok=ok, pattern=pattern, mu_C=mu_C, state=state,
+                Omega=-(state.P_fm + electrons.P),
+                Delta=tuple(abs(float(g)) for g in state.Delta),
+                gapless=bool(state.gapless), n_B=state.n_B_fm,
+                n_e=electrons.n, reason="converged")
+
+
+# The (mu_B, T) map is built ONCE here: 10.3a reads its T = 0 row and 10.5
+# reads the whole of it for the phase boundary.
+csc_omega = {}
+for name in CSC_MODELS:
+    header(f"{name}: Omega per pattern at fixed (mu_B, T), neutral")
+    par = parameters_for(name)
+    for T in CSC_T_GRID:
+        for mu_B in CSC_MU_B_GRID:
+            for pattern in CSC_PATTERNS:
+                csc_omega[(name, float(T), float(mu_B), pattern)] = (
+                    neutral_phase(name, par, float(mu_B), float(T), pattern))
+    solved = sum(1 for key, value in csc_omega.items()
+                 if key[0] == name and value["ok"])
+    total = CSC_T_GRID.size * CSC_MU_B_GRID.size * len(CSC_PATTERNS)
+    print(f"  [{name}] {solved}/{total} (mu_B, T, pattern) blocks converged")
+
+# %%
+GAP_FLOOR = 1.0e-3               # MeV; below this a gap has closed
+
+
+def favoured(name, T, mu_B):
+    """The pattern with the lowest Omega, among those that converged.
+
+    Where the gaps have closed the three candidates ARE one state and their
+    potentials agree to every digit, so which name `min` returns is decided by
+    float noise. Such a cell is reported as `unpaired`, which is the statement
+    that there is no condensate rather than an arbitrary label for one.
+    """
+    have = [csc_omega[(name, T, mu_B, p)] for p in CSC_PATTERNS]
+    have = [r for r in have if r["ok"]]
+    if not have:
+        return None
+    best = min(have, key=lambda r: r["Omega"])
+    if max(best["Delta"]) < GAP_FLOOR:
+        return next((r for r in have if r["pattern"] == "unpaired"), best)
+    return best
+
+
+for name in CSC_MODELS:
+    header(f"{name}: Omega [MeV/fm^3] at T = {CSC_T:.0f} MeV, neutral matter")
+    print(f"  {'mu_B [MeV]':>11s} " +
+          " ".join(f"{p:>12s}" for p in CSC_PATTERNS) +
+          f" {'favoured':>10s} {'n_B [fm^-3]':>12s} {'max Delta':>10s}")
+    for mu_B in CSC_MU_B_GRID:
+        cells = []
+        for pattern in CSC_PATTERNS:
+            entry = csc_omega[(name, CSC_T, float(mu_B), pattern)]
+            cells.append(f"{entry['Omega']:12.2f}" if entry["ok"]
+                         else f"{'--':>12s}")
+        best = favoured(name, CSC_T, float(mu_B))
+        if best is None:
+            print(f"  {mu_B:11.0f} " + " ".join(cells) + f" {'none':>10s}")
+            continue
+        tail = ("  (confined vacuum wins: Omega > 0)" if best["Omega"] > 0.0
+                else "")
+        print(f"  {mu_B:11.0f} " + " ".join(cells) +
+              f" {best['pattern']:>10s} {best['n_B']:12.3f} "
+              f"{max(best['Delta']):10.2f}" + tail)
+
+# %% [markdown]
+# #### 10.3c The same solve against the reference document's own table
+#
+# `docs/njl_csc_implementation.md` section 6 prints a neutral solve at
+# `mu_B = 1500` MeV, `T = 0`, `eta_D = 0.75` and no vector coupling — the
+# shipped default parameter set — for the unpaired and 2SC patterns. It is the
+# one number-for-number check available to a notebook here, so it is made
+# rather than described, and the disagreements are printed beside the
+# agreements.
+#
+# The document is a specification and the code is what runs; where the two
+# differ this cell reports the difference and takes the code's number.
+
+# %%
+DOC_TABLE = {
+    # pattern: (M_u, M_d, M_s, mu_C, mu_8, Delta_3, n_B, P)
+    "unpaired": (9.84, 8.55, 265.59, -34.20, 0.00, 0.0, 1.4319, 302.12),
+    "2SC": (11.96, 7.65, 243.13, -62.27, -2.46, 95.50, 1.4887, 324.75),
+}
+DOC_MU_B = 1500.0
+DOC_FIELDS = ("M_u", "M_d", "M_s", "mu_C", "mu_8", "Delta_3", "n_B", "P")
+
+header("njl against docs/njl_csc_implementation.md section 6, "
+       "mu_B = 1500 MeV, T = 0")
+par = parameters_for("njl")
+print(f"  parameter set: eta_D = {par.eta_D}, eta_V = {par.eta_V}, "
+      f"lambda_UV = {par.lambda_UV} (the document's conditions)")
+print(f"  {'pattern':9s} {'quantity':9s} {'document':>10s} {'code':>10s} "
+      f"{'difference':>12s}")
+for pattern, expected in DOC_TABLE.items():
+    entry = neutral_phase("njl", par, DOC_MU_B, 0.0, pattern)
+    if not entry["ok"]:
+        print(f"  {pattern:9s} did not converge: {entry['reason']}")
+        continue
+    state = entry["state"]
+    got = (float(state.M[0]), float(state.M[1]), float(state.M[2]),
+           entry["mu_C"], state.mu_8, float(state.Delta[2]),
+           state.n_B_fm, state.P_fm)
+    for field, doc_value, code_value in zip(DOC_FIELDS, expected, got):
+        print(f"  {pattern:9s} {field:9s} {doc_value:10.4f} "
+              f"{code_value:10.4f} {code_value - doc_value:12.4f}")
+    print(f"  {pattern:9s} {'residual':9s} {'':>10s} "
+          f"{max(abs(float(r)) for r in state.mass_residual):10.2e} "
+          f"  gapless={state.gapless}, "
+          f"Euler={state.euler_residual():.1e}")
+
+# %% [markdown]
+# **What the table says.** In neutral matter CFL has the lowest `Omega` at
+# every `mu_B` where a gap survives — the condensation energy of pairing all
+# three flavours beats the price of forcing equal flavour densities, and it
+# beats it by more than 2SC does. Where the three columns read the same number
+# to every digit the gaps have closed: the pattern is a *restriction on the
+# enumeration*, so asking for `CFL` above the gap's endpoint returns the
+# unpaired state, correctly, rather than failing.
+#
+# This is the comparison that needs neutrality to be meaningful. Without it the
+# question is decided by a charge the phase is not paying for: CFL is neutral
+# with no electrons at all, so it starts from a different place than the other
+# two, and comparing them at `mu_C = 0` compares two systems rather than two
+# phases of one.
+#
+# #### 10.3b `P` and `eps` against `n_B`, per phase
+#
+# The other holding: at fixed density the candidates are ranked by free energy
+# `f = eps - T s`, which is what `eos_point` does internally, and each phase
+# gets its own `P(n_B)` and `eps(n_B)` branch. Restricting the enumeration is
+# how a branch that is not the ground state gets drawn at all.
+#
+# The sweep is warm-started in **both** directions, and that is not only about
+# speed. The gap equation has three roots at any Fermi-surface mismatch — zero,
+# a barrier maximum, and the physical BCS root — so a Newton solve returns
+# whichever one its seed was nearest, silently. Seeding each point from its
+# neighbour is what keeps a line on one root:
+#
+# * along density, each solved point seeds the next. For `njl`'s 2SC line at
+#   T = 0 that is the difference between 8 solved points and 6, and between one
+#   second and ten;
+# * along temperature, each point is seeded from the *same density at the
+#   temperature below* in preference to its density neighbour. Without it the
+#   `ccdm` 2SC row at T = 40 MeV starts cold, lands on the trivial root at the
+#   first density and — being warm-started from there — carries the zero across
+#   the whole row, printing a gapless band between two gapped ones. With it the
+#   row reads 125 to 133 MeV and the melting is monotone in T, which is what a
+#   gap does.
+
+# %%
+def csc_sweep(name, patterns=CSC_PATTERNS, n_B_grid=CSC_N_B_GRID,
+              T_grid=CSC_T_GRID):
+    """`eos_point` over (pattern, T, n_B), continued in both directions.
+
+    Each point is seeded from the same density one temperature down where that
+    exists, and from the previous density otherwise. Returns
+    {(pattern, T, n_B): point}. A pattern whose gap has closed simply returns
+    the unpaired state at that point, which is the correct answer and not a
+    failure; a point the solver cannot reach is reported by `run` and left out
+    of the dictionary.
+    """
+    solved = {}
+    for pattern in patterns:
+        cooler = {}                      # n_B -> the seed one temperature down
+        for T in T_grid:
+            warmer, x0 = {}, None
+            for n_B in n_B_grid:
+                seed = cooler.get(float(n_B), x0)
+                status, result = csc_point(
+                    name, csc=True, n_B=n_B, T=T, pattern=pattern, x0=seed,
+                    label=f"{name} {pattern} T={T:.0f} n_B={n_B:.2f}")
+                if status == "ok":
+                    solved[(pattern, float(T), float(n_B))] = result.point
+                    warmer[float(n_B)] = x0 = result.point.x
+                else:
+                    x0 = None
+            cooler = warmer
+    return solved
+
+
+csc_points = {}
+for name in CSC_MODELS:
+    header(f"{name}: one line per (pattern, T), warm-started along n_B")
+    csc_points[name] = csc_sweep(name)
+    for pattern in CSC_PATTERNS:
+        for T in CSC_T_GRID:
+            got = [csc_points[name][(pattern, float(T), float(n))]
+                   for n in CSC_N_B_GRID
+                   if (pattern, float(T), float(n)) in csc_points[name]]
+            if not got:
+                print(f"  [{name} {pattern:8s} T={T:4.0f}] no solved point")
+                continue
+            gaps = [max(abs(float(g)) for g in p.Delta) for p in got]
+            print(f"  [{name} {pattern:8s} T={T:4.0f}] "
+                  f"{len(got)}/{CSC_N_B_GRID.size} points, "
+                  f"max|Delta| {min(gaps):6.2f} to {max(gaps):6.2f} MeV")
+
+# %%
+def sweep_line(name, pattern, T, *fields):
+    """One (pattern, T) line as arrays: n_B first, then the named fields.
+
+    `Delta` is reported as `max_eta |Delta_eta|`: the sign of a gap is a phase
+    convention the gap equation is odd in, and `thermo_from_mu` returns either
+    sign, so a magnitude is the only thing that compares across patterns.
+    """
+    n_B, columns = [], {field: [] for field in fields}
+    for n in CSC_N_B_GRID:
+        point = csc_points[name].get((pattern, float(T), float(n)))
+        if point is None:
+            continue
+        n_B.append(float(n))
+        for field in fields:
+            if field == "Delta":
+                columns[field].append(max(abs(float(g)) for g in point.Delta))
+            else:
+                columns[field].append(float(getattr(point, field)))
+    return (np.array(n_B),) + tuple(np.array(columns[f]) for f in fields)
+
+
+header(f"P, eps and f per phase at T = {CSC_T:.0f} MeV, "
+       f"n_B = {CSC_N_B:.2f} fm^-3")
+print(f"  {'model':6s} {'pattern':9s} {'P':>10s} {'eps':>10s} {'f':>10s} "
+      f"{'f - f_unp':>10s} {'mu_B':>9s} {'max Delta':>10s}")
+for name in CSC_MODELS:
+    reference = csc_points[name].get(("unpaired", CSC_T, CSC_N_B))
+    for pattern in CSC_PATTERNS:
+        point = csc_points[name].get((pattern, CSC_T, CSC_N_B))
+        if point is None:
+            print(f"  {name:6s} {pattern:9s} (not solved here)")
+            continue
+        shift = (point.f_total - reference.f_total) if reference else float("nan")
+        print(f"  {name:6s} {pattern:9s} {point.P_total:10.3f} "
+              f"{point.e_total:10.3f} {point.f_total:10.3f} {shift:10.3f} "
+              f"{point.mu_B:9.2f} "
+              f"{max(abs(float(g)) for g in point.Delta):10.2f}")
+print("  units: P, eps, f in MeV/fm^3; mu_B and Delta in MeV. A NEGATIVE "
+      "f - f_unp is\n  a favoured phase, which is the fixed-density "
+      "statement of 10.3a's fixed-mu_B one.")
+
+# %%
+fig, axes = fs.paper_grid("1x3", "double", aspect=1.1, placeholder=False,
+                          fontsize=10, labelsize=9, legendsize=8)
+ax_f, ax_P, ax_eps = axes.ravel()
+
+for name in CSC_MODELS:
+    reference = dict()
+    n_ref, f_ref = sweep_line(name, "unpaired", CSC_T, "f_total")
+    for i, n in enumerate(n_ref):
+        reference[float(n)] = f_ref[i]
+    for pattern in CSC_PATTERNS:
+        n, f_total, P, eps = sweep_line(name, pattern, CSC_T,
+                                        "f_total", "P_total", "e_total")
+        if not n.size:
+            continue
+        shift = np.array([f_total[i] - reference.get(float(n[i]), np.nan)
+                          for i in range(n.size)])
+        ax_f.plot(n, shift, MODEL_DASH[name], color=PATTERN_COLOR[pattern],
+                  label=(pattern if name == "njl" else None))
+        ax_P.plot(n, P, MODEL_DASH[name], color=PATTERN_COLOR[pattern])
+        ax_eps.plot(n, eps, MODEL_DASH[name], color=PATTERN_COLOR[pattern],
+                    label=(f"{name}" if pattern == "unpaired" else None))
+
+ax_f.axhline(0.0, color="0.6", lw=0.6, zorder=0)
+ax_f.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+ax_f.set_ylabel(r"$f - f_{\rm unpaired}$ [MeV/fm$^3$]")
+ax_f.set_title(f"T = {CSC_T:.0f} MeV; below zero is favoured", fontsize=9)
+ax_f.legend(loc="lower left", title="pattern:")
+fs.apply_style(ax_f, legend=False)
+fs.panel_label(ax_f, "(a)", corner='upper right')
+
+ax_P.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+ax_P.set_ylabel(r"$P$ [MeV/fm$^3$]")
+fs.apply_style(ax_P)
+fs.panel_label(ax_P, "(b)", corner='upper left')
+
+ax_eps.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+ax_eps.set_ylabel(r"$\epsilon$ [MeV/fm$^3$]")
+ax_eps.legend(loc="upper left", title="solid / dashed:")
+fs.apply_style(ax_eps, legend=False)
+fs.panel_label(ax_eps, "(c)", corner='lower right')
+
+for ax in (ax_f, ax_P, ax_eps):
+    ax.set_xticks([1.0, 1.5, 2.0])
+
+fs.save_figure(fig, str(FIG_DIR / "csc_phases_vs_nB"))
+plt.show()
+
+# %% [markdown]
+# Panel (a) is the comparison the enumeration makes, drawn: the free energy of
+# each restricted branch measured from the unpaired one at the same density.
+# Where a curve is below zero that pattern is the ground state; where it lies
+# exactly on zero the gap has not opened and the restricted solve has returned
+# the unpaired state.
+#
+# Panels (b) and (c) are what it does to the equation of state, and the
+# direction is worth stating because it is the opposite of the one "pairing
+# costs energy" suggests: at a given density a paired branch has a **higher**
+# `P` and a **lower** `eps` than the unpaired one, in both models. Condensation
+# lowers the free energy, and it does so by lowering `eps` faster than it
+# lowers `mu_B n_B`.
+#
+# **`P` does not rank the phases here, and the table above shows it doing so
+# wrongly.** At `n_B = 1.6` fm^-3 `njl`'s 2SC branch carries the higher
+# pressure of the two paired ones while CFL carries the lower free energy —
+# and CFL is the ground state. The two orderings are allowed to differ because
+# the branches sit at different `mu_B` at the same density; ranking by pressure
+# is the fixed-`mu_B` statement of 10.3a, not the fixed-`n_B` one.
+
+# %% [markdown]
+# ### 10.4 The gap over the `(n_B, T)` plane
+#
+# `Delta` as a function of both independent variables of the mode, one map per
+# pairing pattern per model, from the same sweep as 10.3b. What is mapped is
+# `max_eta |Delta_eta|`: the gap equation is odd in `Delta_eta`, so its sign is
+# a phase convention and only the magnitude compares across patterns. For 2SC
+# that magnitude *is* `Delta_3`; for CFL the three are nearly degenerate and it
+# is the largest of them.
+#
+# The `unpaired` pattern is not mapped, since `Delta = 0` there by
+# construction — which the printed table below shows rather than assumes.
+
+# %%
+header("max_eta |Delta_eta| [MeV] over the (n_B, T) plane")
+for name in CSC_MODELS:
+    for pattern in CSC_PATTERNS:
+        print(f"  [{name} {pattern}]")
+        print(f"    {'T | n_B':>10s} " +
+              " ".join(f"{n:7.2f}" for n in CSC_N_B_GRID))
+        for T in CSC_T_GRID:
+            cells = []
+            for n_B in CSC_N_B_GRID:
+                point = csc_points[name].get((pattern, float(T), float(n_B)))
+                cells.append(f"{'--':>7s}" if point is None else
+                             f"{max(abs(float(g)) for g in point.Delta):7.2f}")
+            print(f"    {T:10.0f} " + " ".join(cells))
+
+# %%
+from matplotlib.colors import LinearSegmentedColormap
+
+# The one colormap this notebook builds, and it is built OUT OF the shared
+# palette rather than picked from matplotlib's: `figure_style` is the only
+# module that decides colours (CLAUDE.md section 10), and a ramp between two of
+# its own colours keeps the choice there rather than here.
+GAP_CMAP = LinearSegmentedColormap.from_list(
+    "gap", ["#ffffff", fs.OKAB["sky"], fs.OKAB["blue"]])
+# White is a CLOSED gap and grey is a point the solver could not reach. They
+# are different statements and the map must not print them the same colour.
+GAP_CMAP.set_bad(fs.STANDARD_COLORS["Gray"])
+
+
+def gap_grid(name, pattern):
+    """max|Delta| on the full (T, n_B) rectangle, nan where nothing solved."""
+    grid = np.full((CSC_T_GRID.size, CSC_N_B_GRID.size), np.nan)
+    for i, T in enumerate(CSC_T_GRID):
+        for j, n_B in enumerate(CSC_N_B_GRID):
+            point = csc_points[name].get((pattern, float(T), float(n_B)))
+            if point is not None:
+                grid[i, j] = max(abs(float(g)) for g in point.Delta)
+    return grid
+
+
+# One colour scale across all four panels, so a reader comparing `ccdm`'s gaps
+# with `njl`'s is comparing lengths and not two differently-stretched rulers.
+GAP_MAX = max(np.nanmax(gap_grid(name, pattern))
+              for name in CSC_MODELS for pattern in GAP_PATTERNS)
+
+fig, axes = fs.paper_grid("2x2", "double", aspect=1.0, placeholder=False,
+                          fontsize=10, labelsize=9, legendsize=8)
+panels = axes.ravel()
+print(f"  colour scale shared across all four panels: 0 to {GAP_MAX:.2f} MeV")
+labels = ("(a)", "(b)", "(c)", "(d)")
+index = 0
+for name in CSC_MODELS:
+    for pattern in GAP_PATTERNS:
+        ax = panels[index]
+        grid = gap_grid(name, pattern)
+        finite = grid[np.isfinite(grid)]
+        mesh = ax.pcolormesh(CSC_N_B_GRID, CSC_T_GRID,
+                             np.ma.masked_invalid(grid), cmap=GAP_CMAP,
+                             shading="nearest", vmin=0.0, vmax=GAP_MAX)
+        bar = fig.colorbar(mesh, ax=ax)
+        bar.set_label(r"$\max_\eta |\Delta_\eta|$ [MeV]", fontsize=8)
+        bar.ax.tick_params(labelsize=8)
+        ax.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+        ax.set_ylabel(r"$T$ [MeV]")
+        ax.set_title(f"{name}, {pattern}", fontsize=9)
+        fs.apply_style(ax, grid=False, legend=False, minor_ticks=False)
+        fs.panel_label(ax, labels[index], corner='upper left')
+        print(f"  [{name} {pattern}] mapped "
+              f"{int(np.isfinite(grid).sum())}/{grid.size} cells, "
+              f"max|Delta| up to "
+              f"{(finite.max() if finite.size else float('nan')):.2f} MeV")
+        index += 1
+
+fs.save_figure(fig, str(FIG_DIR / "csc_gap_maps"))
+plt.show()
+
+# %% [markdown]
+# #### The two cuts through those maps
+#
+# `Delta` against `n_B` at the cold end of the thermal grid, and `Delta` against
+# `T` at the probe density. They are the two directions the map is read in, and
+# they carry the two statements a map at this resolution cannot make sharply:
+# where along the density axis a gap opens, and how far up in temperature it
+# survives.
+
+# %%
+fig, axes = fs.paper_grid("1x2", "double", aspect=1.2, placeholder=False,
+                          fontsize=10, labelsize=9, legendsize=8)
+ax_n, ax_T = axes.ravel()
+
+header(f"Delta vs T at n_B = {CSC_N_B:.2f} fm^-3")
+for name in CSC_MODELS:
+    for pattern in GAP_PATTERNS:
+        n, gaps = sweep_line(name, pattern, CSC_T, "Delta")
+        if n.size:
+            ax_n.plot(n, gaps, MODEL_DASH[name], color=PATTERN_COLOR[pattern],
+                      label=(pattern if name == "njl" else None))
+
+        T_ok, gaps_T = [], []
+        for T in CSC_T_GRID:
+            point = csc_points[name].get((pattern, float(T), CSC_N_B))
+            if point is not None:
+                T_ok.append(float(T))
+                gaps_T.append(max(abs(float(g)) for g in point.Delta))
+        if T_ok:
+            ax_T.plot(T_ok, gaps_T, MODEL_DASH[name],
+                      color=PATTERN_COLOR[pattern],
+                      label=(name if pattern == "2SC" else None))
+            print(f"  [{name} {pattern:4s}] " +
+                  "  ".join(f"T={t:4.0f}: {g:6.2f} MeV"
+                            for t, g in zip(T_ok, gaps_T)))
+
+ax_n.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+ax_n.set_ylabel(r"$\max_\eta |\Delta_\eta|$ [MeV]")
+ax_n.set_title(f"T = {CSC_T:.0f} MeV", fontsize=9)
+ax_n.legend(loc="lower right", title="pattern:")
+fs.apply_style(ax_n, legend=False)
+fs.panel_label(ax_n, "(a)", corner='upper left')
+
+ax_T.set_xlabel(r"$T$ [MeV]")
+ax_T.set_ylabel(r"$\max_\eta |\Delta_\eta|$ [MeV]")
+ax_T.set_title(rf"$n_B$ = {CSC_N_B:.2f} fm$^{{-3}}$", fontsize=9)
+ax_T.legend(loc="lower left", title="solid / dashed:")
+fs.apply_style(ax_T, legend=False)
+fs.panel_label(ax_T, "(b)", corner='upper right')
+
+fs.save_figure(fig, str(FIG_DIR / "csc_gap_cuts"))
+plt.show()
+
+# %% [markdown]
+# ### 10.5 What goes with the gap: composition, sound speed, phase boundary
+#
+# #### 10.5a Quark and electron fractions, per phase
+#
+# `Y_i = n_i/n_B` for the three flavours and for the electrons, at the cold end
+# of the thermal grid. The three quark fractions sum to 3 by construction — a
+# baryon is three quarks — so what distinguishes the phases is how the sum is
+# split, and the electron fraction is what pays for the imbalance.
+#
+# The statement to watch for is CFL's: locking every flavour to every colour
+# forces `n_u = n_d = n_s`, so the matter is electrically neutral with **no
+# electrons at all**, and `Y_e` drops by orders of magnitude rather than by a
+# factor. That is the same fact 10.3a's neutrality solve met from the other
+# side, where CFL's root sat at `mu_C = 0`.
+
+# %%
+header(f"fractions at T = {CSC_T:.0f} MeV, n_B = {CSC_N_B:.2f} fm^-3")
+print(f"  {'model':6s} {'pattern':9s} {'Y_u':>10s} {'Y_d':>10s} {'Y_s':>10s} "
+      f"{'Y_u+Y_d+Y_s':>12s} {'Y_e':>12s} {'mu_e [MeV]':>11s}")
+for name in CSC_MODELS:
+    for pattern in CSC_PATTERNS:
+        point = csc_points[name].get((pattern, CSC_T, CSC_N_B))
+        if point is None:
+            print(f"  {name:6s} {pattern:9s} (not solved here)")
+            continue
+        print(f"  {name:6s} {pattern:9s} {point.Y_u:10.5f} {point.Y_d:10.5f} "
+              f"{point.Y_s:10.5f} {point.Y_u + point.Y_d + point.Y_s:12.5f} "
+              f"{point.Y_e:12.3e} {point.mu_e:11.4f}")
+
+# %% [markdown]
+# #### 10.5b The sound speed, per phase
+#
+# `eos_response` at `frozen='equilibrium'` — nothing held, the composition and
+# (unless a pattern is named) the pairing pattern both re-equilibrating under
+# the perturbation — restricted to one pattern at a time, so the derivative is
+# taken *within* a branch instead of across the enumeration. Taking it across
+# would give a chord over a first-order jump rather than a tangent, which is a
+# number with no meaning.
+#
+# The key is read the same way section 6.3 reads it: whichever of
+# `cs2_isothermal` / `cs2_eq` the model returns, and the panel is labelled for
+# what was computed. Both models here return `cs2_isothermal`, and at the cold
+# end of the grid it coincides with `cs2_adiabatic`.
+#
+# This is the slowest cell of the section: each response is a re-solved finite
+# difference, so it is several full solves per number.
+
+# %%
+csc_cs2 = {}
+header(f"sound speed per phase at T = {CSC_T:.0f} MeV, frozen='equilibrium'")
+for name in CSC_MODELS:
+    for pattern in CSC_PATTERNS:
+        for n_B in CSC_CS2_N_B:
+
+            def respond(name=name, pattern=pattern, n_B=n_B):
+                return model(name).eos_response(
+                    parameters_for(name), CSC_MODE, csc_flags(name, True),
+                    frozen="equilibrium", n_B=n_B, T=CSC_T,
+                    patterns=(pattern,))
+
+            status, out = run(f"{name} {pattern} n_B={n_B:.2f}", respond)
+            if status != "ok":
+                continue
+            if not out.get("converged", False):
+                print(f"  [{name} {pattern} n_B={n_B:.2f}] did not converge: "
+                      f"{out.get('reason', '')}")
+                continue
+            key = next((k for k in CS2_KEYS if k in out), None)
+            if key is None:
+                print(f"  [{name} {pattern}] no sound speed in {sorted(out)}")
+                continue
+            csc_cs2[(name, pattern, n_B)] = (float(out[key]), key)
+            print(f"  [{name:5s} {pattern:8s} n_B={n_B:.2f}] "
+                  f"{key} = {out[key]:.5f}"
+                  + ("   (stencil crossed a branch or pattern change)"
+                     if out.get("branch_changed") else ""))
+
+# %%
+fig, axes = fs.paper_grid("1x3", "double", aspect=1.1, placeholder=False,
+                          fontsize=10, labelsize=9, legendsize=8)
+ax_quark, ax_lepton, ax_sound = axes.ravel()
+
+COMP_CSC_MODEL = "njl"
+for species, column in QUARKS:
+    color, dash = fs.particle_style(species)
+    for pattern in CSC_PATTERNS:
+        n, Y = sweep_line(COMP_CSC_MODEL, pattern, CSC_T, column)
+        if n.size:
+            ax_quark.plot(n, Y, ls=dash, color=color,
+                          alpha=(1.0 if pattern == "CFL" else 0.45),
+                          label=(f"${species}$" if pattern == "CFL" else None))
+ax_quark.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+ax_quark.set_ylabel(r"$Y_i = n_i/n_B$")
+ax_quark.set_title(f"{COMP_CSC_MODEL}, T = {CSC_T:.0f} MeV; "
+                   f"CFL solid, others faded", fontsize=8)
+ax_quark.legend(loc="upper right", ncol=3)
+fs.apply_style(ax_quark, legend=False)
+fs.panel_label(ax_quark, "(a)", corner='upper left')
+
+for name in CSC_MODELS:
+    for pattern in CSC_PATTERNS:
+        n, Y_e = sweep_line(name, pattern, CSC_T, "Y_e")
+        keep = n[Y_e > 0.0], Y_e[Y_e > 0.0]
+        if keep[0].size:
+            ax_lepton.plot(*keep, MODEL_DASH[name],
+                           color=PATTERN_COLOR[pattern],
+                           label=(pattern if name == "njl" else None))
+ax_lepton.set_yscale("log")
+# The floor is set rather than left to the data: CFL's electron fraction is
+# numerically zero (order 1e-16, the residue of a cancellation), and an axis
+# that reaches down to it crushes the two phases that do carry electrons into
+# one line. The curve is off the bottom, which is the statement.
+ax_lepton.set_ylim(1.0e-9, 1.0e-1)
+ax_lepton.text(0.97, 0.03, r"CFL below $10^{-9}$ is off scale",
+               transform=ax_lepton.transAxes, fontsize=7, color="0.35",
+               ha="right")
+ax_lepton.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+ax_lepton.set_ylabel(r"$Y_e = n_e/n_B$")
+fs.log_decades(ax_lepton, axis="y")
+ax_lepton.legend(loc="lower left", title="pattern:")
+fs.apply_style(ax_lepton, legend=False, minor_ticks=False)
+fs.panel_label(ax_lepton, "(b)", corner='upper right')
+
+sound_key = None
+for name in CSC_MODELS:
+    for pattern in CSC_PATTERNS:
+        got = [(n, csc_cs2[(name, pattern, n)][0]) for n in CSC_CS2_N_B
+               if (name, pattern, n) in csc_cs2]
+        if not got:
+            continue
+        sound_key = csc_cs2[(name, pattern, got[0][0])][1]
+        ax_sound.plot([g[0] for g in got], [g[1] for g in got],
+                      MODEL_DASH[name] + "o", color=PATTERN_COLOR[pattern],
+                      ms=3, label=(name if pattern == "unpaired" else None))
+ax_sound.axhline(1.0 / 3.0, color="0.6", lw=0.6, ls=":", zorder=0)
+ax_sound.text(0.02, 1.0 / 3.0, r"$1/3$", va="bottom", ha="left", fontsize=8,
+              color="0.4", transform=ax_sound.get_yaxis_transform())
+ax_sound.set_xlabel(r"$n_B$ [fm$^{-3}$]")
+ax_sound.set_ylabel(rf"$c_s^2$ ({sound_key or 'not computed'})")
+ax_sound.set_ylim(0.0, 0.7)
+ax_sound.legend(loc="lower right", title="solid / dashed:")
+fs.apply_style(ax_sound, legend=False)
+fs.panel_label(ax_sound, "(c)", corner='upper left')
+
+fs.save_figure(fig, str(FIG_DIR / "csc_composition_cs2"))
+plt.show()
+
+# %% [markdown]
+# #### 10.5c The phase boundary in the `(mu_B, T)` plane
+#
+# The map of 10.3a, read for its winner instead of its numbers: at every
+# `(mu_B, T)` the pattern with the lowest neutral `Omega`. The boundary between
+# two colours is the phase boundary, and a cell where the favoured `Omega` is
+# **positive** is one where the confining vacuum beats every deconfined
+# candidate — no quark phase at all, which for `ccdm` is a statement its own
+# branch enumeration makes and for `njl` is a statement about the vacuum
+# pressure `B_eff`.
+#
+# The resolution is the grid of 10.3a and no finer: each cell is a neutrality
+# solve for each of three patterns, so the map is coarse on purpose. What it is
+# for is the *shape*, and the shape has two edges. The paired region is bounded
+# **above in `mu_B`**, where the gap closes because the Fermi surface has run
+# out towards the cutoff, and **above in `T`**, where it melts; and the two
+# edges are not independent — as `T` rises the high-`mu_B` edge moves down.
+#
+# The melting edge is checkable against the one number BCS theory gives for
+# free, `T_c ~ 0.57 Delta(T = 0)`, so the cell below prints that estimate from
+# the gaps of 10.4 beside the temperature at which the map actually loses its
+# condensate.
+
+# %%
+from matplotlib.colors import ListedColormap
+
+BOUNDARY_COLORS = ListedColormap(
+    [PATTERN_COLOR[p] for p in CSC_PATTERNS] + [fs.STANDARD_COLORS["Gray"]])
+CONFINED_INDEX = len(CSC_PATTERNS)
+
+fig, axes = fs.paper_grid("1x2", "double", aspect=1.0, placeholder=False,
+                          fontsize=10, labelsize=9, legendsize=8)
+
+header("the favoured pattern over the (mu_B, T) plane")
+for ax, name, label in zip(axes.ravel(), CSC_MODELS, ("(a)", "(b)")):
+    grid = np.full((CSC_T_GRID.size, CSC_MU_B_GRID.size), np.nan)
+    print(f"  [{name}]")
+    print(f"    {'T | mu_B':>10s} " +
+          " ".join(f"{mu:>10.0f}" for mu in CSC_MU_B_GRID))
+    for i, T in enumerate(CSC_T_GRID):
+        cells = []
+        for j, mu_B in enumerate(CSC_MU_B_GRID):
+            best = favoured(name, float(T), float(mu_B))
+            if best is None:
+                cells.append(f"{'--':>10s}")
+                continue
+            if best["Omega"] > 0.0:
+                grid[i, j] = CONFINED_INDEX
+                cells.append(f"{'confined':>10s}")
+                continue
+            grid[i, j] = CSC_PATTERNS.index(best["pattern"])
+            cells.append(f"{best['pattern']:>10s}")
+        print(f"    {T:10.0f} " + " ".join(cells))
+
+    ax.pcolormesh(CSC_MU_B_GRID, CSC_T_GRID, grid, cmap=BOUNDARY_COLORS,
+                  shading="nearest", vmin=-0.5,
+                  vmax=CONFINED_INDEX + 0.5)
+    ax.set_xlabel(r"$\mu_B$ [MeV]")
+    ax.set_ylabel(r"$T$ [MeV]")
+    ax.set_ylim(float(CSC_T_GRID[0]), float(CSC_T_GRID[-1]))
+    ax.set_title(f"{name}, neutral matter", fontsize=9)
+    fs.apply_style(ax, grid=False, legend=False, minor_ticks=False)
+    fs.panel_label(ax, label, corner='upper left')
+
+handles = [plt.Line2D([], [], color=PATTERN_COLOR[p], lw=6, label=p)
+           for p in CSC_PATTERNS]
+handles.append(plt.Line2D([], [], color=fs.STANDARD_COLORS["Gray"], lw=6,
+                          label="confining vacuum"))
+# The legend sits on top of a filled panel, so it carries its own opaque
+# background: the paper style draws legends unframed, which is unreadable here.
+axes.ravel()[-1].legend(handles=handles, loc="upper right", fontsize=7,
+                        frameon=True, facecolor="white", framealpha=0.92)
+
+fs.save_figure(fig, str(FIG_DIR / "csc_phase_boundary"))
+plt.show()
+
+# %% [markdown]
+# ### What section 10 established
+#
+# * The pairing sector is one flag, and turning it on changes the equations
+#   rather than adding a term: three gaps become unknowns, colour neutrality
+#   becomes two rows, and `mu_3`, `mu_8` exist only where a pattern pairs.
+# * The pattern is an **outcome**, ranked by free energy at fixed density and
+#   by pressure at fixed potential; restricting the enumeration is what draws a
+#   branch that is not the ground state, and every restricted branch above is a
+#   branch, not a mode.
+# * In neutral matter CFL is favoured over 2SC and over unpaired wherever a gap
+#   survives, in both models, and its signature in the composition is the
+#   collapse of `Y_e` — a locked phase is neutral without electrons.
+# * Pairing **softens** both models at fixed density: `P` and `eps` are both
+#   lower in a paired branch than in the unpaired one at the same `n_B`.
+# * The gaps are of order 100 MeV and close from the top of the density range,
+#   which is where a cutoff-regularized model runs out of the Fermi surface it
+#   is cutting.
+#
+# Every number above is a bare deconfined phase, with the caveat section 8
+# already made: what such a phase is *for* is the quark half of a construction,
+# and the hybrid notebook is where it is coupled to a hadronic one.
+
+# %%
+# The BCS ratio is not fitted here and not tuned: it is 2 Delta(0)/(k_B T_c) =
+# 3.52, the weak-coupling value, quoted as the sanity check it is. A gap of a
+# hundred MeV melting at a few tens of MeV is the expected order; agreement to
+# a factor of two is all this coarse a grid can claim, and it is all that is
+# claimed.
+BCS_RATIO = 0.5669           # T_c/Delta(0) at weak coupling
+
+header("melting temperature: BCS estimate against the map")
+for name in CSC_MODELS:
+    for pattern in GAP_PATTERNS:
+        cold = csc_points[name].get((pattern, CSC_T, CSC_N_B))
+        if cold is None:
+            continue
+        gap = max(abs(float(g)) for g in cold.Delta)
+
+        gapped = []
+        for T in CSC_T_GRID:
+            point = csc_points[name].get((pattern, float(T), CSC_N_B))
+            if point is None:
+                continue
+            if max(abs(float(g)) for g in point.Delta) > GAP_FLOOR:
+                gapped.append(float(T))
+        if not gapped:
+            print(f"  [{name:5s} {pattern:4s}] no gap anywhere on the "
+                  f"thermal grid at n_B = {CSC_N_B:.2f} fm^-3")
+            continue
+
+        melted = [float(T) for T in CSC_T_GRID if float(T) > max(gapped)]
+        where = (f"and none at {min(melted):.0f} MeV" if melted
+                 else "(the grid ends before it melts)")
+        print(f"  [{name:5s} {pattern:4s}] Delta(T=0) = {gap:6.2f} MeV  ->  "
+              f"T_c ~ {BCS_RATIO * gap:6.2f} MeV;  the map still has a gap at "
+              f"T = {max(gapped):4.0f} MeV {where}")
