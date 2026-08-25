@@ -330,11 +330,9 @@ for mode in KNOBS.modes:
 # writer and the structure solver both read, and its column names are the same
 # in every model.
 #
-# The knobs cell's `leptons` governs the single points above. It is not passed
-# to `eos_table` here: two of the four models do not yet accept it on that entry
-# point, so the grids below are built at each model's own default treatment of
-# the neutralizing leptons. Passing it to one model and not another would hide
-# that difference rather than show it.
+# The knobs cell's `leptons` reaches this entry point too, under the same rule
+# as the single points: it is named for the fixed-fraction modes and left unsaid
+# for beta equilibrium, where the leptons are what the equilibrium is about.
 
 # %%
 tables = {}
@@ -345,8 +343,10 @@ for mode in KNOBS.modes:
 
         def build(model_name=name, mode=mode, axes=axes):
             module = model(model_name)
+            extra = ({"leptons": KNOBS.leptons} if mode.startswith("fixed_")
+                     else {})
             return module.eos_table(parameters_for(model_name), mode,
-                                    flags_for(model_name), axes)
+                                    flags_for(model_name), axes, **extra)
 
         status, result = run(name, build)
         if status != "ok":
