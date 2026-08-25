@@ -53,7 +53,7 @@ from eos.mixed.charges import Regime
 from eos.general.basis import quark_potentials
 from eos.mixed.solver import has_leptons
 from eos.mixed.thermodynamics import charged_leptons
-from eos.vmit.thermodynamics import compute_quark_density
+from eos.vmit.thermodynamics import quark_density
 
 #: mu_flavor = _M @ mu_charge for mu_charge = (mu_B, mu_C, mu_S). Since
 #: n_charge = _M^T n_flavor, the charge susceptibility is _M^T chi_flavor _M.
@@ -65,8 +65,8 @@ _M = np.array([[1.0 / 3.0,  2.0 / 3.0, 0.0],
 def _fd_quark_kappa(mu_eff, T, m, h_min=1e-2, rel=1e-4):
     """dn/dmu_eff of one quark flavor, central finite difference."""
     h = max(h_min, rel * abs(mu_eff))
-    return (compute_quark_density(mu_eff + h, T, m)
-            - compute_quark_density(mu_eff - h, T, m)) / (2.0 * h)
+    return (quark_density(mu_eff + h, T, m)
+            - quark_density(mu_eff - h, T, m)) / (2.0 * h)
 
 
 def _lepton_kappa(mu_e, T, muons, mu_nue=0.0, h_min=1e-2, rel=1e-4):

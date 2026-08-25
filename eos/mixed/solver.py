@@ -608,8 +608,8 @@ def solve(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
     met from any guess, so non-convergence is never silent.
     """
     if phases is None and vmit_params is None:
-        from eos.vmit.parameters import get_vmit_default
-        vmit_params = get_vmit_default()
+        from eos.vmit.parameters import Parameters as VMITParameters
+        vmit_params = VMITParameters.default()
     ctx = build_mixed_ctx(spec, eta, n_B, par, flags, vmit_params, T=T,
                           n_B_guess=n_B_guess, phases=phases, muons=muons)
     jac = _jac_with_fallback(ctx) if analytic_jac else None

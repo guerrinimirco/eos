@@ -23,7 +23,7 @@ times in silence.
 from dataclasses import dataclass
 
 from eos.general.tabulate import temperature_at_entropy
-from eos.vmit.solver import VMITEOSResult
+from eos.vmit.solver import EoSPoint
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.table import (
     MODE_FRACTIONS, TableSpec, build_table, solve_at,
@@ -40,7 +40,7 @@ class PointResult:
     """
     ok: bool
     message: str
-    point: VMITEOSResult = None
+    point: EoSPoint = None
 
 
 def _check_conditions(mode, conditions):

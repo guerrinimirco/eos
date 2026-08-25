@@ -25,8 +25,8 @@ from typing import Optional
 from eos.zl.parameters import Parameters as ZLParams
 from eos.zl.thermodynamics import thermo_from_mu_n as zl_thermo_from_mu_n
 
-from eos.vmit.parameters import Parameters as VMITParams, get_vmit_default
-from eos.vmit.thermodynamics import compute_vmit_thermo_from_mu_n
+from eos.vmit.parameters import Parameters as VMITParams
+from eos.vmit.thermodynamics import thermo_from_mu_n as vmit_thermo_from_mu_n
 
 from eos.general.thermodynamics_leptons import electron_thermo, neutrino_thermo, photon_thermo
 
@@ -77,7 +77,7 @@ def solve_eta0_trapped(
     if zl_params is None:
         zl_params = ZLParams.default()
     if vmit_params is None:
-        vmit_params = get_vmit_default()
+        vmit_params = VMITParams.default()
     
     # Default initial guess
     if initial_guess is None:
@@ -96,7 +96,7 @@ def solve_eta0_trapped(
         
         # Compute phase thermodynamics
         had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
-        qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
+        qua_sec = vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
         
@@ -177,7 +177,7 @@ def solve_eta0_trapped(
     
     # Recompute thermodynamics at solution
     had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
-    qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
+    qua_sec = vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
     nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
     gamma_thermo = photon_thermo(T)
@@ -236,7 +236,7 @@ def solve_eta0_fixed_chi_trapped(
     if zl_params is None:
         zl_params = ZLParams.default()
     if vmit_params is None:
-        vmit_params = get_vmit_default()
+        vmit_params = VMITParams.default()
     
     # Default guess
     if initial_guess is None:
@@ -251,7 +251,7 @@ def solve_eta0_fixed_chi_trapped(
         mu_p, mu_n, mu_u, mu_d, mu_s, mu_e, mu_nu, n_p, n_n, n_u, n_d, n_s, n_nu = x
         
         had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
-        qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
+        qua_sec = vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
         ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
         
@@ -318,7 +318,7 @@ def solve_eta0_fixed_chi_trapped(
     mu_p, mu_n, mu_u, mu_d, mu_s, mu_e, mu_nu, n_p, n_n, n_u, n_d, n_s, n_nu = sol.x
     
     had_sec = zl_thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, zl_params)
-    qua_sec = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
+    qua_sec = vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, vmit_params)
     ele_sec = electron_thermo(mu_e, T, include_antiparticles=True)
     nu_sec = neutrino_thermo(mu_nu, T, include_antiparticles=True)
     gamma_thermo = photon_thermo(T)

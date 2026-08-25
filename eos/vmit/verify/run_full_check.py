@@ -23,9 +23,9 @@ from eos.general.basis import quark_charges, charge_potentials_from_quarks
 from eos.general.physics_constants import hc, hc3
 from eos.vmit import (
     RESIDUAL_TOL, SpeciesFlags, Parameters, eos_point, eos_response,
-    compute_quark_thermo, compute_vector_field, get_vmit_default,
-    solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
-    solve_vmit_trapped_neutrinos,
+    kinetic_thermo, vector_field, Parameters,
+    solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
+    solve_beta_eq_neutrino_trapped,
 )
 from eos.general.thermodynamics_leptons import (
     electron_thermo, neutrino_thermo, photon_thermo,
@@ -90,14 +90,13 @@ def _states(par, grid, T):
     """One solved state per mode, at each density of the grid."""
     out = []
     for n_B in grid:
-        out.append(("beta", solve_vmit_beta_eq(n_B, T, params=par)))
-        out.append(("yc", solve_vmit_fixed_yc(n_B, 0.3, T, params=par)))
-        out.append(("yc_nolep", solve_vmit_fixed_yc(n_B, 0.3, T, params=par,
-                                                    include_electrons=False)))
-        out.append(("ycys", solve_vmit_fixed_yc_ys(n_B, 0.0, 1.0, T,
-                                                   params=par)))
-        out.append(("trapped", solve_vmit_trapped_neutrinos(n_B, 0.4, T,
-                                                            params=par)))
+        out.append(("beta", solve_beta_eq_neutrinoless(n_B, T, params=par)))
+        out.append(("yc", solve_fixed_yc(n_B, 0.3, T, params=par)))
+        out.append(("yc_nolep", solve_fixed_yc(n_B, 0.3, T, params=par,
+                                               include_electrons=False)))
+        out.append(("ycys", solve_fixed_yc_ys(n_B, 0.0, 1.0, T, params=par)))
+        out.append(("trapped", solve_beta_eq_neutrino_trapped(n_B, 0.4, T,
+                                                             params=par)))
     return out
 
 
@@ -126,12 +125,12 @@ def _check_mean_field(par, grid, T):
     worst = 0.0
     for _, r in _states(par, grid, T):
         V_direct = par.a * hc * (r.n_u + r.n_d + r.n_s)
-        V_module = compute_vector_field(r.n_u, r.n_d, r.n_s, par)
+        V_module = vector_field(r.n_u, r.n_d, r.n_s, par)
         worst = max(worst, abs(V_direct - V_module) / max(abs(V_direct), 1.0))
         # mu_eff = mu - V must reproduce the density the solver settled on
         for mu, n, m in ((r.mu_u, r.n_u, par.m_u), (r.mu_d, r.n_d, par.m_d),
                          (r.mu_s, r.n_s, par.m_s)):
-            n_from_mu = compute_quark_thermo(mu - V_module, T, m).n
+            n_from_mu = kinetic_thermo(mu - V_module, T, m).n
             worst = max(worst, abs(n_from_mu - n) / max(abs(n), 1e-12))
     return CheckResult("vector self-consistency", worst < 1e-8, worst,
                        "V = a hbar c sum n_q, n_q = n(mu_q - V)")
@@ -139,14 +138,14 @@ def _check_mean_field(par, grid, T):
 
 def _check_bag_signs(par):
     """eps_B = -P_B = B/(hbar c)^3, and eps_V = P_V."""
-    from eos.vmit import (compute_bag_energy, compute_bag_pressure,
-                          compute_vector_energy, compute_vector_pressure)
-    e_B, P_B = compute_bag_energy(par), compute_bag_pressure(par)
+    from eos.vmit import (bag_energy, bag_pressure,
+                          vector_energy, vector_pressure)
+    e_B, P_B = bag_energy(par), bag_pressure(par)
     errs = [abs(e_B + P_B) / abs(e_B),
             abs(e_B - par.B / hc3) / abs(e_B)]
     for n in (0.3, 1.0, 2.0):
-        e_V = compute_vector_energy(n, n, n, par)
-        P_V = compute_vector_pressure(n, n, n, par)
+        e_V = vector_energy(n, n, n, par)
+        P_V = vector_pressure(n, n, n, par)
         errs.append(abs(e_V - P_V) / max(abs(e_V), 1e-30))
     worst = max(errs)
     return CheckResult("bag / vector signs", worst < 1e-14, worst,
@@ -157,7 +156,7 @@ def _check_mode_closures(par, grid, T):
     """Each mode's defining conditions, evaluated at its own solution."""
     worst = 0.0
     for n_B in grid:
-        r = solve_vmit_beta_eq(n_B, T, params=par)
+        r = solve_beta_eq_neutrinoless(n_B, T, params=par)
         _, mu_C, mu_S = charge_potentials_from_quarks(r.mu_u, r.mu_d, r.mu_s)
         _, n_C, _ = quark_charges(r.n_u, r.n_d, r.n_s)
         mu_scale = abs(r.mu_B)
@@ -166,17 +165,17 @@ def _check_mode_closures(par, grid, T):
                     abs(mu_S) / mu_scale,              # strangeness equilibrium
                     abs(n_C - r.n_e) / n_B)            # electric neutrality
 
-        r = solve_vmit_fixed_yc(n_B, 0.3, T, params=par)
+        r = solve_fixed_yc(n_B, 0.3, T, params=par)
         _, n_C, _ = quark_charges(r.n_u, r.n_d, r.n_s)
         _, _, mu_S = charge_potentials_from_quarks(r.mu_u, r.mu_d, r.mu_s)
         worst = max(worst, abs(n_C - 0.3 * n_B) / n_B,
                     abs(mu_S) / abs(r.mu_B), abs(n_C - r.n_e) / n_B)
 
-        r = solve_vmit_fixed_yc_ys(n_B, 0.0, 1.0, T, params=par)
+        r = solve_fixed_yc_ys(n_B, 0.0, 1.0, T, params=par)
         _, n_C, n_S = quark_charges(r.n_u, r.n_d, r.n_s)
         worst = max(worst, abs(n_C - 0.0) / n_B, abs(n_S - 1.0 * n_B) / n_B)
 
-        r = solve_vmit_trapped_neutrinos(n_B, 0.4, T, params=par)
+        r = solve_beta_eq_neutrino_trapped(n_B, 0.4, T, params=par)
         _, mu_C, _ = charge_potentials_from_quarks(r.mu_u, r.mu_d, r.mu_s)
         worst = max(worst, abs(mu_C + r.mu_e - r.mu_nu) / abs(r.mu_B),
                     abs((r.n_e + r.n_nu) / n_B - 0.4))
@@ -196,8 +195,8 @@ def _check_free_gas_limit(par, grid, T):
                       a=0.0, B4=0.0)
     worst = 0.0
     for n_B in grid:
-        r = solve_vmit_beta_eq(n_B, T, params=free)
-        gases = [compute_quark_thermo(mu, T, m) for mu, m in
+        r = solve_beta_eq_neutrinoless(n_B, T, params=free)
+        gases = [kinetic_thermo(mu, T, m) for mu, m in
                  ((r.mu_u, free.m_u), (r.mu_d, free.m_d), (r.mu_s, free.m_s))]
         P_kin = sum(g.P for g in gases)
         eps_kin = sum(g.e for g in gases)
@@ -235,7 +234,7 @@ def run_full_check(par=None, grid=None, T=10.0):
     The density grid stays above the bag's unbinding point, where quark matter
     exists at all: below it there is no positive-pressure solution to check.
     """
-    par = par or get_vmit_default()
+    par = par or Parameters.default()
     grid = np.array(grid) if grid is not None else np.array([0.45, 0.80, 1.30])
 
     report = FullCheckReport()

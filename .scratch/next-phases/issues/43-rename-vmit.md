@@ -1,7 +1,7 @@
 # Apply the approved renames — eos/vmit
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 10, 42
 Parent: ../map.md
 
@@ -118,3 +118,94 @@ All three also rewrite `test/baseline/generate_baseline.py`. Run them one at a
 time. The document tickets (30, 31, 32, 33, 35, 36) ARE disjoint from these and
 from each other, and need no pytest run, so they parallelise freely — their only
 shared file is `docs/eos.bib`, which is append-only.
+
+
+## Resolution
+
+**23 renames across 24 files; 0 added failures; `test/baseline/` unmoved.**
+
+All three groups applied. Rule 3's fourteen `compute_*` names lost the prefix,
+the two records that repeated the package are `EoSPoint` and `MatterThermo`
+(vmit defines its own, as `zl`, `alphabag`, `njl`, `ccdm` and `did` do, rather
+than taking `eos.general.state`'s), and the seven vocabulary names landed:
+`Parameters.default()`, the four §3-named solvers, `warm_start(point, mode)`
+and `default_guess(mode, ...)`. The three frozen `compute_tables.py` symbols
+were not touched. `DEFERRED.md`'s vmit entry now reads DONE and says what was
+done; the stale "vmit and sfho have not" clause in the `dd2` entry above it
+is corrected to name sfho alone.
+
+**The two collisions the ticket predicted were both real, and one was NOT the
+one the ticket named.**
+
+- `eos/vmit/table.py:188` — as recorded: the local `def warm_start(point)`
+  adapter would have called itself. It became `def seed(point)`, matching
+  `eos/zl/table.py:165` and `eos/did/table.py:158`, which already use that
+  name for the same one-argument closure.
+- **`eos/vmit/solver.py`, four sites, not in the ticket**: each solver bound a
+  LOCAL `default_guess = get_default_guess_<mode>(...)` before using it, so
+  introducing a module-level `default_guess` would have made every one of them
+  an `UnboundLocalError`. Loud rather than silent — unlike ticket 42's case —
+  but the same shape. The locals are now `x0_default`.
+
+The AST check found neither predictively, because it compares *imported*
+against *defined* names and both of these are local bindings inside a function
+body. It ran clean before and after; what it is good for is the cross-module
+case, and it did confirm that.
+
+**`_GUESS_KIND` went with the rename.** `table.py` carried a four-entry table
+translating the §3 mode names into `result_to_guess`'s private strings
+(`beta_eq`, `trapped_neutrinos`, ...). Once `warm_start` and `default_guess`
+read the mode name itself, the table had nothing to translate.
+
+**Bit-identity was proved, not assumed.** Merging four cold-guess functions
+into one is the only part of this change that could move a number, so the four
+originals were reconstructed and compared against the merged
+`default_guess` across every mode x {6 densities} x {4 temperatures} x
+{3 Y_C} x {leptons on/off}: **every returned array is bit-identical**. The
+solvers therefore enter at exactly the same x0 and follow exactly the same
+path.
+
+**Five files needed an alias, for a reason worth recording.** vMIT's
+`thermo_from_mu` / `thermo_from_n` / `thermo_from_mu_n` are the sixth model to
+expose that vocabulary, and `eos/mixed/adapters.py` imports the same three
+names from `enjl`, `njl`, `ccdm`, `zl` and `alphabag` inside individual
+functions. A module-level unaliased vMIT import would have been shadowed
+function by function -- working, but exactly the ambiguity ticket 42 was bitten
+by. vMIT's are `_vmit_from_mu` / `_vmit_from_n` / `_vmit_from_mu_n` there,
+beside the existing `_zl_from_mu` and `_ab_from_mu`; `eos/zlvmit` takes
+`vmit_thermo_from_mu_n` beside its existing `zl_thermo_from_mu_n`, the
+convention `DEFERRED.md` already describes for that package. The two dead
+aliases in `mixed_phase_eos.py` (`get_vmit_guess`, `vmit_result_to_guess`,
+imported and never called) were repointed rather than deleted -- deleting is
+ticket 46's kind of decision, not a rename's.
+
+`get_vmit_custom()` was left alone, as the ticket directs.
+
+## Suite
+
+**14 failed, 1634 passed, 15 skipped** (`pytest test/ -q`, 20:37). **All 14
+are pre-existing**, verified by running the same tests against a detached
+worktree at HEAD with the pre-rename `eos/` and the test files reverted to the
+old call sites: the same 14 fail there, with byte-identical assertion messages
+and identical mismatch magnitudes.
+
+    8  test/baseline/  ccdm dd2 enjl njl sfho tov vmit zlvmit
+    3  test/dd2/       test_api.py x2, test_dd2_m8.py
+    3  test/tov/       test_solver_fast_robustness.py
+
+Two root causes, neither in this diff:
+
+- **dd2's NMP inversion no longer converges** (`inversion_failed`, isoscalar
+  residual 8.12e-02 against a 2e-02 floor). This is the 6 `test/dd2` +
+  `test/tov` failures AND the `dd2` baseline's `nmp.K_sat` / `nmp.Q_sat` /
+  `nmp.K_sym` drift -- one defect, seven tests. Present at HEAD.
+- **Baseline drift at the 1e-7..1e-10 level** in quantities the generator's own
+  docstring calls round-off: `ccdm`'s `field_residual`, `sfho`'s `mu_S` at
+  Y_S = 0, the tov sequences. vmit's is the sharpest illustration: `n_e` at
+  Y_C = 0 sits at 1.7e-13 where the stored `.npz` (dated 10 Aug) has 3.0e-12,
+  straddling the generator's 1e-12 gate, so `mu_e` is dropped from the fresh
+  run and reported as "no longer produced". Both numbers are zero to any
+  physics.
+
+Neither is touched here -- they are Stage 7 report material. **The map's
+"1648 passed, 15 skipped, 0 failed" line is stale.**

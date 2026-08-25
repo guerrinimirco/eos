@@ -21,17 +21,17 @@ is in `table.py`; the spec API (eos_point / eos_table) is in `api.py`. See
 `vmit.tex` for the physics.
 
 Usage:
-    from eos.vmit.solver import solve_vmit_beta_eq
-    result = solve_vmit_beta_eq(n_B=0.32, T=50.0)
+    from eos.vmit.solver import solve_beta_eq_neutrinoless
+    result = solve_beta_eq_neutrinoless(n_B=0.32, T=50.0)
     print(result.converged, result.P_total)
 """
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional
 
-from eos.vmit.parameters import Parameters, get_vmit_default
+from eos.vmit.parameters import Parameters
 from eos.vmit.thermodynamics import (
-    compute_quark_densities_for_solver, compute_vmit_thermo_from_mu_n, G_QUARK,
+    effective_state, thermo_from_mu_n, G_QUARK,
 )
 from eos.general.thermodynamics_leptons import (
     electron_thermo, neutrino_thermo, photon_thermo,
@@ -51,7 +51,7 @@ def _mu_scale(mu_u, mu_d):
 # RESULT DATACLASS
 # =============================================================================
 @dataclass
-class VMITEOSResult:
+class EoSPoint:
     """One solved vMIT state, with the status a caller must test first.
 
     `converged` is judged on `error`, the largest equilibrium residual after
@@ -102,144 +102,92 @@ class VMITEOSResult:
 
 
 # =============================================================================
-# INITIAL GUESS GENERATION
+# COLD GUESSES
 # =============================================================================
-def get_default_guess_beta_eq(n_B: float, T: float, params: Parameters) -> np.ndarray:
-    """Generate initial guess for beta equilibrium: [μ_u, μ_d, μ_s, μ_e, n_u, n_d, n_s]."""
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
-    
-    # Estimate quark densities with strange quark suppression at low density/temperature
-    # At high T or high nB, strange quarks are thermally populated
-    # At low T and low nB, strange quarks are suppressed due to mass threshold
-    strange_fraction = min(0.9, max(0.01, T / 100.0 + n_B / 0.5))
-    
-    # Initial guess: n_u ≈ n_d ≈ n_B, n_s slightly smaller at low density
-    n_u_est = n_B * 1.0
-    n_d_est = n_B * 1.0
-    n_s_est = n_B * strange_fraction
-    
-    # Fermi momentum estimates
-    kF_u = hc * (6.0 * PI2 * n_u_est / G_QUARK)**(1.0/3.0) if n_u_est > 0 else 0.0
-    kF_d = hc * (6.0 * PI2 * n_d_est / G_QUARK)**(1.0/3.0) if n_d_est > 0 else 0.0
-    kF_s = hc * (6.0 * PI2 * max(n_s_est, 1e-6) / G_QUARK)**(1.0/3.0)
-    
-    mu_u_est = np.sqrt(kF_u**2 + m_u**2)
-    mu_d_est = np.sqrt(kF_d**2 + m_d**2)
-    mu_s_est = np.sqrt(kF_s**2 + m_s**2)
-    mu_e_est = max(0.0, mu_d_est - mu_u_est)  # Beta equilibrium estimate
-    
-    # Add vector field estimate
-    V_est = params.a * hc * (n_u_est + n_d_est + n_s_est)
-    
-    return np.array([mu_u_est + V_est, mu_d_est + V_est, mu_s_est + V_est, 
-                     mu_e_est, n_u_est, n_d_est, n_s_est])
+def default_guess(mode: str, n_B: float, T: float, params: Parameters,
+                  Y_C: float = None, Y_S: float = None, Y_Le: float = None,
+                  leptons: bool = True) -> np.ndarray:
+    """The cold start of one mode.
 
+    Where the composition is unknown the quark densities are estimated first
+    -- n_u = n_d = n_B with the strange flavour thermally suppressed at low T
+    and low density -- and the potentials follow as sqrt(k_F^2 + m_q^2) at the
+    Fermi momentum of those densities, shifted by the vector field
+    V = a hbar c sum_q n_q they imply. Where the mode fixes the composition
+    the densities are not estimated but inverted from the constraints
+    themselves: at fixed Y_C and Y_S,
 
-def get_default_guess_fixed_yc(n_B: float, Y_C: float, T: float, 
-                                params: Parameters,
-                                include_electrons: bool = True) -> np.ndarray:
-    """
-    Generate initial guess for fixed Y_C.
-    
-    Returns [μ_u, μ_d, μ_s, n_u, n_d, n_s] if include_electrons=False,
-    Returns [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e] if include_electrons=True.
+        n_s = Y_S n_B,   n_u = (1 + Y_C) n_B,   n_d = 3 n_B - n_u - n_s
+
+    solves the charge, baryon and strangeness rows exactly, leaving only the
+    vector self-consistency for the solver to close.
+
+    The layouts are the unknown vectors of each mode's residual, so a guess is
+    only valid within its own mode.
     """
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
-    
-    # Estimate densities from constraints
-    n_s = n_B * 0.3  # Initial strange fraction
-    n_u = n_B + Y_C * n_B + n_s / 3.0
-    n_d = n_B - Y_C * n_B / 2.0
-    
-    n_u = max(n_u, n_B * 0.3)
-    n_d = max(n_d, n_B * 0.3)
-    n_s = max(n_s, n_B * 0.1)
-    
-    kF_u = hc * (6.0 * PI2 * n_u / G_QUARK)**(1.0/3.0) if n_u > 0 else 0.0
-    kF_d = hc * (6.0 * PI2 * n_d / G_QUARK)**(1.0/3.0) if n_d > 0 else 0.0
-    kF_s = hc * (6.0 * PI2 * n_s / G_QUARK)**(1.0/3.0) if n_s > 0 else 0.0
-    
-    mu_u_est = np.sqrt(kF_u**2 + m_u**2)
-    mu_d_est = np.sqrt(kF_d**2 + m_d**2)
-    mu_s_est = np.sqrt(kF_s**2 + m_s**2)
-    
-    if include_electrons:
-        # Estimate mu_e from n_e = n_Q = n_B * Y_C (charge neutrality)
-        n_e = n_B * Y_C
-        kF_e = hc * (3 * PI2 * n_e)**(1.0/3.0) if n_e > 0 else 0.0
-        m_e = 0.511  # MeV
-        mu_e_est = np.sqrt(kF_e**2 + m_e**2) if n_e > 0 else m_e
-        return np.array([mu_u_est, mu_d_est, mu_s_est, n_u, n_d, n_s, mu_e_est])
-    
-    return np.array([mu_u_est, mu_d_est, mu_s_est, n_u, n_d, n_s])
 
+    def mu_of_n(n, m):
+        """sqrt(k_F^2 + m^2) at the Fermi momentum of density n."""
+        kF = hc * (6.0 * PI2 * max(n, 0.0) / G_QUARK)**(1.0 / 3.0)
+        return np.sqrt(kF**2 + m**2)
 
+    def mu_e_of_n(n_e):
+        """The electron potential neutralizing a charge density n_e."""
+        m_e = 0.511                                       # MeV
+        if n_e <= 0.0:
+            return m_e
+        kF_e = hc * (3.0 * PI2 * n_e)**(1.0 / 3.0)
+        return np.sqrt(kF_e**2 + m_e**2)
 
-def get_default_guess_fixed_yc_ys(n_B: float, Y_C: float, Y_S: float, T: float,
-                                    params: Parameters,
-                                    include_electrons: bool = True) -> np.ndarray:
-    """
-    Generate initial guess for fixed Y_C AND Y_S.
-    
-    Returns [μ_u, μ_d, μ_s, n_u, n_d, n_s] if include_electrons=False,
-    Returns [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e] if include_electrons=True.
-    
-    Analytic solution for densities (ignoring temperature effects on density):
-      n_s = 3 * n_B * Y_S
-      n_u = n_B * (1 + Y_C)
-      n_d = 3 * n_B - n_s - n_u
-          = n_B * (2 - Y_C) - n_s
-    """
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
-    
-    # Exact densities satisfying constraints
-    n_s = n_B * Y_S
-    n_u = n_B * (1.0 + Y_C)
-    n_d = 3.0 * n_B - n_u - n_s
-    
-    # Ensure positivity for robustness (though physically should be positive)
-    n_u = max(n_u, 1e-10)
-    n_d = max(n_d, 1e-10)
-    n_s = max(n_s, 1e-10)
-    
-    # Calculate Fermi momenta
-    kF_u = hc * (6.0 * PI2 * n_u / G_QUARK)**(1.0/3.0)
-    kF_d = hc * (6.0 * PI2 * n_d / G_QUARK)**(1.0/3.0)
-    kF_s = hc * (6.0 * PI2 * n_s / G_QUARK)**(1.0/3.0)
-    
-    # Calculate chemical potentials
-    mu_u_est = np.sqrt(kF_u**2 + m_u**2)
-    mu_d_est = np.sqrt(kF_d**2 + m_d**2)
-    mu_s_est = np.sqrt(kF_s**2 + m_s**2)
-    
-    if include_electrons:
-        # Estimate mu_e from n_e = n_Q = n_B * Y_C (charge neutrality)
-        n_e = n_B * Y_C
-        kF_e = hc * (3 * PI2 * n_e)**(1.0/3.0) if n_e > 0 else 0.0
-        m_e = 0.511  # MeV
-        mu_e_est = np.sqrt(kF_e**2 + m_e**2) if n_e > 0 else m_e
-        return np.array([mu_u_est, mu_d_est, mu_s_est, n_u, n_d, n_s, mu_e_est])
-    
-    return np.array([mu_u_est, mu_d_est, mu_s_est, n_u, n_d, n_s])
+    if mode in ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped"):
+        # Strange quarks are suppressed by their mass threshold at low T and
+        # low density, and thermally populated as either rises.
+        strange_fraction = min(0.9, max(0.01, T / 100.0 + n_B / 0.5))
+        n_u, n_d = n_B, n_B
+        n_s = n_B * strange_fraction
 
+        mu_u = mu_of_n(n_u, m_u)
+        mu_d = mu_of_n(n_d, m_d)
+        mu_s = mu_of_n(max(n_s, 1e-6), m_s)
+        mu_e = max(0.0, mu_d - mu_u)          # beta equilibrium estimate
+        V = params.a * hc * (n_u + n_d + n_s)
 
-def get_default_guess_trapped_neutrinos(n_B: float, Y_L: float, T: float,
-                                          params: Parameters) -> np.ndarray:
-    """Generate initial guess for trapped neutrinos: [μ_u, μ_d, μ_s, μ_e, μ_ν, n_u, n_d, n_s]."""
-    guess_beta = get_default_guess_beta_eq(n_B, T, params)
-    mu_nu_est = 10.0
-    return np.array([guess_beta[0], guess_beta[1], guess_beta[2], 
-                     guess_beta[3], mu_nu_est, guess_beta[4], guess_beta[5], guess_beta[6]])
+        if mode == "beta_eq_neutrinoless":
+            return np.array([mu_u + V, mu_d + V, mu_s + V, mu_e,
+                             n_u, n_d, n_s])
+        mu_nu = 10.0
+        return np.array([mu_u + V, mu_d + V, mu_s + V, mu_e, mu_nu,
+                         n_u, n_d, n_s])
+
+    if mode == "fixed_YC":
+        n_s = n_B * 0.3
+        n_u = max(n_B + Y_C * n_B + n_s / 3.0, n_B * 0.3)
+        n_d = max(n_B - Y_C * n_B / 2.0, n_B * 0.3)
+    elif mode == "fixed_YC_YS":
+        # Exact: these densities satisfy the charge, baryon and strangeness
+        # rows, so only the vector self-consistency is left to solve.
+        n_s = max(n_B * Y_S, 1e-10)
+        n_u = max(n_B * (1.0 + Y_C), 1e-10)
+        n_d = max(3.0 * n_B - n_u - n_s, 1e-10)
+    else:
+        raise ValueError(f"unknown mode {mode!r}")
+
+    x = [mu_of_n(n_u, m_u), mu_of_n(n_d, m_d), mu_of_n(n_s, m_s),
+         n_u, n_d, n_s]
+    if leptons:
+        x.append(mu_e_of_n(n_B * Y_C))    # n_e = n_C = Y_C n_B
+    return np.array(x)
 
 
 # =============================================================================
 # SOLVER: BETA EQUILIBRIUM
 # =============================================================================
-def solve_vmit_beta_eq(
+def solve_beta_eq_neutrinoless(
     n_B: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
-) -> VMITEOSResult:
+) -> EoSPoint:
     """
     Solve vMIT EOS in beta equilibrium with charge neutrality.
     
@@ -258,24 +206,24 @@ def solve_vmit_beta_eq(
         initial_guess: Initial guess [μ_u, μ_d, μ_s, μ_e, n_u, n_d, n_s]
         
     Returns:
-        VMITEOSResult with all thermodynamic quantities
+        EoSPoint with all thermodynamic quantities
     """
     if params is None:
-        params = get_vmit_default()
+        params = Parameters.default()
     
-    result = VMITEOSResult(n_B=n_B, T=T)
+    result = EoSPoint(n_B=n_B, T=T)
     
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    default_guess = get_default_guess_beta_eq(n_B, T, params)
-    x0 = default_guess if initial_guess is None else initial_guess
-    x0_fallback = None if initial_guess is None else default_guess
+    x0_default = default_guess("beta_eq_neutrinoless", n_B, T, params)
+    x0 = x0_default if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else x0_default
 
     def equations(x):
         mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
 
         # Compute effective μ and densities
-        qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
         n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
 
         eq1 = qmd.n_u_calc - n_u
@@ -303,7 +251,7 @@ def solve_vmit_beta_eq(
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
     
     # Compute quark thermodynamics using helper function
-    q_thermo = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
     
     # Add electron contribution
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
@@ -334,12 +282,12 @@ def solve_vmit_beta_eq(
 # =============================================================================
 # SOLVER: FIXED Y_C
 # =============================================================================
-def solve_vmit_fixed_yc(
+def solve_fixed_yc(
     n_B: float, Y_C: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     include_electrons: bool = True,
     initial_guess: Optional[np.ndarray] = None
-) -> VMITEOSResult:
+) -> EoSPoint:
     """
     Solve vMIT EOS with fixed charge fraction Y_C (strangeness equilibrium).
     
@@ -353,16 +301,16 @@ def solve_vmit_fixed_yc(
         - Strangeness eq: μ_s = μ_d
     """
     if params is None:
-        params = get_vmit_default()
+        params = Parameters.default()
     
-    result = VMITEOSResult(n_B=n_B, T=T, Y_C=Y_C)
+    result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C)
     
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    default_guess = get_default_guess_fixed_yc(n_B, Y_C, T, params,
-                                               include_electrons)
-    x0 = default_guess if initial_guess is None else initial_guess
-    x0_fallback = None if initial_guess is None else default_guess
+    x0_default = default_guess("fixed_YC", n_B, T, params, Y_C=Y_C,
+                               leptons=include_electrons)
+    x0 = x0_default if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else x0_default
 
     if include_electrons:
         # Solve 7 equations with electron charge neutrality
@@ -370,7 +318,7 @@ def solve_vmit_fixed_yc(
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
             eq1 = qmd.n_u_calc - n_u
@@ -406,7 +354,7 @@ def solve_vmit_fixed_yc(
             mu_u, mu_d, mu_s, n_u, n_d, n_s = x
 
             # Compute effective μ and densities
-            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
 
             eq1 = qmd.n_u_calc - n_u
             eq2 = qmd.n_d_calc - n_d
@@ -434,7 +382,7 @@ def solve_vmit_fixed_yc(
     result.Y_s = n_s / n_B 
     
     # Compute quark thermodynamics using helper function
-    q_thermo = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
     
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
@@ -463,12 +411,12 @@ def solve_vmit_fixed_yc(
 # =============================================================================
 # SOLVER: FIXED Y_C AND Y_S
 # =============================================================================
-def solve_vmit_fixed_yc_ys(
+def solve_fixed_yc_ys(
     n_B: float, Y_C: float, Y_S: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     include_electrons: bool = True,
     initial_guess: Optional[np.ndarray] = None
-) -> VMITEOSResult:
+) -> EoSPoint:
     """
     Solve vMIT EOS with fixed charge fraction Y_C AND strangeness fraction Y_S.
     
@@ -477,16 +425,16 @@ def solve_vmit_fixed_yc_ys(
         with charge neutrality n_e(μ_e) = n_Q = n_B * Y_C
     """
     if params is None:
-        params = get_vmit_default()
+        params = Parameters.default()
     
-    result = VMITEOSResult(n_B=n_B, T=T, Y_C=Y_C, Y_S=Y_S)
+    result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C, Y_S=Y_S)
     
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    default_guess = get_default_guess_fixed_yc_ys(n_B, Y_C, Y_S, T, params,
-                                                  include_electrons)
-    x0 = default_guess if initial_guess is None else initial_guess
-    x0_fallback = None if initial_guess is None else default_guess
+    x0_default = default_guess("fixed_YC_YS", n_B, T, params, Y_C=Y_C,
+                               Y_S=Y_S, leptons=include_electrons)
+    x0 = x0_default if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else x0_default
     
     if include_electrons:
         # Solve 7 equations with electron charge neutrality
@@ -494,7 +442,7 @@ def solve_vmit_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
             eq1 = qmd.n_u_calc - n_u
@@ -530,7 +478,7 @@ def solve_vmit_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s = x
             
             # Compute effective μ and densities
-            qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
             
             eq1 = qmd.n_u_calc - n_u
             eq2 = qmd.n_d_calc - n_d
@@ -558,7 +506,7 @@ def solve_vmit_fixed_yc_ys(
     result.Y_s = n_s / n_B 
     
     # Compute quark thermodynamics using helper function
-    q_thermo = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
     
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
@@ -587,32 +535,33 @@ def solve_vmit_fixed_yc_ys(
 # =============================================================================
 # SOLVER: TRAPPED NEUTRINOS
 # =============================================================================
-def solve_vmit_trapped_neutrinos(
+def solve_beta_eq_neutrino_trapped(
     n_B: float, Y_L: float, T: float, params: Parameters = None,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
-) -> VMITEOSResult:
+) -> EoSPoint:
     """
     Solve vMIT EOS with trapped neutrinos (fixed lepton fraction Y_L).
     
     8 equations, 8 unknowns: [μ_u, μ_d, μ_s, μ_e, μ_ν, n_u, n_d, n_s]
     """
     if params is None:
-        params = get_vmit_default()
+        params = Parameters.default()
     
-    result = VMITEOSResult(n_B=n_B, T=T, Y_L=Y_L)
+    result = EoSPoint(n_B=n_B, T=T, Y_L=Y_L)
     
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
     
-    default_guess = get_default_guess_trapped_neutrinos(n_B, Y_L, T, params)
-    x0 = default_guess if initial_guess is None else initial_guess
-    x0_fallback = None if initial_guess is None else default_guess
+    x0_default = default_guess("beta_eq_neutrino_trapped", n_B, T, params,
+                               Y_Le=Y_L)
+    x0 = x0_default if initial_guess is None else initial_guess
+    x0_fallback = None if initial_guess is None else x0_default
 
     def equations(x):
         mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
         
         # Compute effective μ and densities
-        qmd = compute_quark_densities_for_solver(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_thermo = neutrino_thermo(mu_nu, T, include_antiparticles=True)
         
@@ -644,7 +593,7 @@ def solve_vmit_trapped_neutrinos(
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
     
     # Compute quark thermodynamics using helper function
-    q_thermo = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
     
     # Add lepton contributions
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
@@ -677,29 +626,27 @@ def solve_vmit_trapped_neutrinos(
 
 
 # =============================================================================
-# RESULT TO GUESS CONVERSION
+# WARM START
 # =============================================================================
-def result_to_guess(result: VMITEOSResult, eq_type: str, include_electrons: bool = True) -> np.ndarray:
-    """Convert result to initial guess array for next n_B point.
-    
-    Args:
-        result: Previous result to extract guess from
-        eq_type: Equilibrium type ('beta_eq', 'fixed_yc', 'fixed_yc_ys', 'trapped_neutrinos')
-        include_electrons: For fixed_yc/fixed_yc_ys modes, whether electrons are included
+def warm_start(point: EoSPoint, mode: str,
+               leptons: bool = True) -> np.ndarray:
+    """The seed the next density takes from a solved point.
+
+    The layouts are the unknown vectors of each mode's residual, so a warm
+    start is only valid within its own mode. Along a density sweep the
+    potentials and the flavour densities vary smoothly, which is what carries
+    the continuation through the strange quark's onset.
     """
-    if eq_type == 'beta_eq':
-        return np.array([result.mu_u, result.mu_d, result.mu_s, result.mu_e,
-                         result.n_u, result.n_d, result.n_s])
-    elif eq_type in ('fixed_yc', 'fixed_yc_ys'):
-        if include_electrons:
-            return np.array([result.mu_u, result.mu_d, result.mu_s,
-                             result.n_u, result.n_d, result.n_s, result.mu_e])
-        else:
-            return np.array([result.mu_u, result.mu_d, result.mu_s,
-                             result.n_u, result.n_d, result.n_s])
-    elif eq_type == 'trapped_neutrinos':
-        return np.array([result.mu_u, result.mu_d, result.mu_s, result.mu_e, result.mu_nu,
-                         result.n_u, result.n_d, result.n_s])
-    else:
-        return np.array([result.mu_u, result.mu_d, result.mu_s,
-                         result.n_u, result.n_d, result.n_s])
+    if mode == "beta_eq_neutrinoless":
+        return np.array([point.mu_u, point.mu_d, point.mu_s, point.mu_e,
+                         point.n_u, point.n_d, point.n_s])
+    if mode == "beta_eq_neutrino_trapped":
+        return np.array([point.mu_u, point.mu_d, point.mu_s, point.mu_e,
+                         point.mu_nu, point.n_u, point.n_d, point.n_s])
+    if mode in ("fixed_YC", "fixed_YC_YS"):
+        x = [point.mu_u, point.mu_d, point.mu_s,
+             point.n_u, point.n_d, point.n_s]
+        if leptons:
+            x.append(point.mu_e)
+        return np.array(x)
+    raise ValueError(f"unknown mode {mode!r}")

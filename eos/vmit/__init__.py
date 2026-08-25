@@ -10,24 +10,22 @@ the mode and the species flags. See `vmit.tex` for the physics and
 `eos.mixed` for the hybrid hadron-quark construction this is the quark half
 of.
 """
-from eos.vmit.parameters import Parameters, get_vmit_default, get_vmit_custom
+from eos.vmit.parameters import Parameters, get_vmit_custom
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.thermodynamics import (
-    QuarkThermo, VMITThermo, QuarkMuDensity,
-    compute_quark_thermo, compute_quark_density,
-    compute_vector_field, compute_vector_pressure, compute_vector_energy,
-    compute_bag_pressure, compute_bag_energy,
-    compute_mu_effective, compute_mu_physical, compute_effective_mu_quarks,
-    compute_quark_densities_for_solver,
-    compute_vmit_thermo_from_mu_n,
-    compute_quark_matter_thermo_from_n, compute_quark_matter_thermo_from_mu,
+    QuarkThermo, MatterThermo, QuarkMuDensity,
+    kinetic_thermo, quark_density,
+    vector_field, vector_pressure, vector_energy,
+    bag_pressure, bag_energy,
+    effective_potential, physical_potentials, effective_potentials,
+    effective_state,
+    thermo_from_mu_n,
+    thermo_from_n, thermo_from_mu,
 )
 from eos.vmit.solver import (
-    VMITEOSResult, RESIDUAL_TOL, scaled_residual_max, solve_system,
-    solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
-    solve_vmit_trapped_neutrinos, result_to_guess,
-    get_default_guess_beta_eq, get_default_guess_fixed_yc,
-    get_default_guess_fixed_yc_ys, get_default_guess_trapped_neutrinos,
+    EoSPoint, RESIDUAL_TOL, scaled_residual_max, solve_system,
+    solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
+    solve_beta_eq_neutrino_trapped, warm_start, default_guess,
 )
 from eos.vmit.table import (
     TableSpec, TableResult, build_table, rows_from_result, quark_row,
@@ -39,20 +37,18 @@ from eos.vmit.api import (
 from eos.general.table_io import save_table, load_table, export_csv
 
 __all__ = [
-    "Parameters", "get_vmit_default", "get_vmit_custom", "SpeciesFlags",
-    "QuarkThermo", "VMITThermo", "QuarkMuDensity",
-    "compute_quark_thermo", "compute_quark_density",
-    "compute_vector_field", "compute_vector_pressure", "compute_vector_energy",
-    "compute_bag_pressure", "compute_bag_energy",
-    "compute_mu_effective", "compute_mu_physical",
-    "compute_effective_mu_quarks", "compute_quark_densities_for_solver",
-    "compute_vmit_thermo_from_mu_n",
-    "compute_quark_matter_thermo_from_n", "compute_quark_matter_thermo_from_mu",
-    "VMITEOSResult", "RESIDUAL_TOL", "scaled_residual_max", "solve_system",
-    "solve_vmit_beta_eq", "solve_vmit_fixed_yc", "solve_vmit_fixed_yc_ys",
-    "solve_vmit_trapped_neutrinos", "result_to_guess",
-    "get_default_guess_beta_eq", "get_default_guess_fixed_yc",
-    "get_default_guess_fixed_yc_ys", "get_default_guess_trapped_neutrinos",
+    "Parameters", "get_vmit_custom", "SpeciesFlags",
+    "QuarkThermo", "MatterThermo", "QuarkMuDensity",
+    "kinetic_thermo", "quark_density",
+    "vector_field", "vector_pressure", "vector_energy",
+    "bag_pressure", "bag_energy",
+    "effective_potential", "physical_potentials",
+    "effective_potentials", "effective_state",
+    "thermo_from_mu_n",
+    "thermo_from_n", "thermo_from_mu",
+    "EoSPoint", "RESIDUAL_TOL", "scaled_residual_max", "solve_system",
+    "solve_beta_eq_neutrinoless", "solve_fixed_yc", "solve_fixed_yc_ys",
+    "solve_beta_eq_neutrino_trapped", "warm_start", "default_guess",
     "TableSpec", "TableResult", "build_table", "rows_from_result",
     "quark_row", "solve_at", "MODE_FRACTIONS",
     "eos_point", "eos_table", "eos_response", "PointResult",

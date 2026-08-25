@@ -350,8 +350,8 @@ def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
         raise ValueError("n_B0 is required: the density is the unknown and "
                          "its solve must start somewhere")
     if phases is None and vmit_params is None:
-        from eos.vmit.parameters import get_vmit_default
-        vmit_params = get_vmit_default()
+        from eos.vmit.parameters import Parameters as VMITParameters
+        vmit_params = VMITParameters.default()
     ctx = build_mixed_ctx(spec, eta, None, par, flags, vmit_params, T=T,
                           n_B_guess=float(n_B0), chi=float(chi),
                           phases=phases, muons=muons)

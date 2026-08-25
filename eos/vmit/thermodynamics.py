@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 from eos.general.physics_constants import hc, hc3
-from eos.vmit.parameters import Parameters, get_vmit_default
+from eos.vmit.parameters import Parameters
 from eos.general.fermi_integrals import solve_fermi_jel, invert_fermi_density
 from eos.general import particles
 from eos.general.basis import quark_charges, charge_potentials_from_quarks
@@ -57,7 +57,7 @@ class QuarkThermo:
 
 
 @dataclass
-class VMITThermo:
+class MatterThermo:
     """A full vMIT quark-matter state (no leptons)."""
     # Inputs
     n_u: float = 0.0       # Up quark density (fm^-3)
@@ -85,8 +85,8 @@ class VMITThermo:
 # =============================================================================
 # SINGLE QUARK THERMODYNAMICS
 # =============================================================================
-def compute_quark_thermo(mu_eff: float, T: float, m: float,
-                          include_antiparticles: bool = True) -> QuarkThermo:
+def kinetic_thermo(mu_eff: float, T: float, m: float,
+                   include_antiparticles: bool = True) -> QuarkThermo:
     """Kinetic n, P, e, s of one flavour at effective potential `mu_eff`."""
     result = solve_fermi_jel(mu_eff, T, m, G_QUARK,
                              include_antiparticles=include_antiparticles)
@@ -99,8 +99,8 @@ def compute_quark_thermo(mu_eff: float, T: float, m: float,
     )
 
 
-def compute_quark_density(mu_eff: float, T: float, m: float,
-                           include_antiparticles: bool = True) -> float:
+def quark_density(mu_eff: float, T: float, m: float,
+                  include_antiparticles: bool = True) -> float:
     """Number density of one flavour at effective potential `mu_eff`."""
     result = solve_fermi_jel(mu_eff, T, m, G_QUARK,
                              include_antiparticles=include_antiparticles)
@@ -110,8 +110,8 @@ def compute_quark_density(mu_eff: float, T: float, m: float,
 # =============================================================================
 # VECTOR FIELD
 # =============================================================================
-def compute_vector_field(n_u: float, n_d: float, n_s: float,
-                          params: Parameters) -> float:
+def vector_field(n_u: float, n_d: float, n_s: float,
+                 params: Parameters) -> float:
     """The vector mean field V = a hbar c (n_u + n_d + n_s), in MeV.
 
     a is in fm^2 and the densities in fm^-3, so hbar c (MeV fm) closes the
@@ -121,28 +121,28 @@ def compute_vector_field(n_u: float, n_d: float, n_s: float,
     return params.a * hc * n_total
 
 
-def compute_vector_pressure(n_u: float, n_d: float, n_s: float,
-                             params: Parameters) -> float:
+def vector_pressure(n_u: float, n_d: float, n_s: float,
+                    params: Parameters) -> float:
     """P_V = (1/2) a hbar c (n_u + n_d + n_s)^2, in MeV/fm^3."""
     n_total = n_u + n_d + n_s
     return 0.5 * params.a * hc * n_total**2
 
 
-def compute_vector_energy(n_u: float, n_d: float, n_s: float,
-                           params: Parameters) -> float:
+def vector_energy(n_u: float, n_d: float, n_s: float,
+                  params: Parameters) -> float:
     """eps_V = P_V: a vector field contributes equally to P and eps."""
-    return compute_vector_pressure(n_u, n_d, n_s, params)
+    return vector_pressure(n_u, n_d, n_s, params)
 
 
 # =============================================================================
 # BAG CONSTANT
 # =============================================================================
-def compute_bag_pressure(params: Parameters) -> float:
+def bag_pressure(params: Parameters) -> float:
     """P_B = -B/(hbar c)^3, in MeV/fm^3 — negative, the confining pressure."""
     return -params.B / hc3
 
 
-def compute_bag_energy(params: Parameters) -> float:
+def bag_energy(params: Parameters) -> float:
     """eps_B = +B/(hbar c)^3, in MeV/fm^3 — the bag's energy density."""
     return params.B / hc3
 
@@ -150,14 +150,14 @@ def compute_bag_energy(params: Parameters) -> float:
 # =============================================================================
 # EFFECTIVE CHEMICAL POTENTIAL
 # =============================================================================
-def compute_mu_effective(mu: float, n_u: float, n_d: float, n_s: float,
-                          params: Parameters) -> float:
+def effective_potential(mu: float, n_u: float, n_d: float, n_s: float,
+                        params: Parameters) -> float:
     """mu_eff = mu - V, the potential the Fermi integrals are evaluated at."""
-    V = compute_vector_field(n_u, n_d, n_s, params)
+    V = vector_field(n_u, n_d, n_s, params)
     return mu - V
 
 
-def compute_effective_mu_quarks(
+def effective_potentials(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
     params: Parameters
@@ -168,7 +168,7 @@ def compute_effective_mu_quarks(
     isospin and strangeness structure of the state lives entirely in the
     physical potentials.
     """
-    V = compute_vector_field(n_u, n_d, n_s, params)
+    V = vector_field(n_u, n_d, n_s, params)
     return mu_u - V, mu_d - V, mu_s - V
 
 
@@ -247,7 +247,7 @@ class QuarkMuDensity:
         return charge_potentials_from_quarks(self.mu_u, self.mu_d, self.mu_s)[2]
 
 
-def compute_quark_densities_for_solver(
+def effective_state(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
     T: float, params: Parameters
@@ -261,12 +261,12 @@ def compute_quark_densities_for_solver(
     """
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    mu_eff_u, mu_eff_d, mu_eff_s = compute_effective_mu_quarks(
+    mu_eff_u, mu_eff_d, mu_eff_s = effective_potentials(
         mu_u, mu_d, mu_s, n_u, n_d, n_s, params)
 
-    n_u_calc = compute_quark_density(mu_eff_u, T, m_u)
-    n_d_calc = compute_quark_density(mu_eff_d, T, m_d)
-    n_s_calc = compute_quark_density(mu_eff_s, T, m_s)
+    n_u_calc = quark_density(mu_eff_u, T, m_u)
+    n_d_calc = quark_density(mu_eff_d, T, m_d)
+    n_s_calc = quark_density(mu_eff_s, T, m_s)
 
     return QuarkMuDensity(
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s,
@@ -276,21 +276,21 @@ def compute_quark_densities_for_solver(
     )
 
 
-def compute_mu_physical(mu_eff: float, n_u: float, n_d: float, n_s: float,
-                         params: Parameters) -> float:
-    """mu = mu_eff + V, the inverse of `compute_mu_effective`."""
-    V = compute_vector_field(n_u, n_d, n_s, params)
+def physical_potentials(mu_eff: float, n_u: float, n_d: float, n_s: float,
+                        params: Parameters) -> float:
+    """mu = mu_eff + V, the inverse of `effective_potential`."""
+    V = vector_field(n_u, n_d, n_s, params)
     return mu_eff + V
 
 
 # =============================================================================
 # FULL QUARK MATTER THERMODYNAMICS (without leptons)
 # =============================================================================
-def compute_vmit_thermo_from_mu_n(
+def thermo_from_mu_n(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
     T: float, params: Parameters = None
-) -> VMITThermo:
+) -> MatterThermo:
     """Assemble a full quark-matter state from potentials and the mean field.
 
     Both the potentials and the densities are inputs because the densities
@@ -301,18 +301,18 @@ def compute_vmit_thermo_from_mu_n(
     returned densities are the computed ones, not the ones passed in.
     """
     if params is None:
-        params = get_vmit_default()
+        params = Parameters.default()
 
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
-    mu_eff_u, mu_eff_d, mu_eff_s = compute_effective_mu_quarks(
+    mu_eff_u, mu_eff_d, mu_eff_s = effective_potentials(
         mu_u, mu_d, mu_s, n_u, n_d, n_s, params
     )
 
     # Kinetic contributions from the Fermi integrals
-    thermo_u = compute_quark_thermo(mu_eff_u, T, m_u)
-    thermo_d = compute_quark_thermo(mu_eff_d, T, m_d)
-    thermo_s = compute_quark_thermo(mu_eff_s, T, m_s)
+    thermo_u = kinetic_thermo(mu_eff_u, T, m_u)
+    thermo_d = kinetic_thermo(mu_eff_d, T, m_d)
+    thermo_s = kinetic_thermo(mu_eff_s, T, m_s)
 
     n_u_calc = thermo_u.n
     n_d_calc = thermo_d.n
@@ -323,9 +323,9 @@ def compute_vmit_thermo_from_mu_n(
     s_kin = thermo_u.s + thermo_d.s + thermo_s.s
 
     # Vector and bag contributions
-    P_V = compute_vector_pressure(n_u_calc, n_d_calc, n_s_calc, params)
-    P_B = compute_bag_pressure(params)
-    e_B = compute_bag_energy(params)
+    P_V = vector_pressure(n_u_calc, n_d_calc, n_s_calc, params)
+    P_B = bag_pressure(params)
+    e_B = bag_energy(params)
 
     # eps_V = P_V for a vector field; the bag enters with opposite signs
     P_total = P_kin + P_V + P_B
@@ -340,7 +340,7 @@ def compute_vmit_thermo_from_mu_n(
 
     mu_B, mu_C, mu_S = charge_potentials_from_quarks(mu_u, mu_d, mu_s)
 
-    return VMITThermo(
+    return MatterThermo(
         n_u=n_u_calc, n_d=n_d_calc, n_s=n_s_calc, n_B=n_B, n_C=n_C, n_S=n_S,
         Y_C=Y_C, Y_S=Y_S,
         T=T,
@@ -349,7 +349,7 @@ def compute_vmit_thermo_from_mu_n(
     )
 
 
-def compute_quark_matter_thermo_from_n(
+def thermo_from_n(
     n_u: float, n_d: float, n_s: float, T: float,
     params: Parameters = None
 ) -> Tuple[float, float, float, float, float, float, float]:
@@ -363,7 +363,7 @@ def compute_quark_matter_thermo_from_n(
     in MeV/fm^3, s and n_B in fm^-3.
     """
     if params is None:
-        params = get_vmit_default()
+        params = Parameters.default()
 
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
@@ -375,21 +375,21 @@ def compute_quark_matter_thermo_from_n(
     mu_eff_s = invert_fermi_density(n_s, T, m_s, G_QUARK)
 
     # Physical chemical potentials
-    mu_u = compute_mu_physical(mu_eff_u, n_u, n_d, n_s, params)
-    mu_d = compute_mu_physical(mu_eff_d, n_u, n_d, n_s, params)
-    mu_s = compute_mu_physical(mu_eff_s, n_u, n_d, n_s, params)
+    mu_u = physical_potentials(mu_eff_u, n_u, n_d, n_s, params)
+    mu_d = physical_potentials(mu_eff_d, n_u, n_d, n_s, params)
+    mu_s = physical_potentials(mu_eff_s, n_u, n_d, n_s, params)
 
-    thermo_u = compute_quark_thermo(mu_eff_u, T, m_u)
-    thermo_d = compute_quark_thermo(mu_eff_d, T, m_d)
-    thermo_s = compute_quark_thermo(mu_eff_s, T, m_s)
+    thermo_u = kinetic_thermo(mu_eff_u, T, m_u)
+    thermo_d = kinetic_thermo(mu_eff_d, T, m_d)
+    thermo_s = kinetic_thermo(mu_eff_s, T, m_s)
 
     P_kin = thermo_u.P + thermo_d.P + thermo_s.P
     e_kin = thermo_u.e + thermo_d.e + thermo_s.e
     s_kin = thermo_u.s + thermo_d.s + thermo_s.s
 
-    P_V = compute_vector_pressure(n_u, n_d, n_s, params)
-    P_B = compute_bag_pressure(params)
-    e_B = compute_bag_energy(params)
+    P_V = vector_pressure(n_u, n_d, n_s, params)
+    P_B = bag_pressure(params)
+    e_B = bag_energy(params)
 
     P_quarks = P_kin + P_V + P_B
     e_quarks = e_kin + P_V + e_B      # eps_V = P_V
@@ -398,7 +398,7 @@ def compute_quark_matter_thermo_from_n(
     return (mu_u, mu_d, mu_s, P_quarks, e_quarks, s_quarks, n_B)
 
 
-def compute_quark_matter_thermo_from_mu(
+def thermo_from_mu(
     mu_u: float, mu_d: float, mu_s: float, T: float,
     params: Parameters = None
 ) -> Tuple[float, float, float, float, float, float, float]:
@@ -413,16 +413,16 @@ def compute_quark_matter_thermo_from_mu(
     from scipy.optimize import root
 
     if params is None:
-        params = get_vmit_default()
+        params = Parameters.default()
 
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
     def equations(mu_eff_vec):
         mu_eff_u, mu_eff_d, mu_eff_s = mu_eff_vec
-        n_u = compute_quark_thermo(mu_eff_u, T, m_u).n
-        n_d = compute_quark_thermo(mu_eff_d, T, m_d).n
-        n_s = compute_quark_thermo(mu_eff_s, T, m_s).n
-        V = compute_vector_field(n_u, n_d, n_s, params)
+        n_u = kinetic_thermo(mu_eff_u, T, m_u).n
+        n_d = kinetic_thermo(mu_eff_d, T, m_d).n
+        n_s = kinetic_thermo(mu_eff_s, T, m_s).n
+        V = vector_field(n_u, n_d, n_s, params)
         return [mu_eff_u + V - mu_u,
                 mu_eff_d + V - mu_d,
                 mu_eff_s + V - mu_s]
@@ -433,9 +433,9 @@ def compute_quark_matter_thermo_from_mu(
 
     mu_eff_u, mu_eff_d, mu_eff_s = sol.x
 
-    thermo_u = compute_quark_thermo(mu_eff_u, T, m_u)
-    thermo_d = compute_quark_thermo(mu_eff_d, T, m_d)
-    thermo_s = compute_quark_thermo(mu_eff_s, T, m_s)
+    thermo_u = kinetic_thermo(mu_eff_u, T, m_u)
+    thermo_d = kinetic_thermo(mu_eff_d, T, m_d)
+    thermo_s = kinetic_thermo(mu_eff_s, T, m_s)
 
     n_u, n_d, n_s = thermo_u.n, thermo_d.n, thermo_s.n
     n_B = quark_charges(n_u, n_d, n_s)[0]
@@ -444,9 +444,9 @@ def compute_quark_matter_thermo_from_mu(
     e_kin = thermo_u.e + thermo_d.e + thermo_s.e
     s_kin = thermo_u.s + thermo_d.s + thermo_s.s
 
-    P_V = compute_vector_pressure(n_u, n_d, n_s, params)
-    P_B = compute_bag_pressure(params)
-    e_B = compute_bag_energy(params)
+    P_V = vector_pressure(n_u, n_d, n_s, params)
+    P_B = bag_pressure(params)
+    e_B = bag_energy(params)
 
     P_quarks = P_kin + P_V + P_B
     e_quarks = e_kin + P_V + e_B

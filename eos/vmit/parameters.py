@@ -52,20 +52,20 @@ class Parameters:
         """The bag constant itself, B = (B^(1/4))^4, in MeV^4.
 
         Divide by (hbar c)^3 to reach the MeV/fm^3 the rest of the code uses;
-        `eos.vmit.compute_bag_pressure` is the one place that does.
+        `eos.vmit.bag_pressure` is the one place that does.
         """
         return self.B4**4
 
+    @classmethod
+    def default(cls) -> "Parameters":
+        """The working parametrization of this repository: B^(1/4) = 180 MeV,
+        a = 0.2 fm^2, m_s = 150 MeV.
 
-def get_vmit_default() -> Parameters:
-    """The working parametrization of this repository: B^(1/4) = 180 MeV,
-    a = 0.2 fm^2, m_s = 150 MeV.
-
-    A starting point, not a published fit: vMIT's parameters are what a hybrid
-    study scans, and which pair is right depends on the hadronic model it is
-    paired with. `eos.mixed.scan` moves over (B4, a, m_s).
-    """
-    return Parameters(name="vMIT_default")
+        A starting point, not a published fit: vMIT's parameters are what a
+        hybrid study scans, and which pair is right depends on the hadronic
+        model it is paired with. `eos.mixed.scan` moves over (B4, a, m_s).
+        """
+        return cls(name="vMIT_default")
 
 
 def get_vmit_custom(

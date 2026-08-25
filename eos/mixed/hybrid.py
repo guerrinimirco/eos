@@ -133,8 +133,8 @@ def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
     grid = np.asarray(n_B_grid, dtype=float)
     if phases is None:
         if vmit_params is None:
-            from eos.vmit.parameters import get_vmit_default
-            vmit_params = get_vmit_default()
+            from eos.vmit.parameters import Parameters as VMITParameters
+            vmit_params = VMITParameters.default()
         phases = default_pair(par, flags, vmit_params)
         if muons is None and flags is not None:
             muons = bool(flags.muons)

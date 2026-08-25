@@ -249,8 +249,8 @@ def sound_speed_frozen_quark(n_u, n_d, n_s, T=0.0, vmit_params=None,
     may contain muons, the role `flags.muons` plays elsewhere.
     """
     if vmit_params is None:
-        from eos.vmit.parameters import get_vmit_default
-        vmit_params = get_vmit_default()
+        from eos.vmit.parameters import Parameters as VMITParameters
+        vmit_params = VMITParameters.default()
 
     def at(scale):
         P, eps, n_C = _vmit_frozen_block(vmit_params, n_u * scale,

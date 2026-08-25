@@ -52,10 +52,10 @@ from eos.general.state import PhaseThermo
 from eos.dd2.thermodynamics import thermo_at_potentials
 from eos.dd2.solver import solve_beta_eq_octet, solve_octet, sweep_octet
 from eos.mixed.charges import Regime
-from eos.vmit.parameters import get_vmit_default
+from eos.vmit.parameters import Parameters as VMITParameters
 from eos.vmit.thermodynamics import (
-    compute_quark_matter_thermo_from_mu, compute_quark_matter_thermo_from_n,
-    compute_vmit_thermo_from_mu_n,
+    thermo_from_mu as _vmit_from_mu, thermo_from_n as _vmit_from_n,
+    thermo_from_mu_n as _vmit_from_mu_n,
 )
 
 #: Post-solve residual gate for a phase-internal solve. Matches the tolerance
@@ -156,7 +156,8 @@ def quark_phase(mu_u, mu_d, mu_s, T=0.0, params=None):
 
     The vMIT vector interaction makes mu_eff = mu - V(n) density-dependent, so
     the flavor densities are found by a small root solve
-    (`compute_quark_matter_thermo_from_mu`) before the full block is assembled.
+    (`eos.vmit.thermodynamics.thermo_from_mu`) before the full block is
+    assembled.
     Quark sector only: no leptons, no photons.
 
     Charge decomposition (vMIT's convention, shared with the hadronic side):
@@ -168,10 +169,10 @@ def quark_phase(mu_u, mu_d, mu_s, T=0.0, params=None):
     # engine. Revisit only if a profile says the quark side has become hot.
     """
     if params is None:
-        params = get_vmit_default()
-    n_u, n_d, n_s, _P, _e, _s, _nB = compute_quark_matter_thermo_from_mu(
-        mu_u, mu_d, mu_s, T, params)
-    th = compute_vmit_thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+        params = VMITParameters.default()
+    n_u, n_d, n_s, _P, _e, _s, _nB = _vmit_from_mu(mu_u, mu_d, mu_s, T,
+                                                   params)
+    th = _vmit_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
     # The single universal vector shift V = a hc (n_u + n_d + n_s); it is what
     # separates the physical potentials from the effective ones.
     V = params.a * hc * (th.n_u + th.n_d + th.n_s)
@@ -504,22 +505,20 @@ def _vmit_wing_solve(spec, n_B, T, params):
     conditions, which is what test/mixed/test_hybrid_modes.py asserts.
     """
     from eos.vmit.solver import (
-        solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
-        solve_vmit_trapped_neutrinos,
+        solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
+        solve_beta_eq_neutrino_trapped,
     )
     if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
         if spec.L_e is Regime.GLOBAL:
-            return solve_vmit_trapped_neutrinos(n_B, spec.targets["Y_Le"], T,
-                                                params=params)
-        return solve_vmit_beta_eq(n_B, T, params=params)
+            return solve_beta_eq_neutrino_trapped(n_B, spec.targets["Y_Le"],
+                                                  T, params=params)
+        return solve_beta_eq_neutrinoless(n_B, T, params=params)
     if spec.S is Regime.GLOBAL:
-        return solve_vmit_fixed_yc_ys(n_B, spec.targets["Y_C"],
-                                      spec.targets["Y_S"], T,
-                                      params=params,
-                                      include_electrons=spec.yc_leptons)
-    return solve_vmit_fixed_yc(n_B, spec.targets["Y_C"], T,
-                               params=params,
-                               include_electrons=spec.yc_leptons)
+        return solve_fixed_yc_ys(n_B, spec.targets["Y_C"],
+                                 spec.targets["Y_S"], T, params=params,
+                                 include_electrons=spec.yc_leptons)
+    return solve_fixed_yc(n_B, spec.targets["Y_C"], T, params=params,
+                          include_electrons=spec.yc_leptons)
 
 
 
@@ -544,8 +543,8 @@ def _vmit_frozen_block(params, n_u, n_d, n_s, T):
     Rescaling the flavour densities freezes the quark composition exactly — no
     re-solve, and no chance of the solve drifting to another root.
     """
-    _mu_u, _mu_d, _mu_s, P, eps, _s, _n_B = \
-        compute_quark_matter_thermo_from_n(n_u, n_d, n_s, T, params)
+    _mu_u, _mu_d, _mu_s, P, eps, _s, _n_B = _vmit_from_n(n_u, n_d, n_s, T,
+                                                         params)
     return P, eps, quark_charges(n_u, n_d, n_s)[1]
 
 
@@ -636,7 +635,7 @@ def vmit_phase(params=None):
     no flavour basis leaks past this closure.
     """
     if params is None:
-        params = get_vmit_default()
+        params = VMITParameters.default()
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
                return_state=False):
@@ -645,8 +644,8 @@ def vmit_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        from eos.vmit.solver import solve_vmit_beta_eq
-        q = solve_vmit_beta_eq(n_B, T, params=params)
+        from eos.vmit.solver import solve_beta_eq_neutrinoless
+        q = solve_beta_eq_neutrinoless(n_B, T, params=params)
         return q.mu_B, q.mu_e, q.mu_B
 
     def wing_sweep(spec, n_B_grid, T):

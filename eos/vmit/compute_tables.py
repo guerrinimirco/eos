@@ -15,8 +15,8 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Tuple
 
-from eos.vmit.solver import VMITEOSResult
-from eos.vmit.parameters import Parameters, get_vmit_default
+from eos.vmit.solver import EoSPoint
+from eos.vmit.parameters import Parameters
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.table import TableSpec, build_table
 
@@ -73,7 +73,7 @@ class VMITTableSettings:
     output_filename: Optional[str] = None  # Auto-generate if None
 
 
-def compute_vmit_table(settings: VMITTableSettings) -> Dict[Tuple, List[VMITEOSResult]]:
+def compute_vmit_table(settings: VMITTableSettings) -> Dict[Tuple, List[EoSPoint]]:
     """Solve the settings grid; returns {(T, [fractions...]): [results]}.
 
     The key of each line is the tuple of its grid values in the legacy order
@@ -84,7 +84,7 @@ def compute_vmit_table(settings: VMITTableSettings) -> Dict[Tuple, List[VMITEOSR
     if eq_type not in _LEGACY_MODES:
         raise ValueError(f"Unknown equilibrium type: {eq_type}")
 
-    params = settings.params if settings.params is not None else get_vmit_default()
+    params = settings.params if settings.params is not None else Parameters.default()
     frac_axes = _LEGACY_FRACTIONS[eq_type]
 
     axes = {"nB": np.asarray(settings.n_B_values),
@@ -112,7 +112,7 @@ def compute_vmit_table(settings: VMITTableSettings) -> Dict[Tuple, List[VMITEOSR
 
 
 def save_vmit_results(
-    all_results: Dict[Tuple, List[VMITEOSResult]],
+    all_results: Dict[Tuple, List[EoSPoint]],
     settings: VMITTableSettings,
     params: Parameters,
     eq_type: str
@@ -176,7 +176,7 @@ def save_vmit_results(
     print(f"\nSaved to: {filename}")
 
 
-def results_to_arrays(results: List[VMITEOSResult]) -> Dict[str, np.ndarray]:
+def results_to_arrays(results: List[EoSPoint]) -> Dict[str, np.ndarray]:
     """Converged points of one line as {quantity: array}, ready for plotting."""
     input_attrs = ['n_B', 'T', 'Y_C', 'Y_S', 'Y_L']
     mu_attrs = ['mu_u', 'mu_d', 'mu_s', 'mu_e', 'mu_nu']

@@ -362,8 +362,8 @@ def build_table(spec, progress=None, verbose=False):
     lines = lines_from_axes(axes, fixed=spec.fixed)
     vp = spec.vmit_params
     if spec.phases is None and vp is None:
-        from eos.vmit.parameters import get_vmit_default
-        vp = get_vmit_default()
+        from eos.vmit.parameters import Parameters as VMITParameters
+        vp = VMITParameters.default()
 
     rows, windows = [], {}
     hint_of = {}                  # last located window, per fraction combo

@@ -18,11 +18,11 @@ import numpy as np
 from eos.general.tabulate import (
     lines_from_axes, sweep_lines, TEMPERATURE_AXES,
 )
-from eos.vmit.parameters import Parameters, get_vmit_default
+from eos.vmit.parameters import Parameters
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.solver import (
-    solve_vmit_beta_eq, solve_vmit_fixed_yc, solve_vmit_fixed_yc_ys,
-    solve_vmit_trapped_neutrinos, result_to_guess,
+    solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
+    solve_beta_eq_neutrino_trapped, warm_start,
 )
 
 #: Mode name -> the fixed fractions it consumes, as a `TableSpec.axes` grid or
@@ -36,16 +36,6 @@ MODE_FRACTIONS = {
     "fixed_YC_YS": ("Y_C", "Y_S"),
 }
 
-#: Mode name -> the guess layout `result_to_guess` must produce for it. The
-#: unknown vectors differ between modes, so a warm start is only valid within
-#: its own mode.
-_GUESS_KIND = {
-    "beta_eq_neutrinoless": "beta_eq",
-    "beta_eq_neutrino_trapped": "trapped_neutrinos",
-    "fixed_YC": "fixed_yc",
-    "fixed_YC_YS": "fixed_yc_ys",
-}
-
 
 def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     """One point of a table: dispatch to the mode's solver.
@@ -57,23 +47,25 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     T = conditions["T"]
     photons = species.photons
     if mode == "beta_eq_neutrinoless":
-        return solve_vmit_beta_eq(n_B, T, params, include_photons=photons,
-                                  initial_guess=x0)
+        return solve_beta_eq_neutrinoless(n_B, T, params,
+                                          include_photons=photons,
+                                          initial_guess=x0)
     if mode == "beta_eq_neutrino_trapped":
-        return solve_vmit_trapped_neutrinos(n_B, conditions["Y_Le"], T, params,
-                                            include_photons=photons,
-                                            initial_guess=x0)
+        return solve_beta_eq_neutrino_trapped(n_B, conditions["Y_Le"], T,
+                                              params,
+                                              include_photons=photons,
+                                              initial_guess=x0)
     if mode == "fixed_YC":
-        return solve_vmit_fixed_yc(n_B, conditions["Y_C"], T, params,
-                                   include_photons=photons,
-                                   include_electrons=leptons,
-                                   initial_guess=x0)
+        return solve_fixed_yc(n_B, conditions["Y_C"], T, params,
+                              include_photons=photons,
+                              include_electrons=leptons,
+                              initial_guess=x0)
     if mode == "fixed_YC_YS":
-        return solve_vmit_fixed_yc_ys(n_B, conditions["Y_C"],
-                                      conditions["Y_S"], T, params,
-                                      include_photons=photons,
-                                      include_electrons=leptons,
-                                      initial_guess=x0)
+        return solve_fixed_yc_ys(n_B, conditions["Y_C"], conditions["Y_S"],
+                                 T, params,
+                                 include_photons=photons,
+                                 include_electrons=leptons,
+                                 initial_guess=x0)
     raise ValueError(f"unknown mode {mode!r}; expected one of "
                      f"{list(MODE_FRACTIONS)}")
 
@@ -120,7 +112,7 @@ class TableSpec:
             added. Has no meaning in the beta-equilibrium modes, where leptons
             are what the equilibrium is about.
     """
-    params: Parameters = field(default_factory=get_vmit_default)
+    params: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
     axes: dict = field(default_factory=dict)
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
@@ -179,17 +171,15 @@ def build_table(spec, skip_errors=True, rows=False, progress=None,
     """
     axes = {k: v for k, v in spec.axes.items() if k != "nB"}
     lines = lines_from_axes(axes, fixed=spec.fixed)
-    guess_kind = _GUESS_KIND[spec.mode]
 
     def solve(n_B, conditions, x0):
         return solve_at(spec.params, spec.mode, n_B, conditions, spec.include,
                         spec.leptons, x0=x0)
 
-    def warm_start(point):
-        return result_to_guess(point, guess_kind,
-                               include_electrons=spec.leptons)
+    def seed(point):
+        return warm_start(point, spec.mode, leptons=spec.leptons)
 
-    points = sweep_lines(lines, spec.axes["nB"], solve, warm_start=warm_start,
+    points = sweep_lines(lines, spec.axes["nB"], solve, warm_start=seed,
                          skip_errors=skip_errors, progress=progress,
                          verbose=verbose, mode=spec.mode)
     result = TableResult(spec=spec, nB=np.asarray(spec.axes["nB"], dtype=float),

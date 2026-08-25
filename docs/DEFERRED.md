@@ -296,16 +296,31 @@ own session where the baseline and `test_imports.py` are already being run:
               are the shared `eos.general.state` ones (above). What is left is
               `get_sfho_default()`, which carries the model name where
               section 13 asks for `Parameters.default()`.
-    vmit      PARTIAL, and this entry undercounted it badly. The file moves
-              are done (eos.py -> solver.py) and `VMITParams` is `Parameters`,
-              but BELOW `Parameters` the package was never converted at all:
-              the entry named two functions and there are ~23. Fourteen
-              `compute_*` names that carry nothing (section 13 rule 3), two
-              records repeating the package (`VMITEOSResult`, `VMITThermo`),
-              and seven section-13 vocabulary names including all four
-              `solve_vmit_*` entry points. Measured by the ticket-07 sweep,
-              which found vmit the worst package in the repository. zl and abpr
-              have converted; vmit and sfho have not.
+    vmit      DONE. The file moves were already done (eos.py -> solver.py) and
+              `VMITParams` was already `Parameters`; the ~23 names below
+              `Parameters` have now followed. The fourteen `compute_*` names
+              that carried nothing lost the prefix (`compute_quark_thermo` ->
+              `kinetic_thermo`, `compute_bag_pressure`/`_energy` ->
+              `bag_pressure`/`bag_energy`, `compute_quark_matter_thermo_from_mu`
+              -> `thermo_from_mu`, and so on); the two records that repeated
+              the package are `EoSPoint` and `MatterThermo`;
+              `get_vmit_default()` is `Parameters.default()`; the four
+              `solve_vmit_*` entry points carry their section 3 mode names;
+              and `result_to_guess` / `get_default_guess_*` are
+              `warm_start(point, mode)` / `default_guess(mode, ...)`, both
+              reading the mode name rather than a private string -- which
+              retired `table.py`'s `_GUESS_KIND` translation table with them.
+              `eos/zlvmit` moved with them, importing `Parameters as
+              VMITParams` and `thermo_from_mu_n as vmit_thermo_from_mu_n`
+              against the ZL names in the same signatures; `eos/mixed`
+              likewise aliases the three vMIT `thermo_from_*` names, since
+              five models now expose that vocabulary into one file. Three
+              legacy table symbols in `compute_tables.py`
+              (`VMITTableSettings`, `compute_vmit_table`, `save_vmit_results`)
+              are deliberately frozen: their only consumer is the ZLvMIT
+              notebook. What is left is `get_vmit_custom()`, which the frozen
+              dataclass makes redundant. zl, abpr and vmit have converted;
+              sfho has not.
     zl        DONE: eos.py -> solver.py, compute_tables.py -> table.py,
               thermodynamics_nucleons.py -> thermodynamics.py, and species.py
               and api.py added. `ZLParams` is `Parameters` and
