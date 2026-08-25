@@ -517,6 +517,30 @@ against this file, not against the earlier `pytest_before*.txt`.
   `eos_response` claim was already gone, taken by `2844a9a`. `eos.bib`
   untouched; the `.md`'s own reference list was corrected against it.
 
+- [zl, sfho and dd2 document pairs to §11 standard](issues/35-hadronic-documents.md):
+  all three pairs done — six files, three `.tex` compiling clean (7, 8 and 8
+  pages), no `.py` touched. Both "the closed forms are in `<model>.tex`
+  Eq. (T0)" defects closed, and dd2's T = 0 forms **verified against
+  `kinetic_thermo` rather than transcribed** — it returns natural units, so the
+  fm-based forms differ from it by exactly `(hbar c)^3`, agreeing to 7e-16 once
+  reconciled. **A defect in the file the audit passed 14/14**: `zl.tex` gave one
+  neutrality row where the code has TWO SIGNS — `n_C - n_e` in the beta modes,
+  `n_e - n_C` in `fixed_YC` — the same shape as vMIT's `R6`/`R7` swap, so worth
+  expecting in the remaining models. dd2's two Partial cells were one cause, the
+  thermal meson sector having no Bose thermodynamics at all; both files now carry
+  it with the eighteen species and the condensation refusal, plus the
+  `eos_response` set, the masses, the reduced nucleon-only system and the
+  phase-adapter residual. **Two sfho claims the code overturned, one of them
+  mine**: the trapped mode does NOT double-count `nu_e` — `solver.py` refuses
+  the combination — and that refusal is itself the ledgered §4 gap; the factor
+  where the gas is added is a measured 3.000000. **The sfho half was written
+  against [ticket 45](issues/45-rename-sfho.md)'s uncommitted tree** by
+  arrangement with the session holding it, every name verified independently and
+  re-checked at commit. Its correction also saved the dd2 half: **ticket 44
+  never applied the `thermo_at_potentials -> thermo_from_mu` rename it carried**,
+  so dd2 has no `thermo_from_mu` at all and both pairs name what dd2 actually
+  has, flagging it for [ticket 48](issues/48-rename-did-surface.md).
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
