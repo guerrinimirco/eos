@@ -1,7 +1,9 @@
 # SFHo — nonlinear relativistic mean field
 
-The full description, with equations and bibliography, is `sfho.tex` (compiled
-against `../../docs/eos.bib`). This file is the plain-text summary.
+`sfho.tex` is the same description written for LaTeX, with the bibliography;
+this file carries the same physics in plain text. Either one alone is enough to
+reproduce the model. Where a document and the source differ, **the source
+decides**.
 
 **Model.** Nonlinear RMF of Steiner, Hempel & Fischer, ApJ 774 (2013) 17:
 nucleons (plus, optionally, the hyperon octet and the Delta quartet) exchange
@@ -22,6 +24,57 @@ separable in sigma and omega, so d2A/dsigma domega = 0.
 Isospin is the tau_3/2 convention here (I_3 = ±1/2 for nucleons), NOT DD2's
 tau_3 = ±1: the two absorb a factor of two into g_rho, and neither model may
 be read with the other's coupling table.
+
+**Parameters.** The published SFHo set, `Parameters.default()`, all fields of
+the `Parameters` dataclass and arguments everywhere:
+
+| symbol | code | value | | symbol | code | value |
+|---|---|---|---|---|---|---|
+| `m_n` | `m_n` | 939.565346 MeV | | `g_sigma_N` | `g_sigma_N` | 7.531281784 |
+| `m_p` | `m_p` | 938.272013 MeV | | `g_omega_N` | `g_omega_N` | 9.022391059 |
+| `m_sigma` | `m_sigma` | 467.45832077 MeV | | `g_rho_N` | `g_rho_N` | 9.304147570 |
+| `m_omega` | `m_omega` | 782.50106861 MeV | | `g_phi_N` | `g_phi_N` | 0.0 |
+| `m_rho` | `m_rho` | 763.00006690 MeV | | `g2` | `g2` | 2951.456863 MeV |
+| `m_phi` | `m_phi` | 1020.0 MeV | | `g3` | `g3` | -12.29054193 |
+| | | | | `c3` | `c3` | -1.784293887 |
+| | | | | `c4` | `c4` | 5.156564716 |
+
+The three meson masses are not round numbers because SFHo is a FIT: `m_sigma`,
+`m_omega` and `m_rho` were varied with the couplings. `g_phi_N = 0` — the
+nucleon does not couple to the hidden-strange vector.
+
+The cross coupling `A(sigma, omega) = g_rhoN^2 [sum_i a_i sigma^i +
+sum_j b_j omega^(2j)]` carries ten shape coefficients:
+
+    a0 = 0                a4 = 7.11843815e-05     b0 = 0
+    a1 = -38.1010826      a5 = 1.60178018e-07     b1 = 5.51184611
+    a2 = 0.561503181      a6 = 4.05497711e-10     b2 = -4.62461162e-05
+    a3 = 0.0014502631                             b3 = 2.81041557e-07
+
+`a0 = b0 = 0` by construction: a constant term in `A` would shift `E_sym` at
+zero density. `b1` alone is the Horowitz-Piekarewicz `Lambda_v omega^2 rho^2`
+coupling, which is why the inversion below frees it.
+
+Baryon masses (MeV), carried in `Parameters` rather than taken from the shared
+table, because the SFHo fit used its own rounded values:
+
+    n 939.565346   p 938.272013   Lambda 1116   Sigma+ 1189   Sigma0 1193
+    Sigma- 1197    Xi0 1315       Xi- 1321      Delta  1232
+
+**The published sets.** `Parameters.default()` is `SFHo_Nucleonic`;
+`Parameters.named(key)` returns any of the five, and `PUBLISHED_SETS` maps the
+keys to builders:
+
+| key | contents |
+|---|---|
+| `SFHo_Nucleonic` | nucleons only, the CompOSE SFHo table. What `default()` returns, what `nmp.py` reports the published NMPs against, and what `test/baseline` is frozen at |
+| `SFHoY_Fortin` | + hyperons, scaled vector couplings (`y = 1.5`), scalar couplings from `U_Y` (Fortin et al. 2017) |
+| `SFHoY*_Fortin` | + hyperons, SU(6) vector couplings (same reference) |
+| `SFHo_2fam_phi` | + hyperons and Deltas, SU(6) vectors, hyperons coupled to phi |
+| `SFHo_2fam` | as `SFHo_2fam_phi` with `g_phi = 0` for every strange baryon |
+
+All five share the isoscalar and isovector couplings above; they differ only in
+which baryons are active and how those baryons couple.
 
 Because the couplings are constants there is NO rearrangement self-energy:
 Sigma^R = 0, stated rather than omitted. That is the one structural difference
@@ -83,7 +136,21 @@ energy-momentum tensor and the one-species Euler relation:
 which matters: an error in eps_i or P_i propagates into ns_i, and ns_i sources
 the sigma field, so it does not stay confined to the totals. At T = 0, with
 `kF = sqrt(mu_eff^2 - m*^2)` and `L = ln((kF + |mu_eff|)/m*)`, everything is
-elementary (n ∝ kF^3, s = 0); the closed forms are in `sfho.tex` Eq. (T0). At
+elementary:
+
+    n_i   = sgn(mu_eff_i) g_i kF^3 / (6 pi^2 hc^3)
+
+    ns_i  = g_i m*_i / (4 pi^2 hc^3) * ( kF |mu_eff_i| - m*_i^2 L )
+
+    P_i   = g_i/(48 pi^2 hc^3) [ (2 kF^3 - 3 m*_i^2 kF) |mu_eff_i|
+                                 + 3 m*_i^4 L ]
+
+    eps_i = g_i/(16 pi^2 hc^3) [ (2 kF^3 + m*_i^2 kF) |mu_eff_i|
+                                 - m*_i^4 L ]
+
+    s_i   = 0
+
+everything vanishing when `|mu_eff_i| <= m*_i`. At
 T > 0 the integrals are the Johns-Ellis-Lattimer approximants from
 `eos/general/fermi_integrals` (~1e-4 accurate), with a Gauss-Laguerre
 quadrature there as the accuracy reference.
@@ -104,7 +171,34 @@ charges and averaging would misplace n_C_mes as well as the population.
                             n_S = sum_i S_i n_i + n_S_mes
 
 with P_mf, eps_mf the mean-field terms above. Photons:
-`P = pi^2 T^4/(45 hc^3)`, `eps = 3P`, `s = 4 pi^2 T^3/(45 hc^3)`. The Euler sum
+`P = pi^2 T^4/(45 hc^3)`, `eps = 3P`, `s = 4 pi^2 T^3/(45 hc^3)`.
+
+**The `thermal_neutrinos` sector.** With the flag on and `T > 0`, the solver
+adds a `mu = 0` massless neutrino gas at **THREE flavours**
+(`N_NEUTRINO_FLAVOURS = 3.0`), multiplying the single-flavour
+`neutrino_thermo(0, T)` — antiparticles included — into `P`, `eps` and `s`:
+
+    P   += 3 P_nu(mu=0, T)
+    eps += 3 eps_nu(mu=0, T)
+    s   += 3 s_nu(mu=0, T)
+
+It carries no conserved charge and no lepton number, so it touches nothing
+else. The factor is exactly 3, measured: at `n_B = 0.3 fm^-3`, `T = 20 MeV` in
+`beta_eq_neutrinoless`, turning the flag on moves `P`, `eps` and `s` by
+3.000000 times the single-flavour `mu = 0` gas.
+
+**Three is right in the modes where the gas is added, and the trapped mode
+RAISES rather than adding it.** `beta_eq_neutrino_trapped` carries the electron
+neutrino explicitly at its own `mu_nue`, so a three-flavour `mu = 0` gas on top
+would count `nu_e` twice; `solver.py` refuses the combination with a message
+saying exactly that. In every other mode no neutrino flavour is tracked in the
+composition, so all three are untracked and the factor is 3.
+
+Note that the refusal is itself a known conformance gap, not a settled design:
+CLAUDE.md §4 defines the flag by what it does NOT cover, so under trapping it
+should mean the two remaining flavours and be added, not refused. Five models
+disagree on this and the three that succeed are the conformant ones. See
+`docs/DEFERRED.md`; the fix is not this document's. The Euler sum
 reported with the state takes baryons at their FULL potentials and the meson
 gas at its EFFECTIVE ones:
 `sum_i mu_i n_i + sum_j mu*_j n_j + mu_e n_e + mu_nue n_nue`.
@@ -132,6 +226,37 @@ on/off), `fixed_YC_YS`. Non-convergence is a return value at every layer,
 never an exception.
 
 The muon lepton family is not tracked at all; requesting it raises.
+
+**The phase-adapter surface.** What `eos/mixed` consumes across the CLAUDE.md
+§5 contract, and the layer beneath it:
+
+    thermo_from_mu(par, flags, mu_B, mu_C, mu_S=0.0, T=0.0, n_B_guess=0.2,
+                   x0=None, x0_fallback=None, return_state=False)
+        -> PhaseThermo, or (PhaseThermo, {"x_phase": [sigma, omega, rho, phi]})
+           when return_state
+
+The §5 surface: it solves the four meson fields against the field residual at
+the GIVEN potentials, then assembles. It raises `RuntimeError` when no guess
+meets `eos.general.solve.RESIDUAL_TOL` on the per-row scaled residual — an
+internal layer may raise, and the public entry points catch and report.
+
+Note it takes the **PHYSICAL `mu_B`**. SFHo's couplings are constants, so there
+is no rearrangement term and no kinetic potential; dd2's counterpart takes the
+kinetic one, and whether a phase's slot carries the kinetic or the physical
+baryon potential is a declared property of the phase, never an engine
+assumption. dd2's counterpart is also still spelled `thermo_at_potentials`:
+seven of the ten models use `thermo_from_mu` for this surface, sfho is now one
+of them, and dd2 is the outstanding one.
+
+    thermo_from_fields(mu_B, mu_C, mu_S, sigma, omega, rho, phi, T,
+                       particles, params, include_pseudoscalar_mesons=False)
+        -> PhaseThermo
+
+The lower layer, which additionally takes the solved mean fields — the name
+says what the function takes, and that is the whole distinction between the
+two. Matter only: baryons, the mean fields, any thermal pi/K/eta gas. No
+leptons and no photons; `solver.py` adds those, because they are shared by the
+whole system rather than belonging to a phase.
 
 **NMPs.** Forward map at the model's own saturation (the P = 0 root of
 symmetric matter): n_sat, E_sat, m*/m, K_sat, Q_sat, E_sym, L_sym, K_sym — the
