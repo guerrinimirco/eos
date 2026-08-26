@@ -792,7 +792,21 @@ mode & independent variables & extra unknowns & the charge row \\
 
 \noindent
 The trapped mode adds the row $(n_e + n_{\nu_e})/\nB = Y_{L_e}$, and
-\texttt{fixed\_YC\_YS} the row $\nS = Y_S \nB$. In the two fixed-fraction
+\texttt{fixed\_YC\_YS} the row $\nS = Y_S \nB$ --- except at $T = 0$,
+$Y_S = 0$, where that row is \emph{empty} and $\muS = 0$ is imposed in its
+place. Both strangeness carriers of this model have $S = +1$ (the $\Lambda$
+and the $s$ quark) and nothing has $S < 0$, and at $T = 0$ there are no
+antiparticles, so every term of $\nS = n_\Lambda + n_s$ is non-negative and
+$\nS = 0$ forces $n_\Lambda = n_s = 0$ term by term. The row
+$\nS - Y_S \nB = 0$ then holds identically, for every $\muS$, and determines
+nothing: the potential is a null direction of the Jacobian rather than an
+unknown of the system. Imposing $\muS = 0$ chooses a representative for a
+quantity the equilibrium conditions leave free, and it changes no density, no
+$\varepsilon$, no $P$ and no $s$ --- only the reported $\muS$ and, through
+$\mu_i = B_i \muB + C_i \muC + S_i \muS$, the potentials of the two species
+that are absent. At $T > 0$ the Fermi tails populate both species and their
+$S = -1$ antiparticles, the row acquires a gradient in $\muS$, and the
+potential is determined in the ordinary way. In the two fixed-fraction
 modes the \texttt{leptons} flag decides whether the neutralizing electrons and
 muons are added; either way they enter \emph{no equation}, because $\nC$ is
 already pinned by the charge row, so they are computed afterwards from
@@ -929,9 +943,10 @@ row & residual & scale it is divided by & what it imposes \\
 10 & $\sum_i q_i n_i$ \quad\emph{or}\quad $\nC - Y_C\,\nB^{\rm target}$
      & $\nB^{\rm target}$
      & neutrality, Eq.~\eqref{eq:neutral}, \emph{or} the held $Y_C$ \\
-11 & $\nS - Y_S\,\nB^{\rm target}$
-     & $\nB^{\rm target}$
-     & the held $Y_S$ \hfill (\texttt{fixed\_YC\_YS} only) \\
+11 & $\nS - Y_S\,\nB^{\rm target}$, \emph{or} $\muS$
+     & $\nB^{\rm target}$, \emph{or} $100$~MeV
+     & the held $Y_S$; the second form where that row is empty
+       \hfill (\texttt{fixed\_YC\_YS} only) \\
 12 & $n_e + n_{\nu_e} - Y_{L_e}\,\nB^{\rm target}$
      & $\nB^{\rm target}$
      & the held $Y_{L_e}$ \hfill (trapped mode only) \\

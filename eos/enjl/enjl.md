@@ -565,7 +565,20 @@ equilibrium relation and the fraction comes out.
 | `fixed_YC_YS` | `(n_B, Y_C, Y_S, T)` | `mu_S` | `n_C = Y_C n_B` |
 
 The trapped mode adds the row `(n_e + n_nue)/n_B = Y_Le`, and `fixed_YC_YS` the
-row `n_S = Y_S n_B`. In the two fixed-fraction modes the `leptons` flag decides
+row `n_S = Y_S n_B` — except at `T = 0, Y_S = 0`, where that row is empty and
+`mu_S = 0` is imposed in its place. Both strangeness carriers of this model
+have `S = +1` (Table (quantum numbers)) and nothing has `S < 0`, and at `T = 0`
+there are no antiparticles, so every term of `n_S = n_Lambda + n_s` is
+non-negative and `n_S = 0` forces `n_Lambda = n_s = 0` term by term. The row
+`n_S - Y_S n_B = 0` then holds identically, for every `mu_S`, and determines
+nothing: the potential is a null direction of the Jacobian rather than an
+unknown of the system. Imposing `mu_S = 0` is a choice of representative for
+a quantity the equilibrium conditions leave free, and it changes no density,
+no `eps`, no `P` and no `s` — only the reported `mu_S` and, through
+`mu_i = B_i mu_B + C_i mu_C + S_i mu_S`, the potentials of the two species
+that are absent. At `T > 0` the Fermi tails populate both species and their
+`S = -1` antiparticles, the row acquires a gradient in `mu_S`, and the
+potential is determined in the ordinary way. In the two fixed-fraction modes the `leptons` flag decides
 whether the neutralizing electrons and muons are added; either way they enter
 *no equation*, because `n_C` is already pinned by the charge row, so they are
 computed afterwards from `n_e + n_mu = n_C` and contribute to `eps`, `P` and
@@ -652,7 +665,7 @@ row per held fraction:
 | 8 | `Sigma^R_b - Sigma^R_b[x]` | 3000 MeV | baryon rearrangement, (SigmaRb) |
 | 9 | `Sigma^R_q - Sigma^R_q[x]` | 1000 MeV | quark rearrangement, (SigmaRq) |
 | 10 | `sum_i q_i n_i` **or** `n_C - Y_C n_B^target` | `n_B^target` | neutrality, (neutral), *or* the held `Y_C` |
-| 11 | `n_S - Y_S n_B^target` | `n_B^target` | the held `Y_S` (`fixed_YC_YS` only) |
+| 11 | `n_S - Y_S n_B^target`, **or** `mu_S` | `n_B^target`, **or** 100 MeV | the held `Y_S` (`fixed_YC_YS` only); the second form where that row is empty, below |
 | 12 | `n_e + n_nue - Y_Le n_B^target` | `n_B^target` | the held `Y_Le` (trapped mode only) |
 
 Rows 1-9 are present in every mode; rows 10-12 are what the declaration

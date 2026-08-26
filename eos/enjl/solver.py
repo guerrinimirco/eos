@@ -134,6 +134,24 @@ BASE_UNKNOWNS = ("M_u", "M_d", "M_s", "mu_B", "mu_C", "n_bQ",
                  "gomega_omega", "grho_rho", "SigmaR_b", "SigmaR_q")
 
 
+def strangeness_row_is_empty(spec, T):
+    """Whether a held-Y_S row reads 0 = 0, leaving mu_S undetermined.
+
+    Both strangeness carriers of this model have S = +1 -- the Lambda and the
+    s quark, `species.STRANGENESS` -- and nothing in it carries S < 0. At
+    T = 0 there are no antiparticles either, so every term of
+    n_S = sum_i S_i n_i is non-negative and n_S = 0 forces n_Lambda = n_s = 0
+    term by term. The row then vanishes identically, for every mu_S, and
+    determines nothing.
+
+    That is a T = 0 statement only: at T > 0 the Fermi tails populate both
+    species (and their antiparticles, which carry S = -1), the row acquires a
+    gradient in mu_S, and the potential is determined in the ordinary way.
+    """
+    return (spec.is_fixed("S") and T == 0.0
+            and spec.targets["Y_S"] == 0.0)
+
+
 def unknown_slots(spec):
     """The unknown-vector slot names implied by `spec`, in order.
 
@@ -392,7 +410,19 @@ def state_at(x, par, spec, n_B, T=0.0):
         res.append(n_C - spec.targets["Y_C"] * n_B)
     else:
         res.append(sum(CHARGE[sp] * n[sp] for sp in SPECIES))
-    if spec.is_fixed("S"):
+    if strangeness_row_is_empty(spec, T):
+        # mu_S is pinned rather than solved for, because nothing here
+        # determines it (`strangeness_row_is_empty`). Carried as an unknown
+        # with no equation it is a null column in the Jacobian, and the cost
+        # is not cosmetic: the least-squares termination tests fire early on
+        # the rank-deficient problem and leave the scaled residual of the
+        # WHOLE solve four decades higher than the model's other modes reach,
+        # close enough to `eos.general.solve.RESIDUAL_TOL` that round-off
+        # decides which side of it a point lands on. Zero is the value the
+        # solve already returned here, since no gradient ever moved it off
+        # its seed.
+        res.append(mu_S)
+    elif spec.is_fixed("S"):
         n_S = sum(STRANGENESS[sp] * n[sp] for sp in SPECIES)
         res.append(n_S - spec.targets["Y_S"] * n_B)
     if spec.is_fixed("L_e"):
@@ -406,7 +436,7 @@ def residual(x, par, spec, n_B, T=0.0):
     return state_at(x, par, spec, n_B, T)[1]
 
 
-def residual_scales(par, spec, n_B):
+def residual_scales(par, spec, n_B, T=0.0):
     """The scale each row of `residual` balances, so one gate means one thing.
 
     The rows carry mixed units -- MeV for the mass gaps, the fields and the
@@ -422,7 +452,9 @@ def residual_scales(par, spec, n_B):
               par.Gamma_r(n_B) * n_B,                  # g_rho rho [MeV]
               3000.0, 1000.0,                          # Sigma^R [MeV]
               n_B]                                     # the charge row
-    if spec.is_fixed("S"):
+    if strangeness_row_is_empty(spec, T):
+        scales.append(100.0)              # a pinned potential [MeV]
+    elif spec.is_fixed("S"):
         scales.append(n_B)
     if spec.is_fixed("L_e"):
         scales.append(n_B)
@@ -430,7 +462,7 @@ def residual_scales(par, spec, n_B):
 
 
 def _scaled_residual(x, par, spec, n_B, T=0.0):
-    scales = residual_scales(par, spec, n_B)
+    scales = residual_scales(par, spec, n_B, T)
     return [r / s for r, s in zip(residual(x, par, spec, n_B, T), scales)]
 
 
@@ -453,6 +485,13 @@ class BetaPoint:
     `thermo_from_n` returns, and `x` is the converged unknown vector, which is
     what warm-starts the next density. `s` is the entropy density [fm^-3] and
     `T` the temperature [MeV] it was solved at.
+
+    `seed` names the starting point the accepted root was reached from --
+    "warm", "restored" or "cold". Along a sweep it should read "warm" at every
+    density but the first: the other two are on a DIFFERENT branch by
+    construction, so a point reporting one of them mid-sweep is a point where
+    the continuation changed branch, and reading it off the result is what
+    distinguishes a branch that ended from a branch that was displaced.
     """
     converged: bool
     error: float
@@ -471,6 +510,7 @@ class BetaPoint:
     mu_S: float
     point: EoSPoint
     x: tuple
+    seed: str = "warm"
 
     @property
     def EperB(self):
@@ -543,14 +583,15 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
 
     seeds = []
     if x0 is not None:
-        seeds.append(list(x0))
-        seeds.append(_restored_branch(x0, par))
+        seeds.append(("warm", list(x0)))
+        seeds.append(("restored", _restored_branch(x0, par)))
     if cold_start:
-        seeds.extend(default_guess(mode, n_B_fm, par, spec=spec))
+        seeds.extend(("cold", g)
+                     for g in default_guess(mode, n_B_fm, par, spec=spec))
 
-    solved, tried, best_error = None, 0, float("inf")
+    solved, from_seed, tried, best_error = None, None, 0, float("inf")
     already = []
-    for seed in seeds:
+    for name, seed in seeds:
         seed = [min(max(v, l), h) for v, l, h in zip(seed, lo, hi)]
         if any(all(abs(a - b) <= 1e-9 * max(1.0, abs(b))
                    for a, b in zip(seed, other)) for other in already):
@@ -562,10 +603,10 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
             bounds=(lo, hi), x_scale=x_scale,
             xtol=1e-13, ftol=1e-13, gtol=1e-13, max_nfev=1500)
         error = scaled_residual_max(residual(sol.x, par, spec, n_B, T),
-                                    residual_scales(par, spec, n_B))
+                                    residual_scales(par, spec, n_B, T))
         best_error = min(best_error, error)
         if error <= RESIDUAL_TOL:
-            solved = sol.x
+            solved, from_seed = sol.x, name
             break
 
     if solved is None:
@@ -605,7 +646,7 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
         M_q=point.M_q, M_b=point.M_b,
         eps=point.eps / hc3, P=point.P / hc3, s=point.s / hc3,
         mu_b=mu_B, mu_e=mu_e, mu_C=mu_C, mu_S=mu_S,
-        point=point, x=tuple(solved),
+        point=point, x=tuple(solved), seed=from_seed,
     )
 
 

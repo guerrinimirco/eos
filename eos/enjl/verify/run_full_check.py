@@ -43,6 +43,14 @@ the suite reports rather than prints.
 
  10. Non-convergence    a request the solver cannot reach comes back as a
                          status with a message, not as a raise.
+ 11. Residual margin     every solved point clears the acceptance gate by at
+                         least two decades. A mode that merely PASSES the gate
+                         is not safe: the seed list of `solver.solve` falls
+                         through to a start on another chiral branch when a
+                         root misses, so a mode sitting near the gate has its
+                         branch chosen by round-off. That is not hypothetical
+                         -- it is what a held Y_S = 0 did while mu_S was
+                         carried as an unknown its rows did not determine.
 
 Run as `python -m eos.enjl.verify.run_full_check`.
 """
@@ -68,6 +76,7 @@ from eos.general.basis import (
     charge_potentials_from_quarks, charges_from_densities,
 )
 from eos.general.physics_constants import hc3
+from eos.general.solve import RESIDUAL_TOL
 
 
 @dataclass
@@ -899,6 +908,44 @@ def check_delivered_table():
 
 
 
+def check_residual_margin():
+    """Every mode clears `RESIDUAL_TOL` by at least two decades.
+
+    A pass/fail on the gate itself is the wrong test. `solver.solve` walks its
+    starting points in order and stops at the first that clears the gate, and
+    the second of them (`solver._restored_branch`) is on the OTHER chiral
+    branch by construction -- so a root that misses the gate is not retried,
+    it is replaced by a root somewhere else. A mode whose residuals sit near
+    the gate therefore has its branch decided by round-off, and the symptom is
+    an O(1) discontinuity in eps and P rather than a convergence failure.
+
+    The margin is measured, not chosen to fit: with every unknown determined
+    the four modes land between 1e-16 and 1e-13, four decades clear, and the
+    one configuration that ever approached the gate did so because a held
+    Y_S = 0 left mu_S undetermined (`solver.strangeness_row_is_empty`) and the
+    least-squares termination fired early on the rank-deficient problem.
+    """
+    gate = 1.0e-2 * RESIDUAL_TOL
+    worst, detail = 0.0, ""
+    par = Parameters.default()
+    grid = np.linspace(0.12, 1.0, 12)
+    cases = (("beta_eq_neutrinoless", {}, True),
+             ("beta_eq_neutrino_trapped", {"Y_Le": 0.4}, True),
+             ("fixed_YC", {"Y_C": 0.5}, False),
+             ("fixed_YC_YS", {"Y_C": 0.5, "Y_S": 0.0}, False))
+    for mode, fracs, leptons in cases:
+        table = build_table(TableSpec(nB=grid, par=par, mode=mode,
+                                      leptons=leptons, fractions=fracs))
+        for point in table.points:
+            if point.error > worst:
+                worst = point.error
+                detail = f"{mode} {fracs} n_B={point.n_b_fm:.4f}"
+    return CheckResult("residual_margin", worst < gate, worst,
+                       f"{detail or 'all modes'}; "
+                       f"worst {worst:.2e} against {gate:.0e} "
+                       f"(gate {RESIDUAL_TOL:.0e})")
+
+
 CHECKS = (check_euler, check_free_energy, check_entropy_limit,
           check_rearrangement,
           check_gap_equation, check_charge_basis, check_beta_equilibrium,
@@ -906,7 +953,8 @@ CHECKS = (check_euler, check_free_energy, check_entropy_limit,
           check_trapped_lepton_number, check_thermo_from_mu,
           check_causality, check_vacuum,
           check_maxwell_crossing, check_delivered_table,
-          check_refusals, check_non_convergence_is_returned)
+          check_refusals, check_non_convergence_is_returned,
+          check_residual_margin)
 
 
 def run_full_check():

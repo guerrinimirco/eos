@@ -20,17 +20,21 @@ is, and Phase 5 and Phase 6 are done.
 ([ticket 80](issues/80-phase6-conformance.md)), and **Acceptance gates on the
 port only**. The Acceptance criteria block can check that `nucleation` imports
 `eos`, that its suite runs, and that §1 holds in both directions — nothing in it
-reads a README. Ticket 72 is in scope of this map and **not gating**: gating the
+reads a README. Ticket 80 is in scope of this map and **not gating**: gating the
 Stage 7 report on a rewrite no criterion measures would hold it hostage.
 **[Ticket 76](issues/76-nucleation-golden-tolerances.md) IS gating**, and by the
 same test: the port left two `nucleation` goldens comparing round-off, and the
 criteria block's first line is "pytest ... fully green".
 
 Reached when every ticket here is resolved and the Stage 7 report can be written
-with real tool output behind every claim. **Ticket 72 is RESOLVED** (`2b2b72f`,
+with real tool output behind every claim. **Ticket 80 is RESOLVED** (`2b2b72f`,
 pushed to `origin/paper-release`), so the carve-out it was granted here — the one
 ticket that might still be open when the report is written — is spent and no
-longer applies to anything.
+longer applies to anything. (These three lines said "ticket 72" until the
+`72 -> 80` renumber's stragglers were swept up by
+[ticket 72](issues/72-enjl-branch-selection.md), the DIFFERENT ticket that now
+carries the number; read literally they claimed this map's enjl finding was
+already closed.)
 
 ## Notes
 
@@ -143,14 +147,22 @@ down from 12 -> 7 -> 1, and this after-number is HARD: the collected count is
 1696 both before and after, the same denominator as ticket 62's after-image, so
 it is a clean comparison rather than 62's soft one.
 
-**The one survivor is `test_baseline[enjl]`, red ON PURPOSE.** `enjl.npz` is
-still the 3.9 file because the regeneration STOPPED there: the model picks a
-different root of its gap equations on the two stacks
-([ticket 72](issues/72-enjl-branch-selection.md)). Do not regenerate it.
+**That last survivor was `test_baseline[enjl]`, and it is now GREEN.**
+[Ticket 72](issues/72-enjl-branch-selection.md) found that the model did not
+pick different roots on the two stacks at all: both reached the SAME root, and
+one of them missed the 1e-10 acceptance gate by 20% (1.20e-10 against
+1.59e-12), behind which `solver.solve` falls through to a starting point on
+the other chiral branch. The mode could reach the gate only because a held
+Y_S = 0 left `mu_S` as an unknown no row determined. With that row pinned,
+every ENJL mode sits four decades clear of the gate, the sweep is identical on
+both interpreters, and `enjl.npz` is regenerated on 3.14 like the other twelve.
 
-So a ticket reporting **"0 added failures" now means 1, unchanged** — and the
-interpreter and collected count still travel with every number, because the two
-stacks still both exist on this machine. The blocks below are history.
+    test/baseline/  16 passed          all thirteen models, both stacks agree
+    test/enjl/     127 passed
+
+So **"0 added failures" now means 0**, and the map has no deliberate red left.
+The interpreter and collected count still travel with every number, because the
+two stacks still both exist on this machine. The blocks below are history.
 
 Ticket 74 took the six OFF the stack dependence rather than moving them onto
 the other side of it: all six pass on anaconda 3.9.7 as well (`14 passed`).
@@ -1463,7 +1475,10 @@ against this file, not against the earlier `pytest_before*.txt`.
   **The `C_i` fingerprint the Not-yet-specified section predicted fired
   verbatim, in two independently written models**, which is the strongest
   evidence yet that it belongs in `eos/general/verify/` as a check rather than
-  a diagnostic. `dd2` moved in **three keys only** — `nmp.Q_sat` by 0.351 MeV,
+  a diagnostic. **Three, in fact**: [ticket 72](issues/72-enjl-branch-selection.md)
+  later showed that `enjl` — held up here as the NEGATIVE control — was a
+  positive hit whose undetermined `mu_S` at Y_S = 0 is what flipped its branch.
+  The screen fired on it and this ticket read the output as noise. `dd2` moved in **three keys only** — `nmp.Q_sat` by 0.351 MeV,
   `K_sat`, `K_sym` — with all 4689 other keys bit-identical, which isolates it
   to the finite-difference stencil of [ticket 47](issues/47-dd2-nmp-inversion.md)
   rather than the physics; that blessing is the one in this regeneration NOT
@@ -1477,16 +1492,40 @@ against this file, not against the earlier `pytest_before*.txt`.
   `figure_style.py:337` carries a working 3.4 fallback. All five README
   examples reproduce **bit-identically** on 3.14, so no printed digit changed.
 - [ENJL's fixed_YC_YS continuation picks its chiral branch by warm start](issues/72-enjl-branch-selection.md):
-  OPEN, and the finding that stopped the regeneration. At Y_C = 0.5, Y_S = 0,
-  leptonless, over six contiguous densities n_B = 0.300–0.467 fm^-3, 3.9 stays
-  chirally broken (M_q 260 -> 216 MeV, no quarks) while 3.14 enters the
-  restored branch early (M_q -> 5.5 MeV, P = -41 MeV/fm^3). Both report
-  `converged`; both are roots. **Neither is right across the window** — eps is
-  lower on the broken branch to n_B = 0.400 and on the restored one from 0.433,
-  so the crossing sits near 0.41 and both baselines ride a metastable branch
-  past it. It is also the **negative control** for the `S_i`/`C_i` screen:
-  nothing here scales with any charge, which is exactly how the screen was
-  meant to separate a moved potential from moved physics.
+  **the ticket's own diagnosis was wrong, and the real one is smaller. The last
+  deliberate red is gone.** Both stacks reach the SAME root from the warm start
+  (M_u = 260.2337); what differs is its residual — 1.59e-12 on 3.9 against
+  1.20e-10 on 3.14, straddling the 1e-10 gate — and `solver.solve` answers a
+  missed gate by falling through to `_restored_branch`, a seed on the other
+  chiral branch, with no comparison against the near-miss it discarded. So
+  ticket 62's trigger WAS round-off; the O(1) move was the consequence.
+  **The mode could reach the gate only because `mu_S` was an unknown no row
+  determined**: no species of this model carries S < 0 and at T = 0 there are no
+  antiparticles, so Y_S = 0 forces every strange density to zero and the row
+  reads 0 = 0 — a null Jacobian column that left this one mode three decades
+  worse (1.7e-11) than its siblings (2.7e-15). Pinning it puts all four modes at
+  1e-16…1e-13, recovers a density the old code dropped (34 points, not 33), and
+  leaves exactly one branch change per mode — a real one, where the warm start
+  fails by seven orders rather than by 20%. `BetaPoint.seed` now names which
+  starting point produced a point. **A "take the best seed" policy would have
+  made it worse**: the restored seed scores 8.08e-16 against the warm start's
+  1.59e-12, so it would have flipped 3.9 too and nothing would ever have caught
+  it. Regenerated on 3.14 and **identical on both stacks** outside
+  numerically-zero quantities; against the superseded 3.9 file exactly FOUR
+  observables moved, all at n_B = 0.5000, where that file had taken the same
+  fall-through one point early. `test/baseline/` **16 passed**, `test/enjl/`
+  **127 passed**, ENJL verify PASS with a new check 11
+  (`check_residual_margin`, two decades of margin required, which would have
+  gone red at 1.7e-11 years before any interpreter changed).
+  **It also corrects ticket 62's classification, and that matters for
+  [ticket 75](issues/75-undetermined-potential-check.md)**: `enjl` was run as
+  the screen's NEGATIVE control while the same ticket recorded, as a footnote,
+  "the sibling in `mu_S` at Y_S = 0". Those are one finding — the screen fired
+  and its output was read as noise — so the fingerprint has three witnesses,
+  not two, and the sharper lesson is that an undetermined potential is a
+  **conditioning hazard**, not only a wandering baseline key. The physics
+  question the ticket opened with is [ticket 83](issues/83-enjl-branch-selection-physics.md),
+  non-gating.
 - [The six non-baseline failures on 3.14](issues/74-py314-non-baseline-failures.md):
   OPEN. The rest of ticket 57's cost list, none of it a `.npz` — Q_sat's
   `abs=0.2` re-derived from a noise floor measured on 3.14, `test_dd2_m8`'s
@@ -1775,7 +1814,7 @@ In scope, not yet sharp enough to ticket:
   has carried (its comment records the first, `F8_SHOW = [0,1,2,3]` on a 2x2).
 
 - **The paper's tracked figures no longer match what the code produces.**
-  Ticket 72's production run regenerated 23 tracked files under `output/paper/`
+  Ticket 80's production run regenerated 23 tracked files under `output/paper/`
   and restored every one: 14 PDFs differed only inside `/CreationDate`, and the
   9 real changes are round-off — largest 13 cm on an 11.14 km `R_1.4`, with
   `sigma_crit_star` bit-identical across all 398 rows. Restoring was right for a
@@ -1926,9 +1965,16 @@ In scope, not yet sharp enough to ticket:
   second witness taken PREDICTIVELY rather than after the fact —
   [ticket 62](issues/62-regenerate-baselines-py314.md) ran it forward over 53763
   keys and it separated them correctly in both directions, firing on `ccdm` and
-  `njl`'s CFL `mu_3 = mu_C` (with `mu_8` at exactly half) and declining to fire
-  on `enjl`, which turned out to be a real branch flip. What stays open is the
+  `njl`'s CFL `mu_3 = mu_C` (with `mu_8` at exactly half). What stays open is the
   form, and that is now ticket 75's question rather than fog.
+  **Amended by [ticket 72](issues/72-enjl-branch-selection.md):** the third case
+  was read backwards here. The screen DID fire on `enjl` — `mu_S` at Y_S = 0,
+  where no populated species carries S — and ticket 62 filed that as a footnote
+  while classifying the O(1) move beside it as unrelated physics. It was the
+  same finding: the undetermined potential is a null Jacobian column, and the
+  three decades of residual it costs are what let round-off pick the chiral
+  branch. Three witnesses, not two, and the third says the check must catch a
+  CONDITIONING hazard and not only a wandering key.
 - **Whether other tests silently degrade on missing data.** Ticket 39 fixed the
   two TOV helpers and generalised their guard to every `CRUST_FILES` name, but
   nothing has swept the rest of `test/` for the same pattern — an absent input

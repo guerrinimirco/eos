@@ -105,3 +105,51 @@ two solver backends, two stacks, or two seeds) — is execution detail for the
 suite that implements it, not a decision this ticket owes.
 
 Open for execution.
+
+## Amended by ticket 72
+
+[Ticket 72](72-enjl-branch-selection.md) corrects the table above and adds a
+requirement.
+
+**The `enjl` row is not a negative control.** Its two entries are one finding.
+`mu_S` at Y_S = 0 is undetermined for exactly the structural reason
+`mu_3 = mu_C` is undetermined in the CFL pattern — a conserved charge no
+populated species carries — and that undetermined potential is what CAUSED the
+O(1) branch flip recorded beside it as "physics". Carried as an unknown with no
+row, it is a null column in the Jacobian; the least-squares termination fires
+early on the rank-deficient problem and leaves the residual of the whole solve
+three decades high (1.7e-11 against the model's usual 2.7e-15), close enough to
+`RESIDUAL_TOL = 1e-10` for round-off to decide which side a point lands on —
+and `enjl.solver.solve` answers a missed gate with a root on the other chiral
+branch. So the screen fired on `enjl`, and ticket 62 read its output as noise.
+
+The fingerprint therefore has **three** witnesses, not two, and the third is
+the one that did real damage.
+
+**The added requirement: an undetermined potential is a CONDITIONING hazard,
+not only a reporting one.** A differential that only reads ratios between two
+runs would have classified `enjl` correctly and still missed that the mode was
+about to select a chiral branch by round-off. So the check wants a
+single-point, single-run limb as well:
+
+- a mode carries an unknown whose residual row is identically zero;
+- equivalently, a Jacobian column below the numerical rank threshold;
+- and the observable consequence is the whole solve's residual sitting decades
+  above what the model's other modes reach.
+
+`eos.enjl.verify.check_residual_margin` is the narrow, per-model form of that
+last item — every mode must clear `RESIDUAL_TOL` by two decades rather than
+merely pass it — and is the worked example this ticket's general version can be
+written against. Note it is a *symptom* test: it fires on the consequence, not
+on the null column. Whether the general check should look for the column
+directly is this ticket's to decide.
+
+One more site for the survey. `test/baseline/generate_baseline.py`'s `row()`
+already documents the `mu_S`-at-Y_S = 0 case, and handles it by EXCLUDING
+`mu_S` and the S-carrying species potentials from the recorded baseline. That
+hides the symptom at the recording layer and leaves the ill-conditioning in the
+solver. It is still the right protection for the models that have not had
+ticket 72's fix (`did` at Y_S = 0 is named there), so it was not changed — but
+whether the general answer is "do not record it" or "do not leave it
+undetermined" is exactly this ticket's question, and `row()` is where the
+repository already answered it once, the other way.
