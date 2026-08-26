@@ -73,7 +73,13 @@ default is deliberately overridden here: tickets 12–25 build and run things.
 - Golden references are ground truth (§12): `test/baseline/` at rtol = 1e-10, the
   DD2 golden SNM point and published NMP/TOV values, the CompOSE HS(DD2) slices,
   the ENJL author tables.
-- **Never loosen a tolerance to make a test pass.**
+- **Never loosen a tolerance to make a test pass.** Refined by
+  [ticket 76](issues/76-nucleation-golden-tolerances.md): a tolerance is
+  LOOSENED when the assertion measures the same quantity with more slack,
+  and CORRECTED when it measures a different, better-chosen quantity. The
+  rule forbids the first absolutely. It does not forbid replacing a relative
+  comparison of a quantity that is zero by construction with an absolute
+  bound on that zero — that is a different and strictly stronger claim.
 - **No new dependencies.** stdlib, numpy/scipy/matplotlib, numba, jupytext.
   `cProfile`/`pstats`/`time.perf_counter` cover the timing work.
 - Notebooks and benchmarks are written against the public API (`eos_point`,
@@ -1592,6 +1598,65 @@ against this file, not against the earlier `pytest_before*.txt`.
   hadronic models — one built from NMPs. Measured, it is not met: four models
   have no `named()`, `did` is hadronic with NO inverse map, and `dd2`/`did`
   cannot be built field-by-field.
+- [Build the T = 0 g-mode composition contract and drop the DD2 import](issues/77-gmode-contract-build.md):
+  built. `eos/general/sound_speeds.py` carries `EOSTable_for_gmode`, which
+  SUBCLASSES `EOSTable_for_TOV` and adds `cs2_equilibrium` + `cs2_frozen` — a
+  g-mode table IS a structure table, so one object serves both layers.
+  `import eos.astro.gmode` now pulls in **no model package**, gated in
+  `test_imports.py` twice: an AST sweep of `eos/astro/*` and a fresh-interpreter
+  runtime check that catches the function-local import the AST cannot see. Both
+  were confirmed to bite on a planted breach. **Every dd2 g-mode number is
+  bit-identical** (g1 = 149.565 Hz, f = 2064.516 Hz); the only movement anywhere
+  is the Urca rate at 1.3e-5, which is `M_PI` now coming from
+  `general/particles` as §7 requires.
+  **The verify/ carve-out is ruled to EXTEND to an astro suite importing a
+  model, and not to the reverse** — the directions are not symmetric, since a
+  model importing `astro/` is the cycle the rule exists to prevent while an
+  astro suite importing a model creates none, and the carve-out's own
+  justification is a claim about suites rather than about which layer they sit
+  in. **`cs2_eq`/`cs2_ad` are deliberately NOT renamed inside gmode**: the
+  star's second slot holds the DYNAMICAL speed once `at_frequency` folds in a
+  rate, so "frozen" would be false there, while the table's column is always the
+  strict limit. Ticket 53's "mixed and gmode are one vocabulary" premise is
+  severed by this ticket, so `mixed.eos_response`'s keys are now independent.
+  **`cs2_frozen_point`/`cs2_frozen_along` were deleted** — no caller anywhere.
+  **Unplanned finding:** `dd2.eos_response(frozen='composition')` returns the
+  LEPTONLESS frozen speed, so dd2 cannot fill the contract through it either —
+  differencing it against the with-leptons equilibrium speed compares two
+  different fluids, a leading-order error in `N^2`. The fix is §5's third
+  response axis (`leptons=`) in `eos/dd2/`, NOT made here because a concurrent
+  session had `eos/dd2/` mid-edit and transiently unimportable. The producer
+  sits in `gmode/verify/run_full_check.py` as `dd2_table`/`dd2_frozen_cs2`
+  meanwhile, one copy, ledgered.
+- [The two `nucleation` goldens that compare round-off](issues/76-nucleation-golden-tolerances.md):
+  both goldens asserted things no assertion should have read, and neither is
+  fixed by a tolerance. `test_regression_solver_cases` compared, RELATIVELY,
+  quantities the CFL flavour lock forces to zero — where the golden records
+  only where the root find stopped, so it pinned floating-point ASSOCIATION and
+  duly broke on the one-ulp `quark_charges` reassociation. It now asserts the
+  lock itself, absolutely, at `robust_root`'s own `atol = 1e-8` — the tightest
+  claim the code makes, so it cannot re-arm on a correctly converged point.
+  **The zero set is charge-mode dependent**, which the ticket's framing missed:
+  `Y_C` and `mu_C` are zero under `cfl` in every mode, but `Y_e`/`mu_e` only
+  under LOCAL neutrality — under `gcn` the droplet is charged and
+  `mu_e = mu_e^H` is a real ~317 MeV electron sea. `mu_e` under `lcn` is
+  dropped rather than bounded: it is a NONLINEAR image of `Y_e` (`n_e ~ mu_e
+  T^2`), so no bound on it follows from the gate. `test_energy_barrier` bounded
+  `max|dW|` absolutely at `1e-9` on a curve reaching 2.7e6 MeV — 4e-16 of it,
+  BELOW ONE ULP, so it asserted bit-identity; now relative to the barrier
+  height at `1e-12`. **No `eos` diff**: `eos/alphabag/verify` already asserts
+  the CFL lock absolutely, so `eos`'s own tripwire for this was correct all
+  along and the `nucleation` golden was the outlier. **`regression.json` is
+  untouched** — regenerating a golden hides the next real change the same way.
+  Measured on the canonical stack: lock residuals `Y_C` 4.51e-12, `mu_C/mu_B`
+  2.48e-13, `Y_e` 5.61e-13 against 1e-8 (2200x, 40000x, 17800x headroom);
+  `W(R)` 4.51e-15 against 1e-12 (222x). The lock bound separates a locked phase
+  from an unlocked one by 4.1e6. **`nucleation` is now fully green on BOTH
+  stacks — `72 passed` on python.org 3.14 and on anaconda 3.9.7** — so the
+  Acceptance criteria block's first line is satisfied. Ticket 25's noted
+  wrinkle is dissolved rather than decided: [ticket 72](issues/72-phase6-conformance.md)
+  landed as `569296a` mid-session, so the path the criterion names,
+  `nucleation/test/`, now exists.
 
 ## Not yet specified
 
