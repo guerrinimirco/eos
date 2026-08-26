@@ -2,6 +2,7 @@
 
 Type: grilling
 Status: open
+Assignee: session 5687bd50
 Blocked by: (none — 24 is resolved)
 Parent: ../map.md
 
