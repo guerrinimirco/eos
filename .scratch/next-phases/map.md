@@ -1296,7 +1296,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   is isothermal on a `T` axis and ADIABATIC on an `SnB` axis, so it can be
   renamed to neither; and `dd2`'s `cs2_ad` is a DIFFERENT quantity from the
   `cs2_adiabatic` four models already return
-  ([72](issues/72-dd2-remaining-cs2-names.md)). The ticket's own "grep returns
+  ([73](issues/73-dd2-remaining-cs2-names.md)). The ticket's own "grep returns
   nothing over `eos/`" condition is therefore not met and should not be.
   Gated as an isolated HEAD-vs-HEAD+patch **pair, twice** — a concurrent session
   moved HEAD mid-ticket, and its first build was contaminated by a swept-up

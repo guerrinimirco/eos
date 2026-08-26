@@ -132,13 +132,13 @@ Ticket 62 is not ordered against this one.
   along one line, and the line's thermal condition is whichever axis the spec
   was built on: **isothermal on a `T` axis, ADIABATIC on an `SnB` axis**. It
   can therefore be renamed to neither, and it is the same §5 defect with a
-  different correct answer. [Ticket 72](72-dd2-remaining-cs2-names.md).
+  different correct answer. [Ticket 73](73-dd2-remaining-cs2-names.md).
 - **`eos/dd2/api.py`'s `cs2_ad`** under `frozen='composition'`. Taken at fixed
   T, so `_ad` misnames its thermal axis exactly as `cs2_eq` did — but it is a
   DIFFERENT quantity from `did`/`njl`/`ccdm`'s `cs2_adiabatic` (frozen
   composition, not fixed entropy), so renaming it to that name would collide
   two quantities under one key. Needs a decision, not a sweep.
-  [Ticket 72](72-dd2-remaining-cs2-names.md).
+  [Ticket 73](73-dd2-remaining-cs2-names.md).
 
 The ticket's Done condition — "a grep for `cs2_eq` over `eos/` returns
 nothing" — is therefore **not** met and should not be: three of its remaining
