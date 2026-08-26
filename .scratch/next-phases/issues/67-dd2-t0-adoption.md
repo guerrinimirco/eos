@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 62
+Blocked by: 74
 Parent: ../map.md
 
 ## Question
@@ -95,3 +95,34 @@ nowhere else:
 
 The reverted diff is reproducible from this ticket in ten minutes; nothing is
 lost by ruling first.
+
+## Update from [ticket 62](62-regenerate-baselines-py314.md) (not a resolution)
+
+**The vehicle this ticket was waiting for has departed, and two of its premises
+moved with it.**
+
+1. **"The three NMP entries re-freeze ... belongs with ticket 62, which
+   regenerates every `.npz`" is now stale.** Ticket 62 has landed. `dd2.npz` is
+   re-frozen on python.org 3.14.2, and the three entries this ticket names —
+   `nmp.K_sat`, `nmp.K_sym`, `nmp.Q_sat` — are **exactly and only** the three
+   keys that moved in that regeneration. All 4689 other `dd2` keys are
+   bit-identical across the two stacks. A re-freeze for the T = 0 adoption is
+   therefore its own §12 act now, not a rider on someone else's.
+
+2. **The scale this ticket quotes has a sibling that is five times larger.**
+   This ticket measures the adoption moving `nmp.Q_sat` by 3.6e-04 rel
+   (0.061 MeV on 168.65). The stack change alone moved the same quantity by
+   2.08e-03 rel (**0.351 MeV**, 168.65 -> 169.00), with `K_sat` at 1.2e-07 and
+   `K_sym` at 1.4e-08 — the same three entries, the same ordering by
+   derivative order, one order of magnitude apart in cause. Point 4 of this
+   ticket ("`nmp.Q_sat` is a third finite difference ... whether the baseline
+   should carry it at all") is the question both measurements are asking, and
+   it now has two independent witnesses instead of one.
+
+3. **Now blocked by [ticket 74](74-py314-non-baseline-failures.md)**, which
+   re-derives `test_api.py`'s `abs=0.2` on Q_sat from a noise floor measured on
+   the canonical stack. Deciding whether a 0.061 MeV adoption shift is
+   acceptable requires knowing what the honest floor is, and today's `abs=0.2`
+   is a number ticket 47 showed asserts below the stencil noise. Answering this
+   ticket first would be measuring against a tolerance already known to be
+   wrong.
