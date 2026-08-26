@@ -100,7 +100,9 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 - `eos/dd2/notebook_api.py` still exists (25.7 kB) and is imported only by
   `notebooks/DD2_usage.{py,ipynb}` — both of which Stage 0 removes.
 - `eos/general/constraints/__init__.py:403` defines `overlay(ax, plane, ...)`.
-- `docs/STRUCTURE.md` does not exist; CLAUDE.md §10 and §11 both reference it.
+- `docs/STRUCTURE.md` **now exists** (commit `f479845`,
+  [ticket 21](issues/21-phase5-structure.md)); CLAUDE.md §10 and §11 both
+  reference it, and §10's worked figure example lives in its §12.
 
 ## Suite status
 
@@ -806,6 +808,35 @@ against this file, not against the earlier `pytest_before*.txt`.
   the lazy hook is invisible to a module sweep. Targeted runs only (the suite
   gate was held): imports 188 + 2, `gmode`+`tov` 64 passed / 15 skipped,
   `mixed` 20 passed.
+
+- [Phase 5 item 3 — write docs/STRUCTURE.md](issues/21-phase5-structure.md):
+  shipped, commit `f479845` — **`docs/STRUCTURE.md`, 1132 lines**, plus
+  `docs/figures/structure_dd2_vmit.png`. Thirteen sections; **§3 is a
+  quantity -> module -> function index** in four tables, which is the section
+  Acceptance's under-a-minute test actually lands on. Ticket 09's ruling
+  applied as ruled: **both** the `.md` and the `.tex` are linked for all
+  thirteen documents, because they carry the same information natively for
+  each format; all four notebooks linked, `.ipynb` and `.py`. **14 python
+  blocks, all 14 executed** in ONE namespace in order — ticket 20's method —
+  so §12's figure really does continue from §11.3's table; the two shell
+  blocks are real `verify/` runs. The one non-`python` fence is the four-line
+  `try/except ImportError` quoted from `eos/dd2/solver.py`, demoted after the
+  extractor caught it, which is the argument for running the extractor. The
+  §10 worked figure goes through `figure_style.py` ALONE — `paper_grid`,
+  `panel_label`, `apply_style`, `save_figure`, `STANDARD_COLORS`. Worked
+  example is the **DD2 + vMIT hybrid end to end** (pairing -> point ->
+  rows+windows -> TOV -> response -> figure), deliberately not the README's
+  pure DD2: `M_max = 2.254` against pure DD2's `2.419`, identical `R(1.4)`,
+  the transition invisible at canonical mass. All 48 relative links and all
+  13 TOC anchors check. **Ticket 11's carried-in half was already done** by
+  [ticket 64](issues/64-general-verify-suite-missing.md); its suite output is
+  pasted into §8. **One defect, reported not fixed**:
+  `eos/mixed/api.py:eos_response` does not forward `phases=`/`muons=` to its
+  central point, so the general two-`Phase` calling form returns
+  `converged=False` and nan everywhere while the front door returns
+  `chi=0.373300` — Stage 7. Blocks re-verified after a second session went
+  live on 30 files: every physics number byte-identical, only the ms timings
+  move. python.org 3.14.2; full suite deliberately not run.
 
 - [Rename did's and dd2's phase-adapter surface to thermo_from_mu](issues/48-rename-did-surface.md):
   done, commit `2891715`. did's lower layer -> `thermo_from_fields` FIRST, then
