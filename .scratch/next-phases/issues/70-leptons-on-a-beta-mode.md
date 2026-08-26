@@ -43,7 +43,7 @@ acceptance of `False` the only thing that changes.
 
 Decided ONCE for all six, not per model. Whatever wins, §4 or §3 gains the
 sentence that makes it the rule rather than the majority, via
-[ticket 22](22-phase5-claudemd.md), and the four models that do not already
+[ticket 85](85-claudemd-sentences-owed.md), and the four models that do not already
 match it change.
 
 Resolved when the reading is chosen with its reasoning recorded, the six models
@@ -69,7 +69,7 @@ it, and silent acceptance loses that error.
 
 Changes: `sfho` and `dd2` stop raising on `True`; `zl` and `did` stop silently
 accepting `False`. `njl` and `ccdm` are already correct and are the reference.
-§3 gains the sentence via [ticket 22](22-phase5-claudemd.md).
+§3 gains the sentence via [ticket 85](85-claudemd-sentences-owed.md).
 
 No beta-mode NUMBER changes under this reading — only whether the call is
 accepted — so `test/baseline/` must not move.

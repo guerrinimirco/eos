@@ -1,8 +1,7 @@
 # `dd2` and `vmit` are structurally privileged inside `eos/mixed`
 
 Type: grilling
-Status: in progress
-Assignee: session 9a857509
+Status: resolved
 Blocked by: -
 Parent: ../map.md
 
@@ -109,3 +108,88 @@ by making `muons` a flag. Rule 29 first or alongside; not after.
 
 Unrecorded before now: `docs/DEFERRED.md` has zero hits for `vmit_params`, and
 the tickets that mention it only quote signatures in passing.
+
+## Ruling
+
+Agreed with the user across four questions. **`dd2` and `vmit` stop being
+special.**
+
+**1. Invert to match §5 — option (1).** The Phase pair becomes the parameter
+argument in fact, not only in the sentence. The argument that decides it is not
+CLAUDE.md's wording but the shipped code: `sfho_phase`, `did_phase`, `zl_phase`,
+`alphabag_phase`, `njl_phase`, `ccdm_phase` and `enjl_branch_pair` **already
+exist** — seven adapters written for pairings the primary signature cannot
+express, reachable only through a keyword escape hatch. The engine was built
+general; only its signatures never caught up. Option (2) would retire seven
+working adapters to make the documentation match the weaker code.
+
+**2. The front door RETIRES entirely — option (b), not a compatibility
+overload.** `(par, flags, vmit_params)` does not survive on the four entry
+points; callers write `phases=default_pair(par, flags, vmit_params)` when they
+want DD2+vMIT. `default_pair` stays in `adapters.py`, so the convenience is one
+call away and nothing is lost but the privileged position. **The check is a
+grep: `vmit_params` must return ZERO hits in `eos/`** — it is 264 today.
+
+The user's reasoning is what settles it: a compatibility overload keeps dd2 and
+vmit special in the one place a reader actually looks, the signature.
+`notebooks/hybrid_eos`'s "two forms" become
+`phases=default_pair(...)` against `phases=(sfho_phase(...), njl_phase(...))`,
+which shows the symmetry instead of an exception.
+
+**3. `hadronic_qn` / `hadronic_charges` move to `general/basis.py`.**
+
+**Correction to this ticket as filed: it is NOT a §2 breach.**
+`eos/dd2/species.py:23` imports `NUCLEONS, HYPERONS_OCTET, DELTAS` from
+`general/particles` and reads `b.baryon_no, b.charge, b.strangeness` off the
+shared `Particle` objects — it re-declares nothing. These are **general-purpose
+functions sitting in a model package**: they would work unchanged for `sfho`,
+`did` or `zl`, needing only a flags object with `hyperons`/`deltas`. So it is
+§7's single-home rule, not §2's no-second-copy rule. Same destination, different
+reason, and the difference matters because there is no duplicate to delete —
+only a file to move. Check on the way whether `general/basis.charges_from_densities`
+then does the same job; if it does, the merged one wins.
+
+**4. `scan.py` is removed.** The user: *"scan is just a code that helps us find
+parametrizations useful. We can remove it, rethink it. In future I will have a
+bayesian code which does it better."* §6 lists Bayesian inference as use case 3,
+so a scan module is aligned with the library's purpose — but a 626-line
+DD2+vMIT specialisation inside the composite engine is not the way to serve it,
+and it is the reason `mixed` imports `dd2.nmp` and `dd2.solver` at module level.
+
+**`build_parametrization` survives and relocates to `eos/dd2/nmp.py`** — not a
+concession to the deletion but a correction owed anyway: §5 says an
+NMP-inverting constructor "is therefore a free function in `nmp.py`". It has
+been living in the composite engine, one layer further from home than the
+anti-pattern §5 names. Four sites in
+`test/tov/test_solver_fast_robustness.py` depend on it — among the tov tests
+[ticket 74](74-py314-non-baseline-failures.md) just repaired.
+
+**The §8 delivery gate is NOT lost**: `mixed/verify/run_full_check.py:231
+_check_causality` implements it independently; `scan.py`'s `eos_is_physical` is
+a second copy used only by the scan.
+
+### What made option (1) cheap
+
+`responses.py:68`'s `from eos.dd2.solver import warm_start` looked like a design
+gap and is not one. The `Phase` contract **already carries** what it needs:
+`thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None, return_state=False)`
+returning `(block, state)` where "`state` is an opaque internal vector", with
+the docstring stating outright that "the engine never sees a model type". The
+DD2 import is a shortcut around an existing surface, so the inversion needs
+**no new contract work** — the surface it should have used has been there all
+along.
+
+### Sequencing
+
+[Ticket 29](29-mixed-species-flags.md) is the first half of this answer and must
+land first or alongside: `mixed` borrows DD2's `SpeciesFlags` (`api.py:49`), and
+29's `species.py` is what lets `species` stop being a DD2 type. 29's ruling also
+removes the `muons=None` kwarg sitting beside `vmit_params` in the same four
+signatures.
+
+Execution is [ticket 86](86-mixed-phase-pair-primary.md) (the inversion) and
+[ticket 87](87-remove-mixed-scan.md) (the removal). CLAUDE.md's §5 front-door
+clause and §1's `scan.py` mention go via
+[ticket 85](85-claudemd-sentences-owed.md).
+
+Status: resolved.

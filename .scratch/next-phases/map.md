@@ -1775,7 +1775,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   ledgered, and [ticket 78](issues/78-composition-freeze-nine-models.md) is
   annotated with it.
 
-- **[`vmit_params` is threaded through the engine's internals](issues/81-vmit-params-in-the-plumbing.md)**,
+- **[`vmit_params` is threaded through the engine's internals](issues/84-vmit-params-in-the-plumbing.md)**,
   raised by the user asking why `hybrid_table` names one quark model. The engine
   DOES work for all models — `phases=(Phase, Phase)` is the general route and
   nine adapters ship — and CLAUDE.md:277 explicitly blesses

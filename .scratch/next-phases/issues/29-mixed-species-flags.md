@@ -72,7 +72,7 @@ implicitly — §4's exact words.
 
 §5's engine list (`adapters.py`, `api.py`, `responses.py`, `verify/`, the
 `.tex`) does not mention `species.py`; it is a list of what an engine HAS, not a
-prohibition, and it gains the entry via [ticket 22](22-phase5-claudemd.md).
+prohibition, and it gains the entry via [ticket 85](85-claudemd-sentences-owed.md).
 
 Open for execution.
 
@@ -94,7 +94,7 @@ Note the engine's own flags are not covered by that rule: `chi` and anything
 else that is the composite engine's physics defaults where 29 says it does,
 the way `phi_field`, `gluons` and `csc` do in the models.
 
-## Sharpened by [ticket 81](81-vmit-params-in-the-plumbing.md)
+## Sharpened by [ticket 84](84-vmit-params-in-the-plumbing.md)
 
 `mixed` does not merely LACK a `species.py`. `eos/mixed/api.py:49` reads
 `from eos.dd2.species import SpeciesFlags` — the engine borrows a MODEL's flag
