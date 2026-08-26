@@ -1,7 +1,8 @@
 # Execute Phase 6 — the port: make `nucleation` import `eos` again
 
 Type: task
-Status: open
+Status: in progress
+Assignee: session 9a857509
 Blocked by: 23
 Parent: ../map.md
 
@@ -18,17 +19,28 @@ Stage 7 requires it and the map does not lift that particular gate.
 
 ### Before anything: the tree, then the before-image
 
-`nucleation`'s tree is dirty on top of `33c1e61`. Resolve it first:
+**DONE, and one of the two instructions was wrong.** Recorded here because the
+correction matters more than the action.
 
-- commit the 16 regenerated paper PDFs under `output/paper/figures/`;
-- **restore `docs/nucleation_physics.md` and `docs/reproducing.md`** — four live
-  references point at them (`README.md:267,271`, `nucleation/tables/quantum.py:7`
-  citing "section 7", the paper notebook) and `docs/` is otherwise empty.
+Ticket 23's brief said to commit the 16 modified paper PDFs, on the grounds that
+"a figure regeneration is a real artifact". **There was no regeneration.**
+Measured byte by byte against HEAD, all sixteen differ by **3 to 6 bytes each,
+every one inside a `/CreationDate` stamp**, same matplotlib 3.10.9, zero content
+change. Committing them would have put sixteen binary blobs into a paper
+repository's history to record a timestamp. They were **discarded**, not
+committed.
 
-Then **take the before-image**: run the suite at that commit against `eos` HEAD
-and record it verbatim as `nucleation_before_py314.txt`. It will be mostly
-collection errors — `nucleation` cannot import `eos` and has not been able to
-since Phase 3. That wreck is the instrument this ticket is measured with.
+`docs/nucleation_physics.md` (28.9 kB) and `docs/reproducing.md` (8.5 kB) were
+**restored** — the four live references stand, including
+`nucleation/tables/quantum.py:7` citing "section 7" of the first.
+
+`nucleation`'s tree is now **clean**, and its HEAD has moved to `cad424b`
+(ticket 62's session pinned the stack there too: `requires-python >= 3.11`,
+numpy >= 2.0, scipy >= 1.17). **Take the before-image against `cad424b`, not
+`33c1e61`** — run the suite against `eos` HEAD and record it verbatim as
+`nucleation_before_py314.txt`. It will be mostly collection errors:
+`nucleation` cannot import `eos` and has not been able to since Phase 3. That
+wreck is the instrument this ticket is measured with.
 
 ### The port
 

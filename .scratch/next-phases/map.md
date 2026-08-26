@@ -1419,11 +1419,13 @@ against this file, not against the earlier `pytest_before*.txt`.
   docstring standard (nothing in 8,121 lines). "Apply the same API conventions"
   is dropped outright — nucleation is a consumer, not a model.
   **The no-push rule is lifted** (its premise, "no remote exists", is false):
-  push after 24, again after 72. **Before 24 opens**, nucleation's dirty tree is
-  resolved — commit the 16 regenerated paper PDFs, and RESTORE
-  `docs/nucleation_physics.md` and `docs/reproducing.md`, which have four live
-  references including a source docstring citing "section 7" of a document that
-  is currently deleted.
+  push after 24, again after 72. **The dirty tree is resolved, and the brief's own
+  instruction for half of it was wrong**: the 16 "regenerated" paper PDFs differ
+  by 3-6 bytes each, all inside a `/CreationDate` stamp, zero content change — so
+  they were DISCARDED, not committed, and a paper repository was spared sixteen
+  binary blobs recording a timestamp. `docs/nucleation_physics.md` and
+  `docs/reproducing.md` were restored; nucleation's tree is clean and its HEAD is
+  now `cad424b`, ticket 62 having pinned the stack there too.
   Noted for Stage 7, not fixed: `alphabag`'s `solve_*` take `params=None` and a
   boolean flag-bag rather than `SpeciesFlags` — and that non-conformance is
   precisely why two of the seven targets are signature-compatible name swaps.
