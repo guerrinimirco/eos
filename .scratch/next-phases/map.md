@@ -106,11 +106,34 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
-**[Ticket 57](issues/57-canonical-stack.md) is RESOLVED, and the text below has
-not caught up.** The ruling is **python.org 3.14 is canonical** and
-`test/baseline/` regenerates on it, under two conditions; until that
-regeneration lands, 57 itself restates the rule that every failure count names
-its interpreter and its collected count. Read the blocks below as history.
+**[Ticket 57](issues/57-canonical-stack.md)'s ruling is EXECUTED.**
+python.org 3.14 is canonical; [ticket 62](issues/62-regenerate-baselines-py314.md)
+regenerated twelve of the thirteen `.npz` on it and pinned the stack in both
+repositories (`requires-python = ">=3.11"`, `numpy>=2.0`, `scipy>=1.17`, the
+tested stack recorded in `pyproject.toml` and the README).
+
+    python.org 3.14  7 failed, 1674 passed, 15 skipped  (1696 collected)
+                     output/_audit/pytest_after_ticket62_py314.txt
+
+down from 12. **That after-number is soft** — a second session was committing
+to `main` throughout the run and collection moved 1694 -> 1696 mid-run. The
+hard measurement is the baseline check re-run against HEAD afterwards:
+`1 failed, 15 passed`.
+
+**Two things did NOT become true, and a count of 7 is not a count of 0:**
+
+- `test_baseline[enjl]` is red **on purpose**. `enjl.npz` is still the 3.9 file
+  because the regeneration STOPPED there: the model picks a different root of
+  its gap equations on the two stacks
+  ([ticket 72](issues/72-enjl-branch-selection.md)). Do not regenerate it.
+- The other six are tolerances and test premises ticket 57 listed as costs of
+  choosing 3.14, now [ticket 74](issues/74-py314-non-baseline-failures.md).
+  None is a `.npz`.
+
+So "green on 3.14" needs 72 and 74 closed. Until then a ticket reporting
+**"0 added failures" means 7, unchanged** — and the interpreter and collected
+count still travel with every number, because the two stacks still both exist
+on this machine. The blocks below are history.
 
 **Concurrency is now the binding constraint on a full-suite number, not the
 stack.** Tickets 60/61 met their gates while another session held eight
@@ -1305,6 +1328,49 @@ against this file, not against the earlier `pytest_before*.txt`.
   **no number moved, no failure added**. The dd2 half of the rename landed
   inside `5c75584`, a concurrent session's commit, not in `5a4a6cc`.
 
+- [Regenerate test/baseline/ on the canonical stack, and pin it](issues/62-regenerate-baselines-py314.md):
+  **Twelve of thirteen regenerated on python.org 3.14.2; `enjl` stopped the
+  regeneration and became [ticket 72](issues/72-enjl-branch-selection.md).**
+  630 of 53763 keys moved. Seven models are bit-identical across the stacks;
+  `tov` and `zlvmit` drift at 1e-8; `ccdm` and `njl` move only in residual
+  norms, numerically-zero quantities, and **`mu_3 = mu_C` in the CFL pattern**
+  — where §3 says the locking leaves no free charge fraction — with `mu_8`
+  moving by **exactly half** in both models, its coefficient in the projection.
+  **The `C_i` fingerprint the Not-yet-specified section predicted fired
+  verbatim, in two independently written models**, which is the strongest
+  evidence yet that it belongs in `eos/general/verify/` as a check rather than
+  a diagnostic. `dd2` moved in **three keys only** — `nmp.Q_sat` by 0.351 MeV,
+  `K_sat`, `K_sym` — with all 4689 other keys bit-identical, which isolates it
+  to the finite-difference stencil of [ticket 47](issues/47-dd2-nmp-inversion.md)
+  rather than the physics; that blessing is the one in this regeneration NOT
+  resting on the round-off screen, and is flagged as such.
+  **The stop condition was discharged before anything moved**: the user's hand
+  copy was found at `~/Desktop/Research/backups/baseline/` (2026-08-25 18:46),
+  byte-identical to the 3.9 set; nothing was discarded, the 3.9 files are at
+  `test/baseline_py39/`, and the verified 3.14 set was added **beside** the old
+  one as `backups/baseline_py314/` with a README naming which is which.
+  Stack pinned in both repos; `matplotlib` deliberately left unpinned because
+  `figure_style.py:337` carries a working 3.4 fallback. All five README
+  examples reproduce **bit-identically** on 3.14, so no printed digit changed.
+- [ENJL's fixed_YC_YS continuation picks its chiral branch by warm start](issues/72-enjl-branch-selection.md):
+  OPEN, and the finding that stopped the regeneration. At Y_C = 0.5, Y_S = 0,
+  leptonless, over six contiguous densities n_B = 0.300–0.467 fm^-3, 3.9 stays
+  chirally broken (M_q 260 -> 216 MeV, no quarks) while 3.14 enters the
+  restored branch early (M_q -> 5.5 MeV, P = -41 MeV/fm^3). Both report
+  `converged`; both are roots. **Neither is right across the window** — eps is
+  lower on the broken branch to n_B = 0.400 and on the restored one from 0.433,
+  so the crossing sits near 0.41 and both baselines ride a metastable branch
+  past it. It is also the **negative control** for the `S_i`/`C_i` screen:
+  nothing here scales with any charge, which is exactly how the screen was
+  meant to separate a moved potential from moved physics.
+- [The six non-baseline failures on 3.14](issues/74-py314-non-baseline-failures.md):
+  OPEN. The rest of ticket 57's cost list, none of it a `.npz` — Q_sat's
+  `abs=0.2` re-derived from a noise floor measured on 3.14, `test_dd2_m8`'s
+  (240, 300) premise re-measured, three tov robustness cases given a sample the
+  6x6 closure can reach, and the DD2 published NMP/TOV values and CompOSE
+  HS(DD2) slices re-checked — that last having no failing test attached, which
+  is what makes it the easiest to skip.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
@@ -1388,10 +1454,13 @@ In scope, not yet sharp enough to ticket:
   weighed — 44 MB total, of which 13 MB is the irreplaceable `.npz` and ~25 MB
   regenerable `zlvmit` fixtures — and rejected for now because §11 says `test/`
   is not published and un-ignoring it would publish the suite with the repo.
-  **Two caveats the interim measure carries:** a hand copy is only as fresh as
-  the last time it was taken, and [ticket 57](issues/57-canonical-stack.md)
-  regenerates every `.npz` — so the copy is worth taking AFTER that lands, not
-  before, or it preserves the superseded set. The underlying question — whether
+  **DONE (ticket 62).** The copy was taken after the regeneration, and
+  additively: `~/Desktop/Research/backups/baseline/` still holds the 3.9 set,
+  `backups/baseline_py314/` holds the verified canonical set, and a
+  `backups/README.txt` says which is which — so the superseded set is preserved
+  and labelled rather than left looking current. The 3.9 files are also on disk
+  at `test/baseline_py39/`. What remains true is the general point: a hand copy
+  is only as fresh as the last time it was taken. The underlying question — whether
   some of this belongs in `eos/` where it would be tracked — is still
   [ticket 21](issues/21-phase5-structure.md)'s.
 
@@ -1442,17 +1511,15 @@ In scope, not yet sharp enough to ticket:
   all, which is a stronger case for it than "declared once, imported
   everywhere".
 
-  **Better as a check than as a diagnostic, and it has a home that does not exist
-  yet.** Any two species differing only in strangeness must move in the ratio of
-  their `S` when an undetermined potential shifts — so this could run directly
-  and fail FIRST, rather than being applied after something goes red. The home is
-  the `general/verify/` suite §5 requires and [ticket 11](issues/11-conformance-triage.md)
-  row 31 ruled `general/` earns: **`eos/general/verify/` does not exist today**
-  (checked), so this is candidate content for whatever
-  [ticket 21](issues/21-phase5-structure.md) creates. What stays unsharp is the
-  form — a single-point identity (`mu_i` equals its projection through B_i, C_i,
-  S_i) and a two-run differential check are different tests, and only the second
-  is what was actually observed.
+  **GRADUATED to [ticket 75](issues/75-undetermined-potential-check.md).** Both
+  reasons it was fog have cleared: `eos/general/verify/` now exists
+  ([ticket 64](issues/64-general-verify-suite-missing.md)), and the screen has a
+  second witness taken PREDICTIVELY rather than after the fact —
+  [ticket 62](issues/62-regenerate-baselines-py314.md) ran it forward over 53763
+  keys and it separated them correctly in both directions, firing on `ccdm` and
+  `njl`'s CFL `mu_3 = mu_C` (with `mu_8` at exactly half) and declining to fire
+  on `enjl`, which turned out to be a real branch flip. What stays open is the
+  form, and that is now ticket 75's question rather than fog.
 - **Whether other tests silently degrade on missing data.** Ticket 39 fixed the
   two TOV helpers and generalised their guard to every `CRUST_FILES` name, but
   nothing has swept the rest of `test/` for the same pattern — an absent input
