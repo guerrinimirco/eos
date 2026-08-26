@@ -1,8 +1,7 @@
 # Execute Phase 6 — the port: make `nucleation` import `eos` again
 
 Type: task
-Status: in progress
-Assignee: session 9a857509
+Status: open
 Blocked by: 23
 Parent: ../map.md
 
