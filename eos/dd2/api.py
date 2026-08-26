@@ -153,17 +153,23 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
                  Y_p=None, **conditions):
     """Second-derivative quantities at one state.
 
+    Both freezes return BOTH sound speeds, because a freeze is a statement
+    about the COMPOSITION and the key name is a statement about the THERMAL
+    variable (CLAUDE.md section 5) — two axes, never one word doing both jobs:
+
+        cs2_isothermal   (dP/deps)_T, T held on both stencil points
+        cs2_adiabatic    the same at fixed entropy per baryon, larger by
+                         C_P/C_V; equal to the isothermal one at T = 0
+
     frozen='equilibrium' — everything re-equilibrates under the perturbation:
-        the sequence sound speed at fixed T under `cs2_isothermal`, the heat
-        capacities C_V and C_P, and the susceptibility matrix
-        chi_ab = dn_a/dmu_b for a,b in (B, C, S), all from the analytic
-        Jacobian. Implemented for beta_eq_neutrinoless. The adiabatic speed,
-        larger by C_P/C_V at T > 0, is not among the returned quantities.
+        the two sequence sound speeds, the heat capacities C_V and C_P, and
+        the susceptibility matrix chi_ab = dn_a/dmu_b for a,b in (B, C, S),
+        all from the analytic Jacobian. Implemented for beta_eq_neutrinoless.
 
     frozen='composition' — every particle fraction held fixed (reactions
-        slow): c_s^2 and the index Gamma at proton fraction Y_p (nucleonic
-        matter). This derivative is also taken at fixed T, so the composition
-        axis is what separates it from the freeze above, not the thermal one.
+        slow): the two sound speeds and the index Gamma at proton fraction Y_p
+        (nucleonic matter), by finite difference along the frozen-Y_p
+        sequence. Gamma is built on cs2_isothermal (see eos.dd2.responses).
 
     Returns a dict of the computed quantities; raises NotImplementedError,
     naming the gap, for freezes or modes not yet wired.
@@ -182,12 +188,22 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
         if T > 0.0:
             out["C_V"] = heat_capacity_V(par, n_B, species, T)
             out["C_P"] = heat_capacity_P(par, n_B, species, T)
+            out["cs2_adiabatic"] = (out["C_P"] / out["C_V"]
+                                    * out["cs2_isothermal"])
+        else:
+            out["cs2_adiabatic"] = out["cs2_isothermal"]   # C_P/C_V -> 1
         return out
     if frozen == "composition":
         if Y_p is None:
             raise ValueError("frozen='composition' needs Y_p")
-        from eos.dd2.responses import sound_speed_adiabatic, adiabatic_index
-        return {"cs2_ad": sound_speed_adiabatic(par, n_B, Y_p, T=T),
+        from eos.dd2.responses import (
+            sound_speed_isothermal_frozen, sound_speed_adiabatic_frozen,
+            adiabatic_index,
+        )
+        return {"cs2_isothermal": sound_speed_isothermal_frozen(
+                    par, n_B, Y_p, T=T),
+                "cs2_adiabatic": sound_speed_adiabatic_frozen(
+                    par, n_B, Y_p, T=T),
                 "Gamma": adiabatic_index(par, n_B, Y_p, T=T)}
     raise NotImplementedError(
         f"frozen={frozen!r} is not wired; implemented: {RESPONSE_FREEZES} "

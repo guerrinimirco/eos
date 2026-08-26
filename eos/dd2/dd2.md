@@ -301,31 +301,48 @@ freezes are implemented; every other combination raises
 `beta_eq_neutrinoless` only, and computed from the ANALYTIC Jacobian rather
 than by differencing solved points:
 
-    cs2_isothermal   c_s^2 = dP/deps along the mode's own sequence     always
+    cs2_isothermal   c_s^2 = (dP/deps)_T along the mode's own sequence  always
+    cs2_adiabatic    the same at fixed entropy per baryon,             always
+                     = (C_P/C_V) cs2_isothermal
     chi      chi_ab = dn_a/dmu_b for a,b in (B, C, S)          always
     C_V      (T/n_B)(ds/dT)_n_B                                T > 0 only
     C_P      (T/n_B)(ds/dT)_P                                  T > 0 only
 
 `C_V` and `C_P` are ABSENT at T = 0 rather than returned as zero: they are not
 defined there, and a zero would be indistinguishable from a computed one.
+`cs2_adiabatic` is present at T = 0 all the same, where the ratio C_P/C_V is 1
+by construction and the two speeds coincide.
 
 `frozen='composition'` — every particle fraction held fixed, i.e. reactions
 slow compared with the perturbation. This is the freeze that takes a target:
 the proton fraction `Y_p` is a named argument of `eos_response`, and it is a
 **freeze target, not one of the mode's conditions** — which is why it is not
-among `n_B, T, Y_C, Y_S, Y_Le`. It returns the adiabatic sound speed and the
-adiabatic index `Gamma` at that proton fraction, for nucleonic matter.
+among `n_B, T, Y_C, Y_S, Y_Le`. It returns the same two sound speeds at that
+proton fraction, by finite difference along the frozen-`Y_p` sequence, plus
+the index `Gamma` = (eps + P)/P * `cs2_isothermal`, for nucleonic matter.
 
 Raising: `frozen='equilibrium'` in any mode but `beta_eq_neutrinoless`; the
 frozen conserved fractions; the leptonic re-neutralization variants.
 
-A returned name says which thermal variable is held, which is why nothing here
-is called a bare `cs2`. Both freezes hold `T`, so both give an isothermal
-speed, and what separates them is the composition axis — the `frozen=`
-argument, not the key: `frozen='equilibrium'` differentiates along the mode's
-own sequence, `frozen='composition'` at frozen particle fractions. The
-adiabatic speed, larger by `C_P/C_V` at T > 0, is not computed by this model;
-`docs/DEFERRED.md` records the gap.
+The conditioning of a second derivative has two axes here, and each is carried
+by its own thing, so no word does double duty. The COMPOSITION axis is the
+`frozen=` argument: `frozen='equilibrium'` differentiates along the mode's own
+sequence, `frozen='composition'` at frozen particle fractions. The THERMAL
+axis is the key name: `cs2_isothermal` holds `T`, `cs2_adiabatic` holds the
+entropy per baryon, and nothing here is called a bare `cs2`. Both freezes
+return both speeds — four numbers, two keys, two arguments.
+
+The word itself is why this matters. In asteroseismology — Zhao & Lattimer,
+arXiv:2204.03037, Eq. (1) — "the adiabatic sound speed" `c_s` means FROZEN
+COMPOSITION, and the g-mode frequency is the difference between it and the
+equilibrium `c_e`. In the CompOSE manual (Typel et al.) "adiabatic" means
+FIXED ENTROPY. This library serves both literatures, so the word is never
+used unqualified: the composition is said by the argument and the entropy by
+the key.
+
+One gap remains, recorded in `docs/DEFERRED.md`: `Gamma` is built on
+`cs2_isothermal`, so at T > 0 it is the isothermal index and the fixed-entropy
+one is larger by the same `C_P/C_V`.
 
 **The API surface.** `eos_point(par, mode, species, n_B=, T= | SnB=, ...)`,
 `eos_table(par, mode, species, axes, ..., progress=, verbose=)` and

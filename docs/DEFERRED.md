@@ -592,15 +592,22 @@ sound speed of the CompOSE manual and of that paper is taken at fixed entropy
 per baryon. At T = 0 they agree; at T = 50 MeV they do not.
 
 The NAMING half of that is now closed across the ten models: every one returns
-`cs2_isothermal`, and `did`, `njl`, `ccdm` and `sfho` return `cs2_adiabatic`
-beside it, derived through C_P/C_V. What remains is that `zl`, `vmit`,
-`alphabag` and `dd2` return no adiabatic speed at all — the first three carry
-no C_P to form it with, and dd2 carries both heat capacities but does not
-assemble it. Two surfaces also still spell the pair for the composition axis
+`cs2_isothermal`, and `did`, `njl`, `ccdm`, `sfho` and `dd2` return
+`cs2_adiabatic` beside it, derived through C_P/C_V. What remains is that `zl`,
+`vmit` and `alphabag` return no adiabatic speed at all — they carry no C_P to
+form it with. Two surfaces also still spell the pair for the composition axis
 rather than the thermal one: `mixed.eos_response` returns `cs2_eq`/`cs2_frozen`,
 and `astro/gmode` takes `cs2_eq`/`cs2_ad` as argument and background-field
 names. Those two share the `sound_speed_eq` / `sound_speed_frozen` vocabulary of
 `mixed/responses.py` and are one rename, not two.
+
+That the word itself is contested is the reason the pair is carried on two
+axes rather than one. In Zhao & Lattimer (arXiv:2204.03037) Eq. (1) the
+"adiabatic sound speed" `c_s` means FROZEN COMPOSITION and the g-mode is the
+difference between it and the equilibrium `c_e`; in the CompOSE manual
+"adiabatic" means FIXED ENTROPY. The repository serves both, so the
+composition is said by the `frozen=` argument and the thermal condition by the
+key name, and no model returns a word doing both jobs.
 
 ---
 
@@ -923,11 +930,18 @@ decision that cannot be made before the tables exist.
   because it is dd2's number and this was an sfho session. Same quantity, same
   physics — a units convention, not a discrepancy.
 - `eos_response` implements the freezes `equilibrium` (beta_eq_neutrinoless
-  only: c_s^2, C_V, C_P, chi_ab) and `composition` (nucleonic Y_p: adiabatic
-  c_s^2 and Gamma). Not yet wired: frozen conserved fractions (Y_C, Y_S fixed
-  with species re-equilibrating), the leptonic re-neutralization variants,
-  the thermal index through the API, and `equilibrium` for the other modes.
-  All raise naming this file.
+  only: both sound speeds, C_V, C_P, chi_ab) and `composition` (nucleonic
+  Y_p: both sound speeds and Gamma). Not yet wired: frozen conserved
+  fractions (Y_C, Y_S fixed with species re-equilibrating), the leptonic
+  re-neutralization variants, the thermal index through the API, and
+  `equilibrium` for the other modes. All raise naming this file.
+- `Gamma` under `frozen='composition'` is built on `cs2_isothermal`, so it is
+  the ISOTHERMAL index; the fixed-entropy one is larger by the same C_P/C_V
+  that separates the two sound speeds, and at T = 0 they coincide. The
+  material to form it is already there — `responses._frozen_derivs` returns
+  the heat capacities along the frozen-Y_p sequence — so this is a second key
+  rather than new physics, left out because changing what the existing key
+  means at T > 0 was not what the naming pass was authorised to do.
 - The muon lepton family is not tracked in the trapped mode:
   `beta_eq_neutrino_trapped` takes (n_B, Y_Le, T) and Y_Lmu raises.
 - `fixed_YC_YS` with neutralizing leptons (`leptons=True`) is not wired; the

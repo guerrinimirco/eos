@@ -142,5 +142,5 @@ if __name__ == "__main__":
     for n in (0.16, 0.4, 0.8):
         cs2 = sound_speed_eq(par, n, flags)
         chi = susceptibilities(par, n, flags)
-        print(f"n_B={n}: cs2_eq={cs2:.4f}  chi_BB={chi[0,0]:.3e}  "
+        print(f"n_B={n}: cs2_isothermal={cs2:.4f}  chi_BB={chi[0,0]:.3e}  "
               f"asym={np.max(np.abs(chi - chi.T)):.1e}")

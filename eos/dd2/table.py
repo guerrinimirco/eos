@@ -94,7 +94,7 @@ class TableSpec:
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)   # Y_C / Y_S / Y_Le targets
     leptons: bool = False
-    want_coeffs: bool = False             # attach equilibrium c_s^2 per T-line
+    want_coeffs: bool = False             # attach c_s^2 = dP/deps per line
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -121,7 +121,13 @@ class TableResult:
     temp_values: np.ndarray               # the T or S grid
     temp_key: str                         # 'T' or 'SnB'
     points: list                          # points[i_combo][i_nB] EoSPoint
-    cs2_eq: list = None                   # cs2[i_combo][i_nB] if want_coeffs
+    #: c_s^2[i_combo][i_nB] = dP/deps along each line, if want_coeffs. The
+    #: composition re-equilibrates along the line, so only the THERMAL axis
+    #: needs naming, and the axis the table was built on fixes it: EXACTLY
+    #: ONE of the two is populated, the other stays None (CLAUDE.md section 5
+    #: — never a bare `cs2` whose meaning depends on the arguments).
+    cs2_isothermal: list = None           # populated on a 'T' axis
+    cs2_adiabatic: list = None            # populated on an 'SnB' axis
     #: [(temperature value, {fraction: value}), ...], parallel to `points`.
     #: One entry per line; with no fraction axes it is one entry per
     #: temperature and the dict is empty, which is the historical layout.
@@ -129,7 +135,10 @@ class TableResult:
 
 
 def _cs2_along(points):
-    """Equilibrium c_s^2 = dP/deps along one n_B line."""
+    """c_s^2 = dP/deps along one n_B line, composition re-equilibrating. The
+    line's thermal condition is whichever axis the spec was built on, so the
+    caller stores this under `cs2_isothermal` ('T') or `cs2_adiabatic`
+    ('SnB')."""
     P = np.array([p.P for p in points])
     eps = np.array([p.eps for p in points])
     return np.gradient(P, eps)
@@ -154,8 +163,9 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
 
     rows=False (default) returns a `TableResult`, whose `points` are indexed
     [i_combination][i_nB] — one line per (temperature, fractions) pair, in the
-    order `TableResult.combos` records. With want_coeffs, equilibrium c_s^2 is
-    attached per line.
+    order `TableResult.combos` records. With want_coeffs, c_s^2 = dP/deps is
+    attached per line, under `cs2_isothermal` on a 'T' axis and
+    `cs2_adiabatic` on an 'SnB' axis — exactly one of the two, the other None.
 
     rows=True instead returns `(rows, {})` in the long format
     `eos.mixed.build_table` returns — one flat dict per converged point,
@@ -240,8 +250,14 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
 
     cs2 = [_cs2_along(line) for line in points] if spec.want_coeffs else None
     result = TableResult(spec=spec, nB=nB, temp_values=temp,
-                         temp_key=spec._temp_key, points=points, cs2_eq=cs2,
+                         temp_key=spec._temp_key, points=points,
                          combos=combos)
+    # The thermal axis of the derivative IS the table's temperature axis: a
+    # 'T' line holds the temperature, an 'SnB' line the entropy per baryon.
+    if spec._temp_key == "T":
+        result.cs2_isothermal = cs2
+    else:
+        result.cs2_adiabatic = cs2
     return (rows_from_result(result), {}) if rows else result
 
 
@@ -308,5 +324,6 @@ if __name__ == "__main__":
     res = build_table(spec)
     for j, S in enumerate(res.temp_values):
         Ts = [p.T for p in res.points[j]]
+        # an SnB axis, so the populated field is the adiabatic one
         print(f"S={S}: T range {min(Ts):.1f}-{max(Ts):.1f} MeV, "
-              f"max cs2={max(res.cs2_eq[j]):.3f}")
+              f"max cs2_adiabatic={max(res.cs2_adiabatic[j]):.3f}")

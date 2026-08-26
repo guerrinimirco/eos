@@ -31,7 +31,8 @@ from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
 from eos.dd2.nmp import from_hyperon_potentials, from_delta_potential
 from eos.dd2.responses import (
-    sound_speed_eq, sound_speed_adiabatic, adiabatic_index, thermal_index,
+    sound_speed_eq, sound_speed_isothermal_frozen,
+    sound_speed_adiabatic_frozen, adiabatic_index, thermal_index,
     heat_capacity_V, snm_sound_speed,
 )
 # Nothing from `backends/` is re-exported here. CLAUDE.md section 5 defines
@@ -60,6 +61,7 @@ __all__ = [
     "MODES", "MODE_FRACTIONS", "hadronic_row", "rows_from_result",
     "save_table", "load_table", "export_csv",
     "compute_nmp", "energy_per_baryon", "esym",
-    "sound_speed_eq", "sound_speed_adiabatic", "adiabatic_index",
+    "sound_speed_eq", "sound_speed_isothermal_frozen",
+    "sound_speed_adiabatic_frozen", "adiabatic_index",
     "thermal_index", "heat_capacity_V", "snm_sound_speed",
 ]

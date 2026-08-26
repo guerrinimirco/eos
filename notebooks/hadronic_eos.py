@@ -1135,7 +1135,8 @@ save_figure(fig, str(FIG_DIR / "mass_lambda"))
 # All four models spell the key `cs2_isothermal`, naming the thermal variable
 # the derivative was taken at. The composition axis is not part of the key: it
 # is the `frozen='equilibrium'` these calls pass, under which nothing is held
-# and the composition re-equilibrates. `did` returns `cs2_adiabatic` beside it.
+# and the composition re-equilibrates. `dd2`, `did` and `sfho` return
+# `cs2_adiabatic` beside it — the same number here at `T = 0`.
 
 # %%
 header("sound speed")

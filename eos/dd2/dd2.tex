@@ -695,8 +695,10 @@ Jacobian rather than by differencing solved points:
 \toprule
 key & quantity & availability \\
 \midrule
-\texttt{cs2\_isothermal} & $c_s^2 = (\partial P/\partial\varepsilon)$ along the
-                   mode's own sequence & always \\
+\texttt{cs2\_isothermal} & $c_s^2 = (\partial P/\partial\varepsilon)_T$ along
+                   the mode's own sequence & always \\
+\texttt{cs2\_adiabatic} & the same at fixed entropy per baryon,
+                   $= (C_P/C_V)\,c_{s,\mathrm{iso}}^2$ & always \\
 \texttt{chi}     & $\chi_{ab} = \partial n_a/\partial\mu_b$,
                    $a,b \in (B, C, S)$ & always \\
 \texttt{C\_V}    & $C_V = (T/\nB)\,(\partial s/\partial T)_{\nB}$ & $T > 0$
@@ -709,28 +711,51 @@ key & quantity & availability \\
 %
 $C_V$ and $C_P$ are absent at $T = 0$ rather than returned as zero: they are
 not defined there, and a zero would be indistinguishable from a computed one.
+\texttt{cs2\_adiabatic} is present at $T = 0$ all the same, where $C_P/C_V = 1$
+by construction and the two speeds coincide.
 
 \paragraph{\texttt{frozen='composition'}} Every particle fraction held fixed,
 i.e.\ reactions slow compared with the perturbation. This is the freeze that
 takes a target: the proton fraction \texttt{Y\_p} is a named argument of
 \texttt{eos\_response}, and it is a \emph{freeze target}, not one of the
 mode's conditions --- which is why it is not among $\nB, T, Y_C, Y_S,
-Y_{L_e}$. It returns the adiabatic sound speed and the adiabatic index
-$\Gamma$ at that proton fraction, for nucleonic matter.
+Y_{L_e}$. It returns the same two sound speeds at that proton fraction, by
+finite difference along the frozen-$Y_p$ sequence, together with the index
+$\Gamma = (\varepsilon + P)/P \; c_{s,\mathrm{iso}}^2$, for nucleonic matter.
 
 \paragraph{What raises.} \texttt{frozen='equilibrium'} in any mode but
 \texttt{beta\_eq\_neutrinoless}; the frozen conserved fractions; and the
 leptonic re-neutralization variants. Each names itself and points at
 \texttt{docs/DEFERRED.md}.
 
-\paragraph{Isothermal against adiabatic.} A returned name says which thermal
-variable is held, which is why no quantity in this package is called a bare
-\texttt{cs2}. Both freezes here hold $T$, so both give an isothermal speed;
-what separates them is the composition axis, carried by the \texttt{frozen=}
-argument rather than by the key. \texttt{frozen='equilibrium'} differentiates
-along the mode's own sequence, \texttt{frozen='composition'} at frozen
-particle fractions. The adiabatic speed, larger by $C_P/C_V$ at $T > 0$, is
-not computed by this model; \texttt{docs/DEFERRED.md} records the gap.
+\paragraph{Isothermal against adiabatic.} The conditioning of a second
+derivative has two axes here, and each is carried by its own thing, so that no
+word does double duty. The \emph{composition} axis is the \texttt{frozen=}
+argument: \texttt{frozen='equilibrium'} differentiates along the mode's own
+sequence, \texttt{frozen='composition'} at frozen particle fractions. The
+\emph{thermal} axis is the key name: \texttt{cs2\_isothermal} holds $T$,
+\texttt{cs2\_adiabatic} holds the entropy per baryon, and no quantity in this
+package is called a bare \texttt{cs2}. Both freezes return both speeds --- four
+numbers, two keys, two arguments.
+
+The word is what makes this necessary. In asteroseismology \cite{ZhaoLattimer2022},
+Eq.~(1),
+%
+\begin{equation}
+  \nu_g^2 = g^2 \left( \frac{1}{c_e^2} - \frac{1}{c_s^2} \right)
+            e^{\nu - \lambda} ,
+\end{equation}
+%
+``the adiabatic sound speed'' $c_s$ means \emph{frozen composition}, and the
+$g$-mode frequency is precisely the difference between it and the equilibrium
+$c_e$; given only one of the two, $\nu_g \equiv 0$. In the CompOSE manual
+\cite{TypelCompOSE2015} ``adiabatic'' means \emph{fixed entropy}. This library serves
+both literatures, so the word is never used unqualified: the composition is
+said by the argument and the entropy by the key.
+
+One gap remains, recorded in \texttt{docs/DEFERRED.md}: $\Gamma$ is built on
+\texttt{cs2\_isothermal}, so at $T > 0$ it is the isothermal index and the
+fixed-entropy one is larger by the same $C_P/C_V$.
 
 \section{Masses}
 \label{sec:masses}
