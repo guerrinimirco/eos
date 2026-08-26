@@ -42,6 +42,23 @@ numpy >= 2.0, scipy >= 1.17). **Take the before-image against `cad424b`, not
 `nucleation` cannot import `eos` and has not been able to since Phase 3. That
 wreck is the instrument this ticket is measured with.
 
+**TAKEN — and it does not enumerate anything, which changes how the port runs.**
+`output/_audit/nucleation_before_py314.txt`, python.org 3.14.2 / numpy 2.3.5 /
+scipy 1.17.0, nucleation at `cad424b` against eos at `d509edb`:
+
+    bare pytest        cannot load conftest; 0 tests collected
+    module walk        0 of 27 nucleation modules import
+
+**All 27 fail on the same first error** — `No module named 'eos.alphabag.eos'` —
+because everything routes through `nucleation/__init__.py`, which imports
+`composition`, which is the first broken import. The single root cause masks
+every other break behind it.
+
+So the gate cannot be "this list goes to zero": there is no list yet. **The port
+is iterative** — fix, re-measure, repeat, and the real breakage is only visible
+as each mask is removed. Re-run the module walk after every site and keep the
+successive counts; that sequence, not a single diff, is this ticket's evidence.
+
 ### The port
 
 Seven import targets, every one with an in-place successor; the mapping table is
@@ -55,6 +72,19 @@ assembles the total itself from five already-public pieces —
 neutrino_thermo}`. The three `include_*` booleans become three `if`s. **No new
 `eos` code.** Do not route this through `alphabag.eos_point`: that would hand
 `eos` the 4-vector solve that is the reason `nucleation` is a package.
+
+**Measured, so the port need not rediscover it.** `thermo_from_mu` returns
+`MatterThermo(n_u, n_d, n_s, n_B, n_C, n_S, T, mu_u, mu_d, mu_s, P, e, s, f,
+Y_C, Y_S, mu_B, mu_C, mu_S)`. Across `composition.py`, `critical.py`,
+`barrier.py` and `tables/`, what callers actually read off the OLD total result
+is exactly:
+
+    n_B  n_C  Y_C  Y_S  mu_B  mu_C  mu_S     <- MatterThermo already carries these
+    P_total  Y_e  Y_nu  mu_e  mu_nu          <- the five the assembly must add
+
+So the assembly is a small `nucleation` dataclass wrapping `MatterThermo` plus
+those five. Nothing else is consumed, and `P_total` is the only one with physics
+in it — get the terms and signs right there and the rest is bookkeeping.
 
 **The parameter helper.** `get_alphabag_custom(alpha=, B4=, m_s=)` has no
 successor, but `Parameters` carries exactly those fields. One small helper in
