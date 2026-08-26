@@ -1,7 +1,8 @@
 # Should the bare solver `include_*` kwargs follow §4's flags to False?
 
 Type: grilling
-Status: open
+Status: in progress
+Assignee: session 9a857509
 Blocked by: -
 Parent: ../map.md
 

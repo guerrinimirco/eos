@@ -159,6 +159,8 @@ both interpreters, and `enjl.npz` is regenerated on 3.14 like the other twelve.
 
     test/baseline/  16 passed          all thirteen models, both stacks agree
     test/enjl/     127 passed
+    test/njl/ test/ccdm/  134 passed   the sibling CFL undetermined potentials
+    test/mixed/    277 passed          the engine that consumes the branch pair
 
 So **"0 added failures" now means 0**, and the map has no deliberate red left.
 The interpreter and collected count still travel with every number, because the

@@ -1,7 +1,8 @@
 # `dd2` and `vmit` are structurally privileged inside `eos/mixed`
 
 Type: grilling
-Status: open
+Status: in progress
+Assignee: session 9a857509
 Blocked by: -
 Parent: ../map.md
 

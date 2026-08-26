@@ -188,9 +188,19 @@ diff is `mu_S` and the two absent species' potentials it projects into
 (`kF.Lambda`, `nu.Lambda`) — the undetermined potential becoming determined,
 which is the fix working.
 
-    PYTHONPATH=. python3 -m pytest test/baseline/ -q   ->  16 passed
-    PYTHONPATH=. python3 -m pytest test/enjl/     -q   ->  127 passed
-    python3 -m eos.enjl.verify.run_full_check          ->  PASS, 18 checks
+    PYTHONPATH=. python3 -m pytest test/baseline/ -q       ->   16 passed
+    PYTHONPATH=. python3 -m pytest test/enjl/ -q           ->  127 passed
+    PYTHONPATH=. python3 -m pytest test/njl/ test/ccdm/ -q ->  134 passed
+    PYTHONPATH=. python3 -m pytest test/mixed/ -q          ->  277 passed
+    python3 -m eos.enjl.verify.run_full_check              ->  PASS, 18 checks
+
+`test/mixed/` is the composite engine that consumes this model through
+`adapters.enjl_branch_pair`, and it is green. That run is NOT cleanly
+attributable — a concurrent session held eighteen files modified in the tree
+throughout — but there is nothing to attribute: it passed. The attributable
+statement about the coupling is ENJL's own `check_maxwell_crossing`, which
+drives the branch pair through `eos.mixed.construction.locate_maxwell` and
+reports dP/P = 6.4e-13, dmu_B/mu_B = 0.
 
 All thirteen `.npz` reproduce, so the change is provably confined to `enjl`.
 `test/baseline_py39/` and the user's hand copy at
