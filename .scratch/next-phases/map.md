@@ -1787,6 +1787,25 @@ against this file, not against the earlier `pytest_before*.txt`.
   [29](issues/29-mixed-species-flags.md), whose `species.py` removes the
   `muons=` kwarg sitting beside it in the same four signatures.
 
+- **[`leptons=` on a beta-equilibrium mode: one rule, in nine models](issues/70-leptons-on-a-beta-mode.md)**:
+  **`leptons=False` raises; `leptons=True` is accepted and ignored as
+  redundant**, written once as `eos.general.modes.resolve_leptons` and called by
+  every unit that turns a mode name into a spec. In a beta mode the leptons are
+  not an unimplemented sector but a CONSTITUTIVE one — the condition IS
+  mu_C + mu_e = 0 — so §4's "an unimplemented flag raises" does not reach the
+  `True` case. **The census was short by three**: nine models carry the row, not
+  six — `vmit` and `alphabag` were silently accepting `False` beside `zl` and
+  `did`, `enjl` was already correct beside `njl` and `ccdm` — and `eos/mixed`
+  with them. `njl`'s and `ccdm`'s `eos_table` still accepted the refused call
+  after `eos_point` was fixed, because `skip_errors` swallowed the raise inside
+  the sweep; all 27 public entry points now refuse it. `leptons=None` is the
+  caller not naming the flag, and is needed because ticket 68 ruled the
+  per-model fixed-fraction default deliberate. **No number moved**: 204 cases
+  compared bit-exact, 32 lines changed and every one a beta mode with an
+  EXPLICIT flag, 0 with it unset. Gate 1424 collected, 0 added failures,
+  `test/baseline/` unmoved. `eos/enjl/solver.py` keeps its own copy, that file
+  being staged by a concurrent session for ticket 72.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:

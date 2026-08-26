@@ -1,7 +1,7 @@
 # `leptons=` on a beta-equilibrium mode: six models, three answers
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Parent: ../map.md
 
@@ -75,3 +75,89 @@ No beta-mode NUMBER changes under this reading — only whether the call is
 accepted — so `test/baseline/` must not move.
 
 Open for execution.
+
+## Resolution
+
+**Landed as `77f8962`, 0 added failures, `test/baseline/` unmoved.** The rule
+is written ONCE, as `eos.general.modes.resolve_leptons`, and called by every
+unit that turns a mode name into a spec.
+
+### The census was short by three
+
+Measured on the tree at `e88736a` rather than restated from ticket 68's audit:
+**nine** models carry both a beta mode and the flag, not six. `vmit` and
+`alphabag` were silently accepting `False` alongside `zl` and `did`, and `enjl`
+was already correct alongside `njl` and `ccdm`.
+
+    before   raise on True, accept False   dd2, sfho
+             silently accept both          zl, did, vmit, alphabag
+             accept True, raise False      enjl, njl, ccdm
+    after    accept True, raise False      all nine, and eos/mixed
+
+Fixing only the six the ticket named would have left the identical defect in
+two models and the composite engine, so all nine changed and `eos/mixed`'s
+`make_charge_spec` with them.
+
+### Three entry points per model, not one
+
+`njl`'s and `ccdm`'s `eos_table` **accepted** `leptons=False` on a beta mode
+after `eos_point` had been fixed, because the refusal was raised inside the
+sweep, where `skip_errors=True` dropped it as a failed point — a §4 silent
+no-op reached through the very flag this ticket is about, and the same
+`table.py` line ticket 68 recorded as "found and NOT fixed". Both now resolve
+at `TableSpec` construction, outside the sweep. Verified rather than assumed:
+all **27** public entry points across the nine models refuse it, plus
+`eos.mixed.make_charge_spec`; the surface probe reports `LEAKS: none`.
+
+Two more sites the first pass missed, both defaults one layer below the public
+API: `dd2.solver.solve_hadronic` and `alphabag.api.eos_table`. Both turned up
+in the gate as added failures, which is what the paired run is for.
+
+### `leptons=None`, and why it is needed
+
+`dd2`, `sfho`, `did` and `alphabag` default the flag **off**; `zl`, `vmit`,
+`njl`, `ccdm`, `enjl` and `mixed` default it **on**, and ticket 68 ruled that
+divergence deliberate. Without a third state an omitted argument in the first
+four is indistinguishable from an explicit `False`, so every default beta call
+would raise. `None` is therefore the only spelling that refuses the
+contradictory call without changing what `fixed_YC` means by default. The two
+legacy `Settings` adapters (`sfho`, `alphabag`, `zl`) pass `None` where the
+mode has no such flag, for the same reason.
+
+`dd2`'s pre-existing "`fixed_YC_YS` with leptons is not wired" raise is kept:
+that one IS §4's unimplemented sector, and folding it into the new rule would
+have turned it into a silent drop.
+
+### No number moved, measured
+
+204 cases — nine models x four modes x two temperatures x {flag unset, True,
+False} — compared bit-exact as hex floats (`P`, `eps`, `s`, `mu_B`, `mu_C`)
+between `git archive e88736a` and the same tree plus this change:
+
+- **32 lines changed**, every one a beta-equilibrium mode with an EXPLICIT
+  flag: 24 `leptons=False` now refused, 8 `leptons=True` (dd2, sfho) now
+  accepted.
+- **0 changed with the flag unset.** The default path is bit-identical.
+- **0 cases where both sides returned numbers and the numbers differ.**
+
+### Gate
+
+python.org **3.14.2** (`python3`), **1424** collected over `test/baseline
+test/general test/{dd2,sfho,zl,did,vmit,alphabag,njl,ccdm,enjl,mixed}
+test/test_imports.py test/test_nonconvergence_return.py
+test/test_parameter_routes.py`, run as an isolated **pair** from
+`git archive e88736a` plus a snapshot of the gitignored `test/`:
+
+    control (e88736a)         1419 passed, 5 skipped   18:56
+    mine    (+ ticket 70)     1419 passed, 5 skipped   18:58
+
+**0 added failures**, and `test/baseline/` did not move.
+
+### Done differently, and said so
+
+`eos/enjl/solver.py` keeps its own copy of the rule rather than calling the
+shared one. Its behaviour already matches the ruling — it is one of the three
+reference models — and a concurrent session has that file staged for
+[ticket 72](72-enjl-branch-selection.md); sharing the implementation there is
+tidiness, and it is not worth the collision. The refactor is one import and
+five deleted lines whenever that work lands.
