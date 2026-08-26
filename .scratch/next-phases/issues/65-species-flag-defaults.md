@@ -1,6 +1,6 @@
 # Should §4's six flags carry the same default in every model?
 
-Type: grilling
+Type: task
 Status: open
 Blocked by: -
 Parent: ../map.md
@@ -61,3 +61,33 @@ what keeps it from drifting back — that half of 61 is the precedent.
 
 **Not a notebook blocker.** The knobs cell passes all six explicitly, so
 tickets 12, 15, 18 and 58 do not wait on this.
+
+## Ruling
+
+Agreed with the user: **unify on all-False**, sequenced as a behaviour change.
+
+**The measurement that decides it.** The defaults are load-bearing, not
+cosmetic: **66 bare `SpeciesFlags()` calls**, **13 entry points** in `njl`,
+`did` and `ccdm` that construct one when `species=None`, and **148 calls
+passing only `hyperons=`** and inheriting the rest. So a physicist writing
+`SpeciesFlags(hyperons=True)` gets a photon gas in `dd2` and none in `abpr`.
+That is §4's "no sector is enabled or disabled implicitly" failing in practice,
+not in theory.
+
+All-False is the only default under which `SpeciesFlags()` means one thing
+everywhere, and "off unless asked" is the only rule that cannot silently ADD
+physics. Option 2 (the physically-usual set) moves numbers for a convenience —
+the cost without the principle.
+
+**This moves numbers and needs its own gate**: `photons=True` is the current
+default in six models, so every T > 0 call reaching a default loses the photon
+gas, and every `.npz` built through one moves. §12 makes those ground truth.
+**Do it now**: [ticket 62](62-regenerate-baselines-py314.md) has just
+regenerated all thirteen baselines, so the machinery and the judgement behind
+it are warm. Measure the blast radius first, regenerate second.
+
+`enjl`'s `hyperons=True` is a different kind of default — that model fixes every
+flag and raises on any move, so its default states the model rather than a
+convenience. It is exempt, and its docstring says why.
+
+Open for execution.

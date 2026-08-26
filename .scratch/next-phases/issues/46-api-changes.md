@@ -1,6 +1,6 @@
 # The five items on the rename list that are not renames
 
-Type: grilling
+Type: task
 Status: open
 Blocked by: 10
 Parent: ../map.md
@@ -40,3 +40,37 @@ ruling before any code moves.
 
 Resolved when each of the five is ruled and the approved ones applied, with the
 added-failure count reported.
+
+## Ruling
+
+All five ruled, four of them **settled by measurement rather than preference**.
+
+1. **Delete `get_vmit_custom`.** `eos/vmit/parameters.py:71` defaults are
+   `m_u=5.0, m_d=7.0, m_s=150.0, a=0.2, B4=180.0` — and `Parameters` carries
+   **identical** defaults. So `get_vmit_custom(B4=170.0, a=0.15)` IS
+   `Parameters(B4=170.0, a=0.15)`: a pure alias carrying no undocumented
+   physics. Mechanical, 31 sites. The replacement sentence in vmit's document
+   is owed by [ticket 76](76-parametrization-surface.md).
+2. **Fold the isentropic solvers into `SnB=`.** `eos/general/tabulate.py:78
+   temperature_at_entropy(...)` ALREADY IS the shared outer 1-D solve, with
+   `TEMPERATURE_AXES = ("T", "SnB")` declared beside it; sfho's
+   `solve_isentropic_beta_eq/_trapped` (`solver.py:735,761`) are a private
+   second copy. §3's sentence is implemented — sfho just does not use it. Fold
+   into the shared one.
+3. **Merge `find_mixed_window` into `locate_window`.** `boundaries.py:107` and
+   `solver.py:792` have **identical signatures**
+   `(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0, ...)`. One job,
+   two names, two modules. `boundaries.py` wins — it also holds
+   `locate_windows`.
+4. **Confirmatory, no module moves.** `create_custom_parametrization` is already
+   in `eos/sfho/nmp.py:233` (it is the NMP inversion, correctly placed by §5);
+   `get_sfho_general` is in `parameters.py:568` and is the plain alternate
+   constructor. Rename each to a `from_*` form in place.
+5. **`build_mixed_eos_table` -> `build_hybrid_table`.** `hybrid.py:118` stitches
+   hadronic + mixed + quark into one branch; `table.py:323 build_table` is
+   §13's grid driver and keeps the vocabulary word. The name says the job.
+
+Only item 5 is a preference; the other four are settled by what the code
+already contains.
+
+Open for execution.

@@ -1,6 +1,6 @@
 # `leptons=` on a beta-equilibrium mode: six models, three answers
 
-Type: grilling
+Type: task
 Status: open
 Blocked by: —
 Parent: ../map.md
@@ -50,3 +50,28 @@ Resolved when the reading is chosen with its reasoning recorded, the six models
 agree, `test/baseline/` has not moved (no beta-mode NUMBER changes under any
 reading -- only whether the call is accepted), and the added-failure count is
 reported with its interpreter and collected count.
+
+## Ruling
+
+Agreed with the user: **`leptons=False` on a beta-equilibrium mode RAISES;
+`leptons=True` is accepted and ignored as redundant.** All six models converge
+on that — njl and ccdm's behaviour made the rule.
+
+Reasoning. §4's "a flag a model does not implement RAISES" governs
+*unimplemented sectors*, and in a beta mode the leptons are not unimplemented,
+they are **constitutive**. So `leptons=True` is a true statement redundantly
+made, and raising on it punishes precisely the caller writing uniform code
+across models — which is what a notebook knobs cell does, and why
+`notebooks/hadronic_eos.py` currently withholds the flag on beta modes rather
+than passing it uniformly (ticket 12). `leptons=False` is genuinely
+contradictory: it asks for beta equilibrium without the particles that define
+it, and silent acceptance loses that error.
+
+Changes: `sfho` and `dd2` stop raising on `True`; `zl` and `did` stop silently
+accepting `False`. `njl` and `ccdm` are already correct and are the reference.
+§3 gains the sentence via [ticket 22](22-phase5-claudemd.md).
+
+No beta-mode NUMBER changes under this reading — only whether the call is
+accepted — so `test/baseline/` must not move.
+
+Open for execution.

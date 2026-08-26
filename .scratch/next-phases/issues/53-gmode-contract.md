@@ -1,7 +1,7 @@
 # A composition contract in general/, so astro/gmode stops importing dd2.solver
 
-Type: grilling
-Status: open
+Type: task
+Status: resolved
 Blocked by: 11
 Parent: ../map.md
 
@@ -77,3 +77,52 @@ An AST check run for ticket 69 found `cs2_eq` bound as an identifier at 35
 sites under `eos/astro/gmode/` plus `test/gmode/`, all parameters, assignments
 or dataclass fields. None is a dict key, so a rename here is a real refactor
 rather than a string sweep.
+
+## Ruling
+
+Agreed with the user, and grounded in **Zhao & Lattimer, arXiv:2204.03037**
+Eq. (1): `nu_g^2 = g^2 (1/c_e^2 - 1/c_s^2) e^(nu-lambda)`. **The g-mode is the
+difference between the equilibrium and frozen sound speeds** — given one alone,
+`nu_g` is identically zero. That is exactly why `gmode` reaches into
+`dd2.solver`.
+
+**The contract.** Model-general, like TOV: it lives in `general/` beside
+`EOSTable_for_TOV` — the layer both `astro/` and the models may import — every
+model PRODUCES one, `gmode` CONSUMES it, and no model internal is imported.
+
+**Payload: the two sound speeds along the sequence, not a composition
+derivative.** Zhao Eq. (1) needs `c_e` and `c_s` per point and nothing else, and
+`eos_response` already returns both per model. This is a SMALLER interface than
+the ticket imagined, and it answers the ticket's second sub-question: the sound
+speeds ARE the contract, not a separate surface.
+
+**T = 0 only, as a first approach** (user's ruling; finite T when it is useful).
+This is clean rather than a compromise: Zhao's operative clause is "without
+varying chemical composition", NOT the zero temperature. At T = 0 with varying
+composition `c_e != c_s` and the g-mode is nonzero — the dd2-with-hyperons case.
+**T = 0 collapses only the THERMAL axis**, leaving the composition axis intact:
+exactly two numbers per point and no thermal-axis naming problem at all.
+
+**The blocker is not what the ticket thought.** Measured: `frozen='composition'`
+is implemented in **`dd2` alone**. Six models expose only `equilibrium`;
+`njl`, `ccdm` and `enjl` expose no freezes at all. So nine models cannot compute
+the second sound speed under any conditioning, and `C_P` was never the
+constraint.
+
+**Therefore the contract ENDS THE SECTION 1 BREACH but does not make `gmode`
+general** — and that is still worth doing. It converts "gmode is DD2-only by
+accident, hidden inside `from eos.dd2.solver import solve_composition`" into
+"gmode is DD2-only until nine models implement one freeze": visible, per-model,
+and ticketable. A model that cannot fill the contract raises saying so, which is
+§3's own answer to a partly-filled surface.
+
+Execution is [ticket 77](77-gmode-contract-build.md). The nine-model freeze gap
+is [ticket 78](78-composition-freeze-nine-models.md).
+
+**Rides along, same files** (finding 17a'): `eos/astro/gmode/rates.py:90-97`
+declares `G2_FERMI`, `G_A`, `F_PI_NN`, `M_PI` as module constants with no
+override path (§6), and `M_PI` duplicates a mass §7 puts in
+`general/particles.py`. The mass comes from there; the weak couplings become
+arguments.
+
+Status: resolved.

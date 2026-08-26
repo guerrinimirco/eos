@@ -1512,6 +1512,55 @@ against this file, not against the earlier `pytest_before*.txt`.
   169.0 is handed couplings whose Q_sat is 168.65 with no signal. Library
   contract, so Stage 7 report; the test now asserts the solve left the seed.
 
+- **The seven grilling tickets, all ruled in one session** — [73](issues/73-dd2-remaining-cs2-names.md),
+  [70](issues/70-leptons-on-a-beta-mode.md), [65](issues/65-species-flag-defaults.md),
+  [53](issues/53-gmode-contract.md), [75](issues/75-undetermined-potential-check.md),
+  [29](issues/29-mixed-species-flags.md), [46](issues/46-api-changes.md). Nine
+  decisions across three rounds, frontier empty. Six are re-typed `task` and stay
+  open for execution; 53 is resolved because its deliverable WAS the design.
+  **Most of them were settled by measurement rather than preference.**
+  **The literature settled two at once.** Zhao & Lattimer (arXiv:2204.03037)
+  Eq. (1): `nu_g^2 = g^2 (1/c_e^2 - 1/c_s^2) e^(nu-lambda)` — **the g-mode IS the
+  difference between the equilibrium and frozen sound speeds**, so with one alone
+  it is identically zero. That is why gmode imports `dd2.solver`. It also showed
+  `dd2`'s `cs2_ad` is **not a mistake but Zhao's own notation** (`c_s` = frozen
+  composition), clashing with CompOSE/Typel where "adiabatic" means fixed
+  entropy. §5's structure resolves it without picking a winner: composition rides
+  on `frozen=`, thermal is the key name — so dd2 returns BOTH `cs2_isothermal`
+  and `cs2_adiabatic` at each freeze, one multiplication away since it already
+  computes `C_V` and `C_P`.
+  **The g-mode contract shrank and its blocker moved.** Payload is the two sound
+  speeds, not a composition derivative; T = 0 only, which collapses the thermal
+  axis and NOT the composition axis (Zhao's operative clause is "without varying
+  chemical composition", not the zero temperature). And the blocker was never
+  `C_P`: **`frozen='composition'` is implemented in `dd2` ALONE** — six models
+  expose only `equilibrium`, and `njl`/`ccdm`/`enjl` expose none. So the contract
+  ends the §1 breach without making gmode general, which is still worth doing:
+  it makes gmode's DD2-only-ness visible and per-model instead of hidden in an
+  import. Execution [77](issues/77-gmode-contract-build.md), the nine-model gap
+  [78](issues/78-composition-freeze-nine-models.md).
+  **§4's flag defaults unify on all-False**, because the defaults are
+  load-bearing and not cosmetic: 66 bare `SpeciesFlags()` calls, 13 entry points
+  building one when `species=None`, 148 calls passing only `hyperons=`. It moves
+  numbers and needs a baseline regeneration — done NOW while ticket 62's
+  machinery is warm. `mixed` gains the flag set and delegates the per-phase
+  sectors to its two phases; measured, there is **no double-counting risk**,
+  because `adapters.py` already passes `include_photons=False` and the mixture
+  adds photons once — the flag makes that correct by construction.
+  **`leptons=False` raises on a beta mode; `leptons=True` is accepted and
+  ignored** — njl/ccdm's reading made the rule for all six, because in a beta
+  mode the leptons are constitutive, not unimplemented.
+  **Four of ticket 46's five items answered themselves**: `get_vmit_custom` is a
+  pure alias (`Parameters` carries identical defaults); the shared `SnB` outer
+  solve ALREADY exists at `general/tabulate.py:78` and sfho just does not use it;
+  `find_mixed_window` and `locate_window` have identical signatures; and
+  `create_custom_parametrization` is already correctly in `nmp.py`.
+  **One new requirement from the user**, now [ticket 76](issues/76-parametrization-surface.md):
+  every model must offer a published set by name, an arbitrary new set, and — for
+  hadronic models — one built from NMPs. Measured, it is not met: four models
+  have no `named()`, `did` is hadronic with NO inverse map, and `dd2`/`did`
+  cannot be built field-by-field.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:

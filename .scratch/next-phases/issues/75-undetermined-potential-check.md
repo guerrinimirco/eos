@@ -1,6 +1,6 @@
 # The S_i / C_i undetermined-potential check, now that general/verify/ exists
 
-Type: grilling
+Type: task
 Status: open
 Blocked by: -
 Parent: ../map.md
@@ -77,3 +77,31 @@ And it is an argument for §2 that the map already noted and this ticket
 confirms: the ratio is readable ONLY because species potentials are derived by
 projection. A model carrying ad-hoc species potentials would show the identical
 failure as unstructured drift across a dozen quantities, with nothing to read.
+
+## Ruling
+
+Agreed with the user: **both forms, and they are different tests with different
+homes.**
+
+**The per-point identity** — `mu_i` equalling its own projection through
+`B_i, C_i, S_i` — is cheap and belongs in `eos/general/verify/`, the home
+[ticket 64](64-general-verify-suite-missing.md) built. It catches a wrong basis
+map on every run.
+
+**But it cannot catch what tickets 56 and 62 caught.** An UNDETERMINED potential
+satisfies the identity at every point and still moves between runs. The
+differential needs two states to compare, so it belongs with the baseline
+comparison, where a second run exists by construction.
+
+Recording only the identity would claim coverage the screen's actual track
+record does not support — and that record is now strong: run forward over
+**53,763 baseline keys**, it separated `ccdm` and `njl`'s CFL undetermined
+potentials (with `mu_8` carrying exactly half, twice, in two independently
+written models) from `enjl`'s real branch flip, which it correctly failed.
+Right in both directions, on data nobody had looked at.
+
+The remaining sub-question — where the differential gets its second run (the
+two solver backends, two stacks, or two seeds) — is execution detail for the
+suite that implements it, not a decision this ticket owes.
+
+Open for execution.

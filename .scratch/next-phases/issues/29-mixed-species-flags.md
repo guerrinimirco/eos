@@ -1,6 +1,6 @@
 # eos/mixed has no species flags, so its photon gas cannot be turned off
 
-Type: grilling
+Type: task
 Status: open
 Parent: ../map.md
 
@@ -46,3 +46,32 @@ Three ways out:
 Whichever way, §11's requirement that every returned quantity be documented means
 `mixed.md`/`mixed.tex` must state the photon treatment either way; today they do
 not.
+
+## Ruling
+
+Agreed with the user: **`mixed` takes a §4 flag set and passes the per-phase
+sectors to the models it couples**, consuming the phase-common ones itself.
+
+**Measured: there is no double-counting risk, because the code is already built
+this way.** `adapters.py:225,538,584` already pass `include_photons=False` into
+every phase, and `mixed/thermodynamics.py:84` adds `photon_thermo(T)` once at
+the mixture level. The separation between per-phase and phase-common sectors
+already exists in the implementation — what is missing is only the **flag**.
+Adding it makes the adapters' hardcoded `False` correct by construction rather
+than correct by accident.
+
+So: `mixed` gains a `species.py` carrying the six §4 names; `hyperons`,
+`deltas`, `muons` and `thermal_mesons` delegate to the two `Phase` objects;
+`photons` and `thermal_neutrinos` are consumed at the mixture level, where the
+eta-split leptons already are.
+
+**[Ticket 65](65-species-flag-defaults.md) is what makes this urgent.** Once
+`photons` defaults to `False` everywhere, an engine that switches photons on
+unconditionally is the only place in the package where a sector is enabled
+implicitly — §4's exact words.
+
+§5's engine list (`adapters.py`, `api.py`, `responses.py`, `verify/`, the
+`.tex`) does not mention `species.py`; it is a list of what an engine HAS, not a
+prohibition, and it gains the entry via [ticket 22](22-phase5-claudemd.md).
+
+Open for execution.
