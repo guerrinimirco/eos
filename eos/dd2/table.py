@@ -87,13 +87,15 @@ class TableSpec:
            as axes
     leptons: for fixed_YC, whether the neutralizing leptons are present. The
            orthogonal flag of CLAUDE.md section 3, not part of the mode name.
+           None leaves it at DD2's leptonless default; on a beta-equilibrium
+           mode True is redundant and ignored and False raises.
     """
     parametrization: object
     mode: str                             # a key of MODES, above
     axes: dict
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)   # Y_C / Y_S / Y_Le targets
-    leptons: bool = False
+    leptons: bool = None
     want_coeffs: bool = False             # attach c_s^2 = dP/deps per line
 
     def __post_init__(self):

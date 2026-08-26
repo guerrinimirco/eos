@@ -54,7 +54,7 @@ from eos.general.basis import species_potential
 from eos.general.state import EoSPoint, LeptonThermo, PhaseThermo
 from eos.general.modes import (
     Conservation, ModeSpec, electron_potential, muon_potential,
-    strangeness_potential,
+    resolve_leptons, strangeness_potential,
 )
 import numpy as np
 from eos.dd2.thermodynamics import kF_from_n, kinetic_thermo
@@ -883,16 +883,21 @@ MODE_FRACTIONS = {
 }
 
 
-def _mode_kwargs(mode, fixed, leptons=False):
+def _mode_kwargs(mode, fixed, leptons=None):
     """The `solve` keywords a mode name, its fractions and the section 3
-    `leptons` flag mean. Asking for the flag where it does not apply raises
-    rather than being quietly dropped."""
+    `leptons` flag mean.
+
+    `leptons=None` is the caller not naming the flag, which DD2 reads as its
+    leptonless default; the beta-equilibrium reading of an explicit value is
+    `eos.general.modes.resolve_leptons`'s.
+    """
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
     kw = dict(MODES[mode])
+    leptons = resolve_leptons(mode, leptons, default=False)
     if kw.pop("takes_leptons", False):
-        kw["yc_leptons"] = bool(leptons)
-    elif leptons:
+        kw["yc_leptons"] = leptons
+    elif leptons and not mode.startswith("beta_eq"):
         raise ValueError(
             f"leptons=True does not apply to mode {mode!r}; it selects the "
             f"neutralizing leptons of fixed_YC (fixed_YC_YS with leptons is "
@@ -919,7 +924,7 @@ def solve_beta_eq_neutrinoless(par, n_B, flags, T=0.0, x0=None,
 
 
 def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
-                   leptons=False, x0=None, analytic_jac=True,
+                   leptons=None, x0=None, analytic_jac=True,
                    check_consistency=True, include_photons=True, **fracs):
     """
     One hadronic point in a NAMED equilibrium mode — the counterpart of
@@ -929,6 +934,8 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
             'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YS', 'fixed_YC_YS'.
     leptons: for fixed_YC, whether the neutralizing leptons are present. The
             orthogonal flag of CLAUDE.md section 3, not part of the mode name.
+            None leaves it at DD2's leptonless default; on a beta-equilibrium
+            mode True is redundant and ignored and False raises.
     fracs : the fixed fractions the mode consumes, as keywords, e.g.
             Y_C=0.3 for 'fixed_YC' or Y_Le=0.4 for the trapped mode. Which
             keys each mode needs is `eos.dd2.MODE_FRACTIONS`.

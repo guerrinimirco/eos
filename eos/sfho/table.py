@@ -94,24 +94,22 @@ _LEGACY_EQUILIBRIA = {
 
 
 def mode_spec(mode: str, fracs: Dict[str, float],
-              leptons: bool = False) -> modes.ModeSpec:
+              leptons: bool = None) -> modes.ModeSpec:
     """The `ModeSpec` a mode name declares, at these fractions and this flag.
 
     One place where a name becomes a declaration; nothing downstream of here
     branches on the name again. `leptons` is the section 3 flag: it applies to
-    the fixed-fraction modes and asking for it elsewhere raises rather than
-    being quietly dropped.
+    the fixed-fraction modes, and `leptons=None` is the caller not naming it,
+    which SFHo reads as its leptonless default. What an explicit value means
+    on a beta-equilibrium mode is `eos.general.modes.resolve_leptons`'s.
     """
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
     entry = dict(MODES[mode])
     factory = entry.pop("spec")
+    leptons = modes.resolve_leptons(mode, leptons, default=False)
     if entry.pop("takes_leptons", False):
-        entry["leptons"] = bool(leptons)
-    elif leptons:
-        raise ValueError(
-            f"leptons=True does not apply to mode {mode!r}; beta equilibrium "
-            f"is defined by the leptons")
+        entry["leptons"] = leptons
     values = []
     for key in MODE_FRACTIONS[mode]:
         if key not in fracs:
@@ -166,14 +164,15 @@ class TableSpec:
     fixed: scalar values for the fractions the mode needs that are not swept
     leptons: for the fixed-fraction modes, whether the neutralizing electrons
         are present. The orthogonal flag of CLAUDE.md section 3, not part of
-        the mode name.
+        the mode name. None leaves it at SFHo's leptonless default; on a
+        beta-equilibrium mode True is redundant and ignored and False raises.
     """
     parametrization: Parameters
     mode: str
     axes: dict
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)
-    leptons: bool = False
+    leptons: bool = None
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -508,8 +507,10 @@ def _settings_to_spec(settings: TableSettings) -> Tuple[TableSpec, List[str]]:
     if eq not in _LEGACY_EQUILIBRIA:
         raise ValueError(f"Unknown equilibrium type: {settings.equilibrium}")
     mode, temp_key = _LEGACY_EQUILIBRIA[eq]
-    leptons = (mode in ("fixed_YC", "fixed_YC_YS")
-               and bool(settings.include_electrons))
+    # None where the mode has no such flag: in a beta-equilibrium mode the
+    # leptons are constitutive, and an explicit False there is refused.
+    leptons = (bool(settings.include_electrons)
+               if mode in ("fixed_YC", "fixed_YC_YS") else None)
 
     grids = {"Y_C": settings.Y_C_values, "Y_S": settings.Y_S_values,
              "Y_Le": settings.Y_L_values}

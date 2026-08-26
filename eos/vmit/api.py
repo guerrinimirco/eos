@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from eos.general.tabulate import (temperature_at_entropy,
                                   unconverged_response)
+from eos.general.modes import resolve_leptons
 from eos.vmit.solver import EoSPoint
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.table import (
@@ -85,8 +86,9 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
         (n_e = n_C), so the total system is electrically neutral. With
         leptons=False the result is charged quark matter with no leptons,
         which is what a mixed-phase construction needs per pure phase before
-        imposing global neutrality. Ignored by the beta-equilibrium modes,
-        where leptons are what the equilibrium is about.
+        imposing global neutrality. In the beta-equilibrium modes the leptons
+        are constitutive rather than optional: leptons=True is redundant and
+        is ignored, leptons=False raises.
     conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le).
 
     Returns
@@ -104,6 +106,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     if (T is None) == (SnB is None):
         raise ValueError("exactly one of T / SnB must be given")
     _check_conditions(mode, conditions)          # caller errors raise here
+    leptons = resolve_leptons(mode, leptons, default=True)
 
     def solve(temperature):
         line = dict(conditions)

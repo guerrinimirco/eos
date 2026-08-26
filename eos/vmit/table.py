@@ -18,6 +18,7 @@ import numpy as np
 from eos.general.tabulate import (
     lines_from_axes, sweep_lines, TEMPERATURE_AXES,
 )
+from eos.general.modes import resolve_leptons
 from eos.vmit.parameters import Parameters
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.solver import (
@@ -109,8 +110,8 @@ class TableSpec:
     fixed : scalar values for the fractions the mode needs and the axes do not
             sweep
     leptons: for the fixed-fraction modes, whether neutralizing electrons are
-            added. Has no meaning in the beta-equilibrium modes, where leptons
-            are what the equilibrium is about.
+            added. In the beta-equilibrium modes the leptons are constitutive,
+            so True is redundant and ignored and False raises.
     """
     params: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
@@ -138,6 +139,7 @@ class TableSpec:
             if key not in supplied:
                 raise ValueError(f"mode {self.mode!r} needs {key!r}, as an "
                                  f"axis or in fixed")
+        self.leptons = resolve_leptons(self.mode, self.leptons, default=True)
 
 
 @dataclass

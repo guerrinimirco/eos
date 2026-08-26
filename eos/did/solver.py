@@ -58,7 +58,8 @@ import numpy as np
 from eos.general.basis import species_potential
 from eos.general.modes import (
     ModeSpec, beta_eq_neutrinoless, beta_eq_neutrino_trapped, electron_potential,
-    fixed_YC, fixed_YC_YS, muon_potential, strangeness_potential,
+    fixed_YC, fixed_YC_YS, muon_potential, resolve_leptons,
+    strangeness_potential,
 )
 from eos.general.solve import solve_system
 from eos.general.thermodynamics_leptons import (
@@ -661,8 +662,12 @@ def mode_spec(mode, conditions):
 
     One place where the names of CLAUDE.md section 3 turn into a declaration,
     so nothing else in the package branches on a mode string.
+
+    An absent (or None) `leptons` is the caller not naming the flag, which DID
+    reads as its leptonless default; what an explicit value means on a
+    beta-equilibrium mode is `eos.general.modes.resolve_leptons`'s.
     """
-    leptons = conditions.get("leptons", False)
+    leptons = resolve_leptons(mode, conditions.get("leptons"), default=False)
     if mode == "beta_eq_neutrinoless":
         return beta_eq_neutrinoless()
     if mode == "beta_eq_neutrino_trapped":

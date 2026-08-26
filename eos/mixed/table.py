@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from eos.general.modes import resolve_leptons
 from eos.general.tabulate import (
     TEMPERATURE_AXES, lines_from_axes, print_progress, split_conditions,
 )
@@ -58,7 +59,13 @@ MODE_FRACTIONS = {
 
 
 def make_charge_spec(mode, fracs, leptons=True):
-    """`ChargeSpec` for a named mode and its fraction values."""
+    """`ChargeSpec` for a named mode and its fraction values.
+
+    What `leptons` means on a beta-equilibrium mode is
+    `eos.general.modes.resolve_leptons`'s: constitutive, so True is redundant
+    and ignored and False raises.
+    """
+    leptons = resolve_leptons(mode, leptons, default=True)
     if mode == "beta_eq_neutrinoless":
         return beta_eq_neutrinoless()
     if mode == "beta_eq_neutrino_trapped":

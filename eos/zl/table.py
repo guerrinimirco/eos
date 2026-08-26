@@ -25,6 +25,7 @@ import numpy as np
 from eos.general.tabulate import (
     lines_from_axes, sweep_lines, TEMPERATURE_AXES,
 )
+from eos.general.modes import resolve_leptons
 from eos.zl.parameters import Parameters
 from eos.zl.solver import (
     EoSPoint, MODE_FRACTIONS, solve_beta_eq_neutrinoless,
@@ -92,9 +93,9 @@ class TableSpec:
             fraction the mode fixes ('Y_C', 'Y_Le') as a further axis}
     fixed : scalar values for the fractions the mode needs and the axes do not
             sweep
-    leptons: for `fixed_YC`, whether neutralizing electrons are added. Has no
-            meaning in the beta-equilibrium modes, where leptons are what the
-            equilibrium is about.
+    leptons: for `fixed_YC`, whether neutralizing electrons are added. In the
+            beta-equilibrium modes the leptons are constitutive, so True is
+            redundant and ignored and False raises.
     """
     params: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
@@ -124,6 +125,7 @@ class TableSpec:
             if key not in supplied:
                 raise ValueError(f"mode {self.mode!r} needs {key!r}, as an "
                                  f"axis or in fixed")
+        self.leptons = resolve_leptons(self.mode, self.leptons, default=True)
 
 
 @dataclass
@@ -273,7 +275,12 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List[EoSPoint]]:
 
     spec = TableSpec(params=params, mode=_LEGACY_MODES[eq_type], axes=axes,
                      include=SpeciesFlags(photons=settings.include_photons),
-                     leptons=settings.include_leptons)
+                     # None where the mode has no such flag: in a
+                     # beta-equilibrium mode the leptons are constitutive,
+                     # and an explicit False there is refused.
+                     leptons=(settings.include_leptons
+                              if _LEGACY_MODES[eq_type] == "fixed_YC"
+                              else None))
     verbose = settings.print_results or settings.print_timing
     result = build_table(spec, skip_errors=False, verbose=verbose)
 

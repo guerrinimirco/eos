@@ -31,6 +31,7 @@ import numpy as np
 from eos.general.tabulate import (
     lines_from_axes, sweep_lines, TEMPERATURE_AXES,
 )
+from eos.general.modes import resolve_leptons
 from eos.alphabag.parameters import Parameters
 from eos.alphabag.solver import (
     MODE_FRACTIONS, solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
@@ -124,16 +125,17 @@ class TableSpec:
     fixed : scalar values for the conditions the mode needs and the axes do
             not sweep
     leptons: for the fixed-fraction modes, whether neutralizing electrons are
-            added. Has no meaning in the beta-equilibrium modes, where leptons
-            are what the equilibrium is about, nor in the paired phase, which
-            is neutral by construction.
+            added. None leaves it at alphaBag's leptonless default; in the
+            beta-equilibrium modes the leptons are constitutive, so True is
+            redundant and ignored and False raises. The paired phase is
+            neutral by construction.
     """
     params: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
     axes: dict = field(default_factory=dict)
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)
-    leptons: bool = False
+    leptons: bool = None
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -155,6 +157,7 @@ class TableSpec:
             if key not in supplied:
                 raise ValueError(f"mode {self.mode!r} needs {key!r}, as an "
                                  f"axis or in fixed")
+        self.leptons = resolve_leptons(self.mode, self.leptons, default=False)
 
 
 @dataclass
@@ -342,7 +345,10 @@ def compute_table(settings: TableSettings) -> Dict[Tuple, List]:
             photons=settings.include_photons,
             gluons=settings.include_gluons,
             thermal_neutrinos=settings.include_thermal_neutrinos),
-        leptons=settings.include_electrons)
+        # None where the mode has no such flag: in a beta-equilibrium mode
+        # the leptons are constitutive, and an explicit False there is refused.
+        leptons=(settings.include_electrons
+                 if mode in ("fixed_YC", "fixed_YC_YS") else None))
     verbose = settings.print_results or settings.print_timing
     result = build_table(spec, skip_errors=False, verbose=verbose)
 

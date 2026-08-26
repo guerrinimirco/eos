@@ -35,6 +35,7 @@ from eos.general.tabulate import (
     TEMPERATURE_AXES, lines_from_axes, print_progress, sweep_lines,
     temperature_at_entropy,
 )
+from eos.general.modes import resolve_leptons
 from eos.njl.parameters import Parameters
 from eos.njl.solver import MODE_FRACTIONS, solve, warm_start
 from eos.njl.species import SpeciesFlags
@@ -105,9 +106,10 @@ class TableSpec:
     fixed : scalar values for the fractions the mode needs and the axes do not
             sweep
     leptons: for the fixed-fraction modes, whether neutralizing leptons are
-            added so the total system is electrically neutral. Meaningless in
-            the beta-equilibrium modes, where the leptons are what the
-            equilibrium is about.
+            added so the total system is electrically neutral. In the
+            beta-equilibrium modes the leptons are constitutive, so True is
+            redundant and ignored and False raises -- here rather than inside
+            the sweep, where skip_errors would swallow it.
     """
     par: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
@@ -130,6 +132,7 @@ class TableSpec:
             if key not in supplied:
                 raise ValueError(f"mode {self.mode!r} needs {key!r}, as an "
                                  f"axis or in fixed")
+        self.leptons = resolve_leptons(self.mode, self.leptons, default=True)
 
 
 @dataclass

@@ -62,7 +62,7 @@ def _check(mode, conditions):
 
 
 def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
-              leptons=False, x0=None, **conditions):
+              leptons=None, x0=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -78,14 +78,16 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     T, SnB : float
         Exactly one of temperature [MeV] or entropy per baryon; SnB makes T an
         unknown of the same solve rather than an outer iteration.
-    leptons : bool
+    leptons : bool, optional
         For the fixed-fraction modes: whether neutralizing leptons are added,
         so the total system is electrically neutral. With leptons=False the
         result is charged matter, which is what a mixed-phase construction
-        needs per pure phase before imposing global neutrality. Meaningless in
-        the beta-equilibrium modes, where the leptons are what the equilibrium
-        is about. It is a flag, not a condition (CLAUDE.md section 3), so it is
-        a named argument rather than a member of `conditions`.
+        needs per pure phase before imposing global neutrality; left unnamed
+        it is DID's leptonless default. In the beta-equilibrium modes the
+        leptons are constitutive rather than optional: leptons=True is
+        redundant and is ignored, leptons=False raises. It is a flag, not a
+        condition (CLAUDE.md section 3), so it is a named argument rather than
+        a member of `conditions`.
     conditions :
         The fractions the mode fixes (Y_C, Y_S, Y_Le).
     """
@@ -105,7 +107,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
                        f"n_B={n_B:g} fm^-3", point)
 
 
-def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=False,
+def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=None,
               skip_errors=True, rows=False, progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
@@ -136,7 +138,7 @@ RESPONSE_FREEZES = ("equilibrium",)
 
 
 def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
-                 T=0.0, leptons=False, rel_dn=1e-3, dT=0.05, **conditions):
+                 T=0.0, leptons=None, rel_dn=1e-3, dT=0.05, **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' -- nothing is held: the composition re-equilibrates

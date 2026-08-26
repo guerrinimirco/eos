@@ -69,7 +69,7 @@ def _check(mode, conditions):
     return dict(conditions)
 
 
-def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
+def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=None,
               x0=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
@@ -88,12 +88,15 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
         the unknown vector (CLAUDE.md section 3).
     x0 : array, optional
         A warm start, in the unknown order `solver.unknown_names` documents.
-    leptons : bool
+    leptons : bool, optional
         For the fixed-fraction modes: whether the neutralizing electrons are
         added, so the total system is electrically neutral. With leptons=False
         the matter is charged, which is what a mixed-phase construction needs
-        per pure phase before imposing global neutrality. A flag, not a
-        condition (CLAUDE.md section 3), so it is a named argument.
+        per pure phase before imposing global neutrality; left unnamed it is
+        SFHo's leptonless default. A flag, not a condition (CLAUDE.md section
+        3), so it is a named argument. In the beta-equilibrium modes the
+        leptons are constitutive rather than optional: leptons=True is
+        redundant and is ignored, leptons=False raises.
     conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le).
 
     Returns
@@ -120,7 +123,7 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
     return PointResult(True, "converged", point)
 
 
-def eos_table(par, mode, species, axes, fixed=None, leptons=False,
+def eos_table(par, mode, species, axes, fixed=None, leptons=None,
               skip_errors=True, rows=False, progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
@@ -157,7 +160,7 @@ RESPONSE_FREEZES = ("equilibrium",)
 
 
 def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
-                 leptons=False, **conditions):
+                 leptons=None, **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' — nothing is held: the composition re-equilibrates

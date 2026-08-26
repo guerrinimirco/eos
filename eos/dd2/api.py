@@ -59,7 +59,7 @@ def _check(mode, conditions):
     return dict(conditions)
 
 
-def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
+def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=None,
               x0=None, analytic_jac=True, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
@@ -76,12 +76,15 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
     T, SnB : float
         Exactly one of temperature [MeV] or entropy per baryon; SnB adds an
         outer 1-D solve for T.
-    leptons : bool
+    leptons : bool, optional
         For fixed_YC: whether the neutralizing leptons are added, so the total
         system is electrically neutral. With leptons=False the matter is
         charged, which is what a mixed-phase construction needs per pure phase
-        before imposing global neutrality. A flag, not a condition (CLAUDE.md
-        section 3), so it is a named argument.
+        before imposing global neutrality; left unnamed it is DD2's leptonless
+        default. A flag, not a condition (CLAUDE.md section 3), so it is a
+        named argument. In the beta-equilibrium modes the leptons are
+        constitutive rather than optional: leptons=True is redundant and is
+        ignored, leptons=False raises.
     conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le).
 
     Returns
@@ -116,7 +119,7 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=False,
         return PointResult(False, str(err))
 
 
-def eos_table(par, mode, species, axes, fixed=None, leptons=False,
+def eos_table(par, mode, species, axes, fixed=None, leptons=None,
               skip_errors=True, progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 

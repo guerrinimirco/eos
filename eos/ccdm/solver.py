@@ -74,7 +74,7 @@ from eos.ccdm.species import (
 from eos.ccdm.thermodynamics import state_at
 from eos.general.modes import (
     beta_eq_neutrino_trapped, beta_eq_neutrinoless, electron_potential,
-    fixed_YC, fixed_YC_YS, muon_potential,
+    fixed_YC, fixed_YC_YS, muon_potential, resolve_leptons,
 )
 from eos.general.physics_constants import hc3
 from eos.general.solve import solve_system
@@ -121,13 +121,8 @@ def mode_spec(mode, leptons=True, **fractions):
     if given != expected:
         raise ValueError(f"mode {mode!r} takes fractions {sorted(expected)}; "
                          f"got {sorted(given)}")
+    leptons = resolve_leptons(mode, leptons, default=True)
     if mode.startswith("beta_eq"):
-        if not leptons:
-            raise ValueError(
-                "leptons=False has no meaning in beta equilibrium, which is "
-                "defined by the leptons; it applies to fixed_YC and "
-                "fixed_YC_YS, where it is the charged pure phase a "
-                "mixed-phase construction needs")
         return MODE_FACTORIES[mode](**fractions)
     return MODE_FACTORIES[mode](leptons=leptons, **fractions)
 

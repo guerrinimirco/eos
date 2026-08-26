@@ -32,6 +32,7 @@ from dataclasses import dataclass
 
 from eos.general.tabulate import (temperature_at_entropy,
                                   unconverged_response)
+from eos.general.modes import resolve_leptons
 from eos.alphabag.solver import MODE_FRACTIONS
 from eos.alphabag.species import SpeciesFlags
 from eos.alphabag.table import TableSpec, build_table, solve_at
@@ -69,7 +70,7 @@ def _check_conditions(mode, conditions):
 
 
 def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
-              leptons=False, x0=None, **conditions):
+              leptons=None, x0=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -86,15 +87,16 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     T, SnB : float
         Exactly one of temperature [MeV] or entropy per baryon; SnB adds an
         outer 1-D solve for T.
-    leptons : bool
+    leptons : bool, optional
         For the fixed-fraction modes: whether neutralizing electrons are added
         (n_e = n_C), so the total system is electrically neutral. With
         leptons=False -- the default here, since a quark phase is most often
         wanted as one half of a mixed phase -- the result is charged quark
         matter, which is what a mixed-phase construction needs per pure phase
-        before imposing global neutrality. Ignored by the beta-equilibrium
-        modes, where leptons are what the equilibrium is about, and by the
-        paired phase, which is neutral with no electrons at all.
+        before imposing global neutrality. In the beta-equilibrium modes the
+        leptons are constitutive rather than optional: leptons=True is
+        redundant and is ignored, leptons=False raises. The paired phase is
+        neutral with no electrons at all.
     conditions : the conditions the mode fixes (Y_C, Y_S, Y_Le, or Delta0).
 
     Returns
@@ -110,6 +112,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     if (T is None) == (SnB is None):
         raise ValueError("exactly one of T / SnB must be given")
     _check_conditions(mode, conditions)          # caller errors raise here
+    leptons = resolve_leptons(mode, leptons, default=False)
 
     def solve(temperature):
         line = dict(conditions)
@@ -141,7 +144,7 @@ def _entropy_per_baryon(point, n_B):
     return point.s_total / n_B
 
 
-def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=False,
+def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=None,
               skip_errors=True, rows=False, progress=None, verbose=False):
     """A solved grid over {n_B} x {T} [x condition axes].
 
@@ -174,7 +177,7 @@ RESPONSE_FREEZES = ("equilibrium",)
 
 
 def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
-                 T=0.0, leptons=False, rel_step=1e-3, **conditions):
+                 T=0.0, leptons=None, rel_step=1e-3, **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' -- everything re-equilibrates under the perturbation,

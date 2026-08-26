@@ -42,7 +42,7 @@ from eos.did.species import SpeciesFlags
 MAX_BISECT = 6
 
 
-def solve_at(par, mode, n_B, conditions, flags, leptons=False, x0=None):
+def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None):
     """One point of a table: the mode's solve at this density and line.
 
     `conditions` carries the line's temperature (`T`) or entropy per baryon
@@ -92,16 +92,17 @@ class TableSpec:
     fixed : scalar values for the fractions the mode needs and the axes do not
             sweep
     leptons: for the fixed-fraction modes, whether neutralizing leptons are
-            added so the total system is electrically neutral. Meaningless in
-            the beta-equilibrium modes, where the leptons are what the
-            equilibrium is about.
+            added so the total system is electrically neutral. None leaves it
+            at DID's leptonless default; in the beta-equilibrium modes the
+            leptons are constitutive, so True is redundant and ignored and
+            False raises.
     """
     par: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
     axes: dict = field(default_factory=dict)
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)
-    leptons: bool = False
+    leptons: bool = None
 
     def __post_init__(self):
         if "nB" not in self.axes:

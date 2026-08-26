@@ -186,10 +186,47 @@ def fixed_YC_YS(Y_C, Y_S, leptons=True):
                     targets={"Y_C": Y_C, "Y_S": Y_S}, leptons=leptons)
 
 
+def resolve_leptons(mode, leptons, default):
+    """The `leptons` flag a named mode is built with -- and the one call it
+    refuses.
+
+    Section 3 makes `leptons` orthogonal to the mode, but only on the
+    fixed-fraction modes. In a beta-equilibrium mode the leptons are not an
+    unimplemented sector, they are CONSTITUTIVE: the equilibrium condition is
+    mu_C + mu_e = 0, a statement about the electrons, and electric neutrality
+    is what closes the system. So on a beta-equilibrium mode
+
+        leptons=True    a true statement redundantly made -- accepted and
+                        ignored, so a caller writing one loop over several
+                        models may pass the flag uniformly.
+        leptons=False   beta equilibrium without the particles that define
+                        it -- raises. This is section 4's rule that a flag is
+                        never a silent no-op, applied to the value that
+                        actually asks for something.
+        leptons=None    the caller did not name the flag at all -- `default`.
+
+    On every other mode the flag is honoured as given.
+
+    `default` is the model's own fixed-fraction default, and it differs
+    between models on purpose: a model whose usual job is the charged pure
+    phase of a mixed-phase construction defaults it off, one whose usual job
+    is neutral matter defaults it on.
+    """
+    if mode.startswith("beta_eq"):
+        if leptons is False:
+            raise ValueError(
+                f"leptons=False has no meaning in mode {mode!r}: beta "
+                f"equilibrium is defined by the leptons (mu_C + mu_e = 0). "
+                f"The flag applies to fixed_YC and fixed_YC_YS, where it "
+                f"selects the charged pure phase a mixed-phase construction "
+                f"needs before global neutrality is imposed")
+        return True
+    return default if leptons is None else bool(leptons)
+
+
 # =============================================================================
 # WHAT A MODE IMPLIES
 # =============================================================================
-
 def charge_unknowns(spec):
     """The conserved-charge potentials this mode makes unknowns, in order.
 
