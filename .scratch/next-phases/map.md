@@ -1947,3 +1947,41 @@ In scope, not yet sharp enough to ticket:
   cross-check" as item 3 that the suite does not run — the list was already
   wrong and this ticket renumbered around it rather than editing a line it was
   not asked to touch.
+
+- [dd2's two remaining `cs2` names, neither of which is a rename](issues/73-dd2-remaining-cs2-names.md):
+  **executed as ruled; `cs2_ad` and `TableResult.cs2_eq` are gone from
+  `eos/dd2`.** `eos_response` now returns `cs2_isothermal` AND `cs2_adiabatic`
+  at BOTH freezes — composition on the `frozen=` argument, thermal in the key —
+  and `TableResult` carries two fields with **exactly one populated**, chosen by
+  `spec._temp_key` (`T` -> isothermal, `SnB` -> adiabatic), the other `None`.
+  Five models now derive the pair through C_P/C_V the one way.
+  **The equilibrium freeze cost one multiplication, as the ruling predicted;
+  the composition freeze did not, and the ruling did not claim it would.** dd2's
+  `C_V`/`C_P` are taken along the BETA-EQ sequence, so they are the wrong ratio
+  for a frozen-`Y_p` speed: `responses.py` gained `_frozen_derivs`, one central
+  stencil along the fixed-`Y_p` sequence, and builds both heat capacities from it.
+  **The function names had to move with the keys** —
+  `responses.sound_speed_adiabatic` WAS Zhao's `c_s` (frozen composition at
+  fixed T), so it split into `sound_speed_isothermal_frozen` (same stencil
+  byte-for-byte, number unmoved) and `sound_speed_adiabatic_frozen`. Its three
+  outside importers are all tests; **no `eos/mixed` or `eos/astro` source file
+  imports it**, so neither package was touched.
+  **The four notebooks needed no reader change** — the ruling expected a two-key
+  reader, but ticket 69 had already collapsed them to one `cs2_isothermal` read;
+  only a stale sentence naming `did` as the sole model returning the pair was
+  corrected, in the `.py` and its `.ipynb`.
+  One gap opened and RECORDED, not left silent: `Gamma` still stands on
+  `cs2_isothermal`, so at T > 0 it is the isothermal index — restanding it would
+  move a number, which a naming ruling does not authorise (`docs/DEFERRED.md`).
+  Both documents state the clash as physics now, `dd2.tex` printing Zhao &
+  Lattimer Eq. (1) and citing it against `TypelCompOSE2015`.
+  Gates, python.org 3.14.2, never under `timeout`: a concurrent session's
+  in-flight `eos/astro/gmode/sound_speeds.py` breaks `test/gmode` at COLLECTION
+  on the live tree, so the suite ran as an **isolated-copy pair** with that file
+  reverted on both sides — **1671 passed / 11 failed** against control **1670 /
+  11**, the **same eleven failures name for name**, the +1 this ticket's new
+  test. Eight are the reverted gmode file meeting that session's edited tests;
+  `test_baseline[ccdm]` fails in both copies and PASSES live, so it is an
+  isolation artifact too. Live `test/baseline`: **1 failed (enjl), 15 passed**,
+  identical to the before-image. `test/dd2` **207 passed**, dd2 `run_full_check`
+  **PASS**. **No baseline number moved, no tolerance touched.**
