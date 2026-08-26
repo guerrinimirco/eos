@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: 29, 84
+Blocked by: -   (29 and 84 both resolved)
 Parent: ../map.md
 
 ## Question
@@ -11,11 +11,22 @@ Execution of [ticket 84](84-vmit-params-in-the-plumbing.md)'s ruling. Read it
 first: the design is settled and the user's instruction is that **`dd2` and
 `vmit` must not be preferred or special with respect to the other models**.
 
-**Blocked by [ticket 29](29-mixed-species-flags.md)**, which is the first half:
-`mixed` borrows DD2's flag class (`api.py:49 from eos.dd2.species import
-SpeciesFlags`), and 29's own `species.py` is what lets the `species` argument
-stop being a DD2 type. 29 also removes the `muons=None` kwarg sitting beside
-`vmit_params` in the same four signatures.
+**[Ticket 29](29-mixed-species-flags.md) is DONE** (`8bb546c`) and was the
+first half: `eos/mixed/species.py` exists, `api.py` no longer imports
+`eos.dd2.species`, the `species` argument is no longer a DD2 type, and the
+`muons=None` kwarg is gone from all four signatures — the chain that carried
+it now threads the flag object as `species=`.
+
+Two things 29 left for this ticket to finish. The front door's DEFAULT flags
+moved out of `api.py` into **`adapters.default_flags()`** — delete it here
+along with the rest of the front door. And `_engine_fractions`' sibling check
+in `hybrid_table`, the trapped-mode `species.neutrinos` guard, is now narrowed
+to `phases is None`, because for a `Phase` pair the adapter's own
+`_dd2_wing_kwargs` already raises; when the front door goes, that guard goes
+with it.
+
+`eos/mixed/__init__.py:51` was deliberately NOT touched by 29 — the re-export
+is this ticket's.
 
 ### The inversion
 
