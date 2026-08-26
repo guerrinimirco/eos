@@ -1555,7 +1555,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   solve ALREADY exists at `general/tabulate.py:78` and sfho just does not use it;
   `find_mixed_window` and `locate_window` have identical signatures; and
   `create_custom_parametrization` is already correctly in `nmp.py`.
-  **One new requirement from the user**, now [ticket 76](issues/76-parametrization-surface.md):
+  **One new requirement from the user**, now [ticket 79](issues/79-parametrization-surface.md):
   every model must offer a published set by name, an arbitrary new set, and — for
   hadronic models — one built from NMPs. Measured, it is not met: four models
   have no `named()`, `did` is hadronic with NO inverse map, and `dd2`/`did`

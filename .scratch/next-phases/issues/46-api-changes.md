@@ -50,7 +50,7 @@ All five ruled, four of them **settled by measurement rather than preference**.
    **identical** defaults. So `get_vmit_custom(B4=170.0, a=0.15)` IS
    `Parameters(B4=170.0, a=0.15)`: a pure alias carrying no undocumented
    physics. Mechanical, 31 sites. The replacement sentence in vmit's document
-   is owed by [ticket 76](76-parametrization-surface.md).
+   is owed by [ticket 79](79-parametrization-surface.md).
 2. **Fold the isentropic solvers into `SnB=`.** `eos/general/tabulate.py:78
    temperature_at_entropy(...)` ALREADY IS the shared outer 1-D solve, with
    `TEMPERATURE_AXES = ("T", "SnB")` declared beside it; sfho's
