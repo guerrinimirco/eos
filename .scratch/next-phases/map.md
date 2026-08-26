@@ -1821,6 +1821,25 @@ against this file, not against the earlier `pytest_before*.txt`.
   `test/baseline/` unmoved. `eos/enjl/solver.py` keeps its own copy, that file
   being staged by a concurrent session for ticket 72.
 
+- **[The undetermined-potential screen, all three limbs](issues/75-undetermined-potential-check.md)**:
+  `basis.projection_residual` (one state), `basis.undetermined_potential` (two
+  runs, the exact charge ratio) and `solve.undetermined_unknowns` (one run, the
+  null Jacobian column) — the ruling's two plus the conditioning limb ticket
+  72's amendment added, answered **directly** rather than through the residual
+  symptom. **The differential's second run is the stored baseline**, chosen on
+  availability: backends exist for two models, a second stack needs a second
+  interpreter, a perturbed seed asks a different question. It ANNOTATES an
+  already-red `test_baseline` rather than asserting, since a charge-proportional
+  shift is legitimate. **Two readings, because the first version was blind to
+  `ccdm` and `njl`** — the two models the screen's whole record comes from carry
+  `mu_3`/`mu_8` flat, with no quantum number to divide by — caught by firing it
+  at a real red ccdm and getting silence. Every limb proved to fail on a broken
+  input and fired on real baselines, reproducing ticket 62's `mu_8=+0.500`.
+  **Found and not fixed: `did`'s `fixed_YC_YS` at T = 0 carries `mu_S` as a null
+  column**, at Y_S = 0 and 0.05 alike, live again at T = 20 — ticket 72's defect
+  in the model its amendment names, now measured. Gate 1407 collected, 0 added
+  failures, eleven `verify/` suites PASS.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
