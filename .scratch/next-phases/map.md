@@ -299,7 +299,7 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 <!-- one line per closed ticket: gist + link -->
 
-- [Phase 6, second half — the conformance pass on nucleation](issues/72-phase6-conformance.md):
+- [Phase 6, second half — the conformance pass on nucleation](issues/80-phase6-conformance.md):
   **all four items landed and pushed (`2b2b72f` on `origin/paper-release`); the
   notebook EXECUTES in production mode, 39/39 code cells, zero error outputs.**
   Suite unchanged at the new tracked path `test/`: **2 failed, 70 passed, 72

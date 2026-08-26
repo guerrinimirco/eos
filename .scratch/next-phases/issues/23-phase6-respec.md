@@ -196,7 +196,7 @@ helper. **Not the notebook.** Gate:
   comparison; moving the files underneath it destroys the only instrument it
   has.
 
-**[Ticket 72](72-phase6-conformance.md) — the conformance pass**, blocked by 24.
+**[Ticket 80](80-phase6-conformance.md) — the conformance pass**, blocked by 24.
 Exactly four items, since two of the original six measure clean and one has no
 meaning here:
 

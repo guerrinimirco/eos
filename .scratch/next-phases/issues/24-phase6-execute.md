@@ -95,7 +95,7 @@ seven inline copies, not a new `eos` constructor.
 
 - **The paper notebook.** Its port is mechanical (4 import lines, 2 name swaps)
   but its gate is execution, and its own header says the runs take hours.
-  [Ticket 72](72-phase6-conformance.md).
+  [Ticket 80](80-phase6-conformance.md).
 - **The test move.** This ticket's gate is a node-id-to-node-id comparison;
   moving the files underneath it destroys the only instrument it has. Ticket 72.
 - Anything in ticket 72's list.
