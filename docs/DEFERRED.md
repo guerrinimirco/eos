@@ -752,41 +752,55 @@ The gas sources none of the four field equations and adds no unknown to either
 vector being seeded, so both seeds now switch it off: a seed must not fail for
 a reason that has nothing to do with seeding.
 
-### astro/gmode still imports model internals, at four sites
+### astro/gmode is DD2-only until nine models implement a composition freeze
 
-The last live breach of CLAUDE.md section 1's "`astro/` ... never imports model
-internals", and the only one left now that `eos/dd2/notebook_api.py` is gone.
-The four sites:
+RESOLVED as a section 1 breach; what remains is a per-model capability gap.
 
-    eos/astro/gmode/rates.py:85               from eos.dd2.solver import
-                                              solve_composition   (TOP-LEVEL)
-    eos/astro/gmode/sound_speeds.py:94        from eos.mixed.responses import
-                                              sound_speed_eq, sound_speed_frozen
-    eos/astro/gmode/sound_speeds.py:149       the same dd2 import,
-                                              function-local
-    eos/astro/gmode/verify/run_full_check.py:39-41
-                                              eos.dd2 Parameters/SpeciesFlags,
-                                              eos.dd2.responses, eos.dd2.solver
+`eos/astro/gmode` used to import model internals at four sites, one of them
+`rates.py:85` at top level, so `import eos.astro.gmode` pulled DD2 in whether
+or not the caller wanted a DD2 background. The contract that replaced them is
+`eos.general.sound_speeds.EOSTable_for_gmode`: the `(P, eps, n_B)` table plus
+`cs2_equilibrium` and `cs2_frozen` on the same rows, living beside
+`EOSTable_for_TOV` in the layer both `astro/` and the models may import. A
+model produces one; the mode solver consumes one; `test_imports.py` gates it
+both as source text and at runtime in a fresh interpreter.
 
-`rates.py:85` is top-level, so `import eos.astro.gmode` pulls DD2 in whether or
-not the caller wants a DD2 background.
+The payload is the two SOUND SPEEDS, not a composition derivative: Zhao and
+Lattimer (arXiv:2204.03037) Eq. (1),
+`nu_g^2 = g^2 (1/c_e^2 - 1/c_s^2) e^(nu-lambda)`, needs only those two per
+point, and `eos_response` already computes both. T = 0 only -- Zhao's operative
+clause is "without varying chemical composition", not the zero temperature, so
+T = 0 collapses the thermal axis and leaves the composition axis intact.
 
-**This is a gap being designed out, not an accepted breach.** The import exists
-for a physics reason: a composition g-mode needs d(composition)/dn_B along the
-equilibrium sequence, and no `EOSTable_for_TOV` carries it -- which is why the
-cheap answer, naming gmode as a second section 1 exception beside `eos/mixed`,
-was rejected: the astro half of the rule was tightened BECAUSE this ambiguity
-existed, and a carve-out would make gmode DD2-only by specification when the
-physics need is general. `EOSTable_for_TOV` is the shape the contract should
-copy -- it lives in `general/`, the layer both `astro/` and the models may
-import, so producing one is the model's side and consuming it is astro's.
+**What is still deferred.** `frozen='composition'` is implemented in `eos.dd2`
+alone: six models expose only `equilibrium`, and `njl`, `ccdm` and `enjl`
+expose no freeze at all. So nine models cannot compute the second sound speed
+under any conditioning and cannot fill the contract; one that cannot raises
+saying so, which is section 3's own answer to a partly-filled surface. This
+converts "gmode is DD2-only by accident, hidden inside
+`from eos.dd2.solver import solve_composition`" into "gmode is DD2-only until
+nine models implement one freeze": visible, per-model and ticketable.
 
-Open with it: whether the contract carries the composition derivative or a grid
-fine enough for gmode to differentiate itself; whether it also covers the two
-sound speeds taken from `eos.mixed.responses`, or whether `eos_response` is the
-surface for those; and whether section 1's `verify/` carve-out, written for the
-model-to-model half of the rule, extends to an astro suite reaching down into a
-model at all.
+Also deferred: the DD2 producer itself. `dd2.eos_response(frozen='composition')`
+returns the LEPTONLESS frozen speed, which is the right probe of the nucleonic
+sector but the wrong half of a g-mode -- differencing it against the
+with-leptons equilibrium speed compares two different fluids, and the lepton
+term is a sizeable fraction of the whole buoyancy signal. The with-leptons
+producer belongs in `eos.dd2`, reached through section 5's third response axis
+(`leptons=`). It currently sits in
+`eos/astro/gmode/verify/run_full_check.py` as `dd2_table` / `dd2_frozen_cs2`,
+which is where the tests import it from, so there is one copy rather than two.
+
+**The verify/ carve-out, ruled.** Section 1's `verify/` exemption is written
+for the model-to-model half of the rule; it extends to an ASTRO suite importing
+a model, and not to the reverse. The two directions are not symmetric. A model
+importing `astro/` is the cycle the rule exists to prevent and has no carve-out
+anywhere. An astro suite importing a model creates no cycle -- `astro/` already
+sits above the models -- and the carve-out's own justification, that a suite is
+not on the path an inference sampler imports, is a statement about suites and
+not about which layer they sit in. `gmode/verify/run_full_check.py` uses it
+narrowly: five of its eight checks are model-free and `include_dd2=False` turns
+the rest off.
 
 ### Eleven deferred imports are downward, where no cycle exists
 

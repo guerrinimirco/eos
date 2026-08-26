@@ -1635,36 +1635,6 @@ against this file, not against the earlier `pytest_before*.txt`.
   hadronic models — one built from NMPs. Measured, it is not met: four models
   have no `named()`, `did` is hadronic with NO inverse map, and `dd2`/`did`
   cannot be built field-by-field.
-- [Build the T = 0 g-mode composition contract and drop the DD2 import](issues/77-gmode-contract-build.md):
-  built. `eos/general/sound_speeds.py` carries `EOSTable_for_gmode`, which
-  SUBCLASSES `EOSTable_for_TOV` and adds `cs2_equilibrium` + `cs2_frozen` — a
-  g-mode table IS a structure table, so one object serves both layers.
-  `import eos.astro.gmode` now pulls in **no model package**, gated in
-  `test_imports.py` twice: an AST sweep of `eos/astro/*` and a fresh-interpreter
-  runtime check that catches the function-local import the AST cannot see. Both
-  were confirmed to bite on a planted breach. **Every dd2 g-mode number is
-  bit-identical** (g1 = 149.565 Hz, f = 2064.516 Hz); the only movement anywhere
-  is the Urca rate at 1.3e-5, which is `M_PI` now coming from
-  `general/particles` as §7 requires.
-  **The verify/ carve-out is ruled to EXTEND to an astro suite importing a
-  model, and not to the reverse** — the directions are not symmetric, since a
-  model importing `astro/` is the cycle the rule exists to prevent while an
-  astro suite importing a model creates none, and the carve-out's own
-  justification is a claim about suites rather than about which layer they sit
-  in. **`cs2_eq`/`cs2_ad` are deliberately NOT renamed inside gmode**: the
-  star's second slot holds the DYNAMICAL speed once `at_frequency` folds in a
-  rate, so "frozen" would be false there, while the table's column is always the
-  strict limit. Ticket 53's "mixed and gmode are one vocabulary" premise is
-  severed by this ticket, so `mixed.eos_response`'s keys are now independent.
-  **`cs2_frozen_point`/`cs2_frozen_along` were deleted** — no caller anywhere.
-  **Unplanned finding:** `dd2.eos_response(frozen='composition')` returns the
-  LEPTONLESS frozen speed, so dd2 cannot fill the contract through it either —
-  differencing it against the with-leptons equilibrium speed compares two
-  different fluids, a leading-order error in `N^2`. The fix is §5's third
-  response axis (`leptons=`) in `eos/dd2/`, NOT made here because a concurrent
-  session had `eos/dd2/` mid-edit and transiently unimportable. The producer
-  sits in `gmode/verify/run_full_check.py` as `dd2_table`/`dd2_frozen_cs2`
-  meanwhile, one copy, ledgered.
 - [The two `nucleation` goldens that compare round-off](issues/76-nucleation-golden-tolerances.md):
   both goldens asserted things no assertion should have read, and neither is
   fixed by a tolerance. `test_regression_solver_cases` compared, RELATIVELY,
@@ -1694,6 +1664,40 @@ against this file, not against the earlier `pytest_before*.txt`.
   wrinkle is dissolved rather than decided: [ticket 72](issues/72-phase6-conformance.md)
   landed as `569296a` mid-session, so the path the criterion names,
   `nucleation/test/`, now exists.
+
+- [Build the T = 0 g-mode composition contract and drop the DD2 import](issues/77-gmode-contract-build.md):
+  built, committed as `cddcf91`. `eos/general/sound_speeds.py` carries
+  `EOSTable_for_gmode`, which SUBCLASSES `EOSTable_for_TOV` and adds
+  `cs2_equilibrium` + `cs2_frozen` — a g-mode table IS a structure table, so one
+  object serves both layers. `import eos.astro.gmode` now pulls in **no model
+  package**, gated in `test_imports.py` twice: an AST sweep of `eos/astro/*` and
+  a fresh-interpreter runtime check that catches the function-local import the
+  AST cannot see. Both were confirmed to bite on a planted breach. **Every dd2
+  g-mode number is bit-identical** (g1 = 149.565 Hz, f = 2064.516 Hz); the only
+  movement anywhere is the Urca rate at 1.3e-5, which is `M_PI` now coming from
+  `general/particles` as §7 requires.
+  **The verify/ carve-out is ruled to EXTEND to an astro suite importing a
+  model, and not to the reverse** — the directions are not symmetric, since a
+  model importing `astro/` is the cycle the rule exists to prevent while an
+  astro suite importing a model creates none, and the carve-out's own
+  justification is a claim about suites rather than about which layer they sit
+  in. **`cs2_eq`/`cs2_ad` are deliberately NOT renamed inside gmode**: the
+  star's second slot holds the DYNAMICAL speed once `at_frequency` folds in a
+  rate, so "frozen" would be false there, while the table's column is always the
+  strict limit. Ticket 53's "mixed and gmode are one vocabulary" premise is
+  severed by this ticket, so `mixed.eos_response`'s keys are now independent.
+  **`cs2_frozen_point`/`cs2_frozen_along` were deleted** — no caller anywhere.
+  **Unplanned finding, and ticket 73 does NOT close it:** `dd2`'s
+  `frozen='composition'` speed is LEPTONLESS, so dd2 cannot fill the contract
+  through `eos_response` either — differencing it against the with-leptons
+  equilibrium speed compares two different fluids, a leading-order error in
+  `N^2`. Ticket 73 split that speed on the THERMAL axis (isothermal vs adiabatic
+  frozen); the missing axis is §5's THIRD one, `leptons=`, and it is missing in
+  all ten models rather than nine. Not fixed here because `eos/dd2/` was under
+  concurrent edit; the working producer sits in
+  `gmode/verify/run_full_check.py` as `dd2_table`/`dd2_frozen_cs2`, one copy,
+  ledgered, and [ticket 78](issues/78-composition-freeze-nine-models.md) is
+  annotated with it.
 
 ## Not yet specified
 
