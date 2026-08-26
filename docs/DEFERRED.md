@@ -773,8 +773,11 @@ clause is "without varying chemical composition", not the zero temperature, so
 T = 0 collapses the thermal axis and leaves the composition axis intact.
 
 **What is still deferred.** `frozen='composition'` is implemented in `eos.dd2`
-alone: six models expose only `equilibrium`, and `njl`, `ccdm` and `enjl`
-expose no freeze at all. So nine models cannot compute the second sound speed
+alone: eight models expose only `equilibrium`, and `enjl` exposes no freeze at
+all. (This paragraph read "six models ... and `njl`, `ccdm` and `enjl` expose no
+freeze at all" until the measurement in the section below was taken against the
+tree rather than restated: njl and ccdm have carried `equilibrium` since the
+commits that introduced them.) So nine models cannot compute the second sound speed
 under any conditioning and cannot fill the contract; one that cannot raises
 saying so, which is section 3's own answer to a partly-filled surface. This
 converts "gmode is DD2-only by accident, hidden inside
@@ -801,6 +804,193 @@ not on the path an inference sampler imports, is a statement about suites and
 not about which layer they sit in. `gmode/verify/run_full_check.py` uses it
 narrowly: five of its eight checks are model-free and `include_dd2=False` turns
 the rest off.
+
+### The composition freeze: what each model owes, and the order it lands in
+
+`RESPONSE_FREEZES` measured across the ten models and the composite engine,
+against the tree rather than restated from an audit:
+
+    dd2                              ('equilibrium', 'composition')
+    mixed                            ('equilibrium', 'chi')
+    sfho did zl vmit alphabag
+      abpr njl ccdm                  ('equilibrium',)
+    enjl                             ()
+
+`composition` therefore exists in exactly ONE of eleven units, and `mixed` --
+absent from every earlier count -- carries a third spelling that is neither.
+
+**Why this is not one job done nine times.** A composition freeze needs the
+model evaluated at PRESCRIBED SPECIES DENSITIES with no equilibrium condition
+imposed: section 13's `thermo_from_n`, the direction that INVERTS the Fermi
+integrals rather than solving them forward. It cannot be reached by re-tuning
+(mu_B, mu_C, mu_S), because three conserved potentials cannot hold eight
+species fractions -- so any model with more than nucleons needs the
+density-side block outright, and cannot borrow the potential-side one it
+already has. Who has that block today:
+
+    zl     thermo_from_n(n_n, n_p, T)          nucleonic, complete
+    vmit   thermo_from_n(n_u, n_d, n_s, T)     three flavours, complete
+    enjl   thermo_from_n(n, ...)               all eight species, complete
+    dd2    solve_composition(n_n, n_p, T)      NUCLEONIC ONLY
+    sfho did alphabag abpr njl ccdm mixed      absent
+
+Note what the fourth line says about the one working implementation:
+`solve_composition` is a single `brentq` on the sigma gap over n and p, so with
+`hyperons=True` or `deltas=True` **dd2 cannot freeze either**. What exists is
+the nucleonic freeze, not the freeze.
+
+**What each model's freeze costs, in its own physics.** They are not alike, and
+assuming they were is what made this look like one ticket:
+
+- `dd2` -- has it, nucleonic. Owes the with-leptons variant (below) and the
+  extension past n, p: with hyperons the sigma gap is unchanged in form but the
+  freeze needs all eight densities as inputs, i.e. `thermo_from_n` after all.
+- `zl` -- cheapest of the eleven. The interaction is a closed-form function of
+  two densities, so at fixed (n_n, n_p) NO fixed point is solved at all: the
+  potentials are read off and the Fermi integrals inverted once.
+  `thermo_from_n` already does it. This is wiring, not physics.
+- `vmit` -- cheapest in the quark sector, and for the same reason: one
+  algebraic mean field, no scalar sector, three independent Fermi inversions.
+  `thermo_from_n` already does it.
+- `sfho` -- the first real cost. Its four field equations are NONLINEAR in the
+  fields (the c3 omega^4 self-coupling and the omega-rho mixing A(omega, rho)),
+  so at prescribed densities they are a coupled four-dimensional root find, not
+  dd2's single scalar gap. The block has to be written; `thermo_from_mu`
+  (`thermodynamics.py:556`) solves the same four equations from the other side
+  and is the shape to mirror.
+- `did` -- dd2's shape plus a physics choice that is DID's alone. Its couplings
+  depend on n_B *and* on the isospin asymmetry beta = sum_i tau_3i n_i / n_B,
+  so the model carries TWO rearrangement self-energies. Along a frozen-
+  composition sequence beta is constant by construction, so the beta channel
+  contributes nothing to the frozen derivative while the n_B channel still
+  does. That is defensible -- beta IS a composition variable -- but it makes
+  DID's frozen sound speed structurally not the same object as the other RMFs',
+  and it must be chosen deliberately rather than inherited from whichever model
+  gets ported first.
+- `alphabag` -- flavours decouple entirely in the unpaired sector
+  (`quark_density(mu_q, T, m_q, alpha)` per flavour), so the freeze is three
+  independent one-dimensional inversions. But of the ALPHA_S-CORRECTED density,
+  which is not the free Fermi form, so `general.invert_fermi_density` does not
+  serve and the model owes its own inverter. Per section 7 that is model
+  physics, not an integral re-implementation.
+- `abpr` -- **nothing to freeze, and this is a ruling rather than work.** The
+  model is `cfl` and nothing else, and colour-flavour locking sets
+  n_u = n_d = n_s identically, hence Y_C = 0 and Y_S = +1 with no fraction
+  free (section 3 says exactly this). A composition freeze is therefore
+  DEGENERATE: the frozen sound speed IS the equilibrium one, and a g-mode built
+  on an ABPR background is identically zero for a physical reason, not a
+  missing feature. What abpr owes is that sentence in its docstring and a
+  `composition` entry that returns the equilibrium number, not a new solve.
+- `njl`, `ccdm` -- the most expensive pair, for two reasons that compound.
+  First, the freeze must re-solve the model's own self-consistency at each
+  stencil point at prescribed flavour densities: the chiral gap equations for
+  `njl`, those plus the dielectric field for `ccdm`. Their integrals are
+  cutoff-regularised, so again the shared inverter does not serve. Second,
+  **pairing means the composition is not independently free.** In CFL the
+  locking is abpr's above and the freeze is degenerate; in 2SC two flavours of
+  three are tied. Worse, both models SELECT their pattern (and ccdm its branch)
+  by comparing pressures, and under a frozen composition that is not the same
+  competition -- so the freeze must declare whether the pattern is held WITH
+  the composition or re-selected at every stencil point. That declaration is
+  the real cost, and it is the same question already open for enjl's branch
+  pair.
+- `enjl` -- two steps behind on the surface and one step ahead on the physics.
+  It has NO `eos_response` at all, so `equilibrium` comes first and is the
+  larger job. But its `thermo_from_n` is the most complete in the repository
+  (all eight species, the gap equation for M_u, M_d, M_s solved inside the
+  density inversion) and is the direction the paper's own Figs. 1-3 are
+  evaluated in, so once the surface exists the composition freeze is cheap.
+- `mixed` -- **last, by construction rather than by priority.** Its `chi` freeze
+  already holds the quark volume fraction and with it each phase's Y_C and Y_S,
+  with the species re-equilibrating inside them. Section 5's `fast` preset
+  additionally holds every Y_i, and the engine HAS no species of its own: the
+  per-species freeze lives in the phase and is reached through the
+  phase-adapter contract. So mixed can hold {Y_i} | {chi} only once BOTH phases
+  of a pairing can hold their own {Y_i}, which is why it cannot be ordered
+  earlier no matter how much its consumers want it.
+
+**The order.** Driven by the live consumer -- the g-mode contract, which needs
+the two sound speeds on the same rows -- and, after that, by taking the models
+whose block already exists before the ones whose does not:
+
+    1. dd2        move the with-leptons producer home and add the third axis;
+                  this is what makes the ONE existing freeze usable for a
+                  g-mode at all, and its test is already waiting
+    2. zl, vmit   the two models whose `thermo_from_n` exists; wiring, and they
+                  prove the axis generalises across a hadronic AND a quark
+                  model before anything expensive is built
+    3. abpr       the ruling above: degenerate, no new solve
+    4. sfho, did  the two RMFs that must WRITE the density-side block; did's
+                  two-rearrangement choice made deliberately, not inherited
+    5. alphabag   its own alpha_s density inverter
+    6. njl, ccdm  the pattern-under-freeze question decided FIRST, then the
+                  gap-coupled block
+    7. enjl       `equilibrium` first (it has none), then composition, which is
+                  cheap once the surface exists
+    8. mixed      last by construction: needs both phases of a pairing to hold
+                  their own species fractions first
+
+Steps 1-3 are the ones that pay immediately: after them a g-mode has three
+backgrounds (a DD-RMF, a nucleonic model with no fields, a bag model) and the
+abpr zero is explained rather than missing.
+
+**The third axis, and a name collision to resolve first.** Section 5's third
+conditioning axis -- whether leptons re-neutralize against the held charge --
+is what a g-mode needs and is missing everywhere but `mixed`. It cannot simply
+be spelled `leptons=`, because that keyword is ALREADY TAKEN on `eos_response`
+and means something else:
+
+    sfho zl did vmit alphabag njl ccdm   leptons= is the section 3 MODE flag,
+                                         routed into mode_spec(mode, fracs,
+                                         leptons) exactly as on eos_point
+    mixed                                leptons= is the RESPONSE axis, routed
+                                         into sound_speed_frozen, deciding
+                                         whether the perturbed mixture is
+                                         re-neutralised
+    dd2 abpr enjl                        no such argument
+
+One keyword, two jobs, already shipped in opposite senses -- section 13's "one
+name per job", and the reason this spelling is decided here rather than in nine
+per-model tickets, where it would drift on contact.
+
+**Ruled: `leptons=` keeps its section 3 mode meaning on `eos_response`, and the
+response axis takes a different name.** Three reasons, none of them a majority
+count. The mode flag is the SAME argument `eos_point` and `eos_table` take, and
+a uniform API (section 5) cannot have one entry point read a keyword one way
+and its sibling another. The rule for it across the modes was just settled and
+landed in nine models, so re-pointing the name would reopen a closed question
+for a second one. And the two are genuinely orthogonal -- `leptons=` says
+whether the STATE has leptons, the third axis says whether the PERTURBATION
+re-neutralises -- so a caller can want both at once, which one keyword cannot
+express.
+
+The proposed name is `reneutralize=`, a bool, defaulting to True (the physical
+choice for stellar matter, and what `mixed` already defaults to). A g-mode's
+two speeds are then
+
+    eos_response(par, mode, species, frozen='equilibrium',  n_B=...)
+    eos_response(par, mode, species, frozen='composition', n_B=..., Y_p=...,
+                 reneutralize=True)
+
+and the leptonless nucleonic probe is the same call with
+`reneutralize=False`, which is what `dd2.responses.sound_speed_adiabatic_frozen`
+returns today. `mixed` is the one surface that changes, one rename against
+nine models left alone.
+
+Note that under this ruling the collision has a concrete casualty to watch:
+`leptons=False` on a beta-equilibrium mode now RAISES, so the leptonless frozen
+probe MUST be reached through `reneutralize=False` and not by turning the mode's
+leptons off. The two would have meant the same thing to a caller reading only
+the argument name, and one of them is an error.
+
+**What is recorded here and what is not.** This entry is the measurement, the
+per-model cost and the order. It implements no freeze; each step above is its
+own piece of work, and the per-model entries later in this file
+already carry the model-local half of the statement: the `eos_response` bullet
+under each of `### dd2`, `### did`, `### sfho`, `### zl`, `### vmit`,
+`### alphabag`, `### mixed`. They are cited by SECTION NAME and not by line,
+because inserting this entry moved every one of the line numbers the ticket
+that ordered it quoted.
 
 ### Eleven deferred imports are downward, where no cycle exists
 
@@ -1916,7 +2106,7 @@ decision that cannot be made before the tables exist.
   reference gave 2.8e6 — while M and R still agreed to 1e-4, so nothing else
   flagged it. CLAUDE.md §6 says non-convergence is a return value: meeting a
   non-monotone table is exactly that case and must come back as a status, not
-  as a number. The cause has been removed upstream — `build_mixed_eos_table`
+  as a number. The cause has been removed upstream — `build_hybrid_table`
   now enforces §8 before the table is delivered — but the backend is still
   fragile to any other caller that hands it one.
 - Crust table paths are absolute and machine-specific. A missing crust file

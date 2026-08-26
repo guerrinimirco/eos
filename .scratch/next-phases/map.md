@@ -1689,7 +1689,10 @@ against this file, not against the earlier `pytest_before*.txt`.
   ends the §1 breach without making gmode general, which is still worth doing:
   it makes gmode's DD2-only-ness visible and per-model instead of hidden in an
   import. Execution [77](issues/77-gmode-contract-build.md), the nine-model gap
-  [78](issues/78-composition-freeze-nine-models.md).
+  [78](issues/78-composition-freeze-nine-models.md). **The count in this entry
+  is superseded by ticket 78's live measurement**: `njl` and `ccdm` do carry
+  `equilibrium`, so eight models expose only that and `enjl` alone exposes
+  none — and `mixed`, uncounted here, is an eleventh unit carrying `chi`.
   **§4's flag defaults unify on all-False**, because the defaults are
   load-bearing and not cosmetic: 66 bare `SpeciesFlags()` calls, 13 entry points
   building one when `species=None`, 148 calls passing only `hyperons=`. It moves
@@ -1773,7 +1776,10 @@ against this file, not against the earlier `pytest_before*.txt`.
   concurrent edit; the working producer sits in
   `gmode/verify/run_full_check.py` as `dd2_table`/`dd2_frozen_cs2`, one copy,
   ledgered, and [ticket 78](issues/78-composition-freeze-nine-models.md) is
-  annotated with it.
+  annotated with it. **The spelling proposed here is superseded**: ticket 78
+  ruled that the third axis CANNOT be `leptons=`, which already means the §3
+  mode flag on `eos_response` in seven models and the response axis in
+  `mixed`. It becomes `reneutralize=`.
 
 - **[`vmit_params` is threaded through the engine's internals](issues/84-vmit-params-in-the-plumbing.md)**,
   raised by the user asking why `hybrid_table` names one quark model. The engine
@@ -1839,6 +1845,72 @@ against this file, not against the earlier `pytest_before*.txt`.
   column**, at Y_S = 0 and 0.05 alike, live again at T = 20 — ticket 72's defect
   in the model its amendment names, now measured. Gate 1407 collected, 0 added
   failures, eleven `verify/` suites PASS.
+
+- [Nine models cannot compute a frozen-composition response](issues/78-composition-freeze-nine-models.md):
+  the gap and the ORDER are recorded in `docs/DEFERRED.md`; no freeze implemented
+  and no per-model tickets spawned (see Out of scope). **The ticket's own
+  measurement was wrong and is corrected**: `njl` and `ccdm` have carried
+  `equilibrium` since the commits that introduced them, so `enjl` alone has an
+  empty menu, and `mixed` — absent from every earlier count — is the eleventh
+  unit with a third spelling, `chi`. `composition` exists in **one of eleven**.
+  **The substance is why it is nine separate jobs**: a freeze needs the model at
+  prescribed species densities (§13's `thermo_from_n`), unreachable by re-tuning
+  `(mu_B, mu_C, mu_S)` because three potentials cannot hold eight fractions. That
+  block exists in `zl`, `vmit`, `enjl`; `dd2` has only the nucleonic special case,
+  so **dd2 cannot freeze with hyperons on either**. Order: dd2 → zl, vmit → abpr
+  (a RULING: CFL locks the composition, so its frozen speed IS the equilibrium one
+  and an ABPR g-mode is zero for a physical reason) → sfho, did (must write the
+  block; did's beta-rearrangement channel drops out by construction) → alphabag →
+  njl, ccdm (pairing means the composition is not free, and the pattern-under-
+  freeze question comes first) → enjl (`equilibrium` first) → **mixed last BY
+  CONSTRUCTION**, since the species live in its phases behind the adapter contract.
+  **Also ruled, on ticket 77's hand-off**: §5's third axis cannot be spelled
+  `leptons=` — that keyword already means the §3 mode flag in seven models and the
+  response axis in `mixed`, opposite senses. `leptons=` keeps the mode meaning;
+  the response axis becomes `reneutralize=` (default True), so `mixed` is the one
+  surface that renames. Consequence: with ticket 70's rule live, the leptonless
+  probe MUST go through `reneutralize=False`.
+  Gate: docs only, no `eos/` file touched, no test can move; the concurrent
+  session's `DEFERRED.md` edit checked intact before and after.
+
+- **[Ticket 29 — eos/mixed has no species flags, so its photon gas cannot be
+  turned off](issues/29-mixed-species-flags.md)** (resolved, `8bb546c`).
+  `eos/mixed/species.py` exists, carrying §4's six names, all `False` per
+  ticket 65. The engine stopped BORROWING DD2's flag class: `api.py` no longer
+  imports `eos.dd2.species`, and no docstring says `dd2 SpeciesFlags`. The
+  per-phase/phase-common split the ruling described turned out to be already
+  built — every adapter passed `include_photons=False`, the mixture added
+  `photon_thermo(T)` once — so the flag made a hardcoded `False` correct by
+  construction: switching `photons` on at T = 20 MeV moves P, eps and s by
+  exactly `photon_thermo(T)` (3.6e-15 on P), and at T = 0 it is bit-for-bit
+  inert. `thermal_neutrinos` is carried and RAISES, as in `dd2`.
+  The `muons=None` kwarg went from all four entry points, and the internal
+  chain that carried it now threads the FLAG OBJECT as `species=` — so
+  `photons` needed no plumbing of its own and the next §4 name will not
+  either; leaf helpers that take a bool keep it. `mixture_flags` reads the six
+  off any §4-conforming object, which is what lets the DD2+vMIT front door
+  hand one `dd2.SpeciesFlags` to both the phase and the mixture, and why no
+  existing call site grew an argument.
+  **Left where [ticket 86](issues/86-phase-pair-is-the-parameter.md) can
+  finish it**: the front door's default flags moved from `api.py` into
+  `adapters.default_flags()`, which 86 deletes with the rest of the front
+  door. `__init__.py` and `docs/DEFERRED.md` were deliberately NOT touched —
+  both carried another session's uncommitted work; the `thermal_neutrinos`
+  DEFERRED row is owed and is this ticket's one loose end (it IS stated in
+  `mixed.md`/`.tex`).
+  Gates, python.org 3.14.2 (numpy 2.3.5, scipy 1.17.0), never under `timeout`,
+  as an **isolated-copy pair** — the live tree carried a concurrent session
+  throughout, and HEAD moved mid-ticket (tickets 87 and 75 landed), so the
+  pair was rebuilt on the new HEAD. `test/mixed` + `test/baseline`: **282
+  collected, 281 passed / 1 failed** against control **274 passed / 1
+  failed**, the +7 this ticket's new tests. The one failure is
+  `test_baseline[ccdm]`, identical in the control — the same isolation
+  artifact ticket 69's entry above already names. `test_baseline[mixed]`
+  passes at rtol = 1e-10 (the mixed baseline is T = 0; the photon term is
+  finite-T), `eos/mixed/verify/run_full_check.py` **PASS**, all ten `[ok ]`.
+  §11: `mixed.md` and `mixed.tex` said the opposite in three places and now
+  state the photon treatment, the split, the corrected signatures and the
+  `thermal_neutrinos` refusal.
 
 ## Not yet specified
 
@@ -2038,6 +2110,13 @@ In scope, not yet sharp enough to ticket:
   does not, is unmeasured.
 
 ## Out of scope
+
+- **Implementing the nine missing composition freezes.** Ruled by
+  [ticket 78](issues/78-composition-freeze-nine-models.md), which decided the
+  order and stopped there. Nothing in the Acceptance criteria block measures a
+  response freeze, and `docs/DEFERRED.md` is the repository's own tracked ledger
+  for a per-model gap carried past the refactor — so the order lives there, not
+  as nine tickets on this map. Returns only if the destination is redrawn.
 
 - **Creating or pushing any git remote.** `docs/NEXT_PHASES_PROMPT.md` Stage 7
   forbids it and `nucleation` already has one. Publication is the user's act, not

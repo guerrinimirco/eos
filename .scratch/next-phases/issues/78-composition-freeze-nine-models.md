@@ -1,7 +1,8 @@
 # Nine models cannot compute a frozen-composition response
 
 Type: task
-Status: open
+Status: resolved
+Assignee: session 78-freezes
 Blocked by: 53
 Parent: ../map.md
 
@@ -76,3 +77,109 @@ because `eos/dd2/` was under concurrent edit; moving it is the first per-model
 step this ticket orders. `test/gmode/test_sound_speeds.py` already pins
 `leptons=False` against dd2's own function to machine precision, so the move
 has its check waiting.
+
+
+## Ruling
+
+Recorded in `docs/DEFERRED.md`, new section **"The composition freeze: what each
+model owes, and the order it lands in"**, placed after the `astro/gmode` section
+whose deferral it completes. Docs only; no `eos/` code touched.
+
+**The measurement in this ticket was wrong and is corrected.** Taken live rather
+than restated:
+
+    dd2                          ('equilibrium', 'composition')
+    mixed                        ('equilibrium', 'chi')
+    sfho did zl vmit alphabag
+      abpr njl ccdm              ('equilibrium',)
+    enjl                         ()
+
+`njl` and `ccdm` do NOT have empty menus — they have carried `equilibrium` since
+the commits that introduced them (`75b617e`, `971f6ad`), so `enjl` alone has no
+response surface. And `mixed` was missing from the count altogether: it is the
+eleventh unit and carries a third spelling, `chi`. The stale sentence in the
+`astro/gmode` section is corrected in the same diff rather than left to
+contradict the new one.
+
+**Why it is nine separate jobs, which is the substance of the order.** A
+composition freeze needs the model at PRESCRIBED SPECIES DENSITIES with no
+equilibrium condition — §13's `thermo_from_n`, the direction that inverts the
+Fermi integrals. It cannot be reached by re-tuning `(mu_B, mu_C, mu_S)`: three
+conserved potentials cannot hold eight species fractions. That block exists in
+`zl`, `vmit` and `enjl`; `dd2` has the nucleonic special case
+(`solve_composition`, a single `brentq` on the sigma gap over n and p — so
+**dd2 cannot freeze with hyperons or deltas on either**); the other seven have
+nothing.
+
+**The order decided**, driven by the g-mode consumer first and by
+already-existing blocks second:
+
+    1. dd2        the with-leptons producer home from gmode/verify + the third
+                  axis; its test already waits
+    2. zl, vmit   `thermo_from_n` exists; wiring, and they prove the axis across
+                  a hadronic AND a quark model before anything expensive
+    3. abpr       a RULING, not work: CFL locks n_u = n_d = n_s, so no fraction
+                  is free, the frozen speed IS the equilibrium one, and an ABPR
+                  g-mode is identically zero for a physical reason
+    4. sfho, did  must WRITE the block. sfho's four field equations are
+                  nonlinear (c3 omega^4, the omega-rho mixing) so prescribed
+                  densities give a coupled 4-D root find, not dd2's scalar gap.
+                  did carries TWO rearrangement self-energies (couplings depend
+                  on n_B and on beta); beta is constant along a frozen sequence,
+                  so that channel drops out by construction and DID's frozen
+                  speed is structurally not the same object — a choice to make
+                  deliberately, not inherit
+    5. alphabag   flavours decouple, so three 1-D inversions — but of the
+                  alpha_s-corrected density, so it owes its own inverter
+    6. njl, ccdm  most expensive: gap equations (plus ccdm's dielectric) re-solved
+                  at prescribed flavour densities with cutoff-regularised
+                  integrals, AND pairing means the composition is not free (CFL
+                  degenerate as abpr, 2SC ties two of three). Both SELECT their
+                  pattern by comparing pressures, so the freeze must first
+                  declare whether the pattern is held with the composition or
+                  re-selected per stencil point — the same question open for
+                  enjl's branch pair
+    7. enjl       `equilibrium` first (it has none); composition is then cheap,
+                  its `thermo_from_n` being the most complete in the repository
+    8. mixed      **last by construction, not by priority.** Its `chi` freeze
+                  already holds each phase's Y_C and Y_S. §5's `fast` additionally
+                  holds every Y_i, and the engine has no species of its own —
+                  they live in the phases, behind the phase-adapter contract. So
+                  mixed can hold {Y_i} | {chi} only once BOTH phases can hold
+                  their own
+
+**Also ruled here, because ticket 77 handed the spelling over and it collides.**
+§5's third axis (whether leptons re-neutralize) cannot be spelled `leptons=`:
+that keyword is already taken on `eos_response` and already means two different
+things — the §3 MODE flag in `sfho zl did vmit alphabag njl ccdm` (routed into
+`mode_spec`), and the RESPONSE axis in `mixed` (routed into
+`sound_speed_frozen`). One name, two jobs, shipped in opposite senses.
+
+**`leptons=` keeps its §3 mode meaning on `eos_response`; the response axis
+takes `reneutralize=` (bool, default True).** Reasons: `eos_point` and
+`eos_table` take the same argument with the mode meaning and a uniform API
+cannot have siblings read a keyword differently; [ticket 70](70-leptons-on-a-beta-mode.md)
+just landed that rule in nine models; and the two axes are genuinely orthogonal
+— `leptons=` says whether the STATE has leptons, `reneutralize=` whether the
+PERTURBATION re-neutralises — so a caller can want both at once. `mixed` is the
+one surface that renames, against nine models left alone. Consequence worth
+watching: since `leptons=False` on a beta mode now RAISES, the leptonless probe
+MUST be reached through `reneutralize=False`, never by turning the mode's
+leptons off.
+
+**Not done, deliberately.** No freeze implemented, and no per-model tickets
+created — the nine steps are **out of scope of this map** (see the map's Out of
+scope): nothing in the Acceptance criteria block measures a response freeze, and
+`docs/DEFERRED.md` is exactly the repository's tracked ledger for a per-model gap
+carried past the refactor. The order now lives there, where the work will be
+picked up from.
+
+**Gate.** Docs only — `docs/DEFERRED.md` and this ticket. No `eos/` file touched,
+so no test can move; the three test files that mention `DEFERRED.md` do so in
+prose and none parses it. The live session's concurrent edit to `DEFERRED.md`
+(the `build_mixed_eos_table` -> `build_hybrid_table` rename, now at `:2106`) was
+checked before and after and is intact.
+
+**Found and not fixed** (Stage 7 report, not this diff): the map's `## Out of
+scope` section has a run of Decisions-so-far entries misfiled beneath its two
+real bullets — appended to end-of-file rather than to the Decisions section.
