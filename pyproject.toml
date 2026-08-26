@@ -2,13 +2,37 @@
 name = "eos"
 version = "0.1.0"
 description = "Equation of State codes for dense matter in neutron stars"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
+
+# The floors are measured, not guessed. scipy < 1.17 is excluded on a
+# correctness ground rather than a feature one: scipy 1.13's
+# `root(..., method="hybr")` returns the seed unchanged after zero iterations
+# on dd2's 5x5 isoscalar closure (isoscalar residual 2.2e-03) where 1.17 solves
+# it to 6.7e-11, and it reports success while doing so. numpy 2.0 is the NEP 50
+# promotion boundary. Python 3.11 is the floor numpy 2.3 and scipy 1.17
+# themselves impose, and 3.9 reached end of life in October 2025.
+# matplotlib and numba are left unpinned: figure_style.py carries an explicit
+# matplotlib 3.4 fallback for `layout='constrained'`, so a floor here would
+# make working compatibility code unreachable.
 dependencies = [
-    "numpy",
-    "scipy",
+    "numpy>=2.0",
+    "scipy>=1.17",
     "matplotlib",
     "numba",
 ]
+
+# The stack the test suite, the golden references in test/baseline/ and the
+# audit runs in output/_audit/ are all produced on:
+#
+#     CPython 3.14.2, numpy 2.3.5, scipy 1.17.0, numba 0.63.1, matplotlib 3.10.9
+#
+# This matters beyond the version numbers because the tolerances involved are
+# tight enough to see the BLAS: the golden references are frozen at
+# rtol = 1e-10, and an iterative solve converging to that residual lets a
+# last-bit difference in a dot product flip its stopping iteration, so the
+# answer moves at the scale of the gate. Re-freezing them on a different
+# interpreter, numpy/scipy release or BLAS is a deliberate act, not a
+# side effect -- see the module docstring of test/baseline/generate_baseline.py.
 
 [build-system]
 requires = ["setuptools>=61.0"]

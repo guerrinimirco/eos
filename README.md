@@ -1,6 +1,6 @@
 # eos — equations of state for dense nuclear and quark matter
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 A Python library for equations of state of dense matter, at zero and finite
 temperature: ten models — relativistic mean fields with nucleons, hyperons and
@@ -37,11 +37,27 @@ What it computes, for every model through the same three functions:
 pip install git+https://github.com/guerrinimirco/eos.git
 ```
 
-Python >= 3.9 with NumPy, SciPy, Matplotlib and Numba, all installed
-automatically. Nothing else is needed: the neutron-star crust tables and the
+Python >= 3.11 with NumPy >= 2.0, SciPy >= 1.17, Matplotlib and Numba, all
+installed automatically. Nothing else is needed: the neutron-star crust tables and the
 observational-constraint contours ship inside the package, so the M–R examples
 below run from a fresh clone with no data to fetch and no environment variable
 to set.
+
+**The stack the suite is run with.** Development and the test suite use CPython
+**3.14.2** with NumPy 2.3.5, SciPy 1.17.0, Numba 0.63.1 and Matplotlib 3.10.9.
+That is the interpreter the golden reference tables in `test/baseline/` are
+frozen on and the one every audit run in `output/_audit/` is measured with, so
+a failure count is only comparable to another taken on the same stack. The
+distinction is not cosmetic: those references are held to rtol = 1e-10, tight
+enough that a different BLAS moves them. Name the interpreter explicitly rather
+than relying on whichever `python` a shell resolves —
+
+```bash
+python3 -m pytest test -q          # not `python`, if both are on PATH
+```
+
+(the suite itself is not shipped: `test/` is untracked, so a fresh clone has
+the library and the examples but no `test/` directory.)
 
 ---
 
@@ -157,10 +173,12 @@ matter-composition electron neutrino of the trapped modes, a different sector.
 ## Examples
 
 All five are copy-paste runnable and the output below each is what they
-actually printed, on CPython 3.9.7 with NumPy 1.26.4 and SciPy 1.13.1. The
-last digits of a solved quantity, and the M–R numbers of example 3, depend on
-that stack; the physics does not. Together they take about half a minute, the
-M–R sequence being most of it.
+actually printed, on the stack the test suite is run with: CPython 3.14.2 with
+NumPy 2.3.5 and SciPy 1.17.0. Every digit shown also reproduces on CPython
+3.9.7 with NumPy 1.26.4 and SciPy 1.13.1, so these examples do not discriminate
+between the two; quantities held to a tighter gate do, which is why
+`test/baseline/` is frozen on one named stack (see `pyproject.toml`). Together
+they take about half a minute, the M–R sequence being most of it.
 
 ### 1. One point, one model, beta equilibrium
 
