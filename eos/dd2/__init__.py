@@ -30,6 +30,7 @@ from eos.general.table_io import save_table, load_table, export_csv
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
 from eos.dd2.nmp import from_hyperon_potentials, from_delta_potential
+from eos.dd2.nmp import build_parametrization, SECTOR_KEYS
 from eos.dd2.responses import (
     sound_speed_eq, sound_speed_isothermal_frozen,
     sound_speed_adiabatic_frozen, adiabatic_index, thermal_index,
@@ -51,6 +52,7 @@ __all__ = [
     "hadronic_qn", "hadronic_charges",
     "invert_nmp", "from_nmp", "InversionStatus",
     "from_hyperon_potentials", "from_delta_potential",
+    "build_parametrization", "SECTOR_KEYS",
     "EoSPoint", "nucleon_warm_start", "warm_start",
     "solve_beta_eq", "solve_beta_eq_t0",
     "solve", "solve_beta_eq_neutrinoless", "solve_fixed_yc",

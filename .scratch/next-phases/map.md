@@ -1787,6 +1787,21 @@ against this file, not against the earlier `pytest_before*.txt`.
   [29](issues/29-mixed-species-flags.md), whose `species.py` removes the
   `muons=` kwarg sitting beside it in the same four signatures.
 
+- **[`eos/mixed/scan.py` is removed](issues/87-remove-mixed-scan.md)**, on the
+  user's ruling in ticket 84: 626 lines of declared DD2+vMIT study, plus its
+  271-line test file, and with them the last module-level `dd2`/`vmit` imports
+  outside the engine's adapter layer. **One function survived and relocated** —
+  `build_parametrization` is now a free function in `eos/dd2/nmp.py`, where §5
+  says an NMP-inverting constructor belongs, exported from `eos.dd2` and
+  deliberately NOT re-exported from `eos.mixed`. Two duplicated constants and
+  two silently-ignored keyword arguments died with the move. The three `vmit`
+  documents that cited the scan carry a replacement statement rather than a
+  gap: there is no scan driver, and a sweep is a caller-side loop over
+  `Parameters`, one `eos.mixed.eos_table` call per sample. §8's delivery gate
+  was never in the scan — `mixed/verify` implements it independently.
+  `docs/DEFERRED.md:145` echoes CLAUDE.md §1's mention and is owed to
+  [ticket 85](issues/85-claudemd-sentences-owed.md) with it.
+
 - **[`leptons=` on a beta-equilibrium mode: one rule, in nine models](issues/70-leptons-on-a-beta-mode.md)**:
   **`leptons=False` raises; `leptons=True` is accepted and ignored as
   redundant**, written once as `eos.general.modes.resolve_leptons` and called by

@@ -120,13 +120,6 @@ from eos.mixed.responses import (
     sound_speed_frozen_quark, adiabatic_index, frozen_along,
 )
 
-# --- where in parameter space a hybrid equation of state exists -------------
-from eos.mixed.scan import (
-    scan_parameters, scan_point, scan_hadronic, scan_hadronic_point,
-    build_parametrization, grid_samples, NMP_KEYS, VMIT_KEYS,
-    DEFAULT_HYPERON_POTENTIALS, DEFAULT_U_DELTA,
-)
-
 __all__ = [
     # modes
     "beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
@@ -160,8 +153,4 @@ __all__ = [
     # responses
     "sound_speed_eq", "sound_speed_frozen", "sound_speed_frozen_hadronic",
     "sound_speed_frozen_quark", "adiabatic_index", "frozen_along",
-    # parameter-space scan
-    "scan_parameters", "scan_point", "scan_hadronic", "scan_hadronic_point",
-    "build_parametrization", "grid_samples", "NMP_KEYS", "VMIT_KEYS",
-    "DEFAULT_HYPERON_POTENTIALS", "DEFAULT_U_DELTA",
 ]

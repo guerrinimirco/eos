@@ -157,9 +157,12 @@ deconfinement becomes energetically possible and $a$ sets how stiff the quark
 branch is above it, which is how a hybrid star reaches two solar masses. The
 values of Table~\ref{tab:parameters} are the working set of this repository
 and the set \texttt{test/baseline} is frozen at;
-\texttt{eos.mixed.scan} moves over $(B^{1/4}, a, m_s)$, and
-\texttt{get\_vmit\_custom(B4=..., a=..., m\_s=...)} returns a parametrization
-with any subset changed and the rest left at Table~\ref{tab:parameters}.
+\texttt{Parameters(B4=..., a=..., m\_s=...)} returns a parametrization with
+any subset changed and the rest left at Table~\ref{tab:parameters}. There is
+no scan driver in the library: parameters are arguments, so a sweep over
+$(B^{1/4}, a, m_s)$ is a loop in the caller that builds one parametrization
+per sample and calls the mixed engine
+(\texttt{eos.mixed.eos\_table(..., vmit\_params=...)}) once on each.
 The literature values these are taken near are $B^{1/4} \simeq 180$~MeV
 and $a$ in the range $0$--$0.3\ \mathrm{fm}^2$ used by
 Gomes et al.~\cite{Gomes2019} and Constantinou

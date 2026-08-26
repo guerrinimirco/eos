@@ -3,7 +3,9 @@ produce, in both directions.
 
 `compute_nmp` extracts {n_sat, E_sat, m*/m, K_sat, Q_sat, K_sym, E_sym, L_sym}
 from a `Parameters`; `invert_nmp` and `from_nmp` recover the couplings from a
-subset of them. The two share this module because they share the stencils: the
+subset of them, and `build_parametrization` composes that inverse with the
+hyperon and Delta sector constructors, so one sample dict of nuclear-matter
+parameters and single-particle potentials becomes one `Parameters`. The two share this module because they share the stencils: the
 finite-difference bias cancels on a round trip only while both sides difference
 the same way, so a change to `h` made in one and not the other stops the
 inversion reproducing its own inputs.
@@ -540,3 +542,77 @@ def from_delta_potential(U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
         sat.matter.fields["omega0"], sat.matter.Sigma_R)
     return replace(base, x_Delta_sigma=x_Delta_sigma,
                    x_Delta_omega=x_wD, x_Delta_rho=x_rD)
+
+
+# ==========================================================================
+# NMPs + SECTOR POTENTIALS -> ONE PARAMETRIZATION
+# ==========================================================================
+
+#: Hadronic-sector coupling knobs that may be carried *inside* an NMP sample
+#: dict, alongside the nuclear-matter parameters themselves, so that one
+#: sample describes the whole hadronic parametrization. `x_wD`/`x_rD` are the
+#: Delta vector coupling ratios x_omegaDelta / x_rhoDelta; x_sigmaDelta is not
+#: free, being fixed by inverting U_Delta.
+SECTOR_KEYS = ("U_Lambda", "U_Sigma", "U_Xi", "U_Delta", "x_wD", "x_rD")
+
+
+def _split_sample(sample, hyperon_potentials=None, U_Delta=-50.0):
+    """Separate a sample dict into (nmp, sector kwargs).
+
+    A sample may carry any of the `SECTOR_KEYS` next to the nuclear-matter
+    parameters; those override the corresponding keyword arguments. This is
+    what lets one dict put L_sym, U_Xi and U_Delta on axes together -- they
+    are all "hadronic parameters" to the caller even though the inversion
+    treats them in separate stages. Keys absent from both the sample and the
+    keyword arguments are left out, so the sector constructors below apply
+    their own published defaults.
+    """
+    nmp = {k: v for k, v in sample.items() if k not in SECTOR_KEYS}
+    pots = dict(hyperon_potentials or {})
+    pots.update({k: float(sample[k]) for k in ("U_Lambda", "U_Sigma", "U_Xi")
+                 if k in sample})
+    sector = {"hyperon_potentials": pots,
+              "U_Delta": float(sample.get("U_Delta", U_Delta)),
+              "x_wD": float(sample.get("x_wD", 1.0)),
+              "x_rD": float(sample.get("x_rD", 1.0))}
+    return nmp, sector
+
+
+def build_parametrization(nmp, flags, hyperon_potentials=None,
+                          U_Delta=-50.0):
+    """Nuclear-matter parameters to a `Parameters` with the strange and
+    resonant sectors attached, as `flags` requires.
+
+    `from_nmp` inverts the NUCLEON sector only -- it carries no hyperon
+    couplings, so `SpeciesFlags(hyperons=True)` on its output would fail deep
+    in a coupling lookup. The hyperon and Delta sectors are attached on top
+    here, each by inverting its single-particle potential in symmetric matter
+    at saturation *on the inverted base*, so they adapt to that base's nucleon
+    couplings rather than assuming DD2's.
+
+    `nmp` may also carry any of the `SECTOR_KEYS` (U_Lambda, U_Sigma, U_Xi,
+    U_Delta, x_wD, x_rD); those take precedence over the keyword arguments, so
+    a single dict can put nuclear-matter parameters and sector potentials on
+    axes together.
+
+    Returns `(par, stage, message)`. `stage` is 'ok', 'inversion_failed' when
+    the NMPs have no DD-RMF realisation at all, or 'sectors_failed' when they
+    do but the hyperon/Delta scalar inversion does not converge on them -- the
+    second can happen even when the first succeeded, which is why they are
+    reported separately. `par` is None unless `stage` is 'ok'.
+    """
+    nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta)
+    par, status = from_nmp(nmp, return_status=True)
+    if not status.ok:
+        return None, "inversion_failed", status.message
+    try:
+        if flags.hyperons:
+            par = from_hyperon_potentials(
+                base=par, **sector["hyperon_potentials"])
+        if flags.deltas:
+            par = from_delta_potential(
+                U_Delta=sector["U_Delta"], x_wD=sector["x_wD"],
+                x_rD=sector["x_rD"], base=par)
+    except Exception as exc:
+        return None, "sectors_failed", f"{type(exc).__name__}: {exc}"
+    return par, "ok", ""

@@ -40,6 +40,9 @@ Collected, each with the ruling that owes it:
    ([ticket 84](84-vmit-params-in-the-plumbing.md), ticket 84). §1 currently
    reads "`mixed/hybrid.py` and `mixed/scan.py` import `eos.astro.tov`".
    `scan.py` is being removed, so the carve-out names one file, not two.
+   **Shipped**: [ticket 87](87-remove-mixed-scan.md) deleted the file. It also
+   found the same sentence echoed at `docs/DEFERRED.md:145` and left it here,
+   so this ticket sweeps both copies together.
 
 **Do not batch these blind.** §2's warning applies to the specification too: a
 sentence added to CLAUDE.md becomes an invariant the whole suite encodes, so

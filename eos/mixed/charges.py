@@ -106,8 +106,9 @@ class ChargeSpec:
     L_e_locality: Locality = Locality.GLOBAL
 
     # The mode validates its own targets and survives pickling on its own
-    # (`eos.mixed.scan` runs a parameter scan across processes, and CLAUDE.md
-    # section 6 requires that), so neither is restated here. Three enums beside
+    # (CLAUDE.md section 6 requires model objects to be picklable, so a
+    # parameter sweep can run across worker processes), so neither is
+    # restated here. Three enums beside
     # it are picklable as they stand.
 
     def _regime(self, charge, locality):
