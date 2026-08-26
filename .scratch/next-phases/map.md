@@ -260,6 +260,43 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- [The five items on the rename list that are not renames](issues/46-api-changes.md):
+  **all five applied, 0 added failures, `test/baseline/` unmoved at
+  rtol = 1e-10** (`95d4052`). Two of the ruling's four "settled by measurement"
+  premises were FALSE and both were re-measured rather than argued.
+  **sfho's isentropic solvers are not a second copy of the shared outer solve**:
+  they carry the entropy axis as a ROW OF THEIR OWN RESIDUAL, T as a 7th
+  unknown, and `general.tabulate.temperature_at_entropy` disagrees with them by
+  up to **5.4e-8 in T** at the three densities `sfho.npz` freezes -- three to
+  four orders above the gate, so the ruling's literal instruction would have
+  moved a frozen number. Folded as the ticket's own question words instead
+  (`SnB=` on the two mode solvers), which is bit-identical because `_system`
+  already routed both axes. **`find_mixed_window` and `locate_window` are not
+  one job either** -- one returns the list of mixed points, the other a
+  `Window` of boundaries, and the first's docstring says so; it was a one-line
+  alias for `sweep(..., mixed_only=True)` with zero callers, so it is deleted
+  and `locate_window` is untouched. **A third shape of the ticket-42 trap, and
+  the AST check cannot see this one either**: every `get_vmit_custom` caller
+  already binds `Parameters` to **DD2's** dataclass, so the mechanical
+  substitution would have handed a hadronic parameter set to a quark phase --
+  the check flags names a ticket INTRODUCES, and `Parameters` is instead the
+  name a deletion makes callers reach for. All five sites alias
+  `VMITParameters`, as `eos/mixed/adapters.py:55` already did. The other three
+  landed as ruled: `get_vmit_custom` deleted (23 occurrences, not 31 -- the
+  ruling counted its own `.scratch`), `from_potential_depths` /
+  `from_coupling_ratios` renamed in place, `build_hybrid_table` over 29
+  occurrences in 14 files. **`docs/REFACTOR_PLAN.md:66` deliberately keeps the
+  old name**: it records what the refactor deleted, and the name was the old
+  one then. python.org **3.14.2**, collected **417** on
+  `test/baseline test/mixed test/sfho test/vmit test/tov`, **1 failed / 401
+  passed / 15 skipped before AND after**, same node id, `^E ` diff over 22
+  lines EMPTY; sfho, vmit and mixed `verify/` green. **New git trap, measured:
+  `git commit -- <pathspec>` commits the WORKING TREE at those paths and
+  discards a filtered index** -- it swept a concurrent session's four
+  `DEFERRED.md` hunks into the commit, since amended. Stage, then
+  `git commit --amend` with no pathspec.
+  [Ticket 79](issues/79-parametrization-surface.md) is unblocked.
+
 <!-- one line per closed ticket: gist + link -->
 
 - [Phase 6, second half — the conformance pass on nucleation](issues/72-phase6-conformance.md):
