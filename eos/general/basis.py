@@ -164,3 +164,86 @@ def baryon_potentials(mu_B, mu_C=0.0, mu_S=0.0, species=None):
         name = entry if isinstance(entry, str) else entry.name
         out[name] = species_potential(entry, mu_B, mu_C, mu_S)
     return out
+
+
+# --------------------------------------------------------------------------
+# Reading a state against the projection
+# --------------------------------------------------------------------------
+# Two screens, and they answer different questions. The first asks whether one
+# solved state OBEYS the projection above; the second asks, of two runs of the
+# same case, whether what moved between them is one conserved-charge potential
+# that nothing determined. A potential nothing determines obeys the projection
+# at every point and still lands somewhere else on the next run, so the first
+# screen cannot see it -- which is why both are here.
+
+def projection_residual(mu_i, mu_B, mu_C=0.0, mu_S=0.0):
+    """How far a state's species potentials are from their own projection.
+
+    `mu_i` maps species name to the potential the state reports. Every entry
+    must satisfy mu_i = B_i mu_B + C_i mu_C + S_i mu_S, since a species has no
+    potential of its own; a state that violates it has either a wrong quantum
+    number or a species potential carried as an independent unknown, both of
+    which this catches at one point with no second run.
+
+    Returns (worst absolute residual, the species carrying it), in the units
+    of the potentials handed in; an empty `mu_i` gives (0.0, None). Species
+    absent from `eos.general.particles` raise, rather than being skipped: a
+    name the table does not know is exactly the case where the projection was
+    never applied.
+    """
+    worst, carrier = 0.0, None
+    for name, mu in mu_i.items():
+        expected = species_potential(name, mu_B, mu_C, mu_S)
+        error = abs(float(mu) - expected)
+        if error > worst:
+            worst, carrier = error, name
+    return worst, carrier
+
+
+def undetermined_potential(shifts, charge, rtol=1.0e-6):
+    """Is a set of per-species shifts one undetermined conserved potential?
+
+    `shifts` maps species name to how much its potential moved between two
+    runs of the same case; `charge` is 'B', 'C' or 'S'. Because the species
+    potentials are the projection, an undetermined mu_charge moves every
+    species by its OWN coefficient times one common number:
+
+        delta mu_i = X_i * delta mu_charge,     X in (B_i, C_i, S_i)
+
+    so dividing each shift by its coefficient must give the same delta for
+    every species that carries the charge, while every species with X_i = 0
+    must not have moved at all. That exact-ratio structure is what separates a
+    potential the equations never pinned -- legitimate, and not a regression --
+    from a physics change, which moves species in no such proportion.
+
+    Returns (delta, None) where the pattern holds -- `delta` being the shift
+    of the potential itself -- and (None, reason) where it does not.
+
+    Scope. The algebra is the same for all three charges, but only mu_C and
+    mu_S are ever undetermined in practice: mu_B is conjugate to n_B, and no
+    mode of CLAUDE.md section 3 leaves n_B free.
+    """
+    if charge not in ("B", "C", "S"):
+        raise ValueError(f"charge must be one of B, C, S; got {charge!r}")
+    index = ("B", "C", "S").index(charge)
+
+    deltas = []
+    for name, shift in shifts.items():
+        coefficient = charges_of(name)[index]
+        if coefficient == 0.0:
+            if shift != 0.0:
+                return None, (f"{name} carries no {charge} and still moved "
+                              f"by {shift:.3e}")
+            continue
+        deltas.append((name, float(shift) / coefficient))
+    if not deltas:
+        return None, f"no species in the set carries {charge}"
+
+    scale = max(abs(d) for _, d in deltas)
+    if scale == 0.0:
+        return 0.0, None
+    for name, delta in deltas:
+        if abs(delta - deltas[0][1]) > rtol * scale:
+            return None, (f"{name} implies d(mu_{charge}) = {delta:.6e}, "
+                          f"{deltas[0][0]} implies {deltas[0][1]:.6e}")
+    return deltas[0][1], None

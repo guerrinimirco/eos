@@ -82,3 +82,42 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
         if best_err <= RESIDUAL_TOL:
             break
     return best_x, best_err, bool(best_err <= RESIDUAL_TOL)
+
+
+def undetermined_unknowns(jacobian, names, rtol=1.0e-10):
+    """Which unknowns the equations do not constrain, read off the Jacobian.
+
+    An unknown whose residual row is identically zero -- a conserved-charge
+    potential no populated species carries, say -- appears here as a COLUMN of
+    the Jacobian that is zero to numerical precision. Nothing determines it:
+    the solve stops wherever its path ran out and reports round-off.
+
+    That is worth catching directly rather than through its consequences,
+    because the consequences are subtle and expensive. Carried as an unknown
+    with no equation, a null column makes the problem rank-deficient, and a
+    least-squares termination then fires early and leaves the residual of the
+    WHOLE solve decades above what the model's other modes reach -- close
+    enough to `RESIDUAL_TOL` for round-off to decide which side of the gate a
+    point lands on, and for a solver that answers a missed gate by trying
+    another root to select the other root by round-off. So an undetermined
+    potential is a CONDITIONING hazard and not only a reporting one.
+
+    `jacobian` is (n_rows, n_unknowns) and `names` labels its columns, in the
+    order the model's unknown vector carries them. Columns are compared
+    against the largest column norm rather than an absolute floor, since the
+    rows carry mixed units. Returns the names of the unconstrained unknowns,
+    in column order; an empty list is a well-posed system.
+
+    The cure is not to widen the tolerance but to give the unknown a row --
+    pinning it at a declared value where the physics leaves it free.
+    """
+    columns = np.atleast_2d(np.asarray(jacobian, dtype=float))
+    if columns.shape[1] != len(names):
+        raise ValueError(f"jacobian has {columns.shape[1]} columns and "
+                         f"{len(names)} names were given")
+    norms = np.linalg.norm(columns, axis=0)
+    largest = float(norms.max()) if norms.size else 0.0
+    if largest == 0.0:
+        return list(names)
+    return [name for name, norm in zip(names, norms)
+            if norm <= rtol * largest]
