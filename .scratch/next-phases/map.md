@@ -260,6 +260,23 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 79 — three routes to a parameter set, in every model](issues/79-parametrization-surface.md)**
+  (resolved, `ff7888e`). `named()` added to `zl`, `vmit`, `alphabag`, `abpr` as
+  a ONE-ENTRY MAP in dd2/did's shape, keyed on the set's own `name` field — the
+  docstring-only option lost to the same argument gap 2 turns on, that an absent
+  attribute is an `AttributeError` a caller cannot interpret. `did`'s inverse
+  map is REFUSED, not written: `invert_nmp`/`from_nmp` exist and raise, ticket
+  26's zl pattern, and the session found a SECOND reason the ticket did not
+  anticipate — DID's two inequivalent symmetry energies (S, S_2, 2.72 MeV apart
+  at saturation) leave even the LIST to impose undetermined. dd2/did document
+  `dataclasses.replace(default(), ...)` as the new-set route; vmit's replacement
+  sentence is paid. A uniform routes block in all ten `.md` and all ten `.tex`,
+  all of which compile. **0 added failures** — 892 collected, 2 failed, 890
+  passed, IDENTICAL in an isolated HEAD control copy and a work copy, py314.
+  `test_baseline[ccdm]` is newly red and is **ticket 65's**: 20
+  `state.field_residual` keys, absolute 1e-6, compared at rtol 1e-10 against a
+  stored zero — ticket 76's shape exactly.
+
 - **[Ticket 65 — §4's six flag defaults unify on all-False](issues/65-species-flag-defaults.md)**
   (resolved). Nine models default every §4 name to `False`; `enjl` is the one
   exemption (it fixes every flag and raises on any move). **3108 of 53763
