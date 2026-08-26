@@ -1,7 +1,7 @@
 # The eight conformance fixes that move no number
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 11
 Parent: ../map.md
 
@@ -78,3 +78,81 @@ Items 6 and 7 touch the charge map, so they are checked against `test/baseline/`
 for `alphabag` and `mixed` at rtol = 1e-10; the numbers are already correct, so
 any movement means the dedup was wrong. The other six cannot move a number.
 Report added failures against `output/_audit/pytest_before_with_crust.txt`.
+
+
+## Answer
+
+**Seven of the eight shipped in commit `5c75584`; the eighth is real, done, and
+uncommittable.** None moved a number, which is what the grouping was for.
+
+`test/test_imports.py:76 MODEL_PACKAGES` now carries `ccdm` and `eos.ccdm`
+passes both layering tests — but `test/` is gitignored (CLAUDE.md §11), so that
+one word lives in the working tree only and appears in no diff. It is recorded
+here because a future session reading the commit will not find it.
+
+**What each fix turned out to be, where the ticket's description was incomplete:**
+
+- **`fracs` (item 2).** Fixed by passing the local `fracs` dict, which both
+  builders already assemble two lines above. `combos` is deliberately NOT
+  changed: it indexes the grid axes and is consumed by `rows_from_result`
+  (`dd2/table.py:310`, `sfho/table.py:359,563`), so widening it would move table
+  CONTENT, which is exactly the thing this commit is defined by not doing. A
+  comment at each site now says why the two differ.
+
+- **The dd2 constructors (item 3).** The move is bigger than the ticket implies,
+  because `Parameters.from_hyperon_potentials` is a PUBLIC name with callers:
+  `mixed/scan.py:169,172` and five test files
+  (`test/dd2/test_dd2_m4.py`, `test_dd2_m5.py`, `test/mixed/test_mixed_responses.py`,
+  `test_window_location.py`, and `test/baseline/generate_baseline.py`, which is
+  what freezes the dd2 baseline). All updated. Both are re-exported from
+  `eos.dd2`, so `from eos.dd2 import from_hyperon_potentials` works.
+  `nmp.py` already imported `solve_snm` at module scope, so the two
+  `# local import breaks the cycle` lines are simply gone rather than moved.
+
+- **`_mode_kwargs` (item 4).** It cannot move alone: it reads `MODES` and
+  `MODE_FRACTIONS`, which also lived in `table.py`. All three moved to
+  `solver.py`. `eos.dd2.MODES` and `eos.dd2.table.MODES` both still resolve
+  (table.py imports them), so no consumer changed. The two siblings went with
+  it: `nmp.py` imported `esym` from itself twice, and `table.py`'s `__main__`
+  block reached back through `eos.dd2.__init__`.
+
+- **The `abpr` docstring (item 8) — RULED: correct the docstring, do not
+  vectorise.** The physics permits vectorising (every point is independent and
+  the density inverse is closed-form), but `solve_cfl` takes one scalar density,
+  so genuine array-in/array-out is a change to the SOLVER signature, not to the
+  table driver — and a solver change has to be gated on numbers moving, which is
+  the one thing this commit's grouping forbids. The docstring now states the
+  loop, says array-in/array-out is reachable for this model and no other, and
+  says it has not been made. Vectorising remains available as its own ticket.
+
+- **Items 6 and 7 (the charge map) passed their extra gate.** `alphabag` and
+  `mixed` both pass `test/baseline/` at rtol = 1e-10, so the dedup was arithmetic
+  identity as claimed. `mixed/charges.py` re-exports `eos.general.basis.quark_charges`
+  rather than deleting the name, so `eos.mixed.quark_charges` is unchanged and is
+  now the same object `mixed/adapters.py:50` already imported. `QUARK_QN` stays:
+  it is a quantum-number table built from the shared `Particle` objects, not a
+  second copy of the basis map.
+
+**Gate.** Interpreter **python.org 3.14.2** (numpy 2.3.5, scipy 1.17.0), run in
+an isolated `git archive HEAD` copy with the changed files overlaid, because two
+other sessions were live in the checkout. The full suite was NOT run, for the
+same reason.
+
+    test/baseline/                              16 collected,  6 failed,   10 passed
+    test_imports + dd2 + sfho + alphabag
+      + mixed + abpr + ccdm                   1083 collected,  3 failed, 1080 passed
+
+**Zero failures added.** All nine are pre-existing on this interpreter and named
+in `output/_audit/`: the six baselines (`ccdm`, `dd2`, `enjl`, `njl`, `tov`,
+`zlvmit`) in `pytest_after_ticket61_baseline_py314.txt`, and the three dd2
+NMP-inversion failures (`test_inversion_without_Q_sat_predicts_it`,
+`test_inversion_with_Q_sat_still_imposes_it`,
+`test_restarts_recover_a_seed_limited_inversion`) in every `_py314` file back to
+`pytest_before_ticket62_py314.txt`. No tolerance was loosened.
+
+**One trap for the next session using this gate shape.** Overlaying only the
+files a ticket touches onto `git archive HEAD` pairs HEAD's `eos/` with the LIVE
+`test/`, which is shared and gitignored. Where a concurrent session has landed
+its test-side edit and not its code-side one, that pairing invents a failure
+belonging to neither ticket — ticket 69's `cs2_eq` -> `cs2_isothermal` did
+exactly this in ticket 71's gate. Attribute before believing.

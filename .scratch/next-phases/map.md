@@ -1237,6 +1237,45 @@ against this file, not against the earlier `pytest_before*.txt`.
   `unpaired`/`2SC` (stencil neighbour at 2.2022 does not converge), and `ccdm`'s
   returns `branch_changed=True` there even with the pattern restricted.
 
+- [The eight conformance fixes that move no number](issues/50-mechanical-fixes.md):
+  **seven landed as one commit `5c75584`, the eighth cannot be committed** —
+  `ccdm` was missing from `test/test_imports.py MODEL_PACKAGES` and is now in it
+  and passing, but `test/` is gitignored, so that fix exists only in the working
+  tree. The grouping held: `test/baseline/` at rtol = 1e-10 shows zero movement,
+  `alphabag` and `mixed` included, so items 6-7's charge-map dedup was arithmetic
+  identity as predicted. Three rulings the code forced. `fracs` is fixed by
+  passing the builders' own dict and **`combos` is deliberately left narrow**,
+  because it feeds `rows_from_result` and widening it would move table content
+  rather than progress. `_mode_kwargs` **cannot move alone** — `MODES` and
+  `MODE_FRACTIONS` moved to `solver.py` with it — and the dd2 constructors could
+  not either, being public names with callers in `mixed/scan.py` and five test
+  files including `generate_baseline.py`. And **`abpr` gets the docstring, not
+  the vectorisation**: array-in/array-out is genuinely reachable there and
+  nowhere else, but it is a change to `solve_cfl`'s signature, so it needs a gate
+  on numbers moving, which is what this ticket was defined by not having. Gate on
+  **python.org 3.14.2**, in an isolated `git archive HEAD` copy with two sessions
+  live: baseline 16 collected / 6 failed, targeted 1083 collected / 3 failed,
+  **all nine pre-existing and named in `output/_audit/`, zero added**.
+
+- [`eos.enjl.api` documents a name the module does not export](issues/71-enjl-unknowns-docstring.md):
+  fixed in `4d0ab58`, and **the grep the ticket asked for found two more**. The
+  named defect was worse than a wrong order — `unknown_slots(spec)` returns 10
+  slots for `beta_eq_neutrinoless` and `fixed_YC` but **11** for `fixed_YC_YS`
+  (+mu_S) and for the trapped mode (+mu_nue), so a guessed vector is the wrong
+  LENGTH, not merely mis-ordered. Resolving every backticked `eos.*` name in
+  every public docstring under `eos/` by import: 17 unresolvable, **13 of them
+  CompOSE data filenames** (`eos.nb`, `eos.t`, `eos.thermo`, `eos.yq`) that only
+  look like modules, and four real — the target, plus
+  `eos.enjl.verify.check_entropy_limit` sixty lines away in the same package
+  (real function, wrong module), `eos.vmit.solver_table` (never existed; it is
+  `eos.vmit.eos_table`), and `eos.astro.tov.solver.load_crust_table` (it is in
+  `.crust`). The first three fixed; **the fourth left alone and reported**,
+  astro not being one of the nine models the ticket opened. A second pass over
+  BARE backticked identifiers in every `api.py` found nothing: the dotted form is
+  where this class of defect lives. Suite 165 collected / 164 passed; the one
+  failure is ticket 69's rename half-landed across the shared gitignored `test/`
+  tree, green when that session's `eos/vmit/api.py` is overlaid.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
