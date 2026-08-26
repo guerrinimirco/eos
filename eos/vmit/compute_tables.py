@@ -2,7 +2,7 @@
 
 `VMITTableSettings` + `compute_vmit_table` are the first-generation interface:
 one object carrying the grid, the mode and the printing options, returning a
-dict keyed by the grid point. New code should use `eos.vmit.solver_table` (or
+dict keyed by the grid point. New code should use `eos.vmit.eos_table` (or
 `eos.vmit.table.build_table`), which takes the repository's mode names and
 reports through the progress callback every model shares.
 

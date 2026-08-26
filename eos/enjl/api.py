@@ -103,11 +103,20 @@ def eos_point(par, mode, species=None, n_B=None,
         of the two. SnB costs an outer 1-D solve for T, every evaluation of
         which is a full equilibrium solve.
     x0 : list
-        Optional starting guess in the order of `eos.enjl.solver.UNKNOWNS`,
-        normally a neighbouring point's `warm_start`. Above a first-order
-        transition the model has more than one root and the guess decides
-        which one is found; without it the parameter-free cold starts are
-        used, and those stop converging around n_B = 0.5 fm^-3.
+        Optional starting guess, normally a neighbouring point's
+        `eos.enjl.solver.warm_start`. Its ORDER DEPENDS ON THE MODE:
+        `eos.enjl.solver.unknown_slots(spec)` names the slots for the
+        `spec` a mode builds, and returns the ten of
+        `eos.enjl.solver.BASE_UNKNOWNS` -- M_u, M_d, M_s, mu_B, mu_C,
+        n_bQ, gomega_omega, grho_rho, SigmaR_b, SigmaR_q -- followed by
+        one potential per held charge: mu_S where the mode fixes Y_S,
+        then mu_nue where it fixes Y_Le. So a vector written for
+        beta_eq_neutrinoless is ten long and is the WRONG LENGTH for
+        fixed_YC_YS or the trapped mode; build it from `unknown_slots`
+        rather than by counting. Above a first-order transition the model
+        has more than one root and the guess decides which one is found;
+        without it the parameter-free cold starts are used, and those
+        stop converging around n_B = 0.5 fm^-3.
 
     Returns
     -------

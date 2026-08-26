@@ -89,7 +89,7 @@ def check_temperature(T):
     uses does not converge back to (it steps off by ~1e-5 relative the moment
     T != 0 and stays there). That is a property of the fit, not of the port,
     and it is why a T -> 0 continuity check has a floor near 1e-4 -- see
-    `eos.enjl.verify.check_entropy_limit`.
+    `eos.enjl.verify.run_full_check.check_entropy_limit`.
     """
     if T < 0.0:
         raise ValueError(
