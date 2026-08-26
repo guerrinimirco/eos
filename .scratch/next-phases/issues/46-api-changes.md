@@ -2,6 +2,7 @@
 
 Type: task
 Status: open
+Assignee: session eff950ed
 Blocked by: 10
 Parent: ../map.md
 
