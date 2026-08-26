@@ -467,14 +467,24 @@ s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} , \qquad \mu_\gamma = 0 ,
 \label{eq:photons}
 \end{equation}
 %
-and they are \textbf{unconditional at $T > 0$}: the engine has no species flag
-of its own, it takes the hadronic phase's \texttt{SpeciesFlags} for the
-hadronic sector only, and the assembly adds a photon gas whenever $T > 0$
-without consulting any flag. A mixed point at finite temperature therefore
-always carries Eq.~(\ref{eq:photons}), which is the right default for the
-astrophysical use but is not the switchable-sector contract the single-phase
-models honour, and a caller cannot turn it off. This is a known gap in the
-engine's species handling, recorded as such rather than a silent choice.
+and they enter only when \texttt{SpeciesFlags.photons} is set, and only at
+$T > 0$. The engine carries its own \texttt{SpeciesFlags}
+(\texttt{eos/mixed/species.py}) with the six names of CLAUDE.md section 4, all
+defaulting to \texttt{False}; the DD2$+$vMIT front door reads the same six off
+the hadronic model's own flag object, since every model carries them.
+
+The six split by where they are consumed. \texttt{hyperons},
+\texttt{deltas}, \texttt{thermal\_mesons} and the \texttt{muons} of the
+lepton gases are sectors of the models being coupled, and are delegated: each
+\texttt{Phase} carries its own model's flags. \texttt{photons} and
+\texttt{thermal\_neutrinos} belong to NEITHER phase --- like the
+$\eta$-split leptons they are uniform across the mixture --- and are consumed
+at the mixture level, counted once. That is why every adapter solves its phase
+with \texttt{include\_photons=False}: the phases contribute matter, the
+mixture contributes the radiation, and Eq.~(\ref{eq:photons}) appears exactly
+once in Eqs.~(\ref{eq:Ptot})--(\ref{eq:stot}).
+\texttt{thermal\_neutrinos} is carried and raises:
+the flavours a mode does not track are not wired in the engine.
 %
 Each lepton population is evaluated at the potential its own neutrality row
 fixed: $\mu_e^{\mathrm{L},\phH}$ and $\mu_e^{\mathrm{L},\phQ}$ for the local
@@ -649,13 +659,13 @@ plus the arguments a composite engine adds:
 \begin{verbatim}
 eos_point(par, mode, species, n_B=, T=|SnB=, eta=0.0, vmit_params=,
           leptons=True, x0=, analytic_jac=, check_consistency=True,
-          phases=, muons=, **conditions)
+          phases=, **conditions)
 eos_table(par, mode, species, axes=, eta=0.0, fixed=, leptons=True,
           vmit_params=, window_only=True, analytic_jac=, refine="exact",
-          phases=, muons=, progress=, verbose=)
+          phases=, progress=, verbose=)
 eos_response(par, mode, species, frozen="equilibrium", n_B=, T=0.0,
              eta=0.0, vmit_params=, leptons=True, rel_dn=1e-3,
-             phases=, muons=, **conditions)
+             phases=, **conditions)
 \end{verbatim}
 %
 $\nB$ is always the TOTAL baryon density of the mixture, volume-averaged over
@@ -798,8 +808,8 @@ Recorded in \texttt{docs/DEFERRED.md}: the frozen-per-species and
 frozen-conserved-fraction response freezes; $S$ \textsc{local}; a fixed $Y_C$
 combined with a fixed $Y_{L_e}$; \texttt{SpeciesFlags.sigma\_star} in the
 hadronic phase; a Bose condensate in either phase (refused through $\kappa$);
-and a species-flag surface of the engine's own, which is why the photon gas of
-Eq.~(\ref{eq:photons}) cannot be switched off.
+and \texttt{SpeciesFlags.thermal\_neutrinos}, the flavours a mode does not
+track, which the engine carries and refuses.
 
 \begin{acknowledgments}
 Written as the specification of \texttt{eos/mixed}.

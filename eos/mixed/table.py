@@ -139,7 +139,7 @@ def composition_row(r):
 
 def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
                            x0=None, T_lo=0.5, T_hi=50.0, T_cap=250.0,
-                           xtol=1e-4, phases=None, muons=None):
+                           xtol=1e-4, phases=None, species=None):
     """Mixed solve at fixed entropy per baryon S = s/n_B.
 
     An outer one-dimensional root on T, mirroring
@@ -152,7 +152,7 @@ def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
     def point(T):
         return solve(par, flags, n_B, eta, spec, vmit_params=vmit_params,
                            T=T, x0=x0, check_consistency=False, phases=phases,
-                           muons=muons)
+                           species=species)
 
     def f(T):
         return point(T).s / n_B - SnB
@@ -168,7 +168,7 @@ def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
 
 
 def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
-                      phases=None, muons=None):
+                      phases=None, species=None):
     """Warm-started n_B sweep at fixed S = s/n_B (one T solve per point)."""
     slots = mixed_slots(spec, eta, flags, pair=phases)
     out, x0 = [], None
@@ -176,7 +176,7 @@ def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
         try:
             r = solve_at_entropy(par, flags, float(n), SnB, eta, spec,
                                        vmit_params=vmit_params, x0=x0,
-                                       phases=phases, muons=muons)
+                                       phases=phases, species=species)
         except (RuntimeError, ValueError):
             x0 = None                     # reset the warm start past the gap
             continue
@@ -219,8 +219,8 @@ class TableSpec:
     analytic_jac: bool = False
     refine: str = "exact"
     phases: object = None      # a Phase pair for a non-default pairing
-    muons: bool = None         # engine-level; defaults from flags on the
-                               # front-door path
+    species: object = None     # the engine's own SpeciesFlags (section 4);
+                               # read off `flags` on the front-door path
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -272,12 +272,13 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
     try:
         on = solve_fixed_chi(spec.par, spec.flags, 0.0, spec.eta, cs,
                              vmit_params=vp, T=T, n_B0=x_on[i_n], x0=x_on,
-                             phases=spec.phases, muons=spec.muons)
+                             phases=spec.phases, species=spec.species)
         # The offset's hadronic phase no longer tracks n_B; its internal
         # solve is seeded from the previous isotherm's own hadronic density.
         off = solve_fixed_chi(spec.par, spec.flags, 1.0, spec.eta, cs,
                               vmit_params=vp, T=T, n_B0=off2.th_H.n_B,
-                              x0=x_off, phases=spec.phases, muons=spec.muons)
+                              x0=x_off, phases=spec.phases,
+                              species=spec.species)
     except (RuntimeError, ValueError):
         return None
     if not (lo <= on.n_B < off.n_B <= hi):
@@ -314,7 +315,7 @@ def _locate_chained(spec, nB, cs, vp, T, hint, history=()):
         if window is not None:
             return window
     kw = dict(vmit_params=vp, T=T, analytic_jac=spec.analytic_jac,
-              refine=spec.refine, phases=spec.phases, muons=spec.muons)
+              refine=spec.refine, phases=spec.phases, species=spec.species)
     if hint is not None:
         lo, hi = hint
         pad = max(0.15, hi - lo)          # generous: the docstring's advice
@@ -389,7 +390,8 @@ def build_table(spec, progress=None, verbose=False):
         if temp_key == "SnB":
             results = _sweep_at_entropy(spec.par, spec.flags, nB,
                                         float(tv), spec.eta, cs, vp,
-                                        phases=spec.phases, muons=spec.muons)
+                                        phases=spec.phases,
+                                        species=spec.species)
             window, n_requested = None, len(nB)
         elif spec.window_only:
             window = _locate_chained(spec, nB, cs, vp, float(tv),
@@ -419,7 +421,7 @@ def build_table(spec, progress=None, verbose=False):
                                       spec.eta, cs, vmit_params=vp,
                                       T=float(tv),
                                       analytic_jac=spec.analytic_jac,
-                                      phases=spec.phases, muons=spec.muons,
+                                      phases=spec.phases, species=spec.species,
                                       **sweep_kw)
                 n_requested = len(inside)
             else:
@@ -429,7 +431,7 @@ def build_table(spec, progress=None, verbose=False):
             results = sweep(spec.par, spec.flags, nB, spec.eta, cs,
                                   vmit_params=vp, T=float(tv),
                                   analytic_jac=spec.analytic_jac,
-                                  phases=spec.phases, muons=spec.muons)
+                                  phases=spec.phases, species=spec.species)
             window, n_requested = None, len(nB)
 
         for r in results:

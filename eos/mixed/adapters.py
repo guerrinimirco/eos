@@ -49,6 +49,7 @@ from scipy.optimize import root
 from eos.general.physics_constants import hc, hc3
 from eos.general.basis import quark_charges, quark_potentials
 from eos.general.state import PhaseThermo
+from eos.dd2.species import SpeciesFlags as DD2SpeciesFlags
 from eos.dd2.thermodynamics import thermo_from_mu as _dd2_at_mu
 from eos.dd2.solver import solve_beta_eq_neutrinoless, solve, sweep
 from eos.mixed.charges import Regime
@@ -680,6 +681,17 @@ def vmit_phase(params=None):
     return Phase(name="vMIT", thermo=thermo, potential_kind="physical",
                  cold_start=cold_start, wing_sweep=wing_sweep,
                  frozen_thermo=frozen_thermo, jacobian_block=jac)
+
+
+def default_flags():
+    """The hadronic flags the DD2 + vMIT front door falls back on.
+
+    That front door is a named convenience for ONE pairing (CLAUDE.md §5), so
+    its default species set is that pairing's hadronic model's own — which
+    carries §4's six names, and therefore serves the mixture as well
+    (`eos.mixed.species.mixture_flags`).
+    """
+    return DD2SpeciesFlags()
 
 
 def default_pair(par, flags, vmit_params=None):

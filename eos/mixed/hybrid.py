@@ -117,7 +117,7 @@ def _enforce_monotone_pressure(P, n_B):
 
 def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
                        T=0.0, analytic_jac=False, window=None, phases=None,
-                       muons=None):
+                       species=None):
     """Stitch pure hadronic, eta-mixed and pure quark segments into one core
     EoS — every segment at the equilibrium the `spec` declares.
 
@@ -136,8 +136,6 @@ def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
             from eos.vmit.parameters import Parameters as VMITParameters
             vmit_params = VMITParameters.default()
         phases = default_pair(par, flags, vmit_params)
-        if muons is None and flags is not None:
-            muons = bool(flags.muons)
     for phase in phases:
         if phase.wing_sweep is None:
             raise NotImplementedError(
@@ -154,7 +152,7 @@ def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
         window = locate_window(par, flags, grid, eta, spec,
                                vmit_params=vmit_params, T=T,
                                analytic_jac=analytic_jac, phases=None if par
-                               is not None else phases, muons=muons)
+                               is not None else phases, species=species)
 
     rows = []                       # (n_B, P, eps, chi, phase)
     n_lo = window.n_onset if window.exists else np.inf
@@ -176,7 +174,7 @@ def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
                                  vmit_params=vmit_params, T=T,
                                  analytic_jac=analytic_jac,
                                  phases=None if par is not None else phases,
-                                 muons=muons):
+                                 species=species):
                 # A point that drifted outside (0,1) belongs to a pure wing;
                 # the wings below already cover it.
                 if r.in_mixed_phase:
@@ -205,7 +203,7 @@ def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
 
 
 def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
-                      phases=None, muons=None,
+                      phases=None, species=None,
                       crust="BPS", n_transition=0.08, n_ec=160,
                       e_c_min=150.0, e_c_max=3000.0, compute_tidal=True,
                       backend="fast", table=None, tov_parallel=True):
@@ -237,7 +235,7 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     if table is None:
         table = build_hybrid_table(par, flags, n_B_grid, eta, spec,
                                    vmit_params=vmit_params, T=T,
-                                   phases=phases, muons=muons)
+                                   phases=phases, species=species)
     if crust == "BPS" and not have_crust("BPS"):
         crust = "No"
     e_c_vec = generate_ec_logspace(e_c_min, e_c_max, n_ec)

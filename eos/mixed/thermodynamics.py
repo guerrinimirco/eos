@@ -15,8 +15,9 @@ inside the composite engine.
 The weighting convention, used identically for P, eps, s and sum mu_i n_i:
 the two matter phases are volume-averaged with weights (1-chi, chi); the local
 lepton populations carry weight eta and are themselves volume-averaged; the
-global lepton population carries weight 1-eta and is uniform; photons and any
-neutrino population are uniform across the whole mixture and are counted once.
+global lepton population carries weight 1-eta and is uniform; photons (when
+`SpeciesFlags.photons` is set) and any neutrino population are uniform across
+the whole mixture and are counted once.
 The one exception is the pressure, which is uniform in equilibrium and is
 therefore read off the hadronic phase (the phases are equal by the
 mechanical-equilibrium row) plus the phase-common parts.
@@ -68,7 +69,8 @@ def charged_leptons(mu_e, T, muons, mu_nue=0.0):
         mu_dot_n=mu_e * e.n + mu_mu * m.n, n_e=e.n, n_mu=m.n)
 
 
-def assemble(chi, eta, th_H, th_Q, L_H, L_Q, G, nu, mu_nue=0.0, T=0.0):
+def assemble(chi, eta, th_H, th_Q, L_H, L_Q, G, nu, mu_nue=0.0, T=0.0,
+             photons=False):
     """The totals of the mixture: (P, eps, s, sum_i mu_i n_i).
 
     chi, eta     : quark volume fraction and locality parameter
@@ -78,10 +80,15 @@ def assemble(chi, eta, th_H, th_Q, L_H, L_Q, G, nu, mu_nue=0.0, T=0.0):
     nu           : the neutrino block, or None when none is tracked
     mu_nue       : the neutrino potential entering sum mu_i n_i
 
+    photons      : the phase-common radiation gas (CLAUDE.md section 4).
+                   Every phase is solved with its own photons switched off
+                   (`eos.mixed.adapters`), so the mixture's single term here
+                   is the whole of it.
+
     Weighted as the module docstring states; photons enter at T > 0 with
     mu = 0, so they contribute to P, eps and s but not to sum mu_i n_i.
     """
-    ph = photon_thermo(T) if T > 0.0 else None
+    ph = photon_thermo(T) if (photons and T > 0.0) else None
     P_g, e_g, s_g = (ph.P, ph.e, ph.s) if ph else (0.0, 0.0, 0.0)
     P_nu, e_nu, s_nu = (nu.P, nu.e, nu.s) if nu else (0.0, 0.0, 0.0)
 

@@ -107,7 +107,7 @@ class Window:
 def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                   n_probe=12, tol=None, analytic_jac=False, x0=None,
                   hint=None, max_refine=2, refine="exact", phases=None,
-                  muons=None):
+                  species=None):
     """Find the mixed window on `n_B_grid` by bracketing the chi crossings.
 
     Probes the grid coarsely, reading chi as the regime indicator (chi <= 0
@@ -158,7 +158,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         return sweep(par, flags, np.unique(np.linspace(lo, hi, count)),
                            eta, spec, vmit_params=vmit_params, T=T, x0=x0,
                            analytic_jac=analytic_jac, phases=phases,
-                           muons=muons)
+                           species=species)
 
     lo, hi = (float(grid[0]), float(grid[-1])) if hint is None else (
         max(float(grid[0]), float(hint[0])), min(float(grid[-1]), float(hint[1])))
@@ -207,7 +207,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                                   x0=warm_start(r_lo, slots),
                                   nH0=r_lo.th_H.n_B,
                                   analytic_jac=analytic_jac, phases=phases,
-                                  muons=muons)
+                                  species=species)
             if not stepped or abs(stepped[-1].n_B - n_mid) > 1e-12:
                 return np.nan
             r = stepped[-1]
@@ -272,7 +272,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
                                   vmit_params=vmit_params, T=T,
                                   x0=warm_start(r, slots), nH0=r.th_H.n_B,
                                   analytic_jac=analytic_jac, phases=phases,
-                                  muons=muons)
+                                  species=species)
             if not stepped or abs(stepped[-1].n_B - n_next) > 1e-12:
                 return 0.5 * (n_next + r.n_B) if direction < 0 else np.nan
             r = stepped[-1]
@@ -316,7 +316,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     if refine == "exact":
         window = refine_window(window, par, flags, eta, spec,
                                vmit_params=vmit_params, T=T, phases=phases,
-                               muons=muons)
+                               species=species)
     elif refine != "bisect":
         raise ValueError(f"refine must be 'bisect' or 'exact', got {refine!r}")
     return window
@@ -324,7 +324,7 @@ def locate_window(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
 
 def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
                     n_B0=None, x0=None, check_consistency=False, phases=None,
-                    muons=None):
+                    species=None):
     """The density at which the mixed system has volume fraction `chi`:
     chi is IMPOSED and the total density n_B is solved for.
 
@@ -354,7 +354,7 @@ def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
         vmit_params = VMITParameters.default()
     ctx = build_mixed_ctx(spec, eta, None, par, flags, vmit_params, T=T,
                           n_B_guess=float(n_B0), chi=float(chi),
-                          phases=phases, muons=muons)
+                          phases=phases, species=species)
 
     def guesses():
         if x0 is not None:
@@ -378,7 +378,7 @@ def solve_fixed_chi(par, flags, chi, eta, spec, vmit_params=None, T=0.0,
 
 
 def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0,
-                  phases=None, muons=None):
+                  phases=None, species=None):
     """Sharpen a scan-located window with one exact fixed-chi solve per
     boundary.
 
@@ -424,7 +424,8 @@ def refine_window(window, par, flags, eta, spec, vmit_params=None, T=0.0,
         try:
             r = solve_fixed_chi(par, flags, chi_target, eta, spec,
                                 vmit_params=vmit_params, T=T,
-                                n_B0=n_B0, x0=x0, phases=phases, muons=muons)
+                                n_B0=n_B0, x0=x0, phases=phases,
+                                species=species)
         except (RuntimeError, ValueError):
             return None
         return r if accepted(r.n_B, n_scan) else None
@@ -653,7 +654,7 @@ def locate_maxwell(phase_lo, phase_hi, mu_B_grid, T=0.0, muons=True,
 
 
 def locate_windows(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
-                   max_windows=4, phases=None, muons=None, **kw):
+                   max_windows=4, phases=None, species=None, **kw):
     """Every coexistence window on the grid, in density order.
 
     A model with several branches (ENJL) can put MORE than one first-order
@@ -679,7 +680,7 @@ def locate_windows(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
             break
         w = locate_window(par, flags, sub, eta, spec,
                           vmit_params=vmit_params, T=T, phases=phases,
-                          muons=muons, **kw)
+                          species=species, **kw)
         if not w.exists:
             break
         windows.append(w)

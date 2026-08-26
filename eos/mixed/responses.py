@@ -68,6 +68,7 @@ import numpy as np
 from eos.dd2.solver import warm_start
 from eos.general.sound_speeds import sound_speed_eq
 from eos.general.thermodynamics_leptons import neutralizing_leptons
+from eos.mixed.species import mixture_flags
 from eos.mixed.adapters import (
     _dd2_frozen_block, _vmit_frozen_block, default_pair,
 )
@@ -127,7 +128,7 @@ def _frozen_mixture(pair, result, scale, muons, leptons=True):
 
 
 def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
-                       leptons=True, phases=None, muons=None):
+                       leptons=True, phases=None, species=None):
     """Frozen-composition c_ad^2 = dP/deps at the state `result`.
 
     par, flags   : the DD2 `Parameters` and `SpeciesFlags` the state was
@@ -148,9 +149,9 @@ def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
     """
     if phases is None:
         phases = default_pair(par, flags, vmit_params)
-        if muons is None and flags is not None:
-            muons = bool(flags.muons)
-    muons = bool(muons)
+    # The engine's own section-4 flags; on the front-door path the hadronic
+    # model's own object carries the same six names.
+    muons = mixture_flags(flags if species is None else species).muons
     chi = float(np.clip(result.chi, 0.0, 1.0))
     if chi != result.chi:                       # a drifted point: use the wing
         result = _clipped(result, chi)
@@ -255,7 +256,7 @@ def sound_speed_frozen_quark(n_u, n_d, n_s, T=0.0, vmit_params=None,
 
 
 def frozen_along(par, flags, results, vmit_params=None, rel_dn=1e-3,
-                 leptons=True, phases=None, muons=None):
+                 leptons=True, phases=None, species=None):
     """`sound_speed_frozen` at every state in a sequence, as an array.
 
     Non-convergent points come back nan rather than aborting the sequence: a
@@ -267,7 +268,7 @@ def frozen_along(par, flags, results, vmit_params=None, rel_dn=1e-3,
             out.append(sound_speed_frozen(par, flags, r,
                                           vmit_params=vmit_params,
                                           rel_dn=rel_dn, leptons=leptons,
-                                          phases=phases, muons=muons))
+                                          phases=phases, species=species))
         except (RuntimeError, ValueError):
             out.append(np.nan)
     return np.asarray(out, dtype=float)

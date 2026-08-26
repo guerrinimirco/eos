@@ -357,14 +357,22 @@ The photons are
     P_gamma = pi^2 T^4/(45 (hc)^3),  eps_gamma = 3 P_gamma,
     s_gamma = 4 pi^2 T^3/(45 (hc)^3),  mu_gamma = 0             (photons)
 
-and they are **unconditional at T > 0**: the engine has no species flag of its
-own, it takes the hadronic phase's `SpeciesFlags` for the hadronic sector only,
-and `thermodynamics.py` adds a photon gas whenever `T > 0` without consulting
-any flag. So a mixed point at finite temperature always carries (photons),
-which is the right default for the astrophysical use but is not the
-switchable-sector contract the single-phase models honour, and a caller cannot
-turn it off. This is a known gap in the engine's species handling, recorded as
-such, not a silent choice.
+and they enter only when `SpeciesFlags.photons` is set, and only at `T > 0`.
+The engine carries its own `SpeciesFlags` (`eos/mixed/species.py`) with the
+six names of CLAUDE.md section 4, all defaulting to False; the DD2 + vMIT
+front door reads the same six off the hadronic model's own flag object, since
+every model carries them.
+
+The six split by where they are consumed. `hyperons`, `deltas`,
+`thermal_mesons` and the `muons` of the lepton gases are sectors of the
+models being coupled, and are delegated: each `Phase` carries its own model's
+flags. `photons` and `thermal_neutrinos` belong to NEITHER phase — like the
+eta-split leptons they are uniform across the mixture — and are consumed at
+the mixture level, counted once. That is why every adapter solves its phase
+with `include_photons=False`: the phases contribute matter, the mixture
+contributes the radiation, and (photons) appears exactly once in
+(Ptot)-(stot). `thermal_neutrinos` is carried and raises: the flavours a
+mode does not track are not wired in the engine.
 
 **Euler / Hugenholtz-Van Hove.** The identity
 
@@ -503,13 +511,13 @@ plus the two the composite engine adds:
 
     eos_point(par, mode, species, n_B=, T=|SnB=, eta=0.0, vmit_params=,
               leptons=True, x0=, analytic_jac=, check_consistency=True,
-              phases=, muons=, **conditions)
+              phases=, **conditions)
     eos_table(par, mode, species, axes=, eta=0.0, fixed=, leptons=True,
               vmit_params=, window_only=True, analytic_jac=, refine="exact",
-              phases=, muons=, progress=, verbose=)
+              phases=, progress=, verbose=)
     eos_response(par, mode, species, frozen="equilibrium", n_B=, T=0.0,
                  eta=0.0, vmit_params=, leptons=True, rel_dn=1e-3,
-                 phases=, muons=, **conditions)
+                 phases=, **conditions)
 
 `n_B` is always the TOTAL baryon density of the mixture, volume-averaged over
 both phases, not the density of either one. `par`, `species` and `vmit_params`
@@ -638,9 +646,9 @@ says which side of the transition the density is on.
 Recorded in `docs/DEFERRED.md`: the frozen-per-species and
 frozen-conserved-fraction response freezes; `S` LOCAL; combining a fixed `Y_C`
 with a fixed `Y_Le`; `SpeciesFlags.sigma_star` in the hadronic phase; a Bose
-condensate in either phase (refused through `condensation`); and a species-flag
-surface of the engine's own, which is why the photon gas of (photons) cannot be
-switched off.
+condensate in either phase (refused through `condensation`); and
+`SpeciesFlags.thermal_neutrinos`, the flavours a mode does not track, which
+the engine carries and refuses.
 
 
 ## References

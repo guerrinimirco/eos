@@ -202,7 +202,7 @@ def mixed_jacobian(x, ctx):
     """
     spec, eta, slots = ctx.spec, ctx.eta, ctx.slots
     lep = has_leptons(spec)
-    muons = ctx.muons
+    muons = ctx.species.muons
     ns, mus = ctx.n_scale, ctx.mu_scale
     p_H, p_Q = ctx.pair
     slot_H, slot_Q = slots[0], slots[1]
