@@ -40,9 +40,9 @@ class SpeciesFlags:
     deltas,
     thermal_mesons    -- hadronic sectors, meaningless in a deconfined phase.
     """
-    photons: bool = True
+    photons: bool = False
     gluons: bool = True
-    thermal_neutrinos: bool = True
+    thermal_neutrinos: bool = False
     muons: bool = False
     hyperons: bool = False
     deltas: bool = False

@@ -38,10 +38,10 @@ class SpeciesFlags:
     """
     hyperons: bool = False
     deltas: bool = False
-    muons: bool = True
+    muons: bool = False
     thermal_mesons: bool = False
     thermal_neutrinos: bool = False
-    photons: bool = True
+    photons: bool = False
     phi_field: bool = True
 
     def __post_init__(self):

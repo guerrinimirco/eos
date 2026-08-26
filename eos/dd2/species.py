@@ -27,11 +27,11 @@ from eos.general.particles import NUCLEONS, HYPERONS_OCTET, DELTAS
 class SpeciesFlags:
     hyperons: bool = False              # Λ, Σ, Ξ octet
     deltas: bool = False                # Δ quartet
-    muons: bool = True                  # e always on; μ optional
+    muons: bool = False                 # e always on; μ optional
     thermal_mesons: bool = False        # thermal π,K,η,η' Bose gas
     thermal_neutrinos: bool = False     # the ν flavours a mode does NOT track
                                         # (the τ family): unwired here, raises
-    photons: bool = True                # radiation (matters only at T>0)
+    photons: bool = False               # radiation (matters only at T>0)
     neutrinos: bool = False             # matter-composition ν_e of the trapped
                                         # modes — NOT thermal_neutrinos above
     phi_field: bool = True              # hidden-strange VECTOR φ (DD2Y default)

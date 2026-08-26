@@ -95,7 +95,7 @@ class SpeciesFlags:
         Blackbody photons; eps, P and s only, no conserved charge.
     """
     csc: bool = False
-    muons: bool = True
+    muons: bool = False
     thermal_neutrinos: bool = False
     photons: bool = False
     hyperons: bool = False

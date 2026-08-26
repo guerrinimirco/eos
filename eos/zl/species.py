@@ -29,7 +29,7 @@ class SpeciesFlags:
     thermal_neutrinos -- neutrino flavours NOT tracked in the composition,
                          carried as mu = 0 gases. Not wired.
     """
-    photons: bool = True
+    photons: bool = False
     muons: bool = False
     hyperons: bool = False
     deltas: bool = False

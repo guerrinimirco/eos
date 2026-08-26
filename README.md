@@ -155,6 +155,16 @@ matter-composition electron neutrino of the trapped modes, a different sector.
 `dd2` splits section 4's "optionally the vector nonet" off into a secondary
 `thermal_vectors`, leaving `thermal_mesons` as the pi, K gas.
 
+**All six default to `False`** — off unless asked for, in every model, so
+`SpeciesFlags()` means the same thing everywhere and no call quietly inherits
+a sector it did not name. Ask for what the physics needs:
+`SpeciesFlags(muons=True, photons=True)` is the usual neutron-star matter at
+T > 0. Only the six are covered; a model's own flags (`phi_field`, `gluons`,
+`csc`) default where that model's physics says. `enjl` is the one exemption
+and a different kind of default: it fixes every flag and raises on any move,
+so its `hyperons=True` states which baryons the model has (p, n, Lambda)
+rather than a default a caller could have changed.
+
 ### Conventions
 
 - **Units at every public boundary are fm-based**: n in fm^-3, T and mu in
@@ -186,7 +196,7 @@ they take about half a minute, the M–R sequence being most of it.
 from eos.dd2 import Parameters, SpeciesFlags, eos_point
 
 par = Parameters.default()               # the published DD2 table
-flags = SpeciesFlags()                   # nucleons, electrons, muons, photons
+flags = SpeciesFlags(muons=True, photons=True)   # every d.o.f. is explicit
 
 res = eos_point(par, "beta_eq_neutrinoless", flags, n_B=0.32, T=10.0)
 print(res.ok, res.message)
@@ -220,7 +230,7 @@ never an exception and never a hang.
 import numpy as np
 from eos.dd2 import Parameters, SpeciesFlags, eos_table
 
-par, flags = Parameters.default(), SpeciesFlags()
+par, flags = Parameters.default(), SpeciesFlags(muons=True, photons=True)
 n_B = np.linspace(0.05, 0.60, 12)
 T = [0.0, 10.0, 30.0]
 
@@ -274,7 +284,7 @@ from eos.general.state import EOSTable_for_TOV
 from eos.astro.tov import (compute_tov_sequence, find_mmax_precise,
                            generate_ec_logspace)
 
-par, flags = Parameters.default(), SpeciesFlags()
+par, flags = Parameters.default(), SpeciesFlags(muons=True, photons=True)
 cold = eos_table(par, "beta_eq_neutrinoless", flags,
                  axes={"nB": np.geomspace(0.05, 1.25, 150), "T": [0.0]})
 

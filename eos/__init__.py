@@ -79,6 +79,19 @@ MODES = ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
 #: on `thermal_neutrinos=True`, the flavours a mode does not track being
 #: unwired there; dd2's own `neutrinos` is the matter-composition electron
 #: neutrino of the trapped modes, a different sector with its own flag.
+#:
+#: All six DEFAULT TO FALSE in every model: off unless asked for, so
+#: `SpeciesFlags()` means the same thing everywhere and no call inherits a
+#: sector it did not name. This is what section 4's "if a sector is off, its
+#: flag is False" costs at the default row, and it is a behaviour change from
+#: the versions where `photons` defaulted True in six models and `muons` in
+#: five -- a T > 0 call that relied on the default no longer carries the
+#: photon gas, and must ask for it. A model's OWN flags are not covered:
+#: `phi_field`, `gluons` and `csc` are that model's physics and default where
+#: the model says. `enjl` is the one exemption, and a different kind of
+#: default -- it fixes every flag and RAISES on any move, so its
+#: `hyperons=True` states which baryons the model has rather than a
+#: convenience the caller inherited.
 SPECIES_FLAGS = ("hyperons", "deltas", "muons", "thermal_mesons",
                  "thermal_neutrinos", "photons")
 
