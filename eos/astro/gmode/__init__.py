@@ -21,6 +21,26 @@ while c_ad does not, and the fundamental g-mode frequency roughly doubles, so
 detecting one would be evidence for non-nucleonic matter that a mass-radius
 measurement cannot supply.
 
+What a model owes, and what this package does with it
+----------------------------------------------------
+The two sound speeds are the entire physics input, and they arrive as an
+`eos.general.sound_speeds.EOSTable_for_gmode`: the (P, eps, n_B) table a
+structure solver integrates, plus `cs2_equilibrium` and `cs2_frozen` on the
+same rows. That table is the CONTRACT (CLAUDE.md section 1). A model or a
+composite engine PRODUCES one -- both speeds come from its own `eos_response`,
+under `frozen='equilibrium'` and `frozen='composition'` -- and this package
+CONSUMES one. Nothing here imports a model, and no model imports `astro/`.
+
+At present `eos.dd2` is the only model whose `eos_response` implements the
+composition freeze, so it is the only one that can fill the contract; a model
+that cannot raises saying so. That is a per-model, visible gap rather than a
+hidden `from eos.dd2.solver import ...`, which is what it replaced.
+
+The tables are T = 0. Zhao and Lattimer's condition is "without varying
+chemical composition", not the vanishing temperature: T = 0 collapses the
+thermal axis and leaves the composition axis -- the one the g-mode lives on --
+entirely intact. Finite T is future work.
+
 Layout
 ------
 `background`    TOV structure with the radial profiles kept, both metric
@@ -34,17 +54,15 @@ Layout
 
 Quick start
 -----------
+    from eos.general.sound_speeds import EOSTable_for_gmode
     from eos.astro.gmode import gmode_frequency, with_crust
 
-    eos, c_eq, c_ad = with_crust(core_table, c_eq_core, c_ad_core)
-    mode = gmode_frequency(eos, c_eq, c_ad, M_target=1.4)
+    table = EOSTable_for_gmode.from_columns(P, eps, n_B, cs2_frozen)
+    mode = gmode_frequency(with_crust(table), M_target=1.4)
     print(mode.label, mode.nu_hz)
 
-The two sound speeds are the entire physics input. Supply them from wherever
-the equation of state lives: `eos.astro.gmode.sound_speeds.cs2_frozen_nucleonic` and
-`eos.dd2.responses.sound_speed_eq` for a nucleonic star,
-`eos.astro.gmode.sound_speeds.cs2_frozen_along` and
-`eos.mixed.responses.sound_speed_eq` for a DD2 + vMIT hybrid.
+`eos.astro.gmode.verify.run_full_check.dd2_table` builds one for cold DD2
+npemu matter and is the worked example of the producer side.
 
 Everything is in the relativistic Cowling approximation, which gives real
 eigenfrequencies accurate to a few per cent for g-modes but no
@@ -55,12 +73,12 @@ from eos.astro.gmode.background import (
     StellarBackground, build_background, with_crust, brunt_vaisala,
     omega_to_hz, hz_to_omega,
 )
+from eos.general.sound_speeds import EOSTable_for_gmode
 from eos.astro.gmode.sound_speeds import (
-    sound_speed_eq, cs2_frozen_isobaric, cs2_frozen_nucleonic,
-    cs2_frozen_point, cs2_frozen_along, cs2_dynamical, bulk_viscosity,
-    ISOBARIC, EQUAL_COMPRESSION, CONVENTIONS,
+    sound_speed_eq, cs2_frozen_isobaric, cs2_dynamical, bulk_viscosity,
 )
 from eos.astro.gmode.rates import (
+    WeakCouplings, WEAK_COUPLINGS,
     equilibration_rate, equilibration_rate_along, susceptibility_A,
     lambda_direct_urca, lambda_modified_urca,
 )
@@ -73,11 +91,11 @@ __all__ = [
     # background
     "StellarBackground", "build_background", "with_crust", "brunt_vaisala",
     "omega_to_hz", "hz_to_omega",
-    # sound speeds
-    "sound_speed_eq", "cs2_frozen_isobaric", "cs2_frozen_nucleonic",
-    "cs2_frozen_point", "cs2_frozen_along", "cs2_dynamical", "bulk_viscosity",
-    "ISOBARIC", "EQUAL_COMPRESSION", "CONVENTIONS",
+    # the contract, and the sound speeds
+    "EOSTable_for_gmode",
+    "sound_speed_eq", "cs2_frozen_isobaric", "cs2_dynamical", "bulk_viscosity",
     # rates
+    "WeakCouplings", "WEAK_COUPLINGS",
     "equilibration_rate", "equilibration_rate_along", "susceptibility_A",
     "lambda_direct_urca", "lambda_modified_urca",
     # modes

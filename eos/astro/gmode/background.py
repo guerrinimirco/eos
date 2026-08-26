@@ -100,7 +100,10 @@ class StellarBackground:
     g        : local gravity -(dP/dr)/(eps + P) [km^-1]
     cs2_eq   : equilibrium sound speed squared, dimensionless (units of c)
     cs2_ad   : frozen/adiabatic sound speed squared; may be complex if a finite
-               reaction rate was folded in (see `eos.astro.gmode.sound_speeds`)
+               reaction rate was folded in (see `eos.astro.gmode.sound_speeds`).
+               Not named `cs2_frozen`, as the table's column is: once
+               `at_frequency` folds in a rate this slot holds the DYNAMICAL
+               speed, and "frozen" would then be false
     N2       : Brunt-Vaisala frequency squared [km^-2]; complex when cs2_ad is
     gamma    : chemical equilibration rate [s^-1] carried onto the star, or
                None. Only used to rebuild N^2 at a trial frequency.
@@ -212,12 +215,15 @@ def brunt_vaisala(g, cs2_eq, cs2_ad, e_nu, e_lam):
     return g**2 * delta * e_nu / e_lam
 
 
-def with_crust(eos, cs2_eq, cs2_ad, crust="BPS", n_transition=0.08,
+def with_crust(eos, cs2_eq=None, cs2_ad=None, crust="BPS", n_transition=0.08,
                custom_path=None):
     """Prepend a tabulated crust to a core equation of state, with N^2 = 0.
 
-    Returns `(eos_full, cs2_eq_full, cs2_ad_full)` ready for
-    `build_background`. The crust rows get `cs2_ad = cs2_eq`, so the
+    `eos` is an `EOSTable_for_gmode`, in which case the two sound speeds come
+    from its columns and a single extended table is returned; or a plain
+    `EOSTable_for_TOV` with `cs2_eq` and `cs2_ad` given alongside, in which
+    case the return is the tuple `(eos_full, cs2_eq_full, cs2_ad_full)` ready
+    for `build_background`. The crust rows get `cs2_ad = cs2_eq`, so the
     Brunt-Vaisala frequency vanishes there: a tabulated crust carries no
     composition information, and the standard treatment in the g-mode
     literature is to model it as a homogeneous fluid, which supports no
@@ -231,12 +237,23 @@ def with_crust(eos, cs2_eq, cs2_ad, crust="BPS", n_transition=0.08,
     n_transition : baryon density [fm^-3] below which crust rows are kept
     """
     from eos.general.state import EOSTable_for_TOV
+    from eos.general.sound_speeds import EOSTable_for_gmode
     from eos.astro.tov.crust import load_crust_table
+
+    as_table = isinstance(eos, EOSTable_for_gmode)
+    if as_table:
+        if cs2_eq is not None or cs2_ad is not None:
+            raise ValueError(
+                "an EOSTable_for_gmode already carries both sound speeds; "
+                "pass the table alone")
+        cs2_eq, cs2_ad = eos.cs2_equilibrium, eos.cs2_frozen
+    elif cs2_eq is None or cs2_ad is None:
+        raise ValueError("a plain EOS table needs cs2_eq and cs2_ad alongside")
 
     cs2_eq = np.asarray(cs2_eq)
     cs2_ad = np.asarray(cs2_ad)
     if crust in (None, "No", "no", False):
-        return eos, cs2_eq, cs2_ad
+        return eos if as_table else (eos, cs2_eq, cs2_ad)
 
     ct = load_crust_table(crust, custom_path=custom_path)
     keep = ct.nB < n_transition
@@ -249,14 +266,15 @@ def with_crust(eos, cs2_eq, cs2_ad, crust="BPS", n_transition=0.08,
     cs2_crust = np.gradient(ct.P[keep], ct.epsilon[keep])
     cs2_crust = np.clip(cs2_crust, 1e-8, 1.0)
 
-    full = EOSTable_for_TOV(
-        P=np.concatenate([ct.P[keep], np.asarray(eos.P)[core]]),
-        epsilon=np.concatenate([ct.epsilon[keep],
-                                np.asarray(eos.epsilon)[core]]),
-        nB=np.concatenate([ct.nB[keep], np.asarray(eos.nB)[core]]))
-    return (full,
-            np.concatenate([cs2_crust, cs2_eq[core]]),
-            np.concatenate([cs2_crust, cs2_ad[core]]))
+    P_full = np.concatenate([ct.P[keep], np.asarray(eos.P)[core]])
+    e_full = np.concatenate([ct.epsilon[keep], np.asarray(eos.epsilon)[core]])
+    n_full = np.concatenate([ct.nB[keep], np.asarray(eos.nB)[core]])
+    eq_full = np.concatenate([cs2_crust, cs2_eq[core]])
+    ad_full = np.concatenate([cs2_crust, cs2_ad[core]])
+    if as_table:
+        return EOSTable_for_gmode(P=P_full, epsilon=e_full, nB=n_full,
+                                  cs2_equilibrium=eq_full, cs2_frozen=ad_full)
+    return EOSTable_for_TOV(P=P_full, epsilon=e_full, nB=n_full), eq_full, ad_full
 
 
 def _tov_rhs(r, y, eps_grid, P_grid):
@@ -281,16 +299,19 @@ def _tov_rhs(r, y, eps_grid, P_grid):
     ])
 
 
-def build_background(eos, cs2_eq, cs2_ad, e_c=None, M_target=None,
+def build_background(eos, cs2_eq=None, cs2_ad=None, e_c=None, M_target=None,
                      n_points=800, r_max=40.0, P_surf_rel=1e-9,
                      e_c_bracket=None, gamma=None):
     """Integrate the TOV equations keeping the profiles, and form N^2.
 
-    eos       : `EOSTable_for_TOV` (P, epsilon in MeV/fm^3, nB in fm^-3), or any
-                object with those three attributes. Must be ascending in P.
+    eos       : an `eos.general.sound_speeds.EOSTable_for_gmode`, which carries
+                both sound speeds and is then the only argument needed; or an
+                `EOSTable_for_TOV` (P, epsilon in MeV/fm^3, nB in fm^-3), or any
+                object with those three attributes, with the two speeds passed
+                alongside. Must be ascending in P.
     cs2_eq    : equilibrium c^2 = dP/deps, one value per row of `eos`,
-                dimensionless. `eos.mixed.responses.sound_speed_eq` produces
-                exactly this from the table's own P and eps columns.
+                dimensionless. `eos.general.sound_speeds.sound_speed_eq`
+                produces exactly this from the table's own P and eps columns.
     cs2_ad    : frozen c^2 = (dP/deps)_x on the same grid. Set it equal to
                 `cs2_eq` wherever composition is unavailable (a tabulated crust,
                 say); N^2 then vanishes there, which is the standard treatment
@@ -311,6 +332,17 @@ def build_background(eos, cs2_eq, cs2_ad, e_c=None, M_target=None,
 
     Returns a `StellarBackground`.
     """
+    from eos.general.sound_speeds import EOSTable_for_gmode
+    if isinstance(eos, EOSTable_for_gmode):
+        if cs2_eq is None:
+            cs2_eq = eos.cs2_equilibrium
+        if cs2_ad is None:
+            cs2_ad = eos.cs2_frozen
+    if cs2_eq is None or cs2_ad is None:
+        raise ValueError(
+            "build_background needs both sound speeds: pass an "
+            "EOSTable_for_gmode, or give cs2_eq and cs2_ad alongside the table")
+
     P_tab = np.asarray(eos.P, dtype=float) * MEV_FM3_TO_KM2_INV
     e_tab = np.asarray(eos.epsilon, dtype=float) * MEV_FM3_TO_KM2_INV
     n_tab = np.asarray(eos.nB, dtype=float)

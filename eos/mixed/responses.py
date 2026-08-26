@@ -66,30 +66,17 @@ c^2 in units of the speed of light.
 import numpy as np
 
 from eos.dd2.solver import warm_start
+from eos.general.sound_speeds import sound_speed_eq
 from eos.general.thermodynamics_leptons import neutralizing_leptons
 from eos.mixed.adapters import (
     _dd2_frozen_block, _vmit_frozen_block, default_pair,
 )
 
 
-def sound_speed_eq(P, eps):
-    """Equilibrium c_s^2 = dP/deps along a solved sequence.
-
-    `P` and `eps` are arrays in MeV/fm^3, ascending in density — a
-    `EoSTable`'s `.P` and `.eps`, or the stitched columns a notebook
-    assembles. A central finite difference on the sequence itself, so it needs
-    no extra solves; the sequence must be dense enough that the derivative is
-    meaningful, which through a transition window means resolving the window.
-
-    Arrays rather than a table object so that the pure phases, the stitched
-    core equation of state and a notebook's own columns all go through one
-    function.
-    """
-    P = np.asarray(P, dtype=float)
-    eps = np.asarray(eps, dtype=float)
-    if P.size < 2:
-        return np.full(P.shape, np.nan)
-    return np.gradient(P, eps)
+# `sound_speed_eq(P, eps)` is imported above rather than defined here: it
+# differentiates a table and knows no model, so its single home is
+# `eos.general.sound_speeds` (CLAUDE.md section 7), beside the g-mode contract
+# that also needs it. It stays on this module's public surface.
 
 
 def adiabatic_index(P, eps):

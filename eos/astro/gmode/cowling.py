@@ -369,13 +369,17 @@ def solve_gmode(bg, l=2, order=1, nu_min=30.0, nu_max=3500.0, n_scan=220,
     return _refine_complex(bg_complex, mode, l=l, rtol=rtol, atol=atol)
 
 
-def gmode_frequency(eos, cs2_eq, cs2_ad, e_c=None, M_target=1.4, l=2, order=1,
+def gmode_frequency(eos, cs2_eq=None, cs2_ad=None, e_c=None, M_target=1.4,
+                    l=2, order=1,
                     n_points=600, gamma=None, nu_min=30.0, nu_max=3500.0,
                     n_scan=220, **bg_kw):
     """Equation of state in, g-mode frequency out. The package's front door.
 
-    eos      : `EOSTable_for_TOV` (P, epsilon in MeV/fm^3, nB in fm^-3), crust
-               already attached — see `eos.astro.gmode.background.with_crust`
+    eos      : an `eos.general.sound_speeds.EOSTable_for_gmode`, which carries
+               both sound speeds and is then the only table argument; or an
+               `EOSTable_for_TOV` (P, epsilon in MeV/fm^3, nB in fm^-3) with
+               the two passed alongside. Crust already attached — see
+               `eos.astro.gmode.background.with_crust`
     cs2_eq   : equilibrium c^2 = dP/deps, one per row of `eos`
     cs2_ad   : frozen c^2 = (dP/deps)_x, one per row of `eos`
     e_c      : central energy density [MeV/fm^3], or

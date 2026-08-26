@@ -31,6 +31,32 @@ with any earlier implementation:
   8. reaction rates: the beta-equilibration rate reaches a 1 kHz oscillation
      frequency at a few MeV and is nearly density-independent for DD2, which is
      what the Fermi-surface Urca rates predict.
+
+Why this suite may import a model, when the package it checks may not
+---------------------------------------------------------------------
+`eos.astro.gmode` itself imports no model: it consumes an
+`eos.general.sound_speeds.EOSTable_for_gmode` and nothing else (CLAUDE.md
+section 1). This file does import `eos.dd2`, and the exemption is the one
+section 1 grants a `verify/` suite -- read as applying to the direction that
+is safe.
+
+The two directions are not symmetric. A MODEL importing `astro/` is the cycle
+the rule exists to prevent, and section 1 gives that half no carve-out: not in
+a solver, not in a `table.py`, not in a `verify/`. An ASTRO suite importing a
+model creates no cycle, because `astro/` already sits above the models; and the
+carve-out's own justification -- "a suite is not on the path an inference
+sampler imports, which is what the layering rule protects" -- is a statement
+about suites, not about which layer the suite belongs to. It holds here word
+for word.
+
+The exemption is used narrowly. Checks 1-4 and 7 are model-free and run
+without DD2 at all. Only the checks that need matter with a composition
+gradient reach for one, and `include_dd2=False` turns them off.
+
+`dd2_table` below is the worked example of the producer side of the contract.
+It belongs in `eos.dd2`, as `eos_response(frozen='composition')` with the
+neutralising leptons included; it sits here until that lands, and the tests
+import it from here so there is one copy rather than two.
 """
 from dataclasses import dataclass, field
 
@@ -38,13 +64,15 @@ import numpy as np
 
 from eos.dd2 import Parameters, SpeciesFlags
 from eos.dd2.responses import sound_speed_eq
-from eos.dd2.solver import sweep, solve_beta_eq_neutrinoless
+from eos.dd2.solver import sweep, solve_beta_eq_neutrinoless, solve_composition
 from eos.general.state import EOSTable_for_TOV
+from eos.general.sound_speeds import EOSTable_for_gmode, sound_speed_frozen
+from eos.general.thermodynamics_leptons import neutralizing_leptons
 from eos.astro.tov.solver import solve_tov_single, _create_interpolators
 from eos.astro.gmode.background import build_background, with_crust
 from eos.astro.gmode.cowling import mode_spectrum, solve_gmode
-from eos.astro.gmode.sound_speeds import cs2_frozen_nucleonic, cs2_dynamical
-from eos.astro.gmode.rates import equilibration_rate
+from eos.astro.gmode.sound_speeds import cs2_dynamical
+from eos.astro.gmode.rates import equilibration_rate, susceptibility_A
 
 
 @dataclass
@@ -121,19 +149,85 @@ def _check_null_test():
                        f"f={modes[0].nu_hz:.0f} Hz" if modes else "no modes")
 
 
-def _dd2_inputs(par, flags, n_lo=0.08, n_hi=1.2, n_points=110):
+def dd2_frozen_cs2(par, n_B, Y_p, T=0.0, muons=True, leptons=True,
+                   rel_dn=1e-3):
+    """Frozen c_s^2 of charge-neutral nucleonic DD2 matter, leptons included.
+
+    Frozen means fixed Y_p, hence fixed lepton fractions too: the star is
+    compressed faster than the Urca processes can convert neutrons to protons.
+
+    `leptons=True` is the physically right choice for stellar matter and the
+    reason this is not simply `eos.dd2.responses.sound_speed_adiabatic`, which
+    is deliberately leptonless, being a probe of the nucleonic sector alone.
+    `eos.dd2.responses.sound_speed_eq` follows the beta-equilibrium sequence
+    *with* leptons, so differencing the two would compare different fluids --
+    and since the lepton contribution to c_s is a few per cent, comparable to
+    the whole c_s^2 - c_e^2 signal that drives the g-mode, the mismatch would
+    be a leading-order error in N^2 rather than a refinement. Check 6 below
+    exists to catch exactly that. `leptons=False` reproduces
+    `sound_speed_adiabatic`.
+    """
+    def compressed_state(scale):
+        n = n_B * scale
+        n_p = Y_p * n
+        pt = solve_composition(par, n - n_p, n_p, T=T, check_consistency=False)
+        P, eps = pt.P, pt.eps
+        if leptons:
+            _mu_e, e_blk, mu_blk = neutralizing_leptons(
+                n_p, T, include_muons=muons)
+            P += e_blk.P + mu_blk.P
+            eps += e_blk.e + mu_blk.e
+        return P, eps
+
+    return sound_speed_frozen(compressed_state, rel_dn=rel_dn)
+
+
+def dd2_table(par, flags, n_lo=0.08, n_hi=1.2, n_points=110):
+    """Cold DD2 npemu matter as an `EOSTable_for_gmode`.
+
+    The producer side of the contract, worked out for the one model whose
+    `eos_response` implements a composition freeze. Returns
+    `(table, n_B, Y_p)`; `n_B` and `Y_p` come back because the reaction rates
+    need the composition the table itself does not carry.
+    """
     grid = np.geomspace(n_lo, n_hi, n_points)
     pts = sweep(par, grid, flags, T=0.0, include_photons=False,
-                              stop_at_boundary=True)
+                stop_at_boundary=True)
     P = np.array([p.P for p in pts])
     eps = np.array([p.eps for p in pts])
     n_B = np.array([p.n_B for p in pts])
     Y_p = np.array([p.matter.Y("p") for p in pts])
     c_eq = np.array([sound_speed_eq(par, n, flags, T=0.0) for n in n_B])
-    c_ad = np.array([cs2_frozen_nucleonic(par, n, y, muons=flags.muons)
+    c_ad = np.array([dd2_frozen_cs2(par, n, y, muons=flags.muons)
                      for n, y in zip(n_B, Y_p)])
-    core = EOSTable_for_TOV(P=P, epsilon=eps, nB=n_B)
-    return core, c_eq, c_ad, n_B, Y_p
+    return (EOSTable_for_gmode(P=P, epsilon=eps, nB=n_B,
+                               cs2_equilibrium=c_eq, cs2_frozen=c_ad),
+            n_B, Y_p)
+
+
+def dd2_equilibration_rate(par, n_B, Y_p, T, muons=True, **kw):
+    """`equilibration_rate` wired to DD2: the three numbers the model owes it.
+
+    Those are the two Dirac effective masses and the isospin susceptibility
+    A = (d mu_Delta / d n_n) at fixed n_B, whose chemical imbalance
+    mu_Delta = mu_n - mu_p - mu_e is what only the model can evaluate at a
+    perturbed composition.
+    """
+    if T <= 0.0:
+        return 0.0
+
+    def mu_Delta(n_n):
+        n_p = n_B - n_n
+        pt = solve_composition(par, n_n, n_p, T=T, check_consistency=False)
+        mu_e, _e, _m = neutralizing_leptons(n_p, T, include_muons=muons)
+        return -pt.matter.mu_C - mu_e
+
+    n_p = Y_p * n_B
+    pt = solve_composition(par, n_B - n_p, n_p, T=T, check_consistency=False)
+    A = susceptibility_A(mu_Delta, n_B, Y_p)
+    return equilibration_rate(n_B, Y_p, T, pt.matter.m_eff_i["n"],
+                              pt.matter.m_eff_i["p"], A, muons=muons,
+                              m_n=par.m_n, m_p=par.m_p, **kw)
 
 
 def _check_convective_stability(c_eq, c_ad):
@@ -148,8 +242,8 @@ def _check_convective_stability(c_eq, c_ad):
                        f"max = {float(np.max(c_ad - c_eq)):+.2e}")
 
 
-def _check_spectrum(eos, c_eq, c_ad):
-    bg = build_background(eos, c_eq, c_ad, M_target=1.4, n_points=500)
+def _check_spectrum(eos):
+    bg = build_background(eos, M_target=1.4, n_points=500)
     modes = mode_spectrum(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
     gmodes = [m for m in modes if m.is_gmode]
     fmode = [m for m in modes if m.label == "f"]
@@ -166,8 +260,8 @@ def _check_spectrum(eos, c_eq, c_ad):
                        f"{len(gmodes)} g-modes")
 
 
-def _check_eigenfunction(eos, c_eq, c_ad):
-    bg = build_background(eos, c_eq, c_ad, M_target=1.4, n_points=500)
+def _check_eigenfunction(eos):
+    bg = build_background(eos, M_target=1.4, n_points=500)
     g1 = solve_gmode(bg, nu_min=60.0, nu_max=3000.0, n_scan=90)
     peak = np.max(np.abs(g1.xi_r))
     centre = abs(g1.xi_r[0]) / peak
@@ -203,7 +297,8 @@ def _check_rates(par, flags):
         n_B = f * 0.16
         Y_p = solve_beta_eq_neutrinoless(par, n_B, flags, T=1.0).matter.Y("p")
         cross.append(brentq(
-            lambda T: equilibration_rate(par, n_B, Y_p, T) - omega, 0.5, 20.0))
+            lambda T: dd2_equilibration_rate(par, n_B, Y_p, T) - omega,
+            0.5, 20.0))
     spread = max(cross) - min(cross)
     ok = all(3.5 < T < 6.5 for T in cross) and spread < 1.0
     return CheckResult("Urca resonance T", ok, spread,
@@ -222,12 +317,12 @@ def run_full_check(par=None, flags=None, include_dd2=True):
     report.results.append(_check_null_test())
     report.results.append(_check_dynamical_sound_speed())
     if include_dd2:
-        core, c_eq, c_ad, _n, _y = _dd2_inputs(par, flags)
-        eos, ce, ca = with_crust(core, c_eq, c_ad, crust="BPS",
-                                 n_transition=0.08)
-        report.results.append(_check_convective_stability(c_eq, c_ad))
-        report.results.append(_check_spectrum(eos, ce, ca))
-        report.results.append(_check_eigenfunction(eos, ce, ca))
+        core, _n, _y = dd2_table(par, flags)
+        full = with_crust(core, crust="BPS", n_transition=0.08)
+        report.results.append(
+            _check_convective_stability(core.cs2_equilibrium, core.cs2_frozen))
+        report.results.append(_check_spectrum(full))
+        report.results.append(_check_eigenfunction(full))
         report.results.append(_check_rates(par, flags))
     return report
 

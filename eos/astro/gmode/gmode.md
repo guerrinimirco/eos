@@ -9,10 +9,52 @@ fluid element cannot chemically re-equilibrate within an oscillation period.
 Their frequencies therefore measure the COMPOSITION GRADIENT of dense matter —
 something mass, radius and tidal deformability are blind to.
 
-    sound_speeds.py  the two sound speeds, and what a finite rate does to them
+    sound_speeds.py  what a finite rate does to the two sound speeds
     rates.py         Urca equilibration rates and the susceptibility A
     background.py    the stellar background: TOV metric, g, N^2, crust
     cowling.py       the Cowling eigenvalue problem and the mode search
+
+## Where the two sound speeds come from
+
+They are not computed here. A model or a composite engine PRODUCES them, as
+the two extra columns of an `eos.general.sound_speeds.EOSTable_for_gmode`:
+
+    P, epsilon, nB      the table a structure solver integrates
+    cs2_equilibrium     c_e^2 = dP/deps along the equilibrated sequence
+    cs2_frozen          c_s^2 = (dP/deps)_x at fixed composition
+
+That table IS the contract, the composition counterpart of `EOSTable_for_TOV`
+and living beside it for the same reason: `general/` is the layer both the
+models and `astro/` may import, and a model may never import `astro/`
+(CLAUDE.md section 1). Both columns come from a model's own `eos_response`
+(section 5), under `frozen='equilibrium'` and `frozen='composition'`. Nothing
+in this package imports a model.
+
+The tables are T = 0. Zhao and Lattimer's condition is "without varying
+chemical composition", not the vanishing temperature: at T = 0 with a
+composition that varies along the sequence the two speeds still differ and the
+g-mode is nonzero. What T = 0 removes is the THERMAL axis, leaving the
+composition axis — the one the mode lives on — intact, so a point carries
+exactly two numbers and neither needs a name saying which thermal variable was
+held. Finite T adds that axis and is future work.
+
+Today `eos.dd2` is the only model whose `eos_response` implements a
+composition freeze, so it is the only one that can fill the contract; a model
+that cannot raises saying so. `eos.astro.gmode.verify.run_full_check.dd2_table`
+is the worked producer.
+
+One naming consequence: the TABLE's column is `cs2_frozen`, because a table is
+always the strict limit, but the STELLAR BACKGROUND's field is `cs2_ad`,
+because `StellarBackground.at_frequency` replaces it with the dynamical sound
+speed at a finite reaction rate — at which point "frozen" would be false.
+
+## The weak couplings are arguments
+
+`rates.py` takes its weak-sector constants as a `WeakCouplings` dataclass
+(G_F^2 cos^2 theta_c, g_A, f_piNN), whose default is the published set: they
+are parameters, so they are arguments (section 6). The charged-pion mass is
+not among them — it is a particle property and comes from
+`eos.general.particles` (section 7).
 
 ## The two sound speeds, and why the difference is the physics
 
@@ -90,7 +132,7 @@ quantities are held fixed defines c_ad, and different choices give different
 N^2 for the same matter. In a quark-hadron mixed phase this is not a detail —
 whether the quark volume fraction chi is held or allowed to relax changes the
 answer qualitatively. `gmode.tex` section "Convention dependence" states which
-choice is made here and why; `cs2_frozen_isobaric(cs2_H, cs2_Q, chi)` is the
+choice is made here and why; `eos.general.sound_speeds.cs2_frozen_isobaric(cs2_H, cs2_Q, chi)` is the
 mixed-phase case.
 
 ## Running the tests

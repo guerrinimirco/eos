@@ -71,30 +71,64 @@ away from the Fermi surface can satisfy the kinematics that particles on it
 cannot. Nucleon superfluidity, not modelled here, suppresses both rates by
 orders of magnitude once T drops below the gap. `gamma` therefore carries real
 model uncertainty, and every entry point accepts a user-supplied replacement:
-pass your own callable wherever `gamma` or `rate_model` is taken.
+pass your own callable wherever `gamma` or `rate_model` is taken, and the weak
+couplings themselves as a `WeakCouplings` (CLAUDE.md section 6 -- they are
+parameters, so they are arguments, and the published values are a named
+default rather than module constants nobody can override).
+
+What the model supplies, and what this module supplies
+------------------------------------------------------
+Of everything the rates need, only three numbers per point come from the
+equation of state: the two Dirac effective masses and the isospin
+susceptibility `A`. The Fermi momenta follow from n_B and Y_p by kinematics
+alone and the electron potential from `eos.general.thermodynamics_leptons`, so
+this module takes those three as ARGUMENTS and imports no model -- the same
+division the sound-speed contract makes (`eos.general.sound_speeds`), for the
+same reason (CLAUDE.md section 1). `susceptibility_A` takes the chemical
+imbalance as a callable because it is a derivative of it, and only the model
+can evaluate one at a perturbed composition.
 
 Units: n_B in fm^-3 and T in MeV on the boundary, as everywhere in `eos`;
 `gamma` is returned in s^-1 so it can be compared directly with a mode
 frequency. Internally `lambda` is in MeV^3 and `A` in MeV^-2.
 """
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.special import zeta
 
 from eos.general.physics_constants import hc, hc3
-from eos.general.particles import Electron
-from eos.dd2.solver import solve_composition
+from eos.general.particles import Electron, Neutron, Proton, PiP
 from eos.general.thermodynamics_leptons import neutralizing_leptons
 
-#: Fermi coupling squared times the Cabibbo factor, G_F^2 cos^2(theta_c)
-#: [MeV^-4]. Alford and Harris (2018), text below their Eq. (8).
-G2_FERMI = 1.1e-22
 
-#: Axial-vector coupling and the pion-nucleon p-wave coupling.
-G_A = 1.26
-F_PI_NN = 1.0
+@dataclass(frozen=True)
+class WeakCouplings:
+    """The weak-sector constants the Urca rates are built from.
 
-#: Charged pion mass [MeV].
-M_PI = 139.57039
+    G2_fermi : Fermi coupling squared times the Cabibbo factor,
+               G_F^2 cos^2(theta_c) [MeV^-4]. Alford and Harris (2018), text
+               below their Eq. (8).
+    g_A      : axial-vector coupling of the nucleon.
+    f_pi_NN  : pion-nucleon p-wave coupling entering the modified-Urca matrix
+               element.
+
+    A parameter takes no arguments, so these are stored numbers and therefore
+    arguments (CLAUDE.md section 6): `WeakCouplings()` is the published set,
+    and a rate computed with a different g_A is a keyword away rather than a
+    source edit. The charged-pion mass is NOT here -- it is a particle
+    property and comes from `eos.general.particles` (section 7).
+    """
+    G2_fermi: float = 1.1e-22
+    g_A: float = 1.26
+    f_pi_NN: float = 1.0
+
+
+#: The published values, used wherever a caller supplies no couplings.
+WEAK_COUPLINGS = WeakCouplings()
+
+#: Charged pion mass [MeV], from the single home for particle properties.
+M_PI = PiP.mass
 
 #: hbar [MeV s], for turning a rate in MeV into s^-1.
 HBAR_MEV_S = 6.582119569e-22
@@ -116,19 +150,21 @@ def _fermi_momentum(n):
     return hc * (3.0 * np.pi**2 * np.maximum(n, 0.0))**(1.0 / 3.0)
 
 
-def lambda_direct_urca(p_Fn, p_Fp, p_Fe, m_n_eff, m_p_eff, T):
+def lambda_direct_urca(p_Fn, p_Fp, p_Fe, m_n_eff, m_p_eff, T,
+                       couplings=WEAK_COUPLINGS):
     """Subthermal direct-Urca response coefficient [MeV^3].
 
     All momenta and masses in MeV, T in MeV. Returns 0 below the threshold set
     by the triangle inequality p_Fn <= p_Fp + p_Fe.
     """
     allowed = np.where(p_Fn <= p_Fp + p_Fe, 1.0, 0.0)
-    g_tilde2 = G2_FERMI * (1.0 + 3.0 * G_A**2)
+    g_tilde2 = couplings.G2_fermi * (1.0 + 3.0 * couplings.g_A**2)
     return (17.0 / (240.0 * np.pi)) * g_tilde2 * m_n_eff * m_p_eff \
         * p_Fe * T**4 * allowed
 
 
-def lambda_modified_urca(p_Fn, p_Fp, p_Fe, m_n, m_p, T):
+def lambda_modified_urca(p_Fn, p_Fp, p_Fe, m_n, m_p, T,
+                         couplings=WEAK_COUPLINGS):
     """Subthermal modified-Urca response coefficient [MeV^3].
 
     Neutron-spectator channel, no density threshold. The phase-space factor
@@ -149,7 +185,8 @@ def lambda_modified_urca(p_Fn, p_Fp, p_Fe, m_n, m_p, T):
         1.0 - (3.0 / 8.0) * excess**2 / np.maximum(p_Fp * p_Fe, 1e-30))
     vartheta = np.clip(vartheta, 0.0, 1.0)
 
-    gamma_eq = (A_MU * G2_FERMI * F_PI_NN**4 * G_A**2
+    gamma_eq = (A_MU * couplings.G2_fermi * couplings.f_pi_NN**4
+                * couplings.g_A**2
                 * (m_n**3 * m_p / M_PI**4)
                 * p_Fn**4 * p_Fp / (p_Fn**2 + M_PI**2)**2
                 * vartheta * T**7)
@@ -161,88 +198,103 @@ def lambda_modified_urca(p_Fn, p_Fp, p_Fe, m_n, m_p, T):
     return SUBTHERMAL_FACTOR * gamma_eq / T
 
 
-def susceptibility_A(par, n_B, Y_p, T=0.0, muons=True, rel_dn=1e-3):
+def susceptibility_A(mu_Delta, n_B, Y_p, rel_dn=1e-3):
     """A = (d mu_Delta / d n_n) at fixed n_B, in MeV^-2.
 
-    Central finite difference: neutrons are traded for protons at constant
-    baryon density, and the leptons are re-neutralised against the new proton
-    fraction at each step, which is what supplies the mu_e part of mu_Delta.
-    `A > 0` for any stable equation of state — it is the curvature of the
-    energy against isospin, i.e. essentially the symmetry energy.
+    mu_Delta : callable mapping the neutron density n_n [fm^-3] to the chemical
+               imbalance mu_n - mu_p - mu_e [MeV] at the SAME total baryon
+               density n_B, with the leptons re-neutralised against the new
+               proton fraction -- that is what supplies the mu_e part. Only the
+               model can evaluate it, which is why it arrives as a callable and
+               this module imports no model (CLAUDE.md section 1).
+    n_B      : baryon density [fm^-3]
+    Y_p      : proton fraction of the equilibrium state
+
+    A central finite difference trading neutrons for protons at constant baryon
+    density. `A > 0` for any stable equation of state -- it is the curvature of
+    the energy against isospin, i.e. essentially the symmetry energy.
     """
     dn = rel_dn * n_B
-
-    def mu_delta(n_n):
-        n_p = n_B - n_n
-        pt = solve_composition(par, n_n, n_p, T=T, check_consistency=False)
-        mu_e, _e, _m = neutralizing_leptons(n_p, T, include_muons=muons)
-        return -pt.matter.mu_C - mu_e
-
     n_n0 = (1.0 - Y_p) * n_B
-    A_fm = (mu_delta(n_n0 + dn) - mu_delta(n_n0 - dn)) / (2.0 * dn)
+    A_fm = (mu_Delta(n_n0 + dn) - mu_Delta(n_n0 - dn)) / (2.0 * dn)
     return A_fm / hc3                          # MeV fm^3 -> MeV^-2
 
 
-def equilibration_rate(par, n_B, Y_p, T, muons=True, processes="both",
-                       rel_dn=1e-3):
+def equilibration_rate(n_B, Y_p, T, m_eff_n, m_eff_p, A, muons=True,
+                       processes="both", m_n=Neutron.mass, m_p=Proton.mass,
+                       couplings=WEAK_COUPLINGS):
     """Beta-equilibration rate gamma = lambda * A, in s^-1.
 
-    par       : DD2 `Parameters`
     n_B       : baryon density [fm^-3]
     Y_p       : proton fraction of the equilibrium state
     T         : temperature [MeV]
+    m_eff_n,
+    m_eff_p   : Dirac effective masses [MeV] at that state -- the model's
+                contribution, and the reason direct Urca is medium-dependent
+    A         : isospin susceptibility [MeV^-2] from `susceptibility_A`
     processes : "both", "direct", or "modified"
+    m_n, m_p  : VACUUM nucleon masses [MeV]; a model that carries its own in its
+                parameter dataclass passes them, otherwise the values of
+                `eos.general.particles` are used
+    couplings : `WeakCouplings`
 
-    Compare the result with the mode's angular frequency omega = 2 pi nu: the
-    composition is frozen when gamma << omega and equilibrated when
-    gamma >> omega. Returns 0.0 at T = 0, where every rate vanishes and the
-    frozen limit is exact.
+    The Fermi momenta come from n_B and Y_p by kinematics and the electron
+    potential from the neutralising lepton gas, so nothing else is needed from
+    the equation of state. Compare the result with the mode's angular frequency
+    omega = 2 pi nu: the composition is frozen when gamma << omega and
+    equilibrated when gamma >> omega. Returns 0.0 at T = 0, where every rate
+    vanishes and the frozen limit is exact.
     """
+    if processes not in ("both", "direct", "modified"):
+        raise ValueError("processes must be 'both', 'direct' or 'modified', "
+                         f"got {processes!r}")
     if T <= 0.0:
         return 0.0
 
     n_p = Y_p * n_B
     n_n = n_B - n_p
-    pt = solve_composition(par, n_n, n_p, T=T, check_consistency=False)
     mu_e, _e, _m = neutralizing_leptons(n_p, T, include_muons=muons)
 
     p_Fn, p_Fp = _fermi_momentum(n_n), _fermi_momentum(n_p)
     p_Fe = np.sqrt(max(mu_e**2 - Electron.mass**2, 0.0))
-    # Each rate gets the mass its own source prescribes: the Dirac effective
-    # masses for direct Urca, the vacuum masses for modified Urca. The two
-    # nucleons carry their own m*_i; they coincide under DD2's default
-    # averaged kernel mass and differ when nucleon_mass_mode splits them.
-    m_eff_n, m_eff_p = pt.matter.m_eff_i["n"], pt.matter.m_eff_i["p"]
 
     lam = 0.0
+    # Each rate gets the mass its own source prescribes: the Dirac effective
+    # masses for direct Urca, the vacuum masses for modified Urca.
     if processes in ("both", "direct"):
-        lam += lambda_direct_urca(p_Fn, p_Fp, p_Fe, m_eff_n, m_eff_p, T)
+        lam += lambda_direct_urca(p_Fn, p_Fp, p_Fe, m_eff_n, m_eff_p, T,
+                                  couplings=couplings)
     if processes in ("both", "modified"):
-        lam += lambda_modified_urca(p_Fn, p_Fp, p_Fe, par.m_n, par.m_p, T)
-    if processes not in ("both", "direct", "modified"):
-        raise ValueError("processes must be 'both', 'direct' or 'modified', "
-                         f"got {processes!r}")
+        lam += lambda_modified_urca(p_Fn, p_Fp, p_Fe, m_n, m_p, T,
+                                    couplings=couplings)
 
-    A = susceptibility_A(par, n_B, Y_p, T=T, muons=muons, rel_dn=rel_dn)
     return float(lam * A / HBAR_MEV_S)         # MeV -> s^-1
 
 
-def equilibration_rate_along(par, n_B_grid, Y_p_grid, T, **kw):
+def equilibration_rate_along(n_B_grid, Y_p_grid, T, m_eff_n_grid,
+                             m_eff_p_grid, A_grid, **kw):
     """`equilibration_rate` along a density profile, as an array [s^-1].
 
-    Points that fail to converge come back nan rather than aborting the sweep,
-    matching the behaviour of the sound-speed sequence helpers.
+    The three model-supplied columns are parallel to `n_B_grid`. Points that
+    fail come back nan rather than aborting the sweep, matching the behaviour
+    of the sound-speed sequence helpers.
     """
     out = []
-    for n_B, Y_p in zip(np.atleast_1d(n_B_grid), np.atleast_1d(Y_p_grid)):
+    for n_B, Y_p, mn, mp, A in zip(np.atleast_1d(n_B_grid),
+                                   np.atleast_1d(Y_p_grid),
+                                   np.atleast_1d(m_eff_n_grid),
+                                   np.atleast_1d(m_eff_p_grid),
+                                   np.atleast_1d(A_grid)):
         try:
-            out.append(equilibration_rate(par, float(n_B), float(Y_p), T, **kw))
+            out.append(equilibration_rate(float(n_B), float(Y_p), T, float(mn),
+                                          float(mp), float(A), **kw))
         except (RuntimeError, ValueError):
             out.append(np.nan)
     return np.asarray(out, dtype=float)
 
 
 __all__ = [
+    "WeakCouplings", "WEAK_COUPLINGS",
     "equilibration_rate", "equilibration_rate_along", "susceptibility_A",
     "lambda_direct_urca", "lambda_modified_urca",
 ]

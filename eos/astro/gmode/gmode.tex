@@ -123,6 +123,7 @@ fixed lepton fractions, with pressure equality between phases and the internal
 strong-interaction composition of each phase left free.
 
 \subsection{Finite rates}
+\label{sec:rates}
 
 The frozen/equilibrated dichotomy is a limit of a continuous problem. For a
 finite equilibration rate $\gamma$ the response is neither, but a complex,
@@ -189,6 +190,35 @@ reaction-constrained treatment freezes only those species whose gradients
 genuinely survive an oscillation period~\cite{Haskell2024}. We therefore regard
 the mixed-phase $g$-mode frequency as carrying a systematic uncertainty of this
 origin, and recommend quoting results under both prescriptions.
+
+\section{What the equation of state must supply}
+\label{sec:contract}
+
+Equations~(\ref{eq:isobaric}) and the buoyancy above require exactly two
+numbers at every point of the stellar sequence: $c_{\rm eq}^{2}$ and
+$c_{\rm ad}^{2}$. Nothing else about the composition enters. In particular no
+derivative $dY_{i}/dn_{B}$ is needed, because the composition gradient has
+already been integrated into the difference of the two speeds --- which is why
+the $g$-mode is often described as a ``tale of two sounds''~\cite{Jaikumar2021}.
+
+The implementation makes that the literal interface. A model or a composite
+engine produces the two columns alongside the $(P,\varepsilon,n_{B})$ table a
+structure solver integrates, and the mode solver consumes them; the mode solver
+imports no model, and no model imports the mode solver. Both columns come from
+the model's own second-derivative entry point, one at fixed composition and one
+along the equilibrated sequence.
+
+The tables are at $T=0$. The condition that defines the frozen speed is
+``without varying chemical composition'', not the vanishing of the temperature:
+at $T=0$ along a sequence whose composition changes with density the two speeds
+still differ, and $N^{2}\neq0$. Zero temperature removes only the \emph{thermal}
+axis --- the distinction between an isothermal and an adiabatic second
+derivative, which differ by $C_{P}/C_{V}$ --- leaving the composition axis, on
+which the mode lives, entirely intact. A point therefore carries exactly two
+numbers, and neither requires a label saying which thermal variable was held.
+Finite temperature reintroduces that axis and is left to future work; it is also
+the regime in which the finite-rate treatment of Sec.~\ref{sec:rates} matters,
+the two being aspects of the same physics.
 
 \section{Numerical computation}
 
