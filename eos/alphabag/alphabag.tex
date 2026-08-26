@@ -150,6 +150,19 @@ this set is not absolutely stable strange quark matter. Pairing lowers it:
 the CFL phase at $\Delta_0 = 100$~MeV has its surface at
 $\nB = 0.36286\ \mathrm{fm}^{-3}$ with $\varepsilon/\nB = 936.56$~MeV.
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist. \emph{By name:}
+\texttt{Parameters.default()} is the working set above, and
+\texttt{Parameters.named('alphabag\_default')} takes it by name. alphaBag ships
+exactly one set, so the map has a single entry; it exists so that a caller
+sweeping parameter sets need not know which models happen to have more than
+one. \emph{A new set:} every field carries a default, so
+\texttt{Parameters(alpha=..., B4=...)} names only what changes; the dataclass
+is frozen, so \texttt{dataclasses.replace} is how a set already in hand is
+modified. \emph{From nuclear-matter parameters:} no route, and none is missing
+--- alphaBag has no nuclear sector, so there is no \texttt{nmp.py} and nothing
+to invert.
+
 \section{Single-flavour thermodynamics}
 \label{sec:kinetic}
 

@@ -36,7 +36,8 @@ from eos.did.solver import (
 )
 from eos.did.nmp import (
     compute_nmp, crossover_M, delta_ratios_from_potential, energy_per_baryon,
-    nuclear_matter, symmetry_energy_full, symmetry_energy_quadratic,
+    from_nmp, invert_nmp, nuclear_matter, symmetry_energy_full,
+    symmetry_energy_quadratic,
 )
 from eos.did.table import (
     TableResult, TableSpec, build_table, hadronic_row, rows_from_result,
@@ -59,7 +60,8 @@ __all__ = [
     "assemble", "default_guess", "warm_start", "mode_spec", "solve",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys", "solve_mode",
-    "compute_nmp", "energy_per_baryon", "nuclear_matter",
+    "compute_nmp", "invert_nmp", "from_nmp",
+    "energy_per_baryon", "nuclear_matter",
     "symmetry_energy_quadratic", "symmetry_energy_full", "crossover_M",
     "delta_ratios_from_potential",
     "TableSpec", "TableResult", "build_table", "hadronic_row",

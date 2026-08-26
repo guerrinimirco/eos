@@ -457,6 +457,26 @@ available; $\Delta$'s enter under \texttt{SpeciesFlags(deltas=True)} and are an
 extension of this implementation.}
 \end{table}
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist --- and one of the three is refused here
+rather than written. \emph{By name:} \texttt{Parameters.default()} is the
+maximum-likelihood set above, and \texttt{Parameters.named('DID')} or
+\texttt{named('DIDY')} take it by name; the two are the same numbers, DIDY
+being \texttt{SpeciesFlags(hyperons=True)} rather than a second
+parameterisation. \emph{A new set:}
+\texttt{dataclasses.replace(Parameters.default(), ...)}. Twenty-nine of the
+thirty-four fields carry no default, so bare field-by-field construction means
+supplying all twenty-nine, and \texttt{with\_deltas} is the constructor for the
+$\Delta$ extension. \emph{From nuclear-matter parameters:} \textbf{no route.}
+\texttt{nmp.invert\_nmp} and \texttt{nmp.from\_nmp} exist and raise
+\texttt{NotImplementedError} naming the reason: the couplings are the
+maximum-likelihood point of a Bayesian analysis over 18 observables rather than
+the solution of a fixed list of saturation data, and the model carries two
+inequivalent symmetry energies ($S$ and $S_2$, differing by $2.72$~MeV at
+saturation), so the list to impose is itself undetermined. They raise rather
+than being absent because an \texttt{AttributeError} is a gap a caller cannot
+interpret. \texttt{nmp.compute\_nmp} is the forward direction and is complete.
+
 \section{Thermodynamics}
 \label{sec:thermo}
 

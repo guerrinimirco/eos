@@ -65,5 +65,29 @@ class Parameters:
         L_sym = 41.26 MeV. All five are predictions of the couplings -- ZL
         imposes no saturation condition -- and `nmp.compute_nmp` reproduces
         them at T = 0, pinned by `verify/run_full_check.py`.
+
+        A NEW set is `Parameters(a0=..., gamma=...)` -- every field carries a
+        default, so only the ones that change need naming -- or
+        `dataclasses.replace` of one already in hand. FROM nuclear-matter
+        parameters there is no route: `nmp.invert_nmp` raises, because six
+        couplings against five NMPs leaves a one-parameter family with no
+        published closure. `nmp.compute_nmp` is the forward direction.
         """
         return cls()
+
+    @classmethod
+    def named(cls, name: str) -> "Parameters":
+        """A published set by name.
+
+        ZL ships exactly one, the set of Constantinou et al. that `default()`
+        returns, so the map has a single entry; it exists because CLAUDE.md
+        section 13 makes `named` part of the vocabulary every model speaks,
+        and a caller that sweeps parameter sets must not have to know which
+        models happen to have more than one. The key is the set's own `name`
+        field, so `Parameters.named(par.name)` round-trips.
+        """
+        known = {"ZL_Constantinou": cls.default}
+        if name not in known:
+            raise KeyError(f"unknown ZL parameter set {name!r}; "
+                           f"available: {sorted(known)}")
+        return known[name]()

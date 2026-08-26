@@ -93,6 +93,25 @@ class Parameters:
         of iron: absolutely stable strange quark matter.
 
         A set with some of them changed is `Parameters(a4=..., B4=...)`, or
-        `dataclasses.replace` of one already in hand.
+        `dataclasses.replace` of one already in hand. FROM nuclear-matter
+        parameters there is no route: ABPR has no nuclear sector, so there is
+        no `nmp.py` and nothing to invert.
         """
         return cls()
+
+    @classmethod
+    def named(cls, name: str) -> "Parameters":
+        """A parameter set by name.
+
+        ABPR ships exactly one, the working set that `default()` returns, so
+        the map has a single entry; it exists because CLAUDE.md section 13
+        makes `named` part of the vocabulary every model speaks, and a caller
+        that sweeps parameter sets must not have to know which models happen
+        to have more than one. The key is the set's own `name` field, so
+        `Parameters.named(par.name)` round-trips.
+        """
+        known = {"abpr_default": cls.default}
+        if name not in known:
+            raise KeyError(f"unknown ABPR parameter set {name!r}; "
+                           f"available: {sorted(known)}")
+        return known[name]()

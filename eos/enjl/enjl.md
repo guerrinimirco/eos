@@ -257,6 +257,19 @@ carries `N_i = 3` for the baryons. The constant lives in the code as
 `eos.enjl.parameters.RHO_FACTOR`. It is not a bug to be "fixed" back.
 
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:*
+`Parameters.default()` is the set of Figs. 4-6, and `Parameters.named(name)`
+takes any of the six published (f_q, B) combinations -- `'fq0.5_B0'`,
+`'fq0.5_B1'`, `'fq0.7_B0'`, `'fq0.7_B1'`, `'fq1.0_B0'`, `'fq1.0_B1'` -- named
+after the author's own tables, an unknown name raising `KeyError` that lists
+them. *A new set:* every field carries a default, so
+`Parameters(f_q=..., GS=...)` names only what changes; the dataclass is frozen,
+so `dataclasses.replace` is how a set already in hand is modified. *From
+nuclear-matter parameters:* no route. ENJL spans both baryons and quarks and
+has no `nmp.py`: its couplings are fixed by vacuum data and by the author's
+tables, not by a saturation-property list.
+
 ## The mean field
 
 ### Effective scalar densities and the gap equation

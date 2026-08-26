@@ -254,6 +254,19 @@ class Parameters:
         a priori rather than sampled, and c_sigma = infinity likewise; the
         remaining 15 numbers are the fit. n_0 is from Table III, the value at
         which this set gives P = 0 in symmetric matter at T = 0.
+
+        A NEW set is `dataclasses.replace(Parameters.default(), a_sigma=...)`.
+        Twenty-nine of the thirty-four fields carry no default, so bare
+        field-by-field construction means supplying all twenty-nine: that is
+        deliberate for a functional whose couplings are a joint fit, where a
+        partially specified set is a silently wrong one rather than a
+        convenient one. `with_deltas` is the constructor for the Delta
+        extension. FROM nuclear-matter parameters there is no route:
+        `nmp.invert_nmp` raises, because DID's couplings are the maximum-
+        likelihood point of a Bayesian analysis over 18 observables and the
+        model carries two inequivalent symmetry energies, so the list to
+        impose is itself undetermined. `nmp.compute_nmp` is the forward
+        direction.
         """
         return cls(
             n_0=0.15880045,

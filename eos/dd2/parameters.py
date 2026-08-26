@@ -152,7 +152,19 @@ class Parameters:
     # ----------------------------------------------------------- constructors
     @classmethod
     def default(cls):
-        """Published DD2 table, transcribed verbatim."""
+        """Published DD2 table, transcribed verbatim.
+
+        A NEW set is `dataclasses.replace(Parameters.default(), gamma_rho=...)`.
+        Eighteen of the twenty-seven fields carry no default, so bare
+        field-by-field construction means supplying all eighteen: that is
+        deliberate for a DD-RMF, where a coupling is meaningless without the
+        four shape coefficients that go with it and a partially specified set
+        is a silently wrong one rather than a convenient one. Where the shape
+        coefficients follow from the internal constraints, `from_microscopic`
+        is the field-by-field route -- it derives the omitted a_i and d_i and
+        validates any that are supplied. FROM nuclear-matter parameters:
+        `nmp.from_nmp` / `nmp.invert_nmp`.
+        """
         return cls(
             n_sat=0.149065,
             m_n=939.56536, m_p=938.27203,

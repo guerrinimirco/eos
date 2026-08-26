@@ -53,6 +53,20 @@ The reference is Typel et al., PRC 81, 015803 (2010); the density-dependent
 form is Typel & Wolter, NPA 656, 331 (1999). `nucleon_mass_mode='average'`
 selects which nucleon mass the dimensionless residual scales against.
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:*
+`Parameters.default()` is the published DD2 table above, and
+`Parameters.named('DD2')` / `named('DD2Y')` take a published set by name, an
+unknown name raising `KeyError` that lists what there is. *A new set:*
+`dataclasses.replace(Parameters.default(), gamma_rho=...)`, or
+`Parameters.from_microscopic(...)`, which derives the omitted shape
+coefficients from the internal constraints and validates any that are
+supplied. Eighteen of the twenty-seven fields carry no default, so bare
+field-by-field construction means supplying all eighteen -- deliberate for a
+DD-RMF, where a coupling is meaningless without the four shape coefficients
+that go with it. *From nuclear-matter parameters:* `nmp.from_nmp` and
+`nmp.invert_nmp`, imposing `{n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}`.
+
 **Masses**, from the shared particle table rather than from `Parameters` (MeV,
 with the degeneracy `g_i`):
 

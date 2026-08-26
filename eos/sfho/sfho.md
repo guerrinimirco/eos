@@ -76,6 +76,15 @@ keys to builders:
 All five share the isoscalar and isovector couplings above; they differ only in
 which baryons are active and how those baryons couple.
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:* the five keys of
+the table above, through `Parameters.named(key)`, with `default()` returning
+`SFHo_Nucleonic`; an unknown key raises `KeyError` listing them. *A new set:*
+every field carries a default, so `Parameters(g_rho_N=...)` builds one field by
+field and `dataclasses.replace` modifies one already in hand. *From
+nuclear-matter parameters:* `nmp.from_nmp` and `nmp.invert_nmp`, imposing
+`{n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}`.
+
 Because the couplings are constants there is NO rearrangement self-energy:
 Sigma^R = 0, stated rather than omitted. That is the one structural difference
 from DD2; everything else — module layout, names, modes, records — is the

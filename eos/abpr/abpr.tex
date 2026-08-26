@@ -240,6 +240,21 @@ densities of a compact-star core and neither is a controlled expansion at the
 surface. The gap is taken constant --- there is no $\Delta(T)$ here, because
 there is no $T$ --- and it is imposed, never solved for.
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist. \emph{By name:}
+\texttt{Parameters.default()} is the working set above, and
+\texttt{Parameters.named('abpr\_default')} takes it by name. ABPR ships exactly
+one set, so the map has a single entry; it exists so that a caller sweeping
+parameter sets need not know which models happen to have more than one.
+\emph{A new set:} every field carries a default, so
+\texttt{Parameters(a4=..., B4=...)} names only what changes; the dataclass is
+frozen, so \texttt{dataclasses.replace} is how a set already in hand is
+modified. \emph{From nuclear-matter parameters:} no route, and none is missing
+--- ABPR has no nuclear sector, so there is no \texttt{nmp.py} and nothing to
+invert. The inverse maps of Sec.~\ref{sec:inverse} are a different object
+entirely: they invert this model's own \emph{state variables} --- $\mu$ from
+$n_B$, $\mu$ from $P$ --- not its parameters.
+
 \section{Everything else, as derivatives of $P$}
 \label{sec:derived}
 

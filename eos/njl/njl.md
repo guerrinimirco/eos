@@ -165,6 +165,18 @@ use it as a strong-coupling point, not as a reproduction of that paper.
 neutrinos massless with `g_nu = 1` per flavour, particles and antiparticles
 summed; photons massless with `g_gamma = 2`.
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:*
+`Parameters.default()` is the shipped RKH set, and `Parameters.named(name)`
+takes any of the three published sets -- `'rkh'`, `'kunkel'`,
+`'gluon_exchange'` -- an unknown name raising `KeyError` that lists them.
+*A new set:* every field carries a default, so `Parameters(G_D=..., G_V=...)`
+names only what changes; the dataclass is frozen, so `dataclasses.replace` is
+how a set already in hand is modified. *From nuclear-matter parameters:* no
+route, and none is missing -- NJL has no nuclear sector, so there is no
+`nmp.py` and nothing to invert; its parameters are fixed by vacuum data
+instead.
+
 ## The cut medium integrals
 
 One mode of mass `M` at effective potential `mu*` and temperature `T`,

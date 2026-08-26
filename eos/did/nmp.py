@@ -188,6 +188,53 @@ def compute_nmp(par, T=0.0):
                 X_p_eq=beta_eq.Y("p") if beta_eq.converged else float("nan"))
 
 
+def invert_nmp(*args, **kwargs):
+    """Not implemented: the DID inversion has no published closure.
+
+    The forward map is complete -- `compute_nmp` above -- and the paper
+    publishes its nuclear-matter parameters as PREDICTIONS (arXiv:2511.15646,
+    Table VI), not as constraints the couplings were fitted to. The couplings
+    are the maximum-likelihood point of a Bayesian analysis over 18
+    observables: hyperon potentials in two media, saturation properties,
+    chiral-EFT and heavy-ion pressures. Inverting means choosing which of
+    those to impose on 15 sampled numbers, and the paper makes no such choice.
+
+    DID also has a second ambiguity the other models do not. Its symmetry
+    energy comes in two inequivalent forms -- the quadratic coefficient S_2
+    and the full ISM-to-neutron-matter difference S, which differ by 2.72 MeV
+    at saturation here -- so even the LIST of data to impose is undetermined:
+    {n_0, B, K, S, L} and {n_0, B, K, S_2, L_2} are different inversions with
+    different answers, and nothing in the paper singles out one.
+
+    Two ways to close it, either of which makes this implementable:
+
+      - declare the target list explicitly, including WHICH symmetry energy,
+        and hold the 10 or so unsampled couplings (the vector transition-zone
+        shapes, the hyperon sector) at their published values;
+      - invert the isoscalar sector alone against {n_0, B, K} for
+        (g_sigma_N_S, g_tilde_omega_N_S, a_sigma), which is square, and report
+        the isovector parameters as predictions.
+
+    Until one is chosen this raises rather than returning a member of a family
+    the caller cannot see, which is CLAUDE.md section 3's rule for a gap
+    applied to a map rather than a mode: it says which, and it is never a
+    silent no-op. Recorded in docs/DEFERRED.md.
+    """
+    raise NotImplementedError(
+        "eos.did has no NMP inversion: its couplings are the maximum-"
+        "likelihood point of a Bayesian analysis over 18 observables, not the "
+        "solution of a fixed list of saturation data, and the model carries "
+        "two inequivalent symmetry energies (S and S_2) so the list to impose "
+        "is itself undetermined. Declare a target list explicitly, or invert "
+        "the isoscalar sector alone, and this can be written. compute_nmp "
+        "(the forward map) is available.")
+
+
+def from_nmp(*args, **kwargs):
+    """Not implemented; see `invert_nmp`, of which this is the constructor form."""
+    return invert_nmp(*args, **kwargs)
+
+
 # =============================================================================
 # THE DELTA SECTOR: a coupling ratio from a chosen potential
 # =============================================================================

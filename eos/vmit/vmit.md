@@ -111,6 +111,18 @@ reachable, and one of them is a `verify/` check: with `a = 0` and `B = 0` the
 solved state must equal the Fermi integrals evaluated at the physical
 potentials themselves, asserted at 1e-10.
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:*
+`Parameters.default()` is the working set above, and
+`Parameters.named('vMIT_default')` takes it by name. vMIT ships exactly one
+set, so the map has a single entry; it exists so that a caller sweeping
+parameter sets need not know which models happen to have more than one. *A new
+set:* every field carries a default, so `Parameters(B4=..., a=...)` names only
+what changes; the dataclass is frozen, so `dataclasses.replace` is how a set
+already in hand is modified, and there is no setter and no mutating helper.
+*From nuclear-matter parameters:* no route, and none is missing -- vMIT has no
+nuclear sector, so there is no `nmp.py` and nothing to invert.
+
 ## Single-flavour thermodynamics
 
 Each flavour is a free Fermi gas of mass `m_q` and degeneracy

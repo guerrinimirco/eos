@@ -171,6 +171,20 @@ controlled expansion at the surface. The gap is taken constant — there is no
 `Delta(T)` here, because there is no `T` — and it is imposed, never solved for.
 
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:*
+`Parameters.default()` is the working set above, and
+`Parameters.named('abpr_default')` takes it by name. ABPR ships exactly one
+set, so the map has a single entry; it exists so that a caller sweeping
+parameter sets need not know which models happen to have more than one. *A new
+set:* every field carries a default, so `Parameters(a4=..., B4=...)` names only
+what changes; the dataclass is frozen, so `dataclasses.replace` is how a set
+already in hand is modified. *From nuclear-matter parameters:* no route, and
+none is missing -- ABPR has no nuclear sector, so there is no `nmp.py` and
+nothing to invert. The inverse maps of the section below are a different
+object entirely: they invert this model's own STATE VARIABLES -- `mu` from
+`n_B`, `mu` from `P` -- not its parameters.
+
 ## Everything else, as derivatives of P
 
 Since the composition is fixed by (locking), `P(mu)` is the whole model and

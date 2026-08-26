@@ -314,6 +314,25 @@ Leptons carry no strong charge C. The neutrino degeneracy is 1 because only one
 helicity state exists; antineutrinos come from the antiparticle branch of the
 integral.
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist -- and one of the three is
+refused here rather than written. *By name:* `Parameters.default()` is the
+maximum-likelihood set above, and `Parameters.named('DID')` / `named('DIDY')`
+take it by name; the two are the same numbers, DIDY being
+`SpeciesFlags(hyperons=True)` rather than a second parameterisation. *A new
+set:* `dataclasses.replace(Parameters.default(), a_sigma=...)`. Twenty-nine of
+the thirty-four fields carry no default, so bare field-by-field construction
+means supplying all twenty-nine, and `with_deltas` is the constructor for the
+Delta extension. *From nuclear-matter parameters:* **no route.**
+`nmp.invert_nmp` and `nmp.from_nmp` exist and raise `NotImplementedError`
+naming the reason: DID's couplings are the maximum-likelihood point of a
+Bayesian analysis over 18 observables rather than the solution of a fixed list
+of saturation data, and the model carries two inequivalent symmetry energies
+(S and S_2, differing by 2.72 MeV at saturation), so the list to impose is
+itself undetermined. They raise rather than being absent because an
+`AttributeError` is a gap a caller cannot interpret. `nmp.compute_nmp` is the
+forward direction and is complete.
+
 ## Thermodynamics
 
 ### The grand potential and the two rearrangement terms

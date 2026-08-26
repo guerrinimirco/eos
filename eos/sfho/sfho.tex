@@ -743,6 +743,19 @@ All five share the isoscalar and isovector couplings of
 Sec.~\ref{sec:lagrangian}; they differ only in which baryons are active and
 how those baryons couple.
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist. \emph{By name:}
+\texttt{Parameters.default()} is the nucleonic SFHo table above, and
+\texttt{Parameters.named(name)} takes any of the five published sets ---
+\texttt{SFHo\_Nucleonic}, \texttt{SFHoY\_Fortin}, \texttt{SFHoY*\_Fortin},
+\texttt{SFHo\_2fam}, \texttt{SFHo\_2fam\_phi} --- an unknown name raising
+\texttt{KeyError} that lists them. \emph{A new set:} every field carries a
+default, so \texttt{Parameters(g\_rho\_N=...)} builds one field by field and
+\texttt{dataclasses.replace} modifies one already in hand. \emph{From
+nuclear-matter parameters:} \texttt{nmp.from\_nmp} and
+\texttt{nmp.invert\_nmp}, imposing $\{n_\mathrm{sat}, E_\mathrm{sat}, m^*/m,
+K_\mathrm{sat}, E_\mathrm{sym}, L_\mathrm{sym}\}$.
+
 \section{The phase-adapter surface}
 \label{sec:adapter}
 

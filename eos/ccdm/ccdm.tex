@@ -1314,6 +1314,19 @@ $B_{\rm eff}=(239.66\ \mathrm{MeV})^4=429.39$ MeV\,fm$^{-3}$.
 ``the bag constant'' of this model is wrong by a factor of six in energy
 density.
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist. \emph{By name:}
+\texttt{Parameters.default()} is the baseline set, and
+\texttt{Parameters.named(name)} takes any of the four published sets ---
+\texttt{baseline}, \texttt{dressed}, \texttt{novector}, \texttt{stiff} --- an
+unknown name raising \texttt{KeyError} that lists them. \emph{A new set:} every
+field carries a default, so \texttt{Parameters(g\_q=..., B\_g4=...)} names only
+what changes; the dataclass is frozen, so \texttt{dataclasses.replace} is how a
+set already in hand is modified. \emph{From nuclear-matter parameters:} no
+route, and none is missing --- CCDM has no nuclear sector, so there is no
+\texttt{nmp.py} and nothing to invert; the tier-1 parameters are fixed by
+vacuum data instead.
+
 \section{What is returned}
 \label{sec:returns}
 

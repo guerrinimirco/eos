@@ -988,7 +988,14 @@ decision that cannot be made before the tables exist.
   potentials in two media, saturation properties, chi-EFT and heavy-ion
   pressures), and the nuclear-matter parameters are what that fit PREDICTS.
   An inversion would have to choose which 15 of those observables to impose,
-  which is a modelling decision the paper does not make.
+  which is a modelling decision the paper does not make. DID also carries two
+  inequivalent symmetry energies (S and S_2, differing by 2.72 MeV at
+  saturation), so even the LIST to impose is undetermined: {n_0, B, K, S, L}
+  and {n_0, B, K, S_2, L_2} are different inversions with different answers.
+  The refusal is NAMED rather than absent: `nmp.invert_nmp` and `nmp.from_nmp`
+  exist, are exported from `eos.did`, and raise `NotImplementedError` giving
+  the reason and the two ways to close it, the way `eos.zl` does. An absent
+  attribute is an `AttributeError` a caller cannot interpret.
 - `eos_response` implements the `equilibrium` freeze only (c_s^2 isothermal
   and adiabatic, C_V, C_P, Gamma_th, in every mode). The composition freezes
   — held species fractions, held Y_C with the species re-equilibrating — and

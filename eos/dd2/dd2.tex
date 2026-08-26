@@ -143,6 +143,22 @@ canonical DD2 coupling table: the default is universal coupling
 ($x_{\Delta i} = 1$), or $x_{\Delta\sigma}$ is fixed by the same inversion
 from a chosen $U_\Delta \in [-100, -50]$~MeV.
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist. \emph{By name:}
+\texttt{Parameters.default()} is the published DD2 table above, and
+\texttt{Parameters.named('DD2')} or \texttt{named('DD2Y')} take a published set
+by name, an unknown name raising \texttt{KeyError} that lists what there is.
+\emph{A new set:} \texttt{dataclasses.replace(Parameters.default(), ...)}, or
+\texttt{Parameters.from\_microscopic(...)}, which derives the omitted shape
+coefficients $a_i$, $d_i$ from the internal constraints and validates any that
+are supplied. Eighteen of the twenty-seven fields carry no default, so bare
+field-by-field construction means supplying all eighteen --- deliberate for a
+DD-RMF, where a coupling is meaningless without the four shape coefficients
+that go with it. \emph{From nuclear-matter parameters:}
+\texttt{nmp.from\_nmp} and \texttt{nmp.invert\_nmp}, imposing
+$\{n_\mathrm{sat}, E_\mathrm{sat}, m^*/m, K_\mathrm{sat}, E_\mathrm{sym},
+L_\mathrm{sym}\}$.
+
 \section{Mean fields, rearrangement, and thermodynamics}
 
 In static uniform matter the meson field equations are algebraic,

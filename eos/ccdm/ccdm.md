@@ -1058,6 +1058,17 @@ larger part** — quoting `B_g` alone as "the bag constant" of this model is
 wrong by a factor of six in energy density.
 
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:*
+`Parameters.default()` is the baseline set, and `Parameters.named(name)` takes
+any of the four published sets -- `'baseline'`, `'dressed'`, `'novector'`,
+`'stiff'` -- an unknown name raising `KeyError` that lists them. *A new set:*
+every field carries a default, so `Parameters(g_q=..., B_g4=...)` names only
+what changes; the dataclass is frozen, so `dataclasses.replace` is how a set
+already in hand is modified. *From nuclear-matter parameters:* no route, and
+none is missing -- CCDM has no nuclear sector, so there is no `nmp.py` and
+nothing to invert; the tier-1 parameters are fixed by vacuum data instead.
+
 ## What is returned
 
 ### One point

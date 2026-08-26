@@ -368,6 +368,20 @@ The $\omega$ channel needs no such factor, because its source
 Eq.~\eqref{eq:Jomega} already carries $N_i = 3$ for the baryons. The
 constant lives in the code as \texttt{eos.enjl.parameters.RHO\_FACTOR}.
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist. \emph{By name:}
+\texttt{Parameters.default()} is the set of Figs.~4--6, and
+\texttt{Parameters.named(name)} takes any of the six published $(f_q, B)$
+combinations --- \texttt{fq0.5\_B0}, \texttt{fq0.5\_B1}, \texttt{fq0.7\_B0},
+\texttt{fq0.7\_B1}, \texttt{fq1.0\_B0}, \texttt{fq1.0\_B1} --- named after the
+author's own tables, an unknown name raising \texttt{KeyError} that lists them.
+\emph{A new set:} every field carries a default, so
+\texttt{Parameters(f\_q=..., GS=...)} names only what changes; the dataclass is
+frozen, so \texttt{dataclasses.replace} is how a set already in hand is
+modified. \emph{From nuclear-matter parameters:} no route. ENJL spans both
+baryons and quarks and has no \texttt{nmp.py}: its couplings are fixed by
+vacuum data and by the author's tables, not by a saturation-property list.
+
 \section{The mean field}
 \label{sec:meanfield}
 

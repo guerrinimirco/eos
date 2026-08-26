@@ -293,6 +293,19 @@ conversion between the natural units used inside and the fm-based public
 boundary is $(\hbar c)^3$ with $\hbar c = 197.3269804$ MeV\,fm.
 
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist. \emph{By name:}
+\texttt{Parameters.default()} is the shipped RKH set, and
+\texttt{Parameters.named(name)} takes any of the three published sets ---
+\texttt{rkh}, \texttt{kunkel}, \texttt{gluon\_exchange} --- an unknown name
+raising \texttt{KeyError} that lists them. \emph{A new set:} every field
+carries a default, so \texttt{Parameters(G\_D=..., G\_V=...)} names only what
+changes; the dataclass is frozen, so \texttt{dataclasses.replace} is how a set
+already in hand is modified. \emph{From nuclear-matter parameters:} no route,
+and none is missing --- NJL has no nuclear sector, so there is no
+\texttt{nmp.py} and nothing to invert; its parameters are fixed by vacuum data
+instead.
+
 \section{The cut medium integrals}
 \label{sec:medium}
 

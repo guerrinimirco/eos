@@ -64,6 +64,21 @@ isospin splitting of the kinetic term, and the asymmetry enters only through
 `V`. And `n0` is a **parameter of the functional**, not the saturation density
 the functional predicts; the two differ by 0.3 % (below).
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist -- and one of the three is
+refused here rather than written. *By name:* `Parameters.default()` is the
+published set of Constantinou et al., and `Parameters.named('ZL_Constantinou')`
+takes it by name. ZL ships exactly one set, so the map has a single entry; it
+exists so that a caller sweeping parameter sets need not know which models
+happen to have more than one. *A new set:* every field carries a default, so
+`Parameters(a0=..., gamma=...)` names only what changes, and
+`dataclasses.replace` modifies one already in hand. *From nuclear-matter
+parameters:* **no route.** `nmp.invert_nmp` and `nmp.from_nmp` raise
+`NotImplementedError` -- six couplings against the five NMPs of the standard
+list leaves a one-parameter family, and nothing in the literature singles out a
+member of it. The docstring names the two ways to close it. `nmp.compute_nmp`
+is the forward direction and is complete.
+
 **Single-nucleon thermodynamics.** Each species is a free Fermi gas of mass
 `m_i` and degeneracy `g = 2` (spin), evaluated at its effective potential
 `mu_eff_i`, antiparticles included. With `f(x) = 1/(1 + exp(x/T))` and

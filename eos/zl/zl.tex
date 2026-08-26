@@ -130,6 +130,23 @@ the functional predicts; the two differ by $0.3\%$ (Sec.~\ref{sec:nmp}). All
 eight are fields of \texttt{Parameters} and are arguments everywhere --- nothing
 in the package reads a module-level coupling.
 
+\paragraph{Three routes to a parameter set.} Model parameters are always
+arguments, so all three have to exist --- and one of the three is refused here
+rather than written. \emph{By name:} \texttt{Parameters.default()} is the
+published set of Constantinou et al., and
+\texttt{Parameters.named('ZL\_Constantinou')} takes it by name. ZL ships
+exactly one set, so the map has a single entry; it exists so that a caller
+sweeping parameter sets need not know which models happen to have more than
+one. \emph{A new set:} every field carries a default, so
+\texttt{Parameters(a0=..., gamma=...)} names only what changes, and
+\texttt{dataclasses.replace} modifies one already in hand. \emph{From
+nuclear-matter parameters:} \textbf{no route.} \texttt{nmp.invert\_nmp} and
+\texttt{nmp.from\_nmp} raise \texttt{NotImplementedError} --- six couplings
+against the five nuclear-matter parameters of the standard list leaves a
+one-parameter family, and nothing in the literature singles out a member of it.
+The docstring names the two ways to close it. \texttt{nmp.compute\_nmp} is the
+forward direction and is complete.
+
 \section{Single-nucleon thermodynamics}
 \label{sec:kinetic}
 

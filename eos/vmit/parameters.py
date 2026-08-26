@@ -64,5 +64,30 @@ class Parameters:
         A starting point, not a published fit: vMIT's parameters are what a
         hybrid study scans, and which pair is right depends on the hadronic
         model it is paired with. `eos.mixed.scan` moves over (B4, a, m_s).
+
+        A NEW set is `Parameters(B4=..., a=..., m_s=...)` -- every field
+        carries a default, so only the ones that change need naming -- or
+        `dataclasses.replace(Parameters.default(), B4=...)` of one already in
+        hand. The dataclass is frozen, so `replace` is how a set is modified;
+        there is no setter and no mutating helper. FROM nuclear-matter
+        parameters there is no route: vMIT has no nuclear sector, so there is
+        no `nmp.py` and nothing to invert.
         """
         return cls(name="vMIT_default")
+
+    @classmethod
+    def named(cls, name: str) -> "Parameters":
+        """A parameter set by name.
+
+        vMIT ships exactly one, the working set that `default()` returns, so
+        the map has a single entry; it exists because CLAUDE.md section 13
+        makes `named` part of the vocabulary every model speaks, and a caller
+        that sweeps parameter sets must not have to know which models happen
+        to have more than one. The key is the set's own `name` field, so
+        `Parameters.named(par.name)` round-trips.
+        """
+        known = {"vMIT_default": cls.default}
+        if name not in known:
+            raise KeyError(f"unknown vMIT parameter set {name!r}; "
+                           f"available: {sorted(known)}")
+        return known[name]()

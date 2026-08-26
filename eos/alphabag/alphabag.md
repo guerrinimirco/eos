@@ -111,6 +111,18 @@ absolutely stable strange quark matter. Pairing lowers it: the CFL phase at
 `eps/n_B = 936.56` MeV.
 
 
+**Three routes to a parameter set.** CLAUDE.md section 6 makes model
+parameters arguments, so all three have to exist. *By name:*
+`Parameters.default()` is the working set above, and
+`Parameters.named('alphabag_default')` takes it by name. alphaBag ships exactly
+one set, so the map has a single entry; it exists so that a caller sweeping
+parameter sets need not know which models happen to have more than one. *A new
+set:* every field carries a default, so `Parameters(alpha=..., B4=...)` names
+only what changes; the dataclass is frozen, so `dataclasses.replace` is how a
+set already in hand is modified. *From nuclear-matter parameters:* no route,
+and none is missing -- alphaBag has no nuclear sector, so there is no `nmp.py`
+and nothing to invert.
+
 ## Single-flavour thermodynamics
 
 Each flavour is a gas of quarks and antiquarks of degeneracy
