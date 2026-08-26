@@ -565,7 +565,7 @@ def _two_family() -> Parameters:
 
 
 
-def get_sfho_general(
+def from_coupling_ratios(
     x_sigma_lambda: float = 0.85,
     x_sigma_sigma: float = 0.58,
     x_sigma_xi: float = 0.51,
@@ -718,7 +718,7 @@ if __name__ == "__main__":
     
     # Test general parametrization
     print(f"\n{'='*70}")
-    p_general = get_sfho_general(
+    p_general = from_coupling_ratios(
         x_sigma_lambda=0.7,
         x_sigma_sigma=0.5,
         x_sigma_xi=0.4,

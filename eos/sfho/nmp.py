@@ -6,7 +6,7 @@ fitted to, in both directions.
 
     compute_nmp(par)                couplings -> nuclear-matter parameters
     compute_hyperon_potentials(par)  couplings -> U_Lambda, U_Sigma, U_Xi
-    create_custom_parametrization(U_Lambda_N, ...)   the inverse of that
+    from_potential_depths(U_Lambda_N, ...)   the inverse of that
 
 This module sits ABOVE `solver.py` in the import order (CLAUDE.md section
 5), and it has to: every quantity here is defined by a property of the
@@ -228,9 +228,9 @@ def compute_nmp(par, h=1e-3, n_lo=0.12, n_hi=0.20):
 
 
 # =============================================================================
-# CREATE CUSTOM PARAMETRIZATION FROM POTENTIAL DEPTHS
+# A PARAMETRIZATION FROM TARGET POTENTIAL DEPTHS
 # =============================================================================
-def create_custom_parametrization(
+def from_potential_depths(
     # Hyperon potential depths (MeV)
     U_Lambda_N: float = -30.0,
     U_Sigma_N: float = +30.0,
@@ -566,7 +566,7 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
     The hyperon and Delta sectors are NOT refitted: they ride along from
     `par_base`, and their coupling ratios are defined against the nucleon
     couplings this function has just changed. Re-derive them with
-    `create_custom_parametrization` on the result if the potential depths are
+    `from_potential_depths` on the result if the potential depths are
     meant to be held.
     """
     required = ("n_sat", "E_sat", "m_eff_ratio", "K_sat", "E_sym", "L_sym")

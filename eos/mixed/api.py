@@ -50,7 +50,7 @@ from eos.dd2.species import SpeciesFlags
 from eos.mixed.responses import sound_speed_frozen
 from eos.mixed.solver import mixed_slots
 from eos.mixed.solver import Result, solve
-from eos.mixed.hybrid import EoSTable, build_mixed_eos_table
+from eos.mixed.hybrid import EoSTable, build_hybrid_table
 from eos.mixed.table import (
     MODE_FRACTIONS, TableSpec, build_table, make_charge_spec,
 )
@@ -259,11 +259,11 @@ def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
             "the hadronic wing solves at fixed Y_Le and must carry the "
             "neutrino population")
     try:
-        table = build_mixed_eos_table(par, species, n_B_grid, eta, spec,
-                                      vmit_params=vmit_params, T=T,
-                                      analytic_jac=analytic_jac,
-                                      window=window, phases=phases,
-                                      muons=muons)
+        table = build_hybrid_table(par, species, n_B_grid, eta, spec,
+                                   vmit_params=vmit_params, T=T,
+                                   analytic_jac=analytic_jac,
+                                   window=window, phases=phases,
+                                   muons=muons)
     except NotImplementedError:
         raise                       # an unwired request must never be a status
     except (RuntimeError, ValueError) as err:

@@ -23,7 +23,6 @@ from eos.sfho.solver import (
     EoSPoint, warm_start, default_guess, unknown_names,
     solve_mode, solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
     solve_fixed_yc, solve_fixed_yc_ys,
-    solve_isentropic_beta_eq, solve_isentropic_trapped,
 )
 from eos.sfho.table import (
     TableSpec, TableResult, build_table, mode_spec,
@@ -33,7 +32,7 @@ from eos.sfho.table import (
 )
 from eos.sfho.nmp import (
     compute_nmp, energy_per_baryon, pressure, esym,
-    create_custom_parametrization, compute_saturation_fields,
+    from_potential_depths, compute_saturation_fields,
     compute_hyperon_potentials, PUBLISHED_NMP,
 )
 from eos.sfho.api import (
@@ -45,13 +44,12 @@ __all__ = [
     "EoSPoint", "warm_start", "default_guess", "unknown_names",
     "solve_mode", "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",
-    "solve_isentropic_beta_eq", "solve_isentropic_trapped",
     "TableSpec", "TableResult", "build_table", "mode_spec",
     "MODES", "MODE_FRACTIONS", "hadronic_row", "rows_from_result",
     "TableSettings", "compute_table", "save_results", "results_to_arrays",
     "load_eos_table", "build_interpolators", "EOSTableData",
     "compute_nmp", "energy_per_baryon", "pressure", "esym",
-    "create_custom_parametrization", "compute_saturation_fields",
+    "from_potential_depths", "compute_saturation_fields",
     "compute_hyperon_potentials", "PUBLISHED_NMP",
     "eos_point", "eos_table", "eos_response", "PointResult",
     "RESPONSE_FREEZES",

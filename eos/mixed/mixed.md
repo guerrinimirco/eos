@@ -469,7 +469,7 @@ of (Ptot)-(stot), and an `extras` dictionary. `in_mixed_phase` is
 
 ### The complete hybrid equation of state
 
-The stitched table (`build_mixed_eos_table`, and the mode-facing entry
+The stitched table (`build_hybrid_table`, and the mode-facing entry
 `hybrid_table`) covers the whole density range with three segments cut on
 `chi`,
 

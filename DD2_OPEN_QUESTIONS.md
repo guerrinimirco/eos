@@ -317,7 +317,7 @@ On hold: **μ-family ν-trapping** (electron-family Y_L only; user confirming ne
   density — so it is not the favoured state. Measured with hyperons + Deltas,
   L_sym = 85, B^1/4 = 165 MeV: at the claimed onset chi jumps 0 -> 0.517 and P
   falls 36.3 -> 7.8 MeV/fm^3.
-- **Consequence:** `build_mixed_eos_table` stitches a table that steps DOWN in
+- **Consequence:** `build_hybrid_table` stitches a table that steps DOWN in
   pressure, c_s^2 goes to -4, and TOV integrates it to maximum masses in the
   hundreds of solar masses without raising.
 - **Mitigation shipped:** `eos/mixed/scan.py:eos_is_physical` checks P is

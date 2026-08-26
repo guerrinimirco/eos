@@ -89,7 +89,7 @@ from eos.mixed.construction import (
 
 # --- solving one point, and sweeping density -------------------------------
 from eos.mixed.solver import (
-    Result, solve, sweep, find_mixed_window, seed_across_eta,
+    Result, solve, sweep, seed_across_eta,
     solve_beta_eq_neutrinoless, solve_beta_eq_neutrino_trapped,
     solve_fixed_yc, solve_fixed_yc_ys,
 )
@@ -104,7 +104,7 @@ from eos.mixed.table import (
     make_charge_spec, composition_row, MODE_FRACTIONS,
 )
 from eos.mixed.hybrid import (
-    EoSTable, build_mixed_eos_table, mass_radius_mixed,
+    EoSTable, build_hybrid_table, mass_radius_mixed,
 )
 from eos.general.table_io import save_table, load_table, export_csv
 
@@ -145,14 +145,14 @@ __all__ = [
     "solve", "Result",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",
-    "sweep", "locate_window", "locate_windows", "find_mixed_window",
+    "sweep", "locate_window", "locate_windows",
     "Window",
     "solve_fixed_chi", "refine_window",
     "seed_across_eta",
     "solve_at_entropy",
     # tables
     "TableSpec", "build_table", "composition_row",
-    "EoSTable", "build_mixed_eos_table", "mass_radius_mixed",
+    "EoSTable", "build_hybrid_table", "mass_radius_mixed",
     "save_table", "load_table", "export_csv",
     # the uniform model API
     "eos_point", "eos_table", "eos_response", "PointResult",

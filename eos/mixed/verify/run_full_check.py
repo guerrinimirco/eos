@@ -42,7 +42,7 @@ from eos.mixed.charges import ChargeSpec, Regime
 from eos.mixed.solver import solve
 from eos.mixed.solver import sweep
 from eos.mixed.solver import build_mixed_ctx, residual, mixed_slots
-from eos.mixed.hybrid import build_mixed_eos_table
+from eos.mixed.hybrid import build_hybrid_table
 
 
 @dataclass
@@ -230,7 +230,7 @@ def _check_backend_parity(par, flags, vp, n_B=0.6):
 
 def _check_causality(par, flags, vp, grid):
     from eos.mixed.responses import sound_speed_eq
-    t = build_mixed_eos_table(par, flags, grid, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
+    t = build_hybrid_table(par, flags, grid, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
     cs2 = sound_speed_eq(t.P, t.eps)
     mono = np.all(np.diff(t.P) > -1e-6)
     ok = mono and np.all(cs2 >= -1e-6) and np.all(cs2 <= 1.0 + 1e-6)

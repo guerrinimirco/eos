@@ -318,8 +318,9 @@ own session where the baseline and `test_imports.py` are already being run:
               legacy table symbols in `compute_tables.py`
               (`VMITTableSettings`, `compute_vmit_table`, `save_vmit_results`)
               are deliberately frozen: their only consumer is the ZLvMIT
-              notebook. What is left is `get_vmit_custom()`, which the frozen
-              dataclass makes redundant. zl, abpr and vmit have converted;
+              notebook. `get_vmit_custom()` is DELETED: the frozen
+              dataclass carries the identical defaults, so it was a pure
+              alias for `Parameters(...)`. zl, abpr and vmit have converted;
               sfho has not.
     zl        DONE: eos.py -> solver.py, compute_tables.py -> table.py,
               thermodynamics_nucleons.py -> thermodynamics.py, and species.py
@@ -1024,7 +1025,7 @@ decision that cannot be made before the tables exist.
   NUCLEON couplings, which the inversion has just changed, so a parameter set
   inverted from a base carrying hyperons keeps hyperon couplings that no
   longer correspond to the potential depths they were built from.
-  `create_custom_parametrization` has to be re-run on the result to hold
+  `from_potential_depths` has to be re-run on the result to hold
   U_Lambda, U_Sigma, U_Xi. The docstring says so; folding it in automatically
   would mean deciding whether the depths or the ratios are the thing held,
   and that is the caller's physics.
@@ -1139,9 +1140,9 @@ decision that cannot be made before the tables exist.
   renaming a symbol whose sole caller is a notebook nobody is converting buys a
   cleaner name and a broken notebook. The two siblings in the same file,
   `compute_vmit_table` and `save_vmit_results`, are frozen for the same reason
-  and by the same ruling. What is left over is `get_vmit_custom()`, which the
-  frozen dataclass makes redundant. Recorded so the next reader does not
-  re-derive the omission as a bug.
+  and by the same ruling. `get_vmit_custom()` is no longer among them: it is
+  deleted, its defaults having been identical to the frozen dataclass's own.
+  Recorded so the next reader does not re-derive the omission as a bug.
 
 ### alphabag
 - `eos_response` implements the freeze `equilibrium` only, and computes it by

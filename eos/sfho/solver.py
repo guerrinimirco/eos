@@ -631,7 +631,8 @@ def solve(sys: System, x0=None) -> EoSPoint:
 
 def solve_beta_eq_neutrinoless(
     par: Parameters, n_B: float, flags: SpeciesFlags,
-    T: float = 0.0, x0: Optional[np.ndarray] = None
+    T: Optional[float] = 0.0, x0: Optional[np.ndarray] = None,
+    SnB: Optional[float] = None
 ) -> EoSPoint:
     """
     Beta equilibrium with free-streaming neutrinos. Variables (n_B, T).
@@ -642,15 +643,27 @@ def solve_beta_eq_neutrinoless(
     6 unknowns [σ, ω, ρ, φ, μ_B, μ_C]; rows: four field equations, n_B, and
     charge neutrality n_C = n_e.
 
+    Giving `SnB` instead of `T` puts the isentrope in place of the isotherm
+    (CLAUDE.md section 3): T becomes a seventh unknown and s/n_B = SnB the
+    seventh row, and the solved temperature comes back in `result.T`. The
+    entropy counted is the total, photons included where they are. SFHo
+    carries the axis as a row of its own residual, so T is solved for together
+    with the fields and potentials rather than by the outer 1-D bracket of
+    `eos.general.tabulate.temperature_at_entropy`; the two agree to about
+    5e-8 in T, the coupled solve being the tighter.
+
     Args:
         par: SFHo parameters
         n_B: Baryon density (fm⁻³)
         flags: active degrees of freedom
-        T: Temperature (MeV)
-        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C]
+        T: Temperature (MeV); None exactly when SnB is given
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C], with T appended under SnB
+        SnB: Entropy per baryon, in place of T
     """
-    return solve(_system(par, flags, modes.beta_eq_neutrinoless(), n_B, T=T),
-                 x0=x0)
+    if SnB is not None:
+        T = None
+    return solve(_system(par, flags, modes.beta_eq_neutrinoless(), n_B,
+                         T=T, SnB=SnB), x0=x0)
 
 
 def solve_fixed_yc(
@@ -711,7 +724,8 @@ def solve_fixed_yc_ys(
 
 def solve_beta_eq_neutrino_trapped(
     par: Parameters, n_B: float, Y_Le: float, flags: SpeciesFlags,
-    T: float = 0.0, x0: Optional[np.ndarray] = None
+    T: Optional[float] = 0.0, x0: Optional[np.ndarray] = None,
+    SnB: Optional[float] = None
 ) -> EoSPoint:
     """
     Beta equilibrium with trapped neutrinos. Variables (n_B, Y_Le, T).
@@ -720,66 +734,23 @@ def solve_beta_eq_neutrino_trapped(
     conserved at Y_Le = (n_e + n_nue)/n_B, so μ_nue is an unknown rather than
     zero and beta equilibrium reads μ_C + μ_e = μ_nue.
 
+    Giving `SnB` instead of `T` puts the isentrope in place of the isotherm
+    (CLAUDE.md section 3): T joins as an eighth unknown and s/n_B = SnB as an
+    eighth row, and the solved temperature comes back in `result.T`.
+
     Args:
         par: SFHo parameters
         n_B: Baryon density (fm⁻³)
         Y_Le: Electron lepton fraction (n_e + n_nue)/n_B
         flags: active degrees of freedom
-        T: Temperature (MeV)
-        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, μ_nue]
+        T: Temperature (MeV); None exactly when SnB is given
+        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, μ_nue], T appended under SnB
+        SnB: Entropy per baryon, in place of T
     """
+    if SnB is not None:
+        T = None
     return solve(_system(par, flags, modes.beta_eq_neutrino_trapped(Y_Le),
-                         n_B, T=T), x0=x0)
-
-
-def solve_isentropic_beta_eq(
-    par: Parameters, n_B: float, SnB: float, flags: SpeciesFlags,
-    x0: Optional[np.ndarray] = None
-) -> EoSPoint:
-    """
-    Beta equilibrium at fixed entropy per baryon. Variables (n_B, S/A).
-
-    The same mode as `solve_beta_eq_neutrinoless` with the temperature axis
-    replaced by S/A (CLAUDE.md section 3), so T becomes a seventh unknown and
-    s/n_B = SnB the seventh row. The entropy counted is the total, photons
-    included where they are.
-
-    Args:
-        par: SFHo parameters
-        n_B: Baryon density (fm⁻³)
-        SnB: Entropy per baryon (dimensionless)
-        flags: active degrees of freedom
-        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, T]
-
-    Returns:
-        EoSPoint with the solved T in `result.T`
-    """
-    return solve(_system(par, flags, modes.beta_eq_neutrinoless(),
-                         n_B, SnB=SnB), x0=x0)
-
-
-def solve_isentropic_trapped(
-    par: Parameters, n_B: float, SnB: float, Y_Le: float, flags: SpeciesFlags,
-    x0: Optional[np.ndarray] = None
-) -> EoSPoint:
-    """
-    Trapped neutrinos at fixed entropy per baryon. Variables (n_B, Y_Le, S/A).
-
-    8 unknowns [σ, ω, ρ, φ, μ_B, μ_C, μ_nue, T].
-
-    Args:
-        par: SFHo parameters
-        n_B: Baryon density (fm⁻³)
-        SnB: Entropy per baryon
-        Y_Le: Electron lepton fraction (n_e + n_nue)/n_B
-        flags: active degrees of freedom
-        x0: warm start [σ, ω, ρ, φ, μ_B, μ_C, μ_nue, T]
-
-    Returns:
-        EoSPoint with the solved T in `result.T`
-    """
-    return solve(_system(par, flags, modes.beta_eq_neutrino_trapped(Y_Le),
-                         n_B, SnB=SnB), x0=x0)
+                         n_B, T=T, SnB=SnB), x0=x0)
 
 
 def solve_mode(
@@ -873,7 +844,7 @@ if __name__ == "__main__":
     print("trapped, Y_Le = 0.4      "
           f"converged={r.converged}  mu_nue={r.leptons.mu_nue:.2f}  "
           f"n_nu={r.leptons.densities['nu_e']:.3e}")
-    r = solve_isentropic_beta_eq(par, n_B, 1.0, nucleons)
+    r = solve_beta_eq_neutrinoless(par, n_B, nucleons, SnB=1.0)
     print("isentropic, S/A = 1      "
           f"converged={r.converged}  T={r.T:.3f} MeV  P={r.P:.2f}")
     print("\n" + "=" * 60)

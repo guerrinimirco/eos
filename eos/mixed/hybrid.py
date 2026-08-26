@@ -5,9 +5,9 @@ The stellar-core equation of state across a first-order transition, and its
 TOV integration.
 
 *Public API* (re-exported from `eos.mixed`): `EoSTable`,
-`build_mixed_eos_table`, `mass_radius_mixed`.
+`build_hybrid_table`, `mass_radius_mixed`.
 
-`build_mixed_eos_table` produces one monotone (n_B, P, eps) table made of three
+`build_hybrid_table` produces one monotone (n_B, P, eps) table made of three
 segments:
 
     n_B < n_onset     the pure hadronic phase          (eos/dd2)
@@ -115,9 +115,9 @@ def _enforce_monotone_pressure(P, n_B):
     return np.maximum.accumulate(P)
 
 
-def build_mixed_eos_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
-                          T=0.0, analytic_jac=False, window=None, phases=None,
-                          muons=None):
+def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
+                       T=0.0, analytic_jac=False, window=None, phases=None,
+                       muons=None):
     """Stitch pure hadronic, eta-mixed and pure quark segments into one core
     EoS — every segment at the equilibrium the `spec` declares.
 
@@ -235,9 +235,9 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     from eos.astro.tov.crust import have_crust
     from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
     if table is None:
-        table = build_mixed_eos_table(par, flags, n_B_grid, eta, spec,
-                                      vmit_params=vmit_params, T=T,
-                                      phases=phases, muons=muons)
+        table = build_hybrid_table(par, flags, n_B_grid, eta, spec,
+                                   vmit_params=vmit_params, T=T,
+                                   phases=phases, muons=muons)
     if crust == "BPS" and not have_crust("BPS"):
         crust = "No"
     e_c_vec = generate_ec_logspace(e_c_min, e_c_max, n_ec)

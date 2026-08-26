@@ -344,7 +344,7 @@ def build_table(spec, progress=None, verbose=False):
     whole of it. `verbose=True` installs the built-in printer as the callback.
 
     Non-convergent points are skipped rather than filled: this is a raw table,
-    not the smoothed core EoS that `build_mixed_eos_table` produces.
+    not the smoothed core EoS that `build_hybrid_table` produces.
     """
     import time
 

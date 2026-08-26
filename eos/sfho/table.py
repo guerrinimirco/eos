@@ -399,9 +399,9 @@ class TableSettings:
     Custom parametrization:
         Use custom_params to pass a Parameters object directly. Example:
 
-        from eos.sfho.nmp import create_custom_parametrization
+        from eos.sfho.nmp import from_potential_depths
 
-        my_params = create_custom_parametrization(
+        my_params = from_potential_depths(
             U_Lambda_N=-28.0, U_Sigma_N=+30.0, U_Xi_N=-18.0,
             name="MyCustom"
         )

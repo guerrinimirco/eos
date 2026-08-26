@@ -4,7 +4,7 @@ mixed/solver.py
 The mixed-phase equilibrium conditions and the solves that close them.
 
 *Public API* (re-exported from `eos.mixed`): `Result`, `solve`,
-`sweep`, `seed_across_eta`, `find_mixed_window`.
+`sweep`, `seed_across_eta`.
 
 At fixed (n_B, T, eta) plus whatever fractions the mode fixes, hadron-quark
 coexistence is one nonlinear system. Its unknown vector and its residual list
@@ -787,16 +787,3 @@ def sweep(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
         out.append(p)
         seed, n_prev, nH = warm_start(p, slots), float(n_B), p.th_H.n_B
     return [r for r in out if r.in_mixed_phase] if mixed_only else out
-
-
-def find_mixed_window(par, flags, n_B_grid, eta, spec, vmit_params=None,
-                      T=0.0, phases=None):
-    """The subset of a full sweep that is genuinely mixed (0 < chi < 1).
-
-    Kept for callers that want every mixed point on the grid rather than just
-    the boundaries; `eos.mixed.boundaries.locate_window` is much cheaper when
-    only the boundaries are needed.
-    """
-    return sweep(par, flags, n_B_grid, eta, spec,
-                       vmit_params=vmit_params, T=T, mixed_only=True,
-                       phases=phases)

@@ -74,7 +74,7 @@ from eos.dd2.nmp import (
     from_nmp, from_hyperon_potentials, from_delta_potential,
 )
 from eos.dd2.solver import sweep
-from eos.vmit.parameters import get_vmit_custom
+from eos.vmit.parameters import Parameters as VMITParameters
 from eos.mixed.charges import beta_eq_neutrinoless
 from eos.mixed.boundaries import locate_window
 
@@ -374,7 +374,7 @@ def scan_point(nmp, vmit, flags, n_B_grid, eta=0.0, T=0.0, spec=None,
     row = {k: float(nmp[k]) for k in NMP_KEYS}
     row.update(_sector_columns(sector, flags))
     vmit_full = {k: float(vmit[k]) for k in VMIT_KEYS if k in vmit}
-    params = get_vmit_custom(**vmit_full)
+    params = VMITParameters(**vmit_full)
     row.update(B4=params.B4, a=params.a, m_s=params.m_s, eta=float(eta),
                T=float(T))
     row.update(inversion_ok=0.0, window_exists=0.0,
@@ -494,12 +494,12 @@ def _tov_columns(par, flags, grid, eta, spec, params, T, window, tov_parallel):
     the sequence was integrated from, since `mass_radius_mixed` reports the
     central energy density and the transition boundaries are in n_B.
     """
-    from eos.mixed.hybrid import build_mixed_eos_table, mass_radius_mixed
+    from eos.mixed.hybrid import build_hybrid_table, mass_radius_mixed
     from eos.mixed.responses import sound_speed_eq
 
-    table = build_mixed_eos_table(par, flags, grid, float(eta), spec,
-                                  vmit_params=params, T=float(T),
-                                  window=window)
+    table = build_hybrid_table(par, flags, grid, float(eta), spec,
+                               vmit_params=params, T=float(T),
+                               window=window)
     cs2 = sound_speed_eq(table.P, table.eps)
     out = {"cs2_max": float(np.nanmax(cs2)) if cs2.size else np.nan,
            "eos_ok": 0.0, "eos_reason": "",

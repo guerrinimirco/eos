@@ -100,7 +100,7 @@ becomes energetically possible, `a` sets how stiff the quark branch is above
 it, which is how a hybrid star reaches two solar masses. The values above are
 the working set of this repository and the set `test/baseline` is frozen at;
 `eos.mixed.scan` moves over `(B4, a, m_s)`, and
-`get_vmit_custom(B4=..., a=..., m_s=...)` returns a parametrization with any
+`Parameters(B4=..., a=..., m_s=...)` returns a parametrization with any
 subset changed and the rest left at the table. The literature values these sit
 near are `B^(1/4) ~ 180 MeV` and `a` in 0–0.3 fm^2, as used by Gomes et al. and
 Constantinou et al., who write the same vector term as `G_V` or `g_V^2/m_V^2`.

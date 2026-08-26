@@ -45,7 +45,7 @@ from eos.sfho.parameters import Parameters
 from eos.sfho.species import SpeciesFlags, active_baryons
 from eos.sfho.solver import (
     solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
-    solve_beta_eq_neutrino_trapped, solve_isentropic_beta_eq,
+    solve_beta_eq_neutrino_trapped,
 )
 from eos.sfho.nmp import esym as symmetry_energy_analytic
 from eos.sfho.thermodynamics import thermal_meson_thermo
@@ -140,7 +140,7 @@ def _check_euler(nuc, hyp, grid):
             ("trapped", nuc, NUCLEONS,
              solve_beta_eq_neutrino_trapped(nuc, n_B, 0.4, NUCLEONS, T=10.0)),
             ("isentropic", nuc, NUCLEONS,
-             solve_isentropic_beta_eq(nuc, n_B, 1.0, NUCLEONS)),
+             solve_beta_eq_neutrinoless(nuc, n_B, NUCLEONS, SnB=1.0)),
             # T = 50 MeV, not 30: the eta is 548 MeV, so below about 40 MeV its
             # population underflows to zero and a dropped eta term is invisible.
             ("beta mesons T=50", nuc, WITH_MESONS,

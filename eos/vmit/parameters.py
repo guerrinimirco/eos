@@ -66,19 +66,3 @@ class Parameters:
         model it is paired with. `eos.mixed.scan` moves over (B4, a, m_s).
         """
         return cls(name="vMIT_default")
-
-
-def get_vmit_custom(
-    m_u: float = 5.0, m_d: float = 7.0, m_s: float = 150.0,
-    a: float = 0.2, B4: float = 180.0, name: str = "vMIT_custom"
-) -> Parameters:
-    """A parametrization with any subset of the four numbers changed.
-
-    Keyword-named so a scan can write `get_vmit_custom(B4=170.0, a=0.15)` and
-    leave the rest at their defaults.
-    """
-    return Parameters(
-        name=name,
-        m_u=m_u, m_d=m_d, m_s=m_s,
-        a=a, B4=B4
-    )
