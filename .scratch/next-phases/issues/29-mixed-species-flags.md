@@ -75,3 +75,21 @@ implicitly — §4's exact words.
 prohibition, and it gains the entry via [ticket 22](22-phase5-claudemd.md).
 
 Open for execution.
+
+## Binding ruling from ticket 65
+
+[Ticket 65](65-species-flag-defaults.md) is **resolved**: all six of §4's flag
+names default to `False` in every model, `enjl` excepted (it fixes every flag
+and raises on any move). **Whatever `species.py` this ticket gives `eos/mixed`
+must default all six to `False`.**
+
+No edit is owed today: `mixed` has no `species.py` and reuses `dd2`'s flags, so
+it already inherited the change. The obligation is on the module 29 creates.
+
+`test/test_imports.py::test_the_six_species_flags_all_default_to_off` is the
+check that enforces it, and it iterates `eos.MODELS` minus a named `exempt`
+dict — so it covers `mixed` automatically as soon as `mixed` is in the
+iterated set, and a stale exemption turns it red rather than passing quietly.
+Note the engine's own flags are not covered by that rule: `chi` and anything
+else that is the composite engine's physics defaults where 29 says it does,
+the way `phi_field`, `gluons` and `csc` do in the models.

@@ -260,6 +260,23 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 65 — §4's six flag defaults unify on all-False](issues/65-species-flag-defaults.md)**
+  (resolved). Nine models default every §4 name to `False`; `enjl` is the one
+  exemption (it fixes every flag and raises on any move). **3108 of 53763
+  baseline keys moved, all explained**, and a control run — defaults reverted,
+  everything regenerated — moved **0 of 53763**, so the generator is
+  deterministic on this stack and the flip is the sole cause. Movers: `did`
+  (292) and `sfho` (163) photons, `njl` (1411) and `ccdm` (1242) muons, with
+  every `nolep` case and every T=0 beta-eq case at exactly 0. Five suite
+  failures, none papered over: two dd2 tests that inherited `muons=True` (one
+  commented "# muons on" while relying on the default), an njl test that had
+  pinned a `'CFL'`/`'free'` label decided at 1e-16, and two vMIT tests that
+  caught the library disagreeing with itself. **Ticket 29 must adopt all-False**;
+  `mixed` already inherits it via dd2's flags. Two findings raised, not decided:
+  [ticket 81](issues/81-second-default-solver-kwargs.md) and
+  [ticket 82](issues/82-alphabag-gluons-default.md). 1 failed / 1696 passed /
+  1712 collected on 3.14.2, zero added failures.
+
 - [The five items on the rename list that are not renames](issues/46-api-changes.md):
   **all five applied, 0 added failures, `test/baseline/` unmoved at
   rtol = 1e-10** (`95d4052`). Two of the ruling's four "settled by measurement"
@@ -351,7 +368,8 @@ against this file, not against the earlier `pytest_before*.txt`.
   was already in place, so `enjl` and `abpr` stopped being skipped for nothing.
   Defaults measured and NOT changed as instructed — the divergence is
   **three-way** (`muons` 5/5, `photons` 6/4, `thermal_neutrinos` True in
-  `alphabag` alone), graduated to [ticket 65](issues/65-species-flag-defaults.md),
+  `alphabag` alone), graduated to [ticket 65](issues/65-species-flag-defaults.md)
+  (**now resolved: all-False**),
   which does not block the notebooks because the knobs cell passes all six
   explicitly. AST check for `{thermal_mesons, thermal_vectors,
   thermal_neutrinos}` clean before and after; no positional `SpeciesFlags`
