@@ -21,10 +21,8 @@ iteration counts are bounded (MINPACK hybr), so a call returns.
 """
 from dataclasses import dataclass
 
-from eos.dd2.solver import solve, EoSPoint
-from eos.dd2.table import (
-    TableSpec, build_table, _mode_kwargs, solve_at_entropy,
-)
+from eos.dd2.solver import solve, EoSPoint, _mode_kwargs
+from eos.dd2.table import TableSpec, build_table, solve_at_entropy
 
 @dataclass(frozen=True)
 class PointResult:
@@ -156,14 +154,16 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' — everything re-equilibrates under the perturbation:
-        the sequence sound speed c_s^2 = dP/deps along the mode's own
-        sequence, the heat capacities C_V and C_P, and the susceptibility
-        matrix chi_ab = dn_a/dmu_b for a,b in (B, C, S), all from the
-        analytic Jacobian. Implemented for beta_eq_neutrinoless.
+        the sequence sound speed at fixed T under `cs2_isothermal`, the heat
+        capacities C_V and C_P, and the susceptibility matrix
+        chi_ab = dn_a/dmu_b for a,b in (B, C, S), all from the analytic
+        Jacobian. Implemented for beta_eq_neutrinoless. The adiabatic speed,
+        larger by C_P/C_V at T > 0, is not among the returned quantities.
 
     frozen='composition' — every particle fraction held fixed (reactions
-        slow): the adiabatic c_s^2 and adiabatic index Gamma at proton
-        fraction Y_p (nucleonic matter).
+        slow): c_s^2 and the index Gamma at proton fraction Y_p (nucleonic
+        matter). This derivative is also taken at fixed T, so the composition
+        axis is what separates it from the freeze above, not the thermal one.
 
     Returns a dict of the computed quantities; raises NotImplementedError,
     naming the gap, for freezes or modes not yet wired.
@@ -177,7 +177,7 @@ def eos_response(par, mode, species, frozen="equilibrium", n_B=None, T=0.0,
         from eos.dd2.backends.responses_jac import (
             sound_speed_eq, heat_capacity_V, heat_capacity_P, susceptibilities,
         )
-        out = {"cs2_eq": sound_speed_eq(par, n_B, species, T=T),
+        out = {"cs2_isothermal": sound_speed_eq(par, n_B, species, T=T),
                "chi": susceptibilities(par, n_B, species, T=T)}
         if T > 0.0:
             out["C_V"] = heat_capacity_V(par, n_B, species, T)

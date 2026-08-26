@@ -42,7 +42,6 @@ from eos.mixed.charges import ChargeSpec, Regime
 from eos.mixed.solver import solve
 from eos.mixed.solver import sweep
 from eos.mixed.solver import build_mixed_ctx, residual, mixed_slots
-from eos.mixed.backends.jacobian import mixed_jacobian
 from eos.mixed.hybrid import build_mixed_eos_table
 
 
@@ -190,6 +189,11 @@ def _check_cross_mode(par, flags, vp, n_B=0.65):
 
 
 def _check_jacobian(par, flags, vp, n_B=0.6):
+    # Deferred, not module-scope: CLAUDE.md section 5 defines `backends/`
+    # by the property that deleting it changes no number, and a suite that
+    # imports it at module scope cannot be run without it at all.
+    from eos.mixed.backends.jacobian import mixed_jacobian
+
     worst = 0.0
     for eta in (0.0, 0.5):
         r = solve(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,

@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from eos.general.particles import Up, Down, Strange
+from eos.general.basis import quark_charges
 from eos.general import modes
 from eos.general.modes import ModeSpec
 from eos.dd2.species import hadronic_qn, hadronic_charges
@@ -154,18 +155,10 @@ QUARK_QN = {q.name: (q.baryon_no, q.charge, q.strangeness)
             for q in (Up, Down, Strange)}
 
 
-def quark_charges(n_u, n_d, n_s):
-    """(n_B, n_C, n_S) of the quark phase from the flavor densities.
-
-    n_B = (n_u+n_d+n_s)/3, n_C = (2 n_u - n_d - n_s)/3, n_S = n_s — the same
-    convention eos/vmit uses. Output units follow the input.
-    """
-    n_B = n_C = n_S = 0.0
-    for n, (B, C, S) in zip((n_u, n_d, n_s), QUARK_QN.values()):
-        n_B += B * n
-        n_C += C * n
-        n_S += S * n
-    return n_B, n_C, n_S
+# `quark_charges` is NOT redefined here. The basis change (n_u, n_d, n_s) ->
+# (n_B, n_C, n_S) is declared once, in `eos.general.basis` (CLAUDE.md section
+# 2); this re-export keeps `eos.mixed.quark_charges` working while leaving the
+# engine one function of that name in scope rather than two.
 
 
 # The hadronic quantum numbers depend only on the DD2 species set, so they live

@@ -18,65 +18,9 @@ from scipy.optimize import brentq
 
 from eos.dd2.species import SpeciesFlags, hadronic_charges
 from eos.general.state import EOSTable_for_TOV
-from eos.dd2.solver import solve, sweep, sweep
-
-
-#: Equilibrium mode -> the `solve` configuration it means. The fixed
-#: fractions are filled in from `TableSpec.fixed` at build time.
-#:
-#: The names say what the matter is, and they match the modes `eos.mixed`
-#: offers, so a purely hadronic table and a hybrid table are requested the
-#: same way:
-#:
-#:   beta_eq_neutrinoless      charge-neutral beta equilibrium, neutrinos escape
-#:   beta_eq_neutrino_trapped  ... with neutrinos trapped at fixed Y_Le
-#:   fixed_YC                  fixed non-leptonic charge fraction
-#:                             (the CompOSE general-purpose (nB, T, Y_q) slice)
-#:   fixed_YS                  charge-neutral, strangeness fraction fixed
-#:   fixed_YC_YS               both fractions fixed
-#:
-#: Whether the neutralizing leptons are present is the orthogonal `leptons`
-#: flag of CLAUDE.md section 3, carried beside the mode rather than folded
-#: into its name: with leptons=False the matter is charged, which is what a
-#: mixed-phase construction needs per pure phase before imposing global
-#: neutrality. `takes_leptons` says which mode the flag applies to.
-MODES = {
-    "beta_eq_neutrinoless": dict(charge_mode="neutral"),
-    "fixed_YC": dict(charge_mode="fixed", takes_leptons=True),
-    "fixed_YS": dict(charge_mode="neutral", strange_mode="fixed"),
-    "fixed_YC_YS": dict(charge_mode="fixed", strange_mode="fixed"),
-    "beta_eq_neutrino_trapped": dict(charge_mode="neutral",
-                                     lepton_mode="trapped"),
-}
-
-#: mode name -> the fixed fractions it consumes, either as a `TableSpec.axes`
-#: grid or as a scalar in `TableSpec.fixed`. Mirrors
-#: `eos.mixed.MODE_FRACTIONS`, which names the four modes both engines share.
-MODE_FRACTIONS = {
-    "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",), "fixed_YS": ("Y_S",),
-    "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_Le",),
-}
-
-
-def _mode_kwargs(mode, fixed, leptons=False):
-    """The `solve` keywords a mode name, its fractions and the section 3
-    `leptons` flag mean. Asking for the flag where it does not apply raises
-    rather than being quietly dropped."""
-    if mode not in MODES:
-        raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
-    kw = dict(MODES[mode])
-    if kw.pop("takes_leptons", False):
-        kw["yc_leptons"] = bool(leptons)
-    elif leptons:
-        raise ValueError(
-            f"leptons=True does not apply to mode {mode!r}; it selects the "
-            f"neutralizing leptons of fixed_YC (fixed_YC_YS with leptons is "
-            f"not wired; see docs/DEFERRED.md)")
-    for key in MODE_FRACTIONS[mode]:
-        if key not in fixed:
-            raise ValueError(f"mode {mode!r} needs fixed[{key!r}]")
-        kw[key] = fixed[key]
-    return kw
+from eos.dd2.solver import (
+    solve, sweep, MODES, MODE_FRACTIONS, _mode_kwargs,
+)
 
 
 def hadronic_row(p, flags):
@@ -284,10 +228,13 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
                     line.append(p)
                     x0 = warm_start(p, has_phi, has_muS, has_muL)
             points.append(line)
+            # `fracs` is the FULL set the line was solved at, swept and
+            # fixed alike (CLAUDE.md section 5); `combos` records only the
+            # swept keys, because that is the grid axis order it indexes.
             if progress is not None:
                 progress(dict(mode=spec.mode, line=len(points),
                               n_lines=n_lines, temp_key=spec._temp_key,
-                              temp=float(tv), fracs=combos[-1][1],
+                              temp=float(tv), fracs=dict(fracs),
                               n_solved=len(line), n_requested=len(nB),
                               elapsed_s=time.time() - t_line))
 
@@ -350,7 +297,7 @@ def build_core_table(par, flags, n_lo=0.05, n_hi=1.25, n_points=150):
 
 
 if __name__ == "__main__":
-    from eos.dd2 import Parameters
+    from eos.dd2.parameters import Parameters
     spec = TableSpec(
         parametrization=Parameters.named("DD2Y"),
         mode="beta_eq_neutrinoless",

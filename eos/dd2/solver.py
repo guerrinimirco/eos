@@ -846,6 +846,64 @@ def solve(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
     )
 
 
+#: Equilibrium mode -> the `solve` configuration it means. The fixed
+#: fractions are filled in from `TableSpec.fixed` at build time.
+#:
+#: The names say what the matter is, and they match the modes `eos.mixed`
+#: offers, so a purely hadronic table and a hybrid table are requested the
+#: same way:
+#:
+#:   beta_eq_neutrinoless      charge-neutral beta equilibrium, neutrinos escape
+#:   beta_eq_neutrino_trapped  ... with neutrinos trapped at fixed Y_Le
+#:   fixed_YC                  fixed non-leptonic charge fraction
+#:                             (the CompOSE general-purpose (nB, T, Y_q) slice)
+#:   fixed_YS                  charge-neutral, strangeness fraction fixed
+#:   fixed_YC_YS               both fractions fixed
+#:
+#: Whether the neutralizing leptons are present is the orthogonal `leptons`
+#: flag of CLAUDE.md section 3, carried beside the mode rather than folded
+#: into its name: with leptons=False the matter is charged, which is what a
+#: mixed-phase construction needs per pure phase before imposing global
+#: neutrality. `takes_leptons` says which mode the flag applies to.
+MODES = {
+    "beta_eq_neutrinoless": dict(charge_mode="neutral"),
+    "fixed_YC": dict(charge_mode="fixed", takes_leptons=True),
+    "fixed_YS": dict(charge_mode="neutral", strange_mode="fixed"),
+    "fixed_YC_YS": dict(charge_mode="fixed", strange_mode="fixed"),
+    "beta_eq_neutrino_trapped": dict(charge_mode="neutral",
+                                     lepton_mode="trapped"),
+}
+
+#: mode name -> the fixed fractions it consumes, either as a `TableSpec.axes`
+#: grid or as a scalar in `TableSpec.fixed`. Mirrors
+#: `eos.mixed.MODE_FRACTIONS`, which names the four modes both engines share.
+MODE_FRACTIONS = {
+    "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",), "fixed_YS": ("Y_S",),
+    "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_Le",),
+}
+
+
+def _mode_kwargs(mode, fixed, leptons=False):
+    """The `solve` keywords a mode name, its fractions and the section 3
+    `leptons` flag mean. Asking for the flag where it does not apply raises
+    rather than being quietly dropped."""
+    if mode not in MODES:
+        raise ValueError(f"unknown mode {mode!r}; expected one of {list(MODES)}")
+    kw = dict(MODES[mode])
+    if kw.pop("takes_leptons", False):
+        kw["yc_leptons"] = bool(leptons)
+    elif leptons:
+        raise ValueError(
+            f"leptons=True does not apply to mode {mode!r}; it selects the "
+            f"neutralizing leptons of fixed_YC (fixed_YC_YS with leptons is "
+            f"not wired; see docs/DEFERRED.md)")
+    for key in MODE_FRACTIONS[mode]:
+        if key not in fixed:
+            raise ValueError(f"mode {mode!r} needs fixed[{key!r}]")
+        kw[key] = fixed[key]
+    return kw
+
+
 def solve_beta_eq_neutrinoless(par, n_B, flags, T=0.0, x0=None,
                         include_photons=True, check_consistency=True,
                         analytic_jac=True):
@@ -878,7 +936,6 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
     A thin dispatcher over `solve`, which implements every mode; this
     only turns the mode name into its argument set. Returns an `EoSPoint`.
     """
-    from eos.dd2.table import _mode_kwargs
     return solve(par, n_B, flags, T=T, x0=x0,
                        analytic_jac=analytic_jac,
                        check_consistency=check_consistency,

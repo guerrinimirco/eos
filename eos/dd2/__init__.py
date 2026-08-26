@@ -21,13 +21,15 @@ from eos.dd2.solver import (
     solve_composition, solve_composition_t0,
     solve_snm, solve_snm_t0,
 )
+from eos.dd2.solver import MODES, MODE_FRACTIONS
 from eos.dd2.table import (
     TableSpec, TableResult, build_table, solve_at_entropy,
-    MODES, MODE_FRACTIONS, hadronic_row, rows_from_result,
+    hadronic_row, rows_from_result,
 )
 from eos.general.table_io import save_table, load_table, export_csv
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
+from eos.dd2.nmp import from_hyperon_potentials, from_delta_potential
 from eos.dd2.responses import (
     sound_speed_eq, sound_speed_adiabatic, adiabatic_index, thermal_index,
     heat_capacity_V, snm_sound_speed,
@@ -47,6 +49,7 @@ __all__ = [
     "Parameters", "SpeciesFlags", "active_baryons",
     "hadronic_qn", "hadronic_charges",
     "invert_nmp", "from_nmp", "InversionStatus",
+    "from_hyperon_potentials", "from_delta_potential",
     "EoSPoint", "nucleon_warm_start", "warm_start",
     "solve_beta_eq", "solve_beta_eq_t0",
     "solve", "solve_beta_eq_neutrinoless", "solve_fixed_yc",

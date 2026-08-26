@@ -333,10 +333,13 @@ def build_table(spec: TableSpec, skip_errors: bool = False,
                     line.append(r)
             points.append(line)
             previous_line = line
+            # `fracs` is the FULL set the line was solved at, swept and
+            # fixed alike (CLAUDE.md section 5); `combos` records only the
+            # swept keys, because that is the grid axis order it indexes.
             if progress is not None:
                 progress(dict(mode=spec.mode, line=len(points),
                               n_lines=n_lines, temp_key=spec._temp_key,
-                              temp=float(tv), fracs=combos[-1][1],
+                              temp=float(tv), fracs=dict(fracs),
                               n_solved=sum(1 for r in line if r.converged),
                               n_requested=len(nB),
                               elapsed_s=time.time() - t_line))

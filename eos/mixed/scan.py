@@ -70,8 +70,9 @@ import time
 
 import numpy as np
 
-from eos.dd2.nmp import from_nmp
-from eos.dd2.parameters import Parameters
+from eos.dd2.nmp import (
+    from_nmp, from_hyperon_potentials, from_delta_potential,
+)
 from eos.dd2.solver import sweep
 from eos.vmit.parameters import get_vmit_custom
 from eos.mixed.charges import beta_eq_neutrinoless
@@ -166,10 +167,10 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
         return None, "inversion_failed", status.message
     try:
         if flags.hyperons:
-            par = Parameters.from_hyperon_potentials(
+            par = from_hyperon_potentials(
                 base=par, **sector["hyperon_potentials"])
         if flags.deltas:
-            par = Parameters.from_delta_potential(
+            par = from_delta_potential(
                 U_Delta=sector["U_Delta"], x_wD=sector["x_wD"],
                 x_rD=sector["x_rD"], base=par)
     except Exception as exc:

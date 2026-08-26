@@ -104,13 +104,17 @@ the finite-difference bias cancels exactly on a round trip; any change to h
 must be made in both places together or the round trip stops reproducing its
 own inputs. The same applies to the predicted Q_sat this module reports.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 from scipy.optimize import brentq, root
 
 from eos.general.physics_constants import hc3
-from eos.dd2.couplings import rational_d2f, derived_a, derived_d
+from eos.dd2.couplings import (
+    rational_d2f, derived_a, derived_d,
+    SU6_HYPERON, DD2Y_HYPERON, _POTENTIAL_KEY,
+    scalar_ratio_from_potential,
+)
 from eos.dd2.parameters import Parameters
 from eos.dd2.thermodynamics import kF_from_n
 from eos.dd2.solver import solve_snm, solve_snm_t0
@@ -424,7 +428,6 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
             n_sat=n_sat, gamma_sigma=Gs, b_sigma=bS, c_sigma=cS,
             gamma_omega=Gw, b_omega=bW, c_omega=cW,
             gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
-        from eos.dd2.nmp import esym
         dEs = (esym(p, n_sat + 1e-4) - esym(p, n_sat - 1e-4)) / 2e-4
         return 3.0 * n_sat * dEs
 
@@ -438,7 +441,6 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
 
     # --- report what the closure predicts, with the forward map's stencils --
-    from eos.dd2.nmp import esym
     q_final = _isoscalar_quantities(par, n_sat, want_Q=True)
     h = 1e-4
     d2Es = (esym(par, n_sat + h) - 2 * esym(par, n_sat)
@@ -466,8 +468,75 @@ def from_nmp(nmp, m_sigma=546.212459, return_status=False):
     InversionStatus) when `return_status`.
 
     The hyperon and Delta sectors attach on top of the result through
-    `Parameters.from_hyperon_potentials` / `from_delta_potential`, once the
+    `from_hyperon_potentials` / `from_delta_potential` below, once the
     nucleon sector is set; they are not folded in here.
     """
     par, status = invert_nmp(nmp, m_sigma=m_sigma)
     return (par, status) if return_status else par
+
+
+# ==========================================================================
+# THE HYPERON AND DELTA SECTORS FROM THEIR SINGLE-PARTICLE POTENTIALS
+# ==========================================================================
+# Free functions rather than classmethods on `Parameters`, and here rather
+# than in `parameters.py`, for the reason stated at the top of this module:
+# both invert a potential by re-solving symmetric nuclear matter at
+# saturation, so both sit ABOVE `solver.py` in the layer order, while
+# `parameters.py` is its bottom (CLAUDE.md section 5).
+
+def from_hyperon_potentials(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
+                            base=None):
+    """
+    Nucleon + hyperon octet with SU(6) vector couplings and scalar couplings
+    *inverted* from the hyperon potentials U_Y in SNM at saturation (report
+    §2.4b). This is the mechanism that regenerates the DD2Y R_sigma table
+    (U_Xi = -18) and the route for non-DD2Y potentials. Hyperon masses
+    default to the DD2Y (Marques) values.
+
+    base: an existing Parameters to attach the hyperon sector to (e.g.
+    an NMP-inverted nucleon par, so NMP + hyperons compose); defaults to
+    nucleonic DD2. The scalar inversion re-solves SNM on ``base``, so it
+    adapts to that par's nucleon couplings automatically.
+    """
+    base = replace(base if base is not None else Parameters.default(),
+                   U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
+    sat = solve_snm(base, base.n_sat)
+    Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
+    U_map = {"U_Lambda": U_Lambda, "U_Sigma": U_Sigma, "U_Xi": U_Xi}
+
+    rows = []
+    for name, su6 in SU6_HYPERON.items():
+        x_sigma = scalar_ratio_from_potential(
+            U_map[_POTENTIAL_KEY[name]], su6["x_omega"], Gs_sat, Gw_sat,
+            sat.matter.fields["sigma"], sat.matter.fields["omega0"],
+            sat.matter.Sigma_R)
+        rows.append((name, DD2Y_HYPERON[name]["mass"], x_sigma,
+                     su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
+    return replace(base, hyperon_couplings=tuple(rows))
+
+
+def from_delta_potential(U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
+    """
+    Δ-isobar couplings from the Δ single-particle potential in SNM at
+    saturation (report v11 §2.4). There is no canonical DD2Δ coupling
+    table, so the default is universal coupling (x_Δσ = x_Δω = x_Δρ = 1);
+    this constructor instead fixes x_Δσ by inverting
+
+        U_Δ = -x_Δσ Γ_σN σ̄ + x_Δω Γ_ωN ω0 + Σ^R      (all at n_sat)
+
+    for a chosen Δ potential (literature U_Δ ∈ [-100, -50] MeV, default -50)
+    and vector ratios x_wD, x_rD. base: an existing Parameters to attach
+    the Δ sector to (e.g. a DD2Y octet); defaults to nucleonic DD2.
+    """
+    if not (-100.0 <= U_Delta <= -50.0):
+        raise ValueError(
+            f"U_Delta = {U_Delta} MeV outside the literature range "
+            f"[-100, -50]; pass an explicit value in range or widen it")
+    base = base or Parameters.default()
+    sat = solve_snm(base, base.n_sat)
+    Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
+    x_Delta_sigma = scalar_ratio_from_potential(
+        U_Delta, x_wD, Gs_sat, Gw_sat, sat.matter.fields["sigma"],
+        sat.matter.fields["omega0"], sat.matter.Sigma_R)
+    return replace(base, x_Delta_sigma=x_Delta_sigma,
+                   x_Delta_omega=x_wD, x_Delta_rho=x_rD)

@@ -154,10 +154,14 @@ def eos_table(par, mode="cfl", species=None, axes=None, rows=False,
 
     There is no warm start and no bisected continuation here, and their
     absence is the physics rather than a gap: the density inverse is a closed
-    form (`eos.abpr.solver.mu_from_nB`), so no point needs its neighbour and
-    the grid is evaluated by array arithmetic. Nor is there a skip_errors
-    flag: a request outside the phase is a property of the target, not of a
-    solve that might have gone better from a different start.
+    form (`eos.abpr.solver.mu_from_nB`), so no point needs its neighbour. The
+    grid is nevertheless walked point by point -- `solve_cfl` takes one scalar
+    density and returns one `CFLPoint`, and this loops it over `nB`. Every
+    point being independent, genuine array-in/array-out (CLAUDE.md section 6)
+    is reachable for this model and for no other; it is a change to the solver
+    signature, not to this driver, and it has not been made. Nor is there a
+    skip_errors flag: a request outside the phase is a property of the target,
+    not of a solve that might have gone better from a different start.
 
     progress : callable, invoked once per completed line -- there is one --
         with the dict every table builder in this repository reports:

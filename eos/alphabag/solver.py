@@ -42,6 +42,7 @@ from eos.general.thermodynamics_leptons import (
     photon_thermo,
 )
 from eos.alphabag.parameters import Parameters
+from eos.general.basis import quark_charges
 from eos.alphabag.thermodynamics import (
     cfl_n_correction, cfl_thermo_from_mu, gluon_thermo, quark_density,
     thermo_from_mu,
@@ -437,8 +438,7 @@ def solve_beta_eq_neutrinoless(
         n_s = quark_density(mu_s, T, m_s, alpha)
         n_e = electron_thermo(mu_e, T).n
 
-        n_B_calc = (n_u + n_d + n_s) / 3.0
-        n_C = (2.0/3.0)*n_u - (1.0/3.0)*n_d - (1.0/3.0)*n_s
+        n_B_calc, n_C, _ = quark_charges(n_u, n_d, n_s)
 
         return [
             n_B_calc - n_B,
@@ -517,8 +517,7 @@ def solve_beta_eq_neutrino_trapped(
         n_e = electron_thermo(mu_e, T).n
         n_nu = neutrino_thermo(mu_nu, T).n
 
-        n_B_calc = (n_u + n_d + n_s) / 3.0
-        n_C = (2.0/3.0)*n_u - (1.0/3.0)*n_d - (1.0/3.0)*n_s
+        n_B_calc, n_C, _ = quark_charges(n_u, n_d, n_s)
 
         return [
             n_B_calc - n_B,
@@ -609,8 +608,7 @@ def solve_fixed_yc(
         n_d = quark_density(mu_d, T, m_d, alpha)
         n_s = quark_density(mu_s, T, m_s, alpha)
 
-        n_B_calc = (n_u + n_d + n_s) / 3.0
-        n_C = (2.0/3.0)*n_u - (1.0/3.0)*n_d - (1.0/3.0)*n_s
+        n_B_calc, n_C, _ = quark_charges(n_u, n_d, n_s)
         Y_C_calc = n_C / n_B_calc if n_B_calc > 0 else 0.0
 
         return [
@@ -696,8 +694,7 @@ def solve_fixed_yc_ys(
         n_d = quark_density(mu_d, T, m_d, alpha)
         n_s = quark_density(mu_s, T, m_s, alpha)
 
-        n_B_calc = (n_u + n_d + n_s) / 3.0
-        n_C = (2.0/3.0)*n_u - (1.0/3.0)*n_d - (1.0/3.0)*n_s
+        n_B_calc, n_C, _ = quark_charges(n_u, n_d, n_s)
         Y_C_calc = n_C / n_B_calc if n_B_calc > 0 else 0.0
         Y_S_calc = n_s / n_B_calc if n_B_calc > 0 else 0.0
 
@@ -742,7 +739,7 @@ def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
     n_u = quark_density(mu_u, T, params.m_u, alpha)
     n_d = quark_density(mu_d, T, params.m_d, alpha)
     n_s = quark_density(mu_s, T, params.m_s, alpha)
-    n_C = (2.0/3.0)*n_u - (1.0/3.0)*n_d - (1.0/3.0)*n_s
+    _, n_C, _ = quark_charges(n_u, n_d, n_s)
 
     # A warm start carrying a fourth entry brought mu_e with it.
     mu_e_guess = None

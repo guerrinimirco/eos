@@ -220,7 +220,7 @@ class Parameters:
         density-dependent, inheriting f_omega (B4): Γ_phiY(n_B) = x_phi ·
         Γ_omegaN(n_B). This is the bit-exact DD2Y validation setting.
 
-        For non-DD2Y potentials, use from_hyperon_potentials().
+        For non-DD2Y potentials, use `eos.dd2.nmp.from_hyperon_potentials`.
         """
         from dataclasses import replace
         rows = []
@@ -231,69 +231,6 @@ class Parameters:
         return replace(cls.default(),
                        hyperon_couplings=tuple(rows))
 
-    @classmethod
-    def from_hyperon_potentials(cls, U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
-                                base=None):
-        """
-        Nucleon + hyperon octet with SU(6) vector couplings and scalar couplings
-        *inverted* from the hyperon potentials U_Y in SNM at saturation (report
-        §2.4b). This is the mechanism that regenerates the DD2Y R_sigma table
-        (U_Xi = -18) and the route for non-DD2Y potentials. Hyperon masses
-        default to the DD2Y (Marques) values.
-
-        base: an existing Parameters to attach the hyperon sector to (e.g.
-        an NMP-inverted nucleon par, so NMP + hyperons compose); defaults to
-        nucleonic DD2. The scalar inversion re-solves SNM on ``base``, so it
-        adapts to that par's nucleon couplings automatically.
-        """
-        from dataclasses import replace
-        from eos.dd2.solver import solve_snm  # local import breaks the cycle
-
-        base = replace(base if base is not None else cls.default(),
-                       U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
-        sat = solve_snm(base, base.n_sat)
-        Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
-        U_map = {"U_Lambda": U_Lambda, "U_Sigma": U_Sigma, "U_Xi": U_Xi}
-
-        rows = []
-        for name, su6 in SU6_HYPERON.items():
-            x_sigma = scalar_ratio_from_potential(
-                U_map[_POTENTIAL_KEY[name]], su6["x_omega"], Gs_sat, Gw_sat,
-                sat.matter.fields["sigma"], sat.matter.fields["omega0"],
-                sat.matter.Sigma_R)
-            rows.append((name, DD2Y_HYPERON[name]["mass"], x_sigma,
-                         su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
-        return replace(base, hyperon_couplings=tuple(rows))
-
-    @classmethod
-    def from_delta_potential(cls, U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
-        """
-        Δ-isobar couplings from the Δ single-particle potential in SNM at
-        saturation (report v11 §2.4). There is no canonical DD2Δ coupling
-        table, so the default is universal coupling (x_Δσ = x_Δω = x_Δρ = 1);
-        this constructor instead fixes x_Δσ by inverting
-
-            U_Δ = -x_Δσ Γ_σN σ̄ + x_Δω Γ_ωN ω0 + Σ^R      (all at n_sat)
-
-        for a chosen Δ potential (literature U_Δ ∈ [-100, -50] MeV, default -50)
-        and vector ratios x_wD, x_rD. base: an existing Parameters to attach
-        the Δ sector to (e.g. a DD2Y octet); defaults to nucleonic DD2.
-        """
-        from dataclasses import replace
-        from eos.dd2.solver import solve_snm  # local import breaks the cycle
-
-        if not (-100.0 <= U_Delta <= -50.0):
-            raise ValueError(
-                f"U_Delta = {U_Delta} MeV outside the literature range "
-                f"[-100, -50]; pass an explicit value in range or widen it")
-        base = base or cls.default()
-        sat = solve_snm(base, base.n_sat)
-        Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
-        x_Delta_sigma = scalar_ratio_from_potential(
-            U_Delta, x_wD, Gs_sat, Gw_sat, sat.matter.fields["sigma"],
-            sat.matter.fields["omega0"], sat.matter.Sigma_R)
-        return replace(base, x_Delta_sigma=x_Delta_sigma,
-                       x_Delta_omega=x_wD, x_Delta_rho=x_rD)
 
 def _check_dd2_defaults():
     """Standalone ingest check, mirrors the M0 gate."""
