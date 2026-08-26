@@ -1132,22 +1132,12 @@ save_figure(fig, str(FIG_DIR / "mass_lambda"))
 # which one was computed, because at `T > 0` they are different numbers and a
 # bare `c_s^2` would mean whichever the arguments happened to select.
 #
-# The four models do not spell the key alike: `sfho` and `did` return
-# `cs2_isothermal` (and `did` also `cs2_adiabatic`), while `zl` and `dd2` return
-# `cs2_eq` — a name for the *freeze* rather than for the thermal variable. The
-# quantity is the same one at fixed `T`; the cell below takes whichever key the
-# model returns and prints which it took.
+# All four models spell the key `cs2_isothermal`, naming the thermal variable
+# the derivative was taken at. The composition axis is not part of the key: it
+# is the `frozen='equilibrium'` these calls pass, under which nothing is held
+# and the composition re-equilibrates. `did` returns `cs2_adiabatic` beside it.
 
 # %%
-def sound_speed(out):
-    """(value, key) — the isothermal sound speed under whichever name the
-    model returned it. `cs2_eq` is `zl`'s and `dd2`'s spelling of it."""
-    for key in ("cs2_isothermal", "cs2_eq"):
-        if key in out:
-            return float(out[key]), key
-    raise KeyError(f"no sound speed in {sorted(out)}")
-
-
 header("sound speed")
 cs2_curves = {}
 for sector, flags in FIG_SECTORS:
@@ -1169,7 +1159,7 @@ for sector, flags in FIG_SECTORS:
             continue
         par, species = prepared
 
-        densities, values, keys = [], [], set()
+        densities, values = [], []
         for n_B in FIG_CS2_N_B:
 
             def respond(n_B=float(n_B)):
@@ -1179,15 +1169,13 @@ for sector, flags in FIG_SECTORS:
             status, out = run(f"{name} {sector}", respond)
             if status != "ok" or not out.get("converged", True):
                 continue
-            value, key = sound_speed(out)
             densities.append(float(n_B))
-            values.append(value)
-            keys.add(key)
+            values.append(float(out["cs2_isothermal"]))
         if not densities:
             continue
         cs2_curves[(name, sector)] = (np.array(densities), np.array(values))
         print(f"  [{name:5s} {sector:16s}] {len(densities):2d} points, "
-              f"key {'/'.join(sorted(keys))}, max {max(values):.3f}")
+              f"max {max(values):.3f}")
 
 # %%
 fig, axes = sector_grid()

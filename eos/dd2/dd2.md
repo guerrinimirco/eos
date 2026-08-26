@@ -301,7 +301,7 @@ freezes are implemented; every other combination raises
 `beta_eq_neutrinoless` only, and computed from the ANALYTIC Jacobian rather
 than by differencing solved points:
 
-    cs2_eq   c_s^2 = dP/deps along the mode's own sequence     always
+    cs2_isothermal   c_s^2 = dP/deps along the mode's own sequence     always
     chi      chi_ab = dn_a/dmu_b for a,b in (B, C, S)          always
     C_V      (T/n_B)(ds/dT)_n_B                                T > 0 only
     C_P      (T/n_B)(ds/dT)_P                                  T > 0 only
@@ -317,11 +317,15 @@ among `n_B, T, Y_C, Y_S, Y_Le`. It returns the adiabatic sound speed and the
 adiabatic index `Gamma` at that proton fraction, for nucleonic matter.
 
 Raising: `frozen='equilibrium'` in any mode but `beta_eq_neutrinoless`; the
-frozen conserved fractions; the leptonic re-neutralization variants. A
-returned name says which thermal variable is held — `cs2_eq` is the
-equilibrium sound speed along the sequence, the `composition` freeze's is the
-adiabatic one, and the two differ at T > 0 by `C_P/C_V`, which is why nothing
-here is called a bare `cs2`.
+frozen conserved fractions; the leptonic re-neutralization variants.
+
+A returned name says which thermal variable is held, which is why nothing here
+is called a bare `cs2`. Both freezes hold `T`, so both give an isothermal
+speed, and what separates them is the composition axis — the `frozen=`
+argument, not the key: `frozen='equilibrium'` differentiates along the mode's
+own sequence, `frozen='composition'` at frozen particle fractions. The
+adiabatic speed, larger by `C_P/C_V` at T > 0, is not computed by this model;
+`docs/DEFERRED.md` records the gap.
 
 **The API surface.** `eos_point(par, mode, species, n_B=, T= | SnB=, ...)`,
 `eos_table(par, mode, species, axes, ..., progress=, verbose=)` and

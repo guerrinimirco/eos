@@ -819,8 +819,10 @@ C_V = \frac{T}{\nB} \left.\frac{\partial s}{\partial T}\right|_{\nB}
 \label{eq:response}
 \end{equation}
 %
-returned under the keys \texttt{cs2\_eq} and \texttt{C\_V}, the latter only at
-$T > 0$ where it is defined. Every other freeze of the specification --- frozen
+returned under the keys \texttt{cs2\_isothermal} and \texttt{C\_V}, the
+latter only at $T > 0$ where it is defined. The adiabatic speed, larger by
+$C_P/C_V$ at $T > 0$, is not computed by this model: $C_P$ is not among the
+returned quantities, so there is no factor to form it with. Every other freeze of the specification --- frozen
 per-species composition, frozen conserved fractions, the leptonic
 re-neutralization variants, and the susceptibility matrix
 $\chi_{ab} = \partial n_a / \partial \mu_b$ --- raises

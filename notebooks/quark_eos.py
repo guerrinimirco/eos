@@ -578,28 +578,22 @@ plt.show()
 # ### 6.3 The speed of sound, under the name that says which one it is
 #
 # A second derivative is only defined once one says what is held fixed, so the
-# library never returns a bare `cs2`. The four models do not, however, spell the
-# answer the same way, and the notebook has to read three keys:
-#
-# * `njl` and `ccdm` return `cs2_isothermal` and `cs2_adiabatic` — named for the
-#   **thermal** variable held, which is the axis the library's own description
-#   names.
-# * `vmit` and `alphabag` return `cs2_eq` — named for the **composition** axis
-#   instead (everything re-equilibrates), leaving the thermal variable unsaid
-#   although the derivative is in fact taken at fixed `T`.
+# library never returns a bare `cs2`. All four models spell the key
+# `cs2_isothermal`, which names the **thermal** variable the derivative was
+# taken at; `njl` and `ccdm` return `cs2_adiabatic` beside it. The composition
+# axis is not part of the key — it is the `frozen='equilibrium'` these calls
+# pass, under which nothing is held and the composition re-equilibrates.
 #
 # The curve below is drawn at the cold end of the temperature grid, `T = 0`,
-# where the isothermal and adiabatic sound speeds coincide — which is why the
-# three keys can share one axis here and only here. The panel is labelled for
-# what was computed, not for the shortest name.
+# where the isothermal and adiabatic sound speeds coincide — which is why one
+# axis carries both here and only here. The panel is labelled for what was
+# computed, not for the shortest name.
 #
 # The response is asked for only at the densities where that model's own table
 # converged, so a model is never asked to differentiate through a state it could
 # not find.
 
 # %%
-CS2_KEYS = ("cs2_isothermal", "cs2_eq")
-
 fig, axes = fs.paper_grid("1x3", "double", aspect=1.1, placeholder=False,
                           fontsize=10, labelsize=9, legendsize=8)
 ax_cs, ax_frac, ax_lep = axes.ravel()
@@ -607,7 +601,7 @@ ax_cs, ax_frac, ax_lep = axes.ravel()
 header("sound speed at T = 0")
 for name in KNOBS.models:
     n_grid, = line(name, FIG_MODE, COLD, "n_B")
-    n_ok, cs2, key = [], [], None
+    n_ok, cs2 = [], []
     for n_B in n_grid:
 
         def respond(model_name=name, n_B=float(n_B)):
@@ -624,13 +618,9 @@ for name in KNOBS.models:
             print(f"  [{name} n_B={n_B:.2f}] did not converge: "
                   f"{out.get('reason', '')}")
             continue
-        key = next((k for k in CS2_KEYS if k in out), None)
-        if key is None:
-            print(f"  [{name}] no sound speed in {sorted(out)}")
-            continue
         n_ok.append(float(n_B))
-        cs2.append(float(out[key]))
-    print(f"  [{name}] {len(n_ok)}/{n_grid.size} responses, key={key!r}")
+        cs2.append(float(out["cs2_isothermal"]))
+    print(f"  [{name}] {len(n_ok)}/{n_grid.size} responses")
     if n_ok:
         ax_cs.plot(n_ok, cs2, "-", color=MODEL_COLOR[name], label=name)
 
@@ -2172,10 +2162,9 @@ for name in CSC_MODELS:
 # would give a chord over a first-order jump rather than a tangent, which is a
 # number with no meaning.
 #
-# The key is read the same way section 6.3 reads it: whichever of
-# `cs2_isothermal` / `cs2_eq` the model returns, and the panel is labelled for
-# what was computed. Both models here return `cs2_isothermal`, and at the cold
-# end of the grid it coincides with `cs2_adiabatic`.
+# The key is read the same way section 6.3 reads it: `cs2_isothermal`, with the
+# panel labelled for what was computed. At the cold end of the grid it coincides
+# with `cs2_adiabatic`, which both models here return beside it.
 #
 # This is the slowest cell of the section: each response is a re-solved finite
 # difference, so it is several full solves per number.
@@ -2200,13 +2189,9 @@ for name in CSC_MODELS:
                 print(f"  [{name} {pattern} n_B={n_B:.2f}] did not converge: "
                       f"{out.get('reason', '')}")
                 continue
-            key = next((k for k in CS2_KEYS if k in out), None)
-            if key is None:
-                print(f"  [{name} {pattern}] no sound speed in {sorted(out)}")
-                continue
-            csc_cs2[(name, pattern, n_B)] = (float(out[key]), key)
+            csc_cs2[(name, pattern, n_B)] = float(out["cs2_isothermal"])
             print(f"  [{name:5s} {pattern:8s} n_B={n_B:.2f}] "
-                  f"{key} = {out[key]:.5f}"
+                  f"cs2_isothermal = {out['cs2_isothermal']:.5f}"
                   + ("   (stencil crossed a branch or pattern change)"
                      if out.get("branch_changed") else ""))
 
@@ -2256,14 +2241,12 @@ ax_lepton.legend(loc="lower left", title="pattern:")
 fs.apply_style(ax_lepton, legend=False, minor_ticks=False)
 fs.panel_label(ax_lepton, "(b)", corner='upper right')
 
-sound_key = None
 for name in CSC_MODELS:
     for pattern in CSC_PATTERNS:
-        got = [(n, csc_cs2[(name, pattern, n)][0]) for n in CSC_CS2_N_B
+        got = [(n, csc_cs2[(name, pattern, n)]) for n in CSC_CS2_N_B
                if (name, pattern, n) in csc_cs2]
         if not got:
             continue
-        sound_key = csc_cs2[(name, pattern, got[0][0])][1]
         ax_sound.plot([g[0] for g in got], [g[1] for g in got],
                       MODEL_DASH[name] + "o", color=PATTERN_COLOR[pattern],
                       ms=3, label=(name if pattern == "unpaired" else None))
@@ -2271,7 +2254,7 @@ ax_sound.axhline(1.0 / 3.0, color="0.6", lw=0.6, ls=":", zorder=0)
 ax_sound.text(0.02, 1.0 / 3.0, r"$1/3$", va="bottom", ha="left", fontsize=8,
               color="0.4", transform=ax_sound.get_yaxis_transform())
 ax_sound.set_xlabel(r"$n_B$ [fm$^{-3}$]")
-ax_sound.set_ylabel(rf"$c_s^2$ ({sound_key or 'not computed'})")
+ax_sound.set_ylabel(r"$c_s^2$ (isothermal)")
 ax_sound.set_ylim(0.0, 0.7)
 ax_sound.legend(loc="lower right", title="solid / dashed:")
 fs.apply_style(ax_sound, legend=False)

@@ -294,8 +294,12 @@ always first and the mode always required:
 quantities are central differences over a relative step `rel_step` (default
 1e-3) in the variable differentiated:
 
-    cs2_eq = (dP/deps)_T                     key `cs2_eq`
-    C_V    = (T/n_B) (ds/dT)_n_B             key `C_V`, at T > 0 only
+    cs2_isothermal = (dP/deps)_T             always
+    C_V            = (T/n_B) (ds/dT)_n_B     at T > 0 only
+
+The adiabatic speed, larger by `C_P/C_V` at T > 0, is not computed by this
+model: `C_P` is not among the returned quantities, so there is no factor to
+form it with.
 
 Every other freeze — frozen composition, frozen conserved fractions, the
 leptonic re-neutralization variants — and the susceptibility matrix `chi_ab`

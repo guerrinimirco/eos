@@ -588,9 +588,18 @@ slow limit, where imposing every equilibrium but beta collapses them to Y_C.
 A second, orthogonal axis is missing entirely: the thermal condition. Every
 `eos_response` in the repository differentiates at fixed T, while the adiabatic
 sound speed of the CompOSE manual and of that paper is taken at fixed entropy
-per baryon. At T = 0 they agree; at T = 50 MeV they do not. Returned names
-should say which — `cs2_isothermal` against `cs2_adiabatic`, never a bare
-`cs2` whose meaning depends on the arguments.
+per baryon. At T = 0 they agree; at T = 50 MeV they do not.
+
+The NAMING half of that is now closed across the ten models: every one returns
+`cs2_isothermal`, and `did`, `njl`, `ccdm` and `sfho` return `cs2_adiabatic`
+beside it, derived through C_P/C_V. What remains is that `zl`, `vmit`,
+`alphabag` and `dd2` return no adiabatic speed at all — the first three carry
+no C_P to form it with, and dd2 carries both heat capacities but does not
+assemble it. Two surfaces also still spell the pair for the composition axis
+rather than the thermal one: `mixed.eos_response` returns `cs2_eq`/`cs2_frozen`,
+and `astro/gmode` takes `cs2_eq`/`cs2_ad` as argument and background-field
+names. Those two share the `sound_speed_eq` / `sound_speed_frozen` vocabulary of
+`mixed/responses.py` and are one rename, not two.
 
 ---
 

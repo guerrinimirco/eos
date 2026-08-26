@@ -569,14 +569,16 @@ so the derivatives are taken along the mode's own sequence. Both are central
 differences over a relative step `rel_step` (default 1e-3) in the variable
 differentiated, because vMIT has no analytic Jacobian in this repository:
 
-    cs2_eq = (dP/deps)_T
+    cs2_isothermal = (dP/deps)_T
            ~ [P(n_B+d) - P(n_B-d)] / [eps(n_B+d) - eps(n_B-d)]
 
     C_V    = (T/n_B) (ds/dT)_n_B
            ~ (T/n_B) [s(T+dT) - s(T-dT)] / (2 dT)
 
-returned under the keys `cs2_eq` and `C_V`, the latter only at T > 0 where it
-is defined. Every other freeze of the specification — frozen per-species
+returned under the keys `cs2_isothermal` and `C_V`, the latter only at T > 0
+where it is defined. The adiabatic speed, larger by `C_P/C_V` at T > 0, is not
+computed by this model: `C_P` is not among the returned quantities, so there is
+no factor to form it with. Every other freeze of the specification — frozen per-species
 composition, frozen conserved fractions, the leptonic re-neutralization
 variants — and the susceptibility matrix `chi_ab = dn_a/dmu_b` raise
 `NotImplementedError` naming the gap.

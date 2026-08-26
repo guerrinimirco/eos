@@ -180,13 +180,18 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     frozen='equilibrium' -- everything re-equilibrates under the perturbation,
         so the derivatives are taken along the mode's own sequence:
 
-            cs2_eq = dP/deps   along the sequence at fixed T
-            C_V    = (T/n_B) ds/dT   at fixed n_B
+            cs2_isothermal = dP/deps          at fixed T, along the
+                                              mode's own sequence
+            C_V            = (T/n_B) ds/dT    at fixed n_B
 
         Both by central differences over a relative step `rel_step` in the
         variable differentiated, since alphaBag's residual has no analytic
         Jacobian in this repository. C_V is returned only at T > 0, where it
         is defined.
+
+        The adiabatic speed, larger by C_P/C_V at T > 0, is NOT computed:
+        C_P is not among the returned quantities, so there is no factor to
+        form it with. `docs/DEFERRED.md` records the gap.
 
     Returns a dict of the computed quantities, plus `converged` and `reason`.
     A stencil point the equilibrium solver cannot reach is NOT an exception:
@@ -216,7 +221,7 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     dn = rel_step * n_B
     try:
         lo, hi = state(n_B - dn, T), state(n_B + dn, T)
-        out = {"cs2_eq": (hi.P_total - lo.P_total) / (hi.e_total - lo.e_total)}
+        out = {"cs2_isothermal": (hi.P_total - lo.P_total) / (hi.e_total - lo.e_total)}
 
         if T > 0.0:
             dT = rel_step * T
@@ -224,7 +229,7 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
             out["C_V"] = T * (hot.s_total - cold.s_total) / (2.0 * dT) / n_B
     except RuntimeError as err:
         return unconverged_response(
-            str(err), ("cs2_eq", "C_V") if T > 0.0 else ("cs2_eq",))
+            str(err), ("cs2_isothermal", "C_V") if T > 0.0 else ("cs2_isothermal",))
 
     out["converged"] = True
     out["reason"] = "converged"

@@ -695,7 +695,7 @@ Jacobian rather than by differencing solved points:
 \toprule
 key & quantity & availability \\
 \midrule
-\texttt{cs2\_eq} & $c_s^2 = (\partial P/\partial\varepsilon)$ along the
+\texttt{cs2\_isothermal} & $c_s^2 = (\partial P/\partial\varepsilon)$ along the
                    mode's own sequence & always \\
 \texttt{chi}     & $\chi_{ab} = \partial n_a/\partial\mu_b$,
                    $a,b \in (B, C, S)$ & always \\
@@ -724,10 +724,13 @@ leptonic re-neutralization variants. Each names itself and points at
 \texttt{docs/DEFERRED.md}.
 
 \paragraph{Isothermal against adiabatic.} A returned name says which thermal
-variable is held: \texttt{cs2\_eq} is the equilibrium sound speed along the
-sequence, and the \texttt{composition} freeze's is the adiabatic one. The two
-differ at $T > 0$ by the factor $C_P/C_V$, which is why no quantity in this
-package is called a bare \texttt{cs2}.
+variable is held, which is why no quantity in this package is called a bare
+\texttt{cs2}. Both freezes here hold $T$, so both give an isothermal speed;
+what separates them is the composition axis, carried by the \texttt{frozen=}
+argument rather than by the key. \texttt{frozen='equilibrium'} differentiates
+along the mode's own sequence, \texttt{frozen='composition'} at frozen
+particle fractions. The adiabatic speed, larger by $C_P/C_V$ at $T > 0$, is
+not computed by this model; \texttt{docs/DEFERRED.md} records the gap.
 
 \section{Masses}
 \label{sec:masses}

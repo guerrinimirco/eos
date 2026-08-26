@@ -230,7 +230,7 @@ def _check_causality(par, grid):
     values = []
     for n_B in grid:
         cs2 = eos_response(par, "beta_eq_neutrinoless", n_B=n_B,
-                           T=0.0)["cs2_eq"]
+                           T=0.0)["cs2_isothermal"]
         if not np.isfinite(cs2):
             return CheckResult("causality", False, float("inf"),
                                f"c_s^2 is not finite at n_B = {n_B:.3f} "

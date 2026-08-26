@@ -482,8 +482,8 @@ prints.
 re-equilibrates under the perturbation, so the derivatives are taken along the
 mode's own sequence,
 
-    cs2_eq = dP/deps    along the sequence at fixed T
-    C_V    = (T/n_B) ds/dT    at fixed n_B
+    cs2_isothermal = dP/deps          at fixed T, along the sequence
+    C_V            = (T/n_B) ds/dT    at fixed n_B
 
 both by central differences over a relative step `rel_step` in the variable
 differentiated, since alphaBag's residual has no analytic Jacobian in this
@@ -491,8 +491,9 @@ repository. `C_V` is returned only at `T > 0`, where it is defined. The
 remaining freezes of CLAUDE.md §5 — frozen per-species composition, frozen
 conserved fractions, the leptonic re-neutralization variants — raise
 `NotImplementedError` naming the gap, and are recorded in `docs/DEFERRED.md`.
-Note that with `frozen="equilibrium"` there is no isothermal/adiabatic
-ambiguity to name: `cs2_eq` is taken at fixed `T` and says so.
+The derivative is taken at fixed `T`, and the key says so. The adiabatic
+speed, larger by `C_P/C_V` at `T > 0`, is not computed by this model: `C_P` is
+not among the returned quantities, so there is no factor to form it with.
 
 
 ## Numerics
