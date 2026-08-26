@@ -872,6 +872,22 @@ def check_maxwell_crossing():
                        "; ".join(detail))
 
 
+#: The parameter set whose branches do NOT cross on `CONSTRUCTION_NB`, so an
+#: empty window list is a true assertion for it. The negative control below:
+#: without one, "the gate fires" and "the gate fires whenever no window was
+#: passed" are the same observation.
+CLEAN_SET = "fq1.0_B1"
+
+
+def _constructed(par, coexistences):
+    """The delivered table of one parameter set on `CONSTRUCTION_NB`."""
+    from eos.enjl.table import TableSpec, build_constructed_table
+
+    lo, hi, step = CONSTRUCTION_NB
+    return build_constructed_table(
+        TableSpec(nB=np.arange(lo, hi, step), par=par), coexistences)
+
+
 def check_delivered_table():
     """The delivered table is deliverable: P non-decreasing, 0 <= c_s^2 <= 1.
 
@@ -880,31 +896,46 @@ def check_delivered_table():
     continuation is allowed to map it -- and this is the check that the
     construction resolves it before the table reaches a structure solver.
 
-    c_s^2 is a centred finite difference of a table with an exactly flat
-    segment in it, so on the plateau it is zero up to rounding and the lower
-    gate is -1e-9 rather than 0. That is the size of the differencing noise,
-    not a relaxed physical bound: the plateau's c_s^2 is exactly zero.
+    The predicate is `ConstructedTable.defect`, not arithmetic repeated here:
+    the flag a caller tests and the check that blesses it have to be the same
+    statement, or a green suite and a False flag can coexist.
+
+    Demonstrated in BOTH directions, because a gate is only evidence if it is
+    known to be able to fail. Three tables:
+
+    - `CONSTRUCTION_SET` with its located windows -- deliverable. The
+      construction does its job.
+    - `CONSTRUCTION_SET` with an EMPTY window list -- not deliverable, and
+      that is the correct answer, not a defect of this check. Outside a window
+      the assembly keeps the lower-eps branch, which is the stable PURE phase
+      and not the stable state where the branches cross; the min of two convex
+      eps(n_B) curves is concave there, so mu_B jumps down and P falls with it.
+    - `CLEAN_SET` with an empty window list -- deliverable. Its branches do not
+      cross on this grid, so the empty list asserts something true and the gate
+      stays quiet. Without this row the middle one would not distinguish a
+      located crossing from a missing argument.
     """
-    from eos.enjl.table import TableSpec, build_constructed_table
-
     par, found = _coexistences(CONSTRUCTION_SET)
-    lo, hi, step = CONSTRUCTION_NB
-    table = build_constructed_table(
-        TableSpec(nB=np.arange(lo, hi, step), par=par), found)
-    if len(table.rows) < 3:
-        return CheckResult("delivered_table", False, float("inf"),
-                           f"only {len(table.rows)} rows delivered")
+    cases = [(f"{CONSTRUCTION_SET}+windows", par, found, True),
+             (f"{CONSTRUCTION_SET}+none", par, [], False),
+             (f"{CLEAN_SET}+none", Parameters.named(CLEAN_SET), [], True)]
 
-    dP = np.diff(table.P)
-    cs2 = table.cs2
-    worst_P = abs(min(dP.min(), 0.0))
-    worst_cs = abs(max(-cs2.min(), cs2.max() - 1.0, 0.0))
-    passed = dP.min() >= -1.0e-9 and cs2.min() >= -1.0e-9 and cs2.max() <= 1.0
-    return CheckResult(
-        "delivered_table", passed, max(worst_P, worst_cs),
-        f"{len(table.rows)} rows, {len(found)} window(s); "
-        f"min dP={dP.min():+.2e} MeV/fm^3, "
-        f"c_s^2 in [{cs2.min():+.3e}, {cs2.max():.4f}]")
+    detail, passed = [], True
+    for name, params, windows, want in cases:
+        table = _constructed(params, windows)
+        if len(table.rows) < 3:
+            return CheckResult("delivered_table", False, float("inf"),
+                               f"{name}: only {len(table.rows)} rows")
+        got = table.deliverable
+        passed = passed and got is want
+        cs2 = table.cs2
+        detail.append(
+            f"{name}: deliverable={got} (want {want}), "
+            f"min dP={np.diff(table.P).min():+.2e} MeV/fm^3, "
+            f"c_s^2 in [{cs2.min():+.3e}, {cs2.max():.4f}]"
+            + (f", {table.defect}" if table.defect else ""))
+    return CheckResult("delivered_table", passed, 0.0 if passed else 1.0,
+                       "; ".join(detail))
 
 
 

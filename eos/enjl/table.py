@@ -5,8 +5,12 @@ warm-started from its neighbour, so the sequence follows one branch of the
 model and keeps following it past any first-order transition, into the
 metastable region beyond. That is deliberate. Mapping a branch and choosing
 between branches are separate steps, and the second one needs both branches at
-once -- a Maxwell construction equates P and mu_B across them, which no single
-sweep can do. It is also what the author's own tables contain: two of them
+once -- a Maxwell construction equates P and the Gibbs free energy per baryon
+g = (eps + P)/n_B across them, which no single sweep can do. In beta
+equilibrium with neutrality g reduces to mu_B, which is why the located
+transitions are indexed by mu_B; at a held (Y_C, Y_S) it does not, and
+g = mu_B + Y_C mu_C + Y_S mu_S is the quantity that must match. It is also
+what the author's own tables contain: two of them
 retain a step with dP/dn_B < 0 rather than the coexistence plateau that would
 replace it.
 
@@ -192,6 +196,13 @@ def beta_row(point):
 # arrive as an ARGUMENT, `eos.mixed.construction.enjl_coexistences` produces
 # them, and the assembly below is pure ENJL.
 
+#: Tolerance on the two conditions of CLAUDE.md section 8, `ConstructedTable
+#: .defect` below. A delivered table is exactly flat in P across every
+#: constructed window, so a centred difference of it returns zero up to
+#: rounding; this is the size of that differencing noise and not a relaxed
+#: physical bound.
+DELIVERY_TOL = 1.0e-9
+
 #: Row keys that are densities, and so volume-average across a plateau.
 _LEVER_KEYS = ("eps", "s", "n_p", "n_n", "n_Lambda", "n_u", "n_d", "n_s",
                "n_e", "n_mu")
@@ -287,6 +298,51 @@ class ConstructedTable:
             return np.zeros_like(P)
         return np.gradient(P, eps)
 
+    @property
+    def defect(self):
+        """Why this table may not be delivered to a structure solver, or None.
+
+        CLAUDE.md section 8: a table DELIVERED to a structure solver has P
+        non-decreasing in n_B and 0 <= c_s^2 <= 1. A raw branch may violate
+        both inside a first-order transition -- mechanical instability is real
+        physics and `build_table` is allowed to map it -- and this reports on
+        the CONSTRUCTED table, where a construction was supposed to resolve
+        that. The gate belongs to whoever builds the table, and this module
+        builds this one.
+
+        The usual cause is a window that was never located. Outside a window
+        the assembly keeps whichever branch has the lower energy density,
+        which selects the stable PURE phase -- and that is the stable state
+        only where the branches do not cross. Where they do, the min of two
+        convex eps(n_B) curves is CONCAVE at the crossing: mu_B = deps/dn_B
+        jumps down across it and P = mu_B n_B - eps falls with it. So an
+        unlocated window does not merely leave a segment unconstructed, it
+        leaves a pressure drop the assembly manufactured. Passing the located
+        windows removes it.
+        """
+        P = self.P
+        if len(P) < 2:
+            return None
+        n_B = self.nB_solved
+        dP = np.diff(P)
+        i = int(np.argmin(dP))
+        if dP[i] < -DELIVERY_TOL:
+            return (f"P falls by {-dP[i]:.3f} MeV/fm^3 between "
+                    f"n_B = {n_B[i]:.4f} and {n_B[i + 1]:.4f} fm^-3")
+        cs2 = self.cs2
+        i = int(np.argmin(cs2))
+        if cs2[i] < -DELIVERY_TOL:
+            return f"c_s^2 = {cs2[i]:+.3e} at n_B = {n_B[i]:.4f} fm^-3"
+        i = int(np.argmax(cs2))
+        if cs2[i] > 1.0:
+            return f"c_s^2 = {cs2[i]:.4f} > 1 at n_B = {n_B[i]:.4f} fm^-3"
+        return None
+
+    @property
+    def deliverable(self):
+        """True where `defect` is None: this table may go to a structure solver."""
+        return self.defect is None
+
 
 def build_constructed_table(spec, coexistences, eta=1.0, progress=None,
                             verbose=False):
@@ -295,10 +351,17 @@ def build_constructed_table(spec, coexistences, eta=1.0, progress=None,
     Two continuations are swept, "up" from the low-density chirally broken
     side and "down" from the top of the grid, so both branches of every
     transition are in hand. Outside a window the delivered point is whichever
-    of them has the LOWER energy density at that n_B -- at T = 0 and fixed
-    n_B, in beta equilibrium with neutrality, the stable state is the one that
-    minimizes eps, so this needs no branch bookkeeping at all. Inside a
-    window, the plateau of `plateau_row`.
+    of them has the LOWER energy density at that n_B, and inside a window it
+    is the plateau of `plateau_row`.
+
+    At T = 0 the free energy IS eps and the two roots carry identical
+    conserved charges, so the lower-eps root is the stable one -- in beta
+    equilibrium with neutrality and equally at a held (Y_C, Y_S), which is why
+    this needs no branch bookkeeping. What it does not buy is a deliverable
+    table: min-eps selects the stable PURE phase, and that is the stable state
+    only OUTSIDE a coexistence window. Inside one the stable state is a
+    mixture, min-eps manufactures a drop in P at the crossing, and the result
+    reports `deliverable = False`. See `ConstructedTable.defect`.
 
     Parameters
     ----------
@@ -308,8 +371,10 @@ def build_constructed_table(spec, coexistences, eta=1.0, progress=None,
     coexistences : list
         The located windows, from `eos.mixed.construction.enjl_coexistences`.
         An ARGUMENT because a model may not import a composite engine
-        (CLAUDE.md section 1). An empty list is legal and gives the raw stable
-        branch with no constructed segment in it.
+        (CLAUDE.md section 1). An empty list is legal and asserts that this
+        grid holds no transition: where that is true the result is the stable
+        branch with no constructed segment in it, and where it is false the
+        result reports `deliverable = False` rather than pretending. Test it.
     eta : float
         The construction. Only eta = 1, the Maxwell construction with each
         phase separately neutral, is implemented; anything else raises. An
@@ -399,6 +464,6 @@ def build_constructed_table(spec, coexistences, eta=1.0, progress=None,
                             windows=list(windows), eta=eta, T=spec.T)
 
 
-__all__ = ["BetaPoint", "ConstructedTable", "DIRECTIONS", "TableSpec",
-           "TableResult", "beta_row", "build_constructed_table",
-           "build_table", "plateau_row"]
+__all__ = ["BetaPoint", "ConstructedTable", "DELIVERY_TOL", "DIRECTIONS",
+           "TableSpec", "TableResult", "beta_row",
+           "build_constructed_table", "build_table", "plateau_row"]

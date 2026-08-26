@@ -747,8 +747,16 @@ run("eos_response", enjl.eos_response, par, "beta_eq_neutrinoless",
 # a model may not import a composite engine, and locating a coexistence needs
 # both branches at once, which is `eos.mixed.construction.enjl_coexistences`.
 # That call belongs to `hybrid_eos`. With an empty window list the same entry
-# point still returns the stable EoS, keeping at each density whichever branch
-# has the lower energy density, which is the object section 5 assembled by hand:
+# point keeps at each density whichever branch has the lower energy density,
+# which is the object section 5 assembled by hand.
+#
+# That is the stable **pure** phase, and it is the stable state only where the
+# branches do not cross — `fq1.0_B1`, the set plotted here, is one where they
+# do not. Where they do, the minimum of two convex `eps(n_B)` curves is concave
+# at the crossing, so `mu_B` jumps down and `P = mu_B n_B - eps` falls with it:
+# on this same grid `fq0.5_B1` and `fq0.7_B1` lose 34.6 and 24.5 MeV/fm³ of
+# pressure that way. The result therefore carries `deliverable`, and a table
+# bound for a structure solver is tested before it goes:
 
 # %%
 header("the stable branch, assembled by the library")
@@ -761,6 +769,8 @@ if status == "ok":
     tables[(KNOBS.sets[-1], "beta_eq_neutrinoless", "stable")] = rows
     print(f"  {len(rows)} rows   P {rows[0]['P']:8.3f} -> "
           f"{rows[-1]['P']:8.3f}")
+    print(f"  deliverable: {constructed.deliverable}"
+          + (f"  ({constructed.defect})" if constructed.defect else ""))
     # Only over the densities where the two branches are genuinely two states:
     # where they have converged on one root the `branch` label records which
     # continuation happened to supply the row and changes on round-off.

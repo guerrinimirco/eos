@@ -347,6 +347,31 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 <!-- one line per closed ticket: gist + link -->
 
+- [Should the bare solver `include_*` kwargs follow §4's flags to False?](issues/81-second-default-solver-kwargs.md):
+  **the premise was wrong in four ways and the ruling is not a default at all.**
+  `dd2.solver.solve` ACCEPTS a `SpeciesFlags` and never reads `.photons` —
+  measured, `SpeciesFlags(photons=False)` and `(photons=True)` give
+  `P = 36.84136685` alike, exactly 1.000000 photon gases above the honest
+  answer. `include_electrons` is not one of these kwargs: it is §3's
+  `leptons=` under an `include_*` name, already ruled by ticket 70.
+  The rule: **a solver that accepts a flags object must honour it and carry no
+  parallel kwarg; one that lacks a flags object grows one** — then there is no
+  second default to adjudicate. Because `flags` becomes REQUIRED, the call site
+  decides the numbers and `zl`/`vmit`/`alphabag` move **zero** rows, which
+  candidate 1 could not offer; `dd2` moves **456 of 976** because its generator
+  flags already say `photons=False` while its frozen numbers contain photons.
+  Renaming `n_B_fm` exposed a §5 violation the ticket never suspected:
+  `njl`/`ccdm`/`enjl` return a natural-units record on the public result whose
+  `n_B` divides out to exactly `hc3` but whose **P, eps and s do not** — it is
+  matter-only, so `njl .state.P / hc3 = 146.854334` against an outer
+  `146.939710`, and correcting by `hc3` still gives a wrong answer.
+  Execution split three ways by what must be re-measured:
+  [89](issues/89-dd2-honours-species-flags.md) (the only commit moving frozen
+  values), [90](issues/90-solver-signature-and-units-sweep.md),
+  [91](issues/91-leptons-default-and-drift-checks.md). Three sentences owed to
+  [ticket 85](issues/85-claudemd-sentences-owed.md); ticket 82 becomes decisive
+  rather than half an answer.
+
 - [Phase 6, second half — the conformance pass on nucleation](issues/80-phase6-conformance.md):
   **all four items landed and pushed (`2b2b72f` on `origin/paper-release`); the
   notebook EXECUTES in production mode, 39/39 code cells, zero error outputs.**
@@ -1528,6 +1553,52 @@ against this file, not against the earlier `pytest_before*.txt`.
   **conditioning hazard**, not only a wandering baseline key. The physics
   question the ticket opened with is [ticket 83](issues/83-enjl-branch-selection-physics.md),
   non-gating.
+- [How a raw ENJL continuation chooses its branch across a transition](issues/83-enjl-branch-selection-physics.md):
+  **RESOLVED.** It does not choose one — it maps one, and after ticket 72 the up
+  and down sweeps are two correct complementary branches over the whole grid.
+  The choice belongs to the assembler, and the assembler's rule was wrong:
+  **min-eps is not a construction.** Keeping the lower-eps row selects the
+  stable PURE phase — correctly, and in every closure, since at T = 0 the free
+  energy IS eps and the two roots carry identical charges, which settles the
+  ticket's item 4 in the affirmative — but the minimum of two CONVEX eps(n_B)
+  curves is CONCAVE at their crossing, so mu_B jumps down and P = mu_B n_B - eps
+  falls with it. **min-eps cannot deliver a monotone table across a crossing,
+  for any parameter set, in any mode.** The plateau is not an improvement on it;
+  it removes a defect min-eps manufactures.
+  **And the defect was in beta equilibrium, not only in the leptonless
+  heavy-ion mode the ticket asked about**: on the notebook's own grid and call,
+  `fq0.5_B1` and `fq0.7_B1` deliver min dP = -34.6 and -24.5 MeV/fm^3 with
+  c_s^2 down to -0.227, and only `fq1.0_B1` is clean. Nothing caught it because
+  the notebook plotted the clean set under markdown asserting the general claim,
+  and `check_delivered_table` ran a failing set WITH its windows so the plateau
+  covered the hole; `ConstructedTable.cs2` would have shown it and had no
+  reader. Note `EOSTable_for_TOV` disclaims the check and `eos.astro.tov` does
+  not perform it, so this model's `verify/` is the only §8 enforcement on the
+  path — which is §8's own rule, the gate belonging to whoever builds the table.
+  Fixed as a STATUS, not a raise (§6: a P-drop is a physics outcome a sampler
+  must be able to score, and the empty-list path is correct for `fq1.0_B1`):
+  `ConstructedTable.deliverable` / `.defect`, with `check_delivered_table`
+  READING the predicate rather than recomputing it and grown to three cases
+  demonstrated in both directions — windows/True, none/False naming n_B = 0.50,
+  and `fq1.0_B1`/none/True as the **negative control**, without which "the gate
+  fires" and "the gate fires whenever no window was passed" are the same
+  observation. That is precisely the mistake ticket 62 made with `enjl`. ENJL
+  verify PASS, 18 checks. Four documents corrected, the notebook's prose among
+  them. The window the leptonless mode needs was MEASURED and not built —
+  [ticket 88](issues/88-fixed-composition-coexistence.md).
+- [A coexistence locator for a phase held at fixed (Y_C, Y_S)](issues/88-fixed-composition-coexistence.md):
+  OPEN, non-gating, split out of 83 with its target already measured:
+  [0.34945, 0.47500] fm^-3 at P = 22.9282 MeV/fm^3 and g = 1006.4074 MeV, the
+  eps crossing at 0.41774 inside it. Two findings it opens with rather than
+  discovers. **`locate_maxwell` will not take a second closure**: it bisects
+  gap(mu_B) in one variable only because beta equilibrium with neutrality
+  determines mu_C from mu_B and so reduces the Gibbs energy per baryon
+  g = mu_B + Y_C mu_C + Y_S mu_S to mu_B; at a held (Y_C, Y_S) coexistence
+  needs equal P AND equal g, a 2-D root find in the two branches' own mu_B.
+  And **`Coexistence` encodes the beta closure in its field list** — one `mu_B`
+  field documented as equal across both phases, written onto every plateau row —
+  which is the same defect 83 fixed in `build_constructed_table`'s promise, so
+  the one carrier is generalized rather than a second one added.
 - [The six non-baseline failures on 3.14](issues/74-py314-non-baseline-failures.md):
   OPEN. The rest of ticket 57's cost list, none of it a `.npz` — Q_sat's
   `abs=0.2` re-derived from a noise floor measured on 3.14, `test_dd2_m8`'s

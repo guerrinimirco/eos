@@ -175,6 +175,14 @@ def eos_table(par, mode, species=None, axes=None,
     returned exactly as before, which is what `test/baseline` freezes.
     `eta` selects the construction and only eta = 1 (Maxwell) is implemented.
 
+    An EMPTY list is legal and asserts that this grid holds no transition.
+    Where that is false the table keeps the lower-eps branch across the
+    crossing, which drops P there, and the returned `ConstructedTable`
+    reports `deliverable = False` with `defect` naming the density. Test it
+    before handing the table to a structure solver -- `rows=True` returns the
+    rows alone and drops the status along with `windows`, so a caller who
+    needs either asks for the object.
+
     progress : callable, invoked once per completed line, with the dict every
         table builder in this repository reports. verbose=True installs the
         built-in printer.
