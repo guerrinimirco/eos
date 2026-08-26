@@ -27,8 +27,10 @@ same test: the port left two `nucleation` goldens comparing round-off, and the
 criteria block's first line is "pytest ... fully green".
 
 Reached when every ticket here is resolved and the Stage 7 report can be written
-with real tool output behind every claim — with ticket 72 the one ticket that
-may still be open when the report is written, named in it as such.
+with real tool output behind every claim. **Ticket 72 is RESOLVED** (`2b2b72f`,
+pushed to `origin/paper-release`), so the carve-out it was granted here — the one
+ticket that might still be open when the report is written — is spent and no
+longer applies to anything.
 
 ## Notes
 
@@ -253,6 +255,36 @@ against this file, not against the earlier `pytest_before*.txt`.
 ## Decisions so far
 
 <!-- one line per closed ticket: gist + link -->
+
+- [Phase 6, second half — the conformance pass on nucleation](issues/72-phase6-conformance.md):
+  **all four items landed and pushed (`2b2b72f` on `origin/paper-release`); the
+  notebook EXECUTES in production mode, 39/39 code cells, zero error outputs.**
+  Suite unchanged at the new tracked path `test/`: **2 failed, 70 passed, 72
+  collected** on python.org 3.14.2 — identical to ticket 24's baseline node id
+  for node id, both survivors [ticket 76](issues/76-nucleation-golden-tolerances.md)'s,
+  no tolerance touched. **The brief's "4 import lines" is five statements and
+  two ALIASES**, because the port creates two real collisions: `sfho.table` and
+  `alphabag.table` both export `TableSettings`/`compute_table`, and
+  `custom_params` is both the `nucleation.quark` constructor and an sfho
+  `TableSettings` field. The make_fixture references were **six, not three**.
+  pyflakes 24 -> 4, the bulk being fifteen private re-exports in
+  `tables/__init__.py` that nothing imported through that door — the comment
+  claiming `critical.py` needed `_BASE_DATA_KEYS` was false, and `critical.py`
+  imports none of them. README examples run from a fresh clone off the committed
+  fixture and were extracted back out and executed to verify. **Two things
+  measured that the brief did not predict**: `make_fixture.py` no longer
+  reproduces the committed fixture (all 937 rows move; restored bit-for-bit,
+  hazard documented), and the smoke leg CANNOT complete — `F8_SHOW = [1,3]`
+  clips to `[]` on the single-alpha smoke grid and `pd.concat([])` raises,
+  pre-existing and untouched by the diff, but both READMEs tell a reader to
+  smoke-run first. **Nothing under `output/paper/` committed**: 23 tracked files
+  moved, 14 PDFs timestamp-only and 9 real, whose largest move is 13 cm on an
+  11.14 km R_1.4 with `sigma_crit_star` bit-identical across all 398 rows; all
+  restored to HEAD. **A concurrent eos session forced an isolated eos**
+  (`git archive HEAD`): it holds `eos/sfho/*` dirty mid-rename of
+  `create_custom_parametrization` -> `from_potential_depths`, which will break
+  `test/make_fixture.py:98` and the paper notebook SILENTLY, since neither is on
+  the suite's import path.
 
 - [dd2 cannot take two of §4's six species flags](issues/61-dd2-species-flags.md):
   **closed by giving dd2 the names — all ten models now take `SpeciesFlags(**six)`
@@ -1564,6 +1596,40 @@ against this file, not against the earlier `pytest_before*.txt`.
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
+
+- **A rename landing green is not a rename landing safe.** A concurrent session
+  is renaming `eos.sfho.create_custom_parametrization` -> `from_potential_depths`
+  (uncommitted at the time [ticket 72](issues/72-phase6-conformance.md) ran).
+  Two `nucleation` consumers import the old name — `test/make_fixture.py:98` and
+  the paper notebook — and **neither is on the suite's import path**:
+  make_fixture imports it lazily inside `main()`, and a notebook is not
+  collected at all. So the rename will show a green nucleation suite and break
+  both silently, exactly the shape ticket 24 hit when 38 of 38 modules could not
+  import while the suite reported nothing. The question is not this one rename;
+  it is that the cross-repo call-site check has a blind spot wherever an import
+  is lazy or lives in a notebook, and no gate covers it. Related to the
+  stated-limitation rot below, but the opposite direction: not a comment
+  outliving behaviour, a CONSUMER outliving a name.
+
+- **Smoke mode cannot complete, and both documents tell a reader to run it
+  first.** `notebooks/2fam_PNS_nucleation.py:1935` clips `F8_SHOW = [1, 3]`
+  against a single-`alpha_s` smoke grid, gets `[]`, and `pd.concat([])` raises
+  at Figure 5. Pre-existing and production-safe; found by
+  [ticket 72](issues/72-phase6-conformance.md) and left undiffed under the
+  only-what-the-ticket-asks rule. The sharp question is not the one-line fix but
+  whether a "prove every cell runs before you commit hours" path deserves a gate
+  of its own, given that this is the second smoke-only shape bug the same cell
+  has carried (its comment records the first, `F8_SHOW = [0,1,2,3]` on a 2x2).
+
+- **The paper's tracked figures no longer match what the code produces.**
+  Ticket 72's production run regenerated 23 tracked files under `output/paper/`
+  and restored every one: 14 PDFs differed only inside `/CreationDate`, and the
+  9 real changes are round-off — largest 13 cm on an 11.14 km `R_1.4`, with
+  `sigma_crit_star` bit-identical across all 398 rows. Restoring was right for a
+  conformance ticket, but it leaves the tracked figures as the pre-refactor
+  ones. Whether to re-commit the regenerated set is a publication decision for
+  the user, and it wants deciding before the repository goes public rather than
+  discovering later that a reader's rerun does not match the committed CSVs.
 
 - **Nothing in this repository notices when a stated limitation stops being
   true.** Three instances surfaced in one afternoon, each found by accident
