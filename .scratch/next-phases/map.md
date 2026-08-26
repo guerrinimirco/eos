@@ -125,28 +125,29 @@ regenerated twelve of the thirteen `.npz` on it and pinned the stack in both
 repositories (`requires-python = ">=3.11"`, `numpy>=2.0`, `scipy>=1.17`, the
 tested stack recorded in `pyproject.toml` and the README).
 
-    python.org 3.14  7 failed, 1674 passed, 15 skipped  (1696 collected)
-                     output/_audit/pytest_after_ticket62_py314.txt
+[Ticket 74](issues/74-py314-non-baseline-failures.md) then re-derived the six
+non-baseline tolerances and premises on that stack.
 
-down from 12. **That after-number is soft** — a second session was committing
-to `main` throughout the run and collection moved 1694 -> 1696 mid-run. The
-hard measurement is the baseline check re-run against HEAD afterwards:
-`1 failed, 15 passed`.
+    python.org 3.14  1 failed, 1680 passed, 15 skipped  (1696 collected)
+                     output/_audit/pytest_after_ticket74_py314.txt
 
-**Two things did NOT become true, and a count of 7 is not a count of 0:**
+down from 12 -> 7 -> 1, and this after-number is HARD: the collected count is
+1696 both before and after, the same denominator as ticket 62's after-image, so
+it is a clean comparison rather than 62's soft one.
 
-- `test_baseline[enjl]` is red **on purpose**. `enjl.npz` is still the 3.9 file
-  because the regeneration STOPPED there: the model picks a different root of
-  its gap equations on the two stacks
-  ([ticket 72](issues/72-enjl-branch-selection.md)). Do not regenerate it.
-- The other six are tolerances and test premises ticket 57 listed as costs of
-  choosing 3.14, now [ticket 74](issues/74-py314-non-baseline-failures.md).
-  None is a `.npz`.
+**The one survivor is `test_baseline[enjl]`, red ON PURPOSE.** `enjl.npz` is
+still the 3.9 file because the regeneration STOPPED there: the model picks a
+different root of its gap equations on the two stacks
+([ticket 72](issues/72-enjl-branch-selection.md)). Do not regenerate it.
 
-So "green on 3.14" needs 72 and 74 closed. Until then a ticket reporting
-**"0 added failures" means 7, unchanged** — and the interpreter and collected
-count still travel with every number, because the two stacks still both exist
-on this machine. The blocks below are history.
+So a ticket reporting **"0 added failures" now means 1, unchanged** — and the
+interpreter and collected count still travel with every number, because the two
+stacks still both exist on this machine. The blocks below are history.
+
+Ticket 74 took the six OFF the stack dependence rather than moving them onto
+the other side of it: all six pass on anaconda 3.9.7 as well (`14 passed`).
+Its sample was chosen for being seed-limited on BOTH stacks for exactly that
+reason.
 
 **Concurrency is now the binding constraint on a full-suite number, not the
 stack.** Tickets 60/61 met their gates while another session held eight
@@ -1473,6 +1474,43 @@ against this file, not against the earlier `pytest_before*.txt`.
   same way, so the numbers are comparable, but "nucleation depends on eos" is
   true in the source and not yet in the environment.
   Transcripts: `output/_audit/nucleation_after_ticket24_py314.txt`.
+
+- [The six non-baseline failures on 3.14](issues/74-py314-non-baseline-failures.md):
+  **all six fixed, nothing loosened, and none was a regression** — the suite is
+  `1 failed, 1680 passed, 15 skipped` (1696 collected), the survivor being
+  ticket 72's deliberate `enjl` red. The six reduce to ONE function,
+  `dd2/nmp.py::invert_nmp`, and **`eos/` was not edited at all**: the whole diff
+  is four tests.
+  **Ticket 57's framing was half wrong and that is the finding.** It called
+  `test_api.py:127`/`:143` tolerances asserting below a noise floor; both are
+  false PREMISES, and widening either would have pinned a number produced by a
+  solve THAT NEVER RAN. `:127` is ticket 47's Q1 applied — DD2's published point
+  is not a root of its own 5x5 closure, so the honest prediction is Q_sat =
+  117.5, and 3.9 passed only because scipy 1.13's `hybr` stalled and returned
+  the seed. **`:143` is not a stack artifact at all**: at DD2's own NMPs the
+  6x6 returns the seed BIT-IDENTICALLY on both stacks (`status=5`, 48 restarts
+  never beat 2.201e-03), because the `Q_sat` row moves 7.1e-04 under hybr's own
+  1.49e-08 probe against a 1.5e-03 base residual — half its Jacobian column is
+  stencil noise. 3.9 passed by coincidence.
+  **The measured floor, which ticket 67 was waiting for: Q_sat carries 0.25 MeV
+  of stencil excursion at the shipped h = 1e-4** (h swept in both maps together
+  per `nmp.py:85`; plateau [2e-4, 1e-3] spread 0.088), so two evaluations differ
+  by ~0.5 MeV. Underneath it sits an h-STABLE **-0.207 MeV** offset between the
+  published table's 6-decimal coefficients and the re-derived ones — real, not
+  noise. `test_dd2_m1.py:73` had pinned Q_sat at `abs=0.5` all along and
+  survived the stack move, so `abs=0.2` was the outlier of the repo's own two
+  tolerances on one quantity. **h was NOT moved**: that needs both maps together
+  and a `dd2.npz` re-freeze this ticket does not authorise.
+  `(K_sat, Q_sat) = (220, 300)` replaces both the m8 target and the tov sample —
+  the only candidate **seed-limited on BOTH stacks** (x895 on 3.14, x219 on
+  3.9), verified to keep every tov premise (core still undercuts BPS, 0.308 vs
+  0.406 at n_B = 0.080). Item 4 discharged and unmoved: golden SNM 1.40e-05,
+  CompOSE HS(DD2) 2.83e-05, published NS point and M_max >= 2 all PASS.
+  Evidence: `output/_audit/nmp_noise_floor_ticket74_py314.txt`.
+  **Reported, not fixed: `invert_nmp` returns `ok=True` on a solve that never
+  ran** — ISO_GATE admits the 2.2e-03 stall, so a caller asking for Q_sat =
+  169.0 is handed couplings whose Q_sat is 168.65 with no signal. Library
+  contract, so Stage 7 report; the test now asserts the solve left the seed.
 
 ## Not yet specified
 

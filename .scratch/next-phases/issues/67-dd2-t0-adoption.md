@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 74
+Blocked by: - (74 resolved)
 Parent: ../map.md
 
 ## Question
@@ -126,3 +126,46 @@ moved with it.**
    is a number ticket 47 showed asserts below the stencil noise. Answering this
    ticket first would be measuring against a tolerance already known to be
    wrong.
+
+## Unblocked by [ticket 74](74-py314-non-baseline-failures.md)
+
+**The honest floor this ticket was waiting for: Q_sat carries 0.25 MeV of
+stencil excursion at the shipped h = 1e-4**, measured by sweeping h in the
+forward and inverse maps together per `nmp.py:85` — the [2e-4, 1e-3] plateau
+has a spread of 0.088 MeV and the shipped h sits 0.2508 MeV off its mean. Two
+independent evaluations of Q_sat therefore differ by up to ~0.5 MeV.
+
+Against that floor, all three witnesses of point 4 fall inside it:
+
+    this ticket's T = 0 adoption      0.061 MeV   a quarter of the floor
+    the 3.9 -> 3.14 stack change      0.351 MeV   inside the 2-evaluation spread
+    published table vs re-derived     0.207 MeV   h-STABLE, so NOT noise
+
+So **question 4 has its measured answer: no**, `nmp.Q_sat` does not belong in a
+frozen `rtol = 1e-10` baseline — a 0.061 MeV adoption shift is not
+distinguishable from the stencil, and pinning it at ten digits pins noise.
+Note the third row is the odd one out and worth keeping separate: it is flat to
+three digits across h in [3e-4, 2e-3], so it is a genuine difference between two
+parametrizations (the published table's 6-decimal coefficients against the
+re-derived ones), not something a Richardson extrapolation would remove.
+
+**Point 3 is discharged, not merely unblocked.** `test_dd2_m8`'s target moved to
+(220, 300), which is seed-limited on BOTH stacks, and the test now asserts the
+residual falls by at least x100 alongside the `ok` verdict — which is the
+"stops being about `ok` and starts being about the residual falling by orders of
+magnitude" this ticket asked for.
+
+**Point 2's premise is confirmed stale**: the re-freeze vehicle has departed and
+ticket 74 did not restore it. `h` was deliberately NOT moved, for the same
+reason — both maps together plus a `dd2.npz` re-freeze is a §12 act neither
+ticket authorises. So this ticket's decision 1 (does dd2 adopt the shared T = 0
+door at all?) is now the only open half, and it is a ruling, not a measurement.
+
+**One piece of this ticket's own evidence went stale with the target.** The
+measurement above — "inverting to (K_sat, Q_sat) = (240, 300) lands at
+isoscalar residual 3.36e-02 against the 2e-02 gate after 32 restarts" — was
+taken against a target `test_dd2_m8` no longer uses, and on the 3.9 stack where
+(240, 300) was still seed-limited. If the adoption is revisited, that row must
+be re-measured at (220, 300) on the canonical stack before it counts as a cost:
+the second failure this ticket attributes to the adoption may not survive the
+change of target.
