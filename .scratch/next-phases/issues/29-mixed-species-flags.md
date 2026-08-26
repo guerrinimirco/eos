@@ -93,3 +93,14 @@ iterated set, and a stale exemption turns it red rather than passing quietly.
 Note the engine's own flags are not covered by that rule: `chi` and anything
 else that is the composite engine's physics defaults where 29 says it does,
 the way `phi_field`, `gluons` and `csc` do in the models.
+
+## Sharpened by [ticket 81](81-vmit-params-in-the-plumbing.md)
+
+`mixed` does not merely LACK a `species.py`. `eos/mixed/api.py:49` reads
+`from eos.dd2.species import SpeciesFlags` — the engine borrows a MODEL's flag
+class as its own, and its public docstrings say `species : dd2 SpeciesFlags`.
+So a caller pairing SFHo with NJL is still asked for a DD2-typed object, and
+`import eos.mixed` still pulls DD2 in.
+
+That is why this ticket and 81 are one problem seen from two sides, and it makes
+this ruling's `species.py` the first half of 81's answer rather than a tidy-up.
