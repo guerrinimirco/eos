@@ -17,7 +17,7 @@ is, and Phase 5 and Phase 6 are done.
 **What "Phase 6 is done" means, amended by
 [ticket 23](issues/23-phase6-respec.md):** Phase 6 splits into a **port**
 ([ticket 24](issues/24-phase6-execute.md)) and a **conformance pass**
-([ticket 72](issues/72-phase6-conformance.md)), and **Acceptance gates on the
+([ticket 80](issues/80-phase6-conformance.md)), and **Acceptance gates on the
 port only**. The Acceptance criteria block can check that `nucleation` imports
 `eos`, that its suite runs, and that §1 holds in both directions — nothing in it
 reads a README. Ticket 72 is in scope of this map and **not gating**: gating the
@@ -1484,7 +1484,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   **Phase 6 splits**: [24](issues/24-phase6-execute.md) is the port, gated on a
   before-image taken FIRST (the suite cannot have been green since Phase 3, so
   "0 added failures" has nothing to measure against) with the rule that surviving
-  failures are reported, not fixed; [72](issues/72-phase6-conformance.md) is the
+  failures are reported, not fixed; [80](issues/80-phase6-conformance.md) is the
   conformance pass, blocked by 24 and NOT gating Acceptance.
   **Two eos rules deliberately do not transfer.** `nucleation/test/` is tracked,
   not gitignored — `eos` hides its suite because it is private, nucleation is
@@ -1661,7 +1661,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   from an unlocked one by 4.1e6. **`nucleation` is now fully green on BOTH
   stacks — `72 passed` on python.org 3.14 and on anaconda 3.9.7** — so the
   Acceptance criteria block's first line is satisfied. Ticket 25's noted
-  wrinkle is dissolved rather than decided: [ticket 72](issues/72-phase6-conformance.md)
+  wrinkle is dissolved rather than decided: [ticket 80](issues/80-phase6-conformance.md)
   landed as `569296a` mid-session, so the path the criterion names,
   `nucleation/test/`, now exists.
 
@@ -1705,7 +1705,7 @@ In scope, not yet sharp enough to ticket:
 
 - **A rename landing green is not a rename landing safe.** A concurrent session
   is renaming `eos.sfho.create_custom_parametrization` -> `from_potential_depths`
-  (uncommitted at the time [ticket 72](issues/72-phase6-conformance.md) ran).
+  (uncommitted at the time [ticket 80](issues/80-phase6-conformance.md) ran).
   Two `nucleation` consumers import the old name — `test/make_fixture.py:98` and
   the paper notebook — and **neither is on the suite's import path**:
   make_fixture imports it lazily inside `main()`, and a notebook is not
@@ -1721,7 +1721,7 @@ In scope, not yet sharp enough to ticket:
   first.** `notebooks/2fam_PNS_nucleation.py:1935` clips `F8_SHOW = [1, 3]`
   against a single-`alpha_s` smoke grid, gets `[]`, and `pd.concat([])` raises
   at Figure 5. Pre-existing and production-safe; found by
-  [ticket 72](issues/72-phase6-conformance.md) and left undiffed under the
+  [ticket 80](issues/80-phase6-conformance.md) and left undiffed under the
   only-what-the-ticket-asks rule. The sharp question is not the one-line fix but
   whether a "prove every cell runs before you commit hours" path deserves a gate
   of its own, given that this is the second smoke-only shape bug the same cell
