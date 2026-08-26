@@ -1734,6 +1734,18 @@ against this file, not against the earlier `pytest_before*.txt`.
   ledgered, and [ticket 78](issues/78-composition-freeze-nine-models.md) is
   annotated with it.
 
+- **[`vmit_params` is threaded through the engine's internals](issues/81-vmit-params-in-the-plumbing.md)**,
+  raised by the user asking why `hybrid_table` names one quark model. The engine
+  DOES work for all models — `phases=(Phase, Phase)` is the general route and
+  nine adapters ship — and CLAUDE.md:277 explicitly blesses
+  `(par, flags, vmit_params)` as the DD2+vMIT front door. **The defect is that
+  the slot did not stay at the front door**: 264 sites, with `solver.py` 16,
+  `boundaries.py` 13, `table.py` 11, `responses.py` 9. §5's "couples phases only
+  through this surface" is true of the documentation and not of the code. Now
+  ticket 81, and it should be ruled consistently with
+  [29](issues/29-mixed-species-flags.md), whose `species.py` removes the
+  `muons=` kwarg sitting beside it in the same four signatures.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
