@@ -55,3 +55,25 @@ arguments.
 
 Resolved when the contract is designed and ruled — not necessarily built. If
 building it is a session's work in its own right, that becomes its own ticket.
+
+## Note from ticket 69 (2026-08-26)
+
+[Ticket 69](69-cs2-eq-naming.md) renamed `cs2_eq` -> `cs2_isothermal` across
+the ten models and deliberately stopped at this surface. The reason is that
+`mixed` and `gmode` are not two spellings but ONE: `eos/astro/gmode/sound_speeds.py`
+imports `sound_speed_eq` and `sound_speed_frozen` from `eos/mixed/responses.py`,
+so `mixed.eos_response`'s `cs2_eq`/`cs2_frozen` keys and gmode's `cs2_eq`/`cs2_ad`
+arguments and `Background` fields share one vocabulary. Renaming half of it is
+worse than renaming none.
+
+So this ticket now also settles the third spelling: whether the g-mode surface
+is `cs2_equilibrium`/`cs2_frozen`, and whether `mixed.eos_response`'s keys move
+with it. §5's rule is that the key names the THERMAL axis and the `frozen=`
+argument names the composition axis — but gmode's two speeds are not one call
+with a `frozen=`; they are two arrays a caller supplies, so the rule does not
+transfer unexamined. That is the decision.
+
+An AST check run for ticket 69 found `cs2_eq` bound as an identifier at 35
+sites under `eos/astro/gmode/` plus `test/gmode/`, all parameters, assignments
+or dataclass fields. None is a dict key, so a rename here is a real refactor
+rather than a string sweep.

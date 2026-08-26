@@ -1276,6 +1276,35 @@ against this file, not against the earlier `pytest_before*.txt`.
   failure is ticket 69's rename half-landed across the shared gitignored `test/`
   tree, green when that session's `eos/vmit/api.py` is overlaid.
 
+- [`cs2_eq` names the freeze where §5 requires the thermal variable](issues/69-cs2-eq-naming.md):
+  **closed by renaming the key to `cs2_isothermal` in `zl`, `vmit`, `alphabag`
+  and `dd2`; a grep for `cs2_eq` over the ten models now returns nothing.** The
+  freeze is not lost — §5's three axes are properties of the CALL, and the
+  composition axis is the `frozen=` argument, still there; the key names the one
+  axis a caller cannot recover from its own arguments. Swept through each
+  `verify/`, the `.tex` AND `.md` documents, `test/`, and both notebooks that
+  carried a two-key reader, which lose it. Three docstrings gain §5's named gap:
+  `zl`, `vmit` and `alphabag` compute no adiabatic speed, having no `C_P` to
+  form it with. **Two dd2 documents were stating something false** and are
+  corrected rather than renamed — they called the `composition` freeze's speed
+  "the adiabatic one", but `responses.py` holds T on both stencil points, so it
+  is isothermal at frozen composition; the rename made that visible rather than
+  causing it. **Three sites deliberately NOT renamed**, each for a physics
+  reason rather than scope: `mixed` and `gmode` are one surface sharing
+  `sound_speed_eq`/`sound_speed_frozen`, so half a rename is worse than none
+  ([53](issues/53-gmode-contract.md), noted there); `dd2`'s `TableResult.cs2_eq`
+  is isothermal on a `T` axis and ADIABATIC on an `SnB` axis, so it can be
+  renamed to neither; and `dd2`'s `cs2_ad` is a DIFFERENT quantity from the
+  `cs2_adiabatic` four models already return
+  ([72](issues/72-dd2-remaining-cs2-names.md)). The ticket's own "grep returns
+  nothing over `eos/`" condition is therefore not met and should not be.
+  Gated as an isolated HEAD-vs-HEAD+patch **pair, twice** — a concurrent session
+  moved HEAD mid-ticket, and its first build was contaminated by a swept-up
+  `_mode_kwargs` import hunk that added two false failures until stripped.
+  Baseline and all four verify suites identical on both sides at both HEADs;
+  **no number moved, no failure added**. The dd2 half of the rename landed
+  inside `5c75584`, a concurrent session's commit, not in `5a4a6cc`.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
