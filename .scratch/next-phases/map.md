@@ -14,8 +14,18 @@ per-model document passes CLAUDE.md §11's test (a physicist reproduces the mode
 without opening the source), CLAUDE.md describes the repository as it actually
 is, and Phase 5 and Phase 6 are done.
 
+**What "Phase 6 is done" means, amended by
+[ticket 23](issues/23-phase6-respec.md):** Phase 6 splits into a **port**
+([ticket 24](issues/24-phase6-execute.md)) and a **conformance pass**
+([ticket 72](issues/72-phase6-conformance.md)), and **Acceptance gates on the
+port only**. The Acceptance criteria block can check that `nucleation` imports
+`eos`, that its suite runs, and that §1 holds in both directions — nothing in it
+reads a README. Ticket 72 is in scope of this map and **not gating**: gating the
+Stage 7 report on a rewrite no criterion measures would hold it hostage.
+
 Reached when every ticket here is resolved and the Stage 7 report can be written
-with real tool output behind every claim.
+with real tool output behind every claim — with ticket 72 the one ticket that
+may still be open when the report is written, named in it as such.
 
 ## Notes
 
@@ -1370,6 +1380,53 @@ against this file, not against the earlier `pytest_before*.txt`.
   6x6 closure can reach, and the DD2 published NMP/TOV values and CompOSE
   HS(DD2) slices re-checked — that last having no failing test attached, which
   is what makes it the easiest to skip.
+
+- [Re-specify Phase 6 against nucleation as it actually is](issues/23-phase6-respec.md):
+  **the corrected brief is written and agreed** — fifteen decisions across four
+  grilling rounds, frontier empty. **Three of the ticket's own premises were
+  false.** The alphabag rename question has no subject: `compute_alphabag_*` /
+  `compute_cfl_*` are GONE from `eos`, which already carries §13's vocabulary, so
+  nucleation simply follows and nothing widens. The line-count row is not drift —
+  40 files / 11,620 lines in the tree, 8,121 in the package, both right for
+  different denominators. And the job is not "a port across the refactor's module
+  layout": measured target by target it is **one mechanical pass plus exactly one
+  structural change**, because six of the seven broken targets have in-place
+  successors of identical signature.
+  Re-measured against `eos` at HEAD after ~57 tickets including four renames: the
+  breakage is **exactly the seven, and nothing new** — so ticket 07's finding now
+  holds EMPIRICALLY against a much-changed `eos`. `EOSTable_for_TOV` is the one
+  that did not follow its neighbours into `astro/`; it went to `general/`,
+  because it is the contract surface both layers may import.
+  The structural change: the total-thermo assembly has no successor, and
+  **nucleation keeps its own saddlepoint solver**, assembling from five pieces
+  that are all already public (`thermo_from_mu`, `gluon_thermo`, and
+  `electron_thermo` / `photon_thermo` / `neutrino_thermo`, the last three in a
+  module nucleation already imports successfully). **No new `eos` code.**
+  **Phase 6 splits**: [24](issues/24-phase6-execute.md) is the port, gated on a
+  before-image taken FIRST (the suite cannot have been green since Phase 3, so
+  "0 added failures" has nothing to measure against) with the rule that surviving
+  failures are reported, not fixed; [72](issues/72-phase6-conformance.md) is the
+  conformance pass, blocked by 24 and NOT gating Acceptance.
+  **Two eos rules deliberately do not transfer.** `nucleation/test/` is tracked,
+  not gitignored — `eos` hides its suite because it is private, nucleation is
+  headed public and would ship a paper's repository with no runnable tests. And
+  nucleation's `output/` gitignore stands: it already tracks
+  `output/paper/{figures,figure_data,tables}` (87 files), which IS §11's
+  `output/public/` principle correctly specialised; flattening it would untrack
+  the paper's figures.
+  **Two conformance items measured clean** and are commissioned no sweep:
+  internal layering (already acyclic, `barrier.py` at the bottom) and the
+  docstring standard (nothing in 8,121 lines). "Apply the same API conventions"
+  is dropped outright — nucleation is a consumer, not a model.
+  **The no-push rule is lifted** (its premise, "no remote exists", is false):
+  push after 24, again after 72. **Before 24 opens**, nucleation's dirty tree is
+  resolved — commit the 16 regenerated paper PDFs, and RESTORE
+  `docs/nucleation_physics.md` and `docs/reproducing.md`, which have four live
+  references including a source docstring citing "section 7" of a document that
+  is currently deleted.
+  Noted for Stage 7, not fixed: `alphabag`'s `solve_*` take `params=None` and a
+  boolean flag-bag rather than `SpeciesFlags` — and that non-conformance is
+  precisely why two of the seven targets are signature-compatible name swaps.
 
 ## Not yet specified
 
