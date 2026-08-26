@@ -22,6 +22,9 @@ port only**. The Acceptance criteria block can check that `nucleation` imports
 `eos`, that its suite runs, and that §1 holds in both directions — nothing in it
 reads a README. Ticket 72 is in scope of this map and **not gating**: gating the
 Stage 7 report on a rewrite no criterion measures would hold it hostage.
+**[Ticket 76](issues/76-nucleation-golden-tolerances.md) IS gating**, and by the
+same test: the port left two `nucleation` goldens comparing round-off, and the
+criteria block's first line is "pytest ... fully green".
 
 Reached when every ticket here is resolved and the Stage 7 report can be written
 with real tool output behind every claim — with ticket 72 the one ticket that
@@ -1429,6 +1432,47 @@ against this file, not against the earlier `pytest_before*.txt`.
   Noted for Stage 7, not fixed: `alphabag`'s `solve_*` take `params=None` and a
   boolean flag-bag rather than `SpeciesFlags` — and that non-conformance is
   precisely why two of the seven targets are signature-compatible name swaps.
+
+- [Execute Phase 6 — the port](issues/24-phase6-execute.md): **`nucleation`
+  imports `eos` again**, landed as `32ef8c4` and **pushed to
+  `origin/paper-release`** (`33c1e61..32ef8c4`). 17 files, +281/-63; **no file
+  under `eos/` was edited**, so the brief's "no new `eos` code" held end to end.
+  The port ran ITERATIVELY, as the before-image forced — one root cause masked
+  every other break, so the evidence is the sequence, not a diff:
+
+      run 0  before          module walk  38 of 38 FAIL   pytest  0 collected
+      run 1  imports fixed   module walk   0 of 39 fail   pytest  21F 15E 36P
+      run 2  Y_Le / mu_nue                                pytest   7F 12E 53P
+      run 3  Y_u, Y_d, Y_s                                pytest   2F  0E 70P
+
+  **Runs 2 and 3 existed only because run 1 cleared the mask.** `eos.sfho.table`
+  had renamed the trapped table's outer axis `Y_L -> Y_Le` and its potential
+  `mu_nu -> mu_nue`; only the READS of eos-produced tables were renamed, never
+  nucleation's own keys. The structural change is `nucleation/quark.py`: a
+  `DropletThermo` and ONE assembly function (the old unpaired and CFL builders
+  differed only in their phase block) over `thermo_from_mu` /
+  `cfl_thermo_from_mu`, `gluon_thermo` and the lepton and photon gases, plus
+  `custom_params` for the seven `get_alphabag_custom` sites.
+  **The brief's "exactly five added fields" was nine.** `e_total` is read at
+  four sites, and `Y_u`/`Y_d`/`Y_s` through `tables/grid.py:_BASE_DATA_KEYS` —
+  a list of key STRINGS fed to `getattr`, which no attribute-access grep can
+  see. That is the lesson, not the fields.
+  §1 holds both ways: forward `import nucleation` -> OK, pulling in only
+  `eos.alphabag` and `eos.general`; reverse
+  `test_eos_never_imports_nucleation` passes (194 in the file).
+  **Two failures survive and were REPORTED, not fixed, with no tolerance
+  touched** — an A/B swapping only the alphaBag kernel under the ported code
+  (old: 2 passed, new: 2 failed) traces them to a **~1 ulp** change in the quark
+  block's floating-point association, §2's shared basis maps replacing inline
+  charge sums. They are now [ticket 76](issues/76-nucleation-golden-tolerances.md),
+  which **blocks Acceptance** — by ticket 23's own argument, since the criteria
+  block's first line is "pytest ... fully green".
+  Reported, not fixed: **`eos` is not installed on the canonical stack** —
+  `nucleation/pyproject.toml` declares it, `pip list` on 3.14 does not have it,
+  and `import eos` works only via `PYTHONPATH`. The before-image was taken the
+  same way, so the numbers are comparable, but "nucleation depends on eos" is
+  true in the source and not yet in the environment.
+  Transcripts: `output/_audit/nucleation_after_ticket24_py314.txt`.
 
 ## Not yet specified
 
