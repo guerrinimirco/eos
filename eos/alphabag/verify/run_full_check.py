@@ -107,14 +107,14 @@ def _states(par, grid, T):
     """One solved state per mode, at each density of the grid."""
     out = []
     for n_B in grid:
-        out.append(("beta", solve_beta_eq_neutrinoless(n_B, T, params=par)))
+        out.append(("beta", solve_beta_eq_neutrinoless(par, n_B, T)))
         out.append(("trapped",
-                    solve_beta_eq_neutrino_trapped(n_B, 0.4, T, params=par)))
-        out.append(("yc", solve_fixed_yc(n_B, 0.0, T, params=par,
+                    solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T)))
+        out.append(("yc", solve_fixed_yc(par, n_B, 0.0, T,
                                          include_electrons=True)))
-        out.append(("yc_nolep", solve_fixed_yc(n_B, 0.0, T, params=par,
+        out.append(("yc_nolep", solve_fixed_yc(par, n_B, 0.0, T,
                                                include_electrons=False)))
-        out.append(("ycys", solve_fixed_yc_ys(n_B, 0.0, 1.0, T, params=par)))
+        out.append(("ycys", solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T)))
     return out
 
 
@@ -127,7 +127,7 @@ def _check_euler(par, grid, T):
         worst = max(worst, abs(eps + P - T * s - mu_n_sum) / abs(eps))
     for n_B in grid:
         for Delta0 in (50.0, 100.0):
-            c = solve_cfl(n_B, T, Delta0, params=par, include_photons=False,
+            c = solve_cfl(par, n_B, T, Delta0, include_photons=False,
                           include_gluons=False)
             mu_n_sum = c.mu_u * c.n_u + c.mu_d * c.n_d + c.mu_s * c.n_s
             worst = max(worst, abs(c.e_total + c.P_total - T * c.s_total
@@ -270,7 +270,7 @@ def _check_charge_basis(par, grid, T):
     """
     worst = 0.0
     for n_B in grid:
-        r = solve_beta_eq_neutrinoless(n_B, T, params=par)
+        r = solve_beta_eq_neutrinoless(par, n_B, T)
         block = thermo_from_mu(r.mu_u, r.mu_d, r.mu_s, T, par)
         n_B_b, n_C_b, n_S_b = quark_charges(block.n_u, block.n_d, block.n_s)
         mu_B_b, mu_C_b, mu_S_b = charge_potentials_from_quarks(
@@ -290,7 +290,7 @@ def _check_mode_closures(par, grid, T):
     """Each mode's defining conditions, evaluated at its own solution."""
     worst = 0.0
     for n_B in grid:
-        r = solve_beta_eq_neutrinoless(n_B, T, params=par)
+        r = solve_beta_eq_neutrinoless(par, n_B, T)
         mu_scale = abs(r.mu_B)
         worst = max(worst,
                     abs(r.mu_C + r.mu_e) / mu_scale,        # beta equilibrium
@@ -298,23 +298,23 @@ def _check_mode_closures(par, grid, T):
                     abs(r.Y_C * n_B - r.n_e) / n_B,         # neutrality
                     abs(r.n_B - n_B) / n_B)                 # baryon number
 
-        r = solve_beta_eq_neutrino_trapped(n_B, 0.4, T, params=par)
+        r = solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T)
         worst = max(worst,
                     abs(r.mu_C + r.mu_e - r.mu_nu) / abs(r.mu_B),
                     abs(r.mu_S) / abs(r.mu_B),
                     abs(r.Y_C * n_B - r.n_e) / n_B,
                     abs((r.n_e + r.n_nu) / n_B - 0.4))
 
-        r = solve_fixed_yc(n_B, 0.0, T, params=par, include_electrons=True)
+        r = solve_fixed_yc(par, n_B, 0.0, T, include_electrons=True)
         worst = max(worst, abs(r.Y_C), abs(r.mu_S) / abs(r.mu_B),
                     abs(r.n_B - n_B) / n_B)
 
-        r = solve_fixed_yc(n_B, 0.0, T, params=par, include_electrons=False)
+        r = solve_fixed_yc(par, n_B, 0.0, T, include_electrons=False)
         # No neutrality here: the phase would be charged at any other Y_C,
         # which is the point.
         worst = max(worst, abs(r.Y_C), abs(r.n_e))
 
-        r = solve_fixed_yc_ys(n_B, 0.0, 1.0, T, params=par)
+        r = solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T)
         worst = max(worst, abs(r.Y_C), abs(r.Y_S - 1.0),
                     abs(r.n_B - n_B) / n_B)
     return CheckResult("mode closures", worst < 1e-8, worst,
@@ -337,7 +337,7 @@ def _check_cfl(par, grid, T):
             # The bare phase: the derivatives below are of its own
             # potential, so the gluon and photon gases must not be in the
             # totals they are compared against.
-            c = solve_cfl(n_B, T, Delta0, params=par, include_photons=False,
+            c = solve_cfl(par, n_B, T, Delta0, include_photons=False,
                           include_gluons=False)
             worst_neutral = max(worst_neutral, abs(c.Y_C))
 
@@ -387,7 +387,7 @@ def _check_residual_gate(par, grid, T):
     states = _states(par, grid, T)
     for n_B in grid:
         for Delta0 in (50.0, 100.0):
-            states.append(("cfl", solve_cfl(n_B, T, Delta0, params=par)))
+            states.append(("cfl", solve_cfl(par, n_B, T, Delta0)))
     worst = max(r.error for _, r in states if r.converged)
     n_bad = sum(1 for _, r in states if not r.converged)
     return CheckResult("residual gate", n_bad == 0 and worst <= RESIDUAL_TOL,

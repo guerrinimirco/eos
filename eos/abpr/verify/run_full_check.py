@@ -99,7 +99,7 @@ def check_euler():
     worst, detail = 0.0, ""
     for par in SETS:
         for n_B in DENSITIES:
-            point = solve_cfl(n_B, par)
+            point = solve_cfl(par, n_B)
             lhs = point.e_total + point.P_total
             rhs = (point.T * point.s_total
                    + point.mu_u * point.n_u
@@ -119,7 +119,7 @@ def check_free_energy():
     worst, detail = 0.0, ""
     for par in SETS:
         for n_B in DENSITIES:
-            point = solve_cfl(n_B, par)
+            point = solve_cfl(par, n_B)
             scale = abs(point.e_total)
             for value, name in (
                     (point.f_total - (point.e_total
@@ -166,7 +166,7 @@ def check_charges():
     worst, detail = 0.0, ""
     for par in SETS:
         for n_B in DENSITIES:
-            point = solve_cfl(n_B, par)
+            point = solve_cfl(par, n_B)
             _, n_C, n_S = quark_charges(point.n_u, point.n_d, point.n_s)
             _, mu_C, mu_S = charge_potentials_from_quarks(
                 point.mu_u, point.mu_d, point.mu_s)
@@ -197,7 +197,7 @@ def check_surface():
         if not converged:
             return CheckResult("surface", False, np.inf,
                                f"{par.name}: no P = 0 root")
-        point = solve_cfl(baryon_density(mu0, par), par)
+        point = solve_cfl(par, baryon_density(mu0, par))
         err_P = abs(point.P_total) / (par.B / hc3)
         E_per_A = point.e_total / point.n_B
         err_EA = abs(E_per_A - point.mu_B) / point.mu_B

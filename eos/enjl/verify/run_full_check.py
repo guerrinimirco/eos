@@ -127,15 +127,15 @@ COMPOSITIONS = (
 )
 
 
-def _densities(n_B_fm, y_p, y_L, y_q):
+def _densities(n_B, y_p, y_L, y_q):
     """Species densities [MeV^3] for one entry of COMPOSITIONS.
 
     The quark baryon fraction y_q is split equally over the three flavours, so
     n_u = n_d = n_s = y_q n_B; the rest is baryonic.
     """
-    n_B = n_B_fm * hc3
-    n_quark = y_q * n_B
-    n_had = n_B - y_q * n_B
+    n_B_nat = n_B * hc3
+    n_quark = y_q * n_B_nat
+    n_had = n_B_nat - y_q * n_B_nat
     return {"p": y_p * n_had, "n": (1.0 - y_p - y_L) * n_had,
             "Lambda": y_L * n_had,
             "u": n_quark, "d": n_quark, "s": n_quark,
@@ -427,7 +427,7 @@ def check_beta_equilibrium():
         x0 = None
         for n_B in (0.2, 0.3, 0.4, 0.5, 0.6):
             try:
-                pt = solve_beta_eq_neutrinoless(n_B, par=par, x0=x0)
+                pt = solve_beta_eq_neutrinoless(par, n_B, x0=x0)
             except RuntimeError:
                 x0 = None
                 continue
@@ -480,7 +480,7 @@ def check_thermo_from_mu():
     worst, detail, x0 = 0.0, "", None
     for n_B in (0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.5):
         try:
-            pt = solve_beta_eq_neutrinoless(n_B, par=par, x0=x0)
+            pt = solve_beta_eq_neutrinoless(par, n_B, x0=x0)
         except RuntimeError:
             x0 = None
             continue
@@ -591,7 +591,7 @@ def check_fixed_fractions():
         for Y_C in (0.0, 0.1, 0.3, 0.5):
             for leptons in (True, False):
                 try:
-                    pt = solve_fixed_yc(n_B, Y_C, par=par, leptons=leptons)
+                    pt = solve_fixed_yc(par, n_B, Y_C, leptons=leptons)
                 except RuntimeError:
                     continue
                 got = pt.point.n_C / pt.point.n_b
@@ -600,7 +600,7 @@ def check_fixed_fractions():
                     worst, detail = err, f"n_B={n_B} Y_C={Y_C} leptons={leptons}"
         for Y_S in (0.0, 0.1):
             try:
-                pt = solve_fixed_yc_ys(n_B, 0.3, Y_S, par=par, leptons=False)
+                pt = solve_fixed_yc_ys(par, n_B, 0.3, Y_S, leptons=False)
             except RuntimeError:
                 continue
             for got, want, name in ((pt.point.n_C / pt.point.n_b, 0.3, "Y_C"),
@@ -649,7 +649,7 @@ def check_symmetric_matter_slice():
     for n_B in np.arange(0.10, 0.86, 0.05):
         n_B = float(n_B)
         try:
-            pt = solve_fixed_yc_ys(n_B, 0.5, 0.0, par=par, leptons=False)
+            pt = solve_fixed_yc_ys(par, n_B, 0.5, 0.0, leptons=False)
         except RuntimeError:
             continue
         attempted += 1
@@ -692,7 +692,7 @@ def check_trapped_lepton_number():
     for Y_Le in (0.1, 0.2, 0.3, 0.4):
         for n_B in (0.2, 0.4):
             try:
-                pt = solve_beta_eq_neutrino_trapped(n_B, Y_Le, par=par)
+                pt = solve_beta_eq_neutrino_trapped(par, n_B, Y_Le)
             except RuntimeError:
                 continue
             _, _, mu_C, _, mu_nue, _ = _unpack(pt.x, pt.spec)
@@ -970,7 +970,7 @@ def check_residual_margin():
         for point in table.points:
             if point.error > worst:
                 worst = point.error
-                detail = f"{mode} {fracs} n_B={point.n_b_fm:.4f}"
+                detail = f"{mode} {fracs} n_B={point.n_B:.4f}"
     return CheckResult("residual_margin", worst < gate, worst,
                        f"{detail or 'all modes'}; "
                        f"worst {worst:.2e} against {gate:.0e} "

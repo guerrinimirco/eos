@@ -274,6 +274,47 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 90 — one solver signature, one unit system at the boundary](issues/90-solver-signature-and-units-sweep.md)**
+  (resolved). Ticket 81 §§2 and 5 were meant to be the no-value-moves half of
+  that ruling; **two more halves of it turned out to move frozen values and
+  were split out rather than the gate being weakened**, the treatment
+  [ticket 89](issues/89-dd2-honours-species-flags.md) was given. §4 became one
+  ticket per model — [94](issues/94-zl-solver-flags.md),
+  [95](issues/95-vmit-solver-flags.md), [96](issues/96-alphabag-solver-flags.md)
+  — because deleting `include_photons`/`include_gluons`/`include_thermal_neutrinos`
+  into the flags moves every T > 0 row in three baselines, the generators naming
+  none of the three. §5 and the record half of §3 became
+  [97](issues/97-natural-record-leaves-the-result.md), split *after* being
+  written and measured: the `_fm` names are ACCESSORS on the natural-units
+  records the baselines freeze, so the rename changes what **4128 frozen keys
+  mean** and the removal deletes **21271** (enjl 14976 nested under `.point`,
+  njl 3255 and ccdm 3040 under `.state`). All four are blocked by this ticket;
+  96 was also blocked by [92](issues/92-cfl-gluon-term.md), which has since
+  ruled.
+  **What executed moves nothing.** `par` is now first and required in all ten
+  models — the seven that lacked it gained it, and the
+  `if par is None: par = Parameters.default()` reach was DELETED from thirteen
+  zl/vmit/alphabag entry points, which is the §6 violation the signature was
+  hiding rather than a convenience. `params` -> `par`; `n_B_fm` -> `n_B` over 87
+  sites with `_nat` on every displaced natural-units variable, now stated in
+  `docs/STRUCTURE.md` §5 as the repository rule. **161 call sites moved, 139 of
+  them by an AST rewrite** that relocates the argument's exact source slice, so
+  multi-line calls move correctly. `dd2/solver.py`'s local is `n_B_solved`, not
+  `n_B`: it is the EVALUATED density against the function's TARGET `n_B`, which
+  differ at T > 0.
+  **One silent-unit trap, and only one test caught it**: two seed expressions in
+  `enjl`'s `default_guess` were natural units and became fm; every enjl test
+  passed but `test_high_density_needs_a_widened_box`, which stopped at a scaled
+  residual of 2.259e-09 against a 1e-10 bound. Confirmed against an isolated
+  reverted control. Ticket 97 is told to rename fields first and accessors
+  second for exactly this reason.
+  Gate: `test/baseline` **20 passed, UNREGENERATED** except `enjl.npz`, whose
+  **234 renamed keys are BIT-identical and whose 21044 surviving keys are
+  bit-identical, 0 moved, 0 added or lost**; twelve `verify/` entry points,
+  **136 checks, 0 FAIL**; full suite **1737 passed, 20 skipped, 0 failed**,
+  py314. Four findings reported not fixed, including a baseline generator whose
+  breakage is invisible to a partial run.
+
 - **[Ticket 89 — `dd2.solver.solve` honours `flags.photons`](issues/89-dd2-honours-species-flags.md)**
   (resolved, `992fd9c`). Ticket 81 §1 executed, and kept alone because it is the
   only commit in that ruling that moves frozen values. `include_photons` deleted
@@ -386,10 +427,15 @@ against this file, not against the earlier `pytest_before*.txt`.
   `n_B` divides out to exactly `hc3` but whose **P, eps and s do not** — it is
   matter-only, so `njl .state.P / hc3 = 146.854334` against an outer
   `146.939710`, and correcting by `hc3` still gives a wrong answer.
-  Execution split three ways by what must be re-measured:
+  Execution split by what must be re-measured, three ways and then six:
   [89](issues/89-dd2-honours-species-flags.md) (the only commit moving frozen
-  values), [90](issues/90-solver-signature-and-units-sweep.md),
-  [91](issues/91-leptons-default-and-drift-checks.md). Three sentences owed to
+  values, as it was then), [90](issues/90-solver-signature-and-units-sweep.md),
+  [91](issues/91-leptons-default-and-drift-checks.md) — and on 2026-08-27
+  ticket 90 shed its §4, whose "no value moves" premise ticket 82 had
+  falsified, into one ticket per affected model:
+  [94](issues/94-zl-solver-flags.md), [95](issues/95-vmit-solver-flags.md),
+  [96](issues/96-alphabag-solver-flags.md), all three blocked by 90 and 96
+  also by [92](issues/92-cfl-gluon-term.md). Three sentences owed to
   [ticket 85](issues/85-claudemd-sentences-owed.md); ticket 82 becomes decisive
   rather than half an answer.
 

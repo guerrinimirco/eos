@@ -290,7 +290,7 @@ because in the ABPR parametrization `Delta` is fitted alongside `a4`, `m_s` and
 `B` and belongs with them in the parameter set; carrying it in both places
 would be two homes for one number.
 
-The "solve" behind `solve_cfl(n_B)` is the inversion of (nB), given in closed
+The "solve" behind `solve_cfl(par, n_B)` is the inversion of (nB), given in closed
 form below.
 
 **What the other four modes mean here, and why each raises.** The repository's

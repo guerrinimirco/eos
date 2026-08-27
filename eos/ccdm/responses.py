@@ -46,7 +46,7 @@ def _solve(par, flags, mode, n_B, T, branches, patterns, fractions):
     asked for at a state the model cannot reach is a caller error, not a
     sampler's bad draw, so this is not turned into a status.
     """
-    point = solve(mode, n_B, T, par, flags, branches=branches,
+    point = solve(par, mode, n_B, T, flags, branches=branches,
                   patterns=patterns, **fractions)
     if not point.converged:
         raise RuntimeError(

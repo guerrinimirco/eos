@@ -129,13 +129,14 @@ def eos_point(par, mode, species=None, n_B=None,
     if n_B <= 0.0:
         raise ValueError(f"n_B must be positive, got {n_B}")
 
-    common = dict(par=par, x0=x0, cold_start=x0 is None, leptons=leptons,
+    common = dict(x0=x0, cold_start=x0 is None, leptons=leptons,
                   species=species)
     try:
         if SnB is None:
-            point = solve(mode, n_B, T=T, **common, **conditions)
+            point = solve(par, mode, n_B, T=T, **common, **conditions)
         else:
-            point = solve_at_entropy(mode, n_B, SnB, **common, **conditions)
+            point = solve_at_entropy(par, mode, n_B, SnB,
+                                     **common, **conditions)
     except RuntimeError as err:
         return PointResult(False, str(err))
     return PointResult(True, "converged", point)

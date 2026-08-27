@@ -101,7 +101,7 @@ def eos_point(par, mode="cfl", species=None, n_B=None, T=0.0, SnB=None,
     if n_B <= 0.0:
         raise ValueError(f"n_B must be positive, got {n_B}")
 
-    point = solve_cfl(n_B, par, T=T)
+    point = solve_cfl(par, n_B, T=T)
     if not point.converged:
         return PointResult(
             False, f"ABPR cfl inverse did not land at n_B={n_B}: "
@@ -183,7 +183,7 @@ def eos_table(par, mode="cfl", species=None, axes=None, rows=False,
     T = _check_call(mode, species, float(temps[0]), None, {})
 
     started = time.time()
-    points = [solve_cfl(float(n), par, T=T) for n in nB]
+    points = [solve_cfl(par, float(n), T=T) for n in nB]
     if progress is None and verbose:
         from eos.general.tabulate import print_progress
         progress = print_progress

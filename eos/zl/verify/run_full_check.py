@@ -90,12 +90,11 @@ def _states(par, grid, T):
     """One solved state per mode, at each density of the grid."""
     out = []
     for n_B in grid:
-        out.append(("beta", solve_beta_eq_neutrinoless(n_B, T, params=par)))
-        out.append(("yc", solve_fixed_yc(n_B, 0.3, T, params=par)))
-        out.append(("yc_nolep", solve_fixed_yc(n_B, 0.3, T, params=par,
+        out.append(("beta", solve_beta_eq_neutrinoless(par, n_B, T)))
+        out.append(("yc", solve_fixed_yc(par, n_B, 0.3, T)))
+        out.append(("yc_nolep", solve_fixed_yc(par, n_B, 0.3, T,
                                                include_electrons=False)))
-        out.append(("trapped", solve_beta_eq_neutrino_trapped(n_B, 0.4, T,
-                                                              params=par)))
+        out.append(("trapped", solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T)))
     return out
 
 
@@ -162,22 +161,22 @@ def _check_mode_closures(par, grid, T):
     """Each mode's defining conditions, evaluated at its own solution."""
     worst = 0.0
     for n_B in grid:
-        r = solve_beta_eq_neutrinoless(n_B, T, params=par)
+        r = solve_beta_eq_neutrinoless(par, n_B, T)
         mu_scale = abs(r.mu_B)
         worst = max(worst,
                     abs(r.mu_C + r.mu_e) / mu_scale,   # beta equilibrium
                     abs(r.n_p - r.n_e) / n_B,          # electric neutrality
                     abs(r.n_p + r.n_n - n_B) / n_B)    # baryon number
 
-        r = solve_fixed_yc(n_B, 0.3, T, params=par)
+        r = solve_fixed_yc(par, n_B, 0.3, T)
         worst = max(worst, abs(r.n_p - 0.3 * n_B) / n_B,
                     abs(r.n_p - r.n_e) / n_B)
 
-        r = solve_fixed_yc(n_B, 0.3, T, params=par, include_electrons=False)
+        r = solve_fixed_yc(par, n_B, 0.3, T, include_electrons=False)
         # No neutrality here: the phase is charged, which is the point.
         worst = max(worst, abs(r.n_p - 0.3 * n_B) / n_B, abs(r.n_e))
 
-        r = solve_beta_eq_neutrino_trapped(n_B, 0.4, T, params=par)
+        r = solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T)
         worst = max(worst, abs(r.mu_C + r.mu_e - r.mu_nu) / abs(r.mu_B),
                     abs(r.n_p - r.n_e) / n_B,
                     abs((r.n_e + r.n_nu) / n_B - 0.4))
@@ -198,7 +197,7 @@ def _check_free_gas_limit(par, grid, T):
                       a1=0.0, b1=0.0, gamma1=par.gamma1)
     worst = 0.0
     for n_B in grid:
-        r = solve_beta_eq_neutrinoless(n_B, T, params=free)
+        r = solve_beta_eq_neutrinoless(free, n_B, T)
         gases = [kinetic_thermo(r.mu_p, T, free.m_p),
                  kinetic_thermo(r.mu_n, T, free.m_n)]
         P_kin = sum(g.P for g in gases)
@@ -220,7 +219,7 @@ def _check_isospin_symmetry(par, grid, T):
     """
     worst = 0.0
     for n_B in grid:
-        r = solve_fixed_yc(n_B, 0.5, T, params=par, include_electrons=False)
+        r = solve_fixed_yc(par, n_B, 0.5, T, include_electrons=False)
         worst = max(worst, abs(r.mu_C) / abs(r.mu_B))
         block = thermo_from_mu_n(r.mu_p, r.mu_n, r.n_p, r.n_n, T, par)
         worst = max(worst, abs(block.n_p - block.n_n) / n_B)
@@ -281,7 +280,7 @@ def _check_no_strangeness(par):
     except NotImplementedError:
         raised_api = True
     listed = "fixed_YC_YS" not in MODE_FRACTIONS
-    r = solve_beta_eq_neutrinoless(0.16, 10.0, params=par)
+    r = solve_beta_eq_neutrinoless(par, 0.16, 10.0)
     n_S_zero = (r.Y_S == 0.0 and r.mu_S == 0.0)
     passed = raised_solver and raised_api and listed and n_S_zero
     return CheckResult("no strangeness", passed, 0.0 if passed else 1.0,

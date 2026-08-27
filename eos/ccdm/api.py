@@ -131,7 +131,7 @@ def eos_point(par, mode, species=None, n_B=None,
 
     if SnB is not None:
         def entropy_at(temp):
-            p = solve(mode, n_B, temp, par, species, x0, branches=branches,
+            p = solve(par, mode, n_B, temp, species, x0, branches=branches,
                       patterns=patterns, leptons=leptons, **conditions)
             return p.s_total / p.n_B if p.n_B else 0.0
         try:
@@ -142,7 +142,7 @@ def eos_point(par, mode, species=None, n_B=None,
             # scored and stepped over, never raised.
             return PointResult(False, str(err))
 
-    point = solve(mode, n_B, T, par, species, x0, branches=branches,
+    point = solve(par, mode, n_B, T, species, x0, branches=branches,
                   patterns=patterns, leptons=leptons, **conditions)
     if point.converged:
         return PointResult(

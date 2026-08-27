@@ -141,22 +141,22 @@ def _states(par, include_csc=True):
     out = []
     for T in (0.0, 25.0):
         out.append(("beta", plain, T,
-                    solve_beta_eq_neutrinoless(1.0, T, par, plain)))
+                    solve_beta_eq_neutrinoless(par, 1.0, T, plain)))
         out.append(("yc_lep", plain, T,
-                    solve_fixed_yc(1.0, 0.1, T, par, plain, leptons=True)))
+                    solve_fixed_yc(par, 1.0, 0.1, T, plain, leptons=True)))
         out.append(("yc_nolep", plain, T,
-                    solve_fixed_yc(1.0, 0.1, T, par, plain, leptons=False)))
+                    solve_fixed_yc(par, 1.0, 0.1, T, plain, leptons=False)))
     out.append(("trapped", plain, 25.0,
-                solve_beta_eq_neutrino_trapped(1.0, 0.2, 25.0, par, plain)))
+                solve_beta_eq_neutrino_trapped(par, 1.0, 0.2, 25.0, plain)))
     out.append(("yc_ys", plain, 25.0,
-                solve_fixed_yc_ys(1.0, 0.0, 0.3, 25.0, par, plain)))
+                solve_fixed_yc_ys(par, 1.0, 0.0, 0.3, 25.0, plain)))
     if include_csc:
         paired = SpeciesFlags(csc=True)
         out.append(("beta_2SC", paired, 0.0,
-                    solve("beta_eq_neutrinoless", 1.4887, 0.0, par, paired,
+                    solve(par, "beta_eq_neutrinoless", 1.4887, 0.0, paired,
                           patterns=("2SC",))))
         out.append(("beta_2SC_hot", paired, 20.0,
-                    solve("beta_eq_neutrinoless", 1.4, 20.0, par, paired,
+                    solve(par, "beta_eq_neutrinoless", 1.4, 20.0, paired,
                           patterns=("2SC",))))
     return out
 
@@ -322,7 +322,7 @@ def check_density_derivative(par, tol=1.0e-5):
     for flags, n_B, patterns in ((SpeciesFlags(csc=False), 1.0, None),
                                  (SpeciesFlags(csc=True), 1.4887, ("2SC",))):
         dn = 1.0e-2 * n_B
-        points = [solve("beta_eq_neutrinoless", n, 0.0, par, flags,
+        points = [solve(par, "beta_eq_neutrinoless", n, 0.0, flags,
                         patterns=patterns)
                   for n in (n_B - dn, n_B, n_B + dn)]
         if not all(p.converged for p in points):
@@ -363,12 +363,12 @@ def check_anchor(par, tol=1.0e-3):
                 worst, where = error, f"{label}.{name}"
 
     plain = SpeciesFlags(csc=False)
-    p = solve("beta_eq_neutrinoless", ANCHOR_UNPAIRED["n_B"], 0.0, par, plain)
+    p = solve(par, "beta_eq_neutrinoless", ANCHOR_UNPAIRED["n_B"], 0.0, plain)
     compare({"M_u": p.M[0], "M_d": p.M[1], "M_s": p.M[2], "mu_C": p.mu_C,
              "n_B": p.n_B, "P": p.P_total}, ANCHOR_UNPAIRED, "unpaired")
 
     paired = SpeciesFlags(csc=True)
-    q = solve("beta_eq_neutrinoless", ANCHOR_2SC["n_B"], 0.0, par, paired,
+    q = solve(par, "beta_eq_neutrinoless", ANCHOR_2SC["n_B"], 0.0, paired,
               patterns=("2SC",))
     compare({"M_s": q.M[2], "mu_C": q.mu_C, "mu_8": q.mu_8,
              "Delta_3": q.Delta[2], "n_B": q.n_B, "P": q.P_total},
@@ -395,7 +395,7 @@ def check_colour_neutrality(par, tol=1.0e-10):
     scale = max(abs(st.n_q), 1.0)
     unpaired = max(abs(st.n_3), abs(st.n_8)) / scale
 
-    paired = solve("beta_eq_neutrinoless", 1.4887, 0.0, par,
+    paired = solve(par, "beta_eq_neutrinoless", 1.4887, 0.0,
                    SpeciesFlags(csc=True), patterns=("2SC",))
     solved = max(abs(paired.state.n_3), abs(paired.state.n_8)) / max(
         abs(paired.state.n_q), 1.0)

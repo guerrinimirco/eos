@@ -104,7 +104,7 @@ class EoSPoint:
 # =============================================================================
 # COLD GUESSES
 # =============================================================================
-def default_guess(mode: str, n_B: float, T: float, params: Parameters,
+def default_guess(mode: str, n_B: float, T: float, par: Parameters,
                   Y_C: float = None, Y_S: float = None, Y_Le: float = None,
                   leptons: bool = True) -> np.ndarray:
     """The cold start of one mode.
@@ -125,7 +125,7 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
     The layouts are the unknown vectors of each mode's residual, so a guess is
     only valid within its own mode.
     """
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
     def mu_of_n(n, m):
         """sqrt(k_F^2 + m^2) at the Fermi momentum of density n."""
@@ -151,7 +151,7 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
         mu_d = mu_of_n(n_d, m_d)
         mu_s = mu_of_n(max(n_s, 1e-6), m_s)
         mu_e = max(0.0, mu_d - mu_u)          # beta equilibrium estimate
-        V = params.a * hc * (n_u + n_d + n_s)
+        V = par.a * hc * (n_u + n_d + n_s)
 
         if mode == "beta_eq_neutrinoless":
             return np.array([mu_u + V, mu_d + V, mu_s + V, mu_e,
@@ -184,7 +184,7 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
 # SOLVER: BETA EQUILIBRIUM
 # =============================================================================
 def solve_beta_eq_neutrinoless(
-    n_B: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, T: float,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
@@ -201,21 +201,19 @@ def solve_beta_eq_neutrinoless(
     Args:
         n_B: Baryon density (fm⁻³)
         T: Temperature (MeV)
-        params: vMIT parameters
+        par: vMIT parameters
         include_photons: Include photon contributions
         initial_guess: Initial guess [μ_u, μ_d, μ_s, μ_e, n_u, n_d, n_s]
         
     Returns:
         EoSPoint with all thermodynamic quantities
     """
-    if params is None:
-        params = Parameters.default()
     
     result = EoSPoint(n_B=n_B, T=T)
     
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
-    x0_default = default_guess("beta_eq_neutrinoless", n_B, T, params)
+    x0_default = default_guess("beta_eq_neutrinoless", n_B, T, par)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
 
@@ -223,7 +221,7 @@ def solve_beta_eq_neutrinoless(
         mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
 
         # Compute effective μ and densities
-        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
         n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
 
         eq1 = qmd.n_u_calc - n_u
@@ -251,7 +249,7 @@ def solve_beta_eq_neutrinoless(
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
     
     # Add electron contribution
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
@@ -283,7 +281,7 @@ def solve_beta_eq_neutrinoless(
 # SOLVER: FIXED Y_C
 # =============================================================================
 def solve_fixed_yc(
-    n_B: float, Y_C: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, Y_C: float, T: float,
     include_photons: bool = True,
     include_electrons: bool = True,
     initial_guess: Optional[np.ndarray] = None
@@ -300,14 +298,12 @@ def solve_fixed_yc(
         - Baryon: (n_u + n_d + n_s)/3 = n_B
         - Strangeness eq: μ_s = μ_d
     """
-    if params is None:
-        params = Parameters.default()
     
     result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C)
     
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
-    x0_default = default_guess("fixed_YC", n_B, T, params, Y_C=Y_C,
+    x0_default = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C,
                                leptons=include_electrons)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
@@ -318,7 +314,7 @@ def solve_fixed_yc(
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
             eq1 = qmd.n_u_calc - n_u
@@ -354,7 +350,7 @@ def solve_fixed_yc(
             mu_u, mu_d, mu_s, n_u, n_d, n_s = x
 
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
 
             eq1 = qmd.n_u_calc - n_u
             eq2 = qmd.n_d_calc - n_d
@@ -382,7 +378,7 @@ def solve_fixed_yc(
     result.Y_s = n_s / n_B 
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
     
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
@@ -412,7 +408,7 @@ def solve_fixed_yc(
 # SOLVER: FIXED Y_C AND Y_S
 # =============================================================================
 def solve_fixed_yc_ys(
-    n_B: float, Y_C: float, Y_S: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, Y_C: float, Y_S: float, T: float,
     include_photons: bool = True,
     include_electrons: bool = True,
     initial_guess: Optional[np.ndarray] = None
@@ -424,14 +420,12 @@ def solve_fixed_yc_ys(
     If include_electrons=True:  7 equations, 7 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e]
         with charge neutrality n_e(μ_e) = n_Q = n_B * Y_C
     """
-    if params is None:
-        params = Parameters.default()
     
     result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C, Y_S=Y_S)
     
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
-    x0_default = default_guess("fixed_YC_YS", n_B, T, params, Y_C=Y_C,
+    x0_default = default_guess("fixed_YC_YS", n_B, T, par, Y_C=Y_C,
                                Y_S=Y_S, leptons=include_electrons)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
@@ -442,7 +436,7 @@ def solve_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
             eq1 = qmd.n_u_calc - n_u
@@ -478,7 +472,7 @@ def solve_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s = x
             
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
             
             eq1 = qmd.n_u_calc - n_u
             eq2 = qmd.n_d_calc - n_d
@@ -506,7 +500,7 @@ def solve_fixed_yc_ys(
     result.Y_s = n_s / n_B 
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
     
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
@@ -536,7 +530,7 @@ def solve_fixed_yc_ys(
 # SOLVER: TRAPPED NEUTRINOS
 # =============================================================================
 def solve_beta_eq_neutrino_trapped(
-    n_B: float, Y_L: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, Y_L: float, T: float,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
@@ -545,14 +539,12 @@ def solve_beta_eq_neutrino_trapped(
     
     8 equations, 8 unknowns: [μ_u, μ_d, μ_s, μ_e, μ_ν, n_u, n_d, n_s]
     """
-    if params is None:
-        params = Parameters.default()
     
     result = EoSPoint(n_B=n_B, T=T, Y_L=Y_L)
     
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
-    x0_default = default_guess("beta_eq_neutrino_trapped", n_B, T, params,
+    x0_default = default_guess("beta_eq_neutrino_trapped", n_B, T, par,
                                Y_Le=Y_L)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
@@ -561,7 +553,7 @@ def solve_beta_eq_neutrino_trapped(
         mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
         
         # Compute effective μ and densities
-        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_thermo = neutrino_thermo(mu_nu, T, include_antiparticles=True)
         
@@ -593,7 +585,7 @@ def solve_beta_eq_neutrino_trapped(
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, params)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
     
     # Add lepton contributions
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)

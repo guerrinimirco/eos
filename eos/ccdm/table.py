@@ -68,13 +68,13 @@ def solve_at(par, mode, n_B, conditions, flags, leptons=True, x0=None):
                  if k in MODE_FRACTIONS[mode]}
     if "SnB" in conditions:
         def entropy_at(T):
-            point = solve(mode, n_B, T, par, flags, x0, leptons=leptons,
+            point = solve(par, mode, n_B, T, flags, x0, leptons=leptons,
                           **fractions)
             return point.s_total / point.n_B if point.n_B else 0.0
         T = temperature_at_entropy(entropy_at, conditions["SnB"])
     else:
         T = conditions["T"]
-    return solve(mode, n_B, T, par, flags, x0, leptons=leptons, **fractions)
+    return solve(par, mode, n_B, T, flags, x0, leptons=leptons, **fractions)
 
 
 def quark_row(point):

@@ -1058,9 +1058,16 @@ no dispatcher gains a branch, no engine learns the model's name.
    learn which mode it is in.
 5. **`eos/<model>/solver.py`** — `default_guess`, `warm_start`, `residual`,
    and one `solve_<mode>` per mode the model supports, with `<mode>` the §4
-   name lowercased. Use `eos.general.solve.solve_system` so the residual
-   scaling and the bounded iteration count are the shared ones. Every solve
-   has a bounded iteration count and a residual gate.
+   name lowercased. **`par` is the first argument of every one of them and is
+   required**, as it is on the uniform API (CLAUDE.md §5): a solver that
+   reaches for `Parameters.default()` on the caller's behalf cannot be
+   sampled over. Densities, temperatures and fractions follow, named `n_B`,
+   `T`, `Y_C`, `Y_S`, `Y_Le`, `Y_Lmu` — **fm-based, with no unit suffix**; a
+   natural-units working variable inside the module carries `_nat`, which is
+   the only place the two systems are named apart. Use
+   `eos.general.solve.solve_system` so the residual scaling and the bounded
+   iteration count are the shared ones. Every solve has a bounded iteration
+   count and a residual gate.
 6. **`eos/<model>/table.py`** — `build_table`, a warm-started sweep along the
    density axis driven by `eos.general.tabulate.sweep_lines`, accepting a
    `progress` callback that is invoked once per completed line with the

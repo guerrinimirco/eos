@@ -513,14 +513,13 @@ def _vmit_wing_solve(spec, n_B, T, params):
     )
     if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
         if spec.L_e is Regime.GLOBAL:
-            return _vmit_trapped(n_B, spec.targets["Y_Le"], T,
-                                 params=params)
-        return _vmit_beta(n_B, T, params=params)
+            return _vmit_trapped(params, n_B, spec.targets["Y_Le"], T)
+        return _vmit_beta(params, n_B, T)
     if spec.S is Regime.GLOBAL:
-        return _vmit_yc_ys(n_B, spec.targets["Y_C"],
-                           spec.targets["Y_S"], T, params=params,
+        return _vmit_yc_ys(params, n_B, spec.targets["Y_C"],
+                           spec.targets["Y_S"], T,
                            include_electrons=spec.yc_leptons)
-    return _vmit_yc(n_B, spec.targets["Y_C"], T, params=params,
+    return _vmit_yc(params, n_B, spec.targets["Y_C"], T,
                     include_electrons=spec.yc_leptons)
 
 
@@ -648,7 +647,7 @@ def vmit_phase(params=None):
 
     def cold_start(n_B, T):
         from eos.vmit.solver import solve_beta_eq_neutrinoless as _vmit_beta
-        q = _vmit_beta(n_B, T, params=params)
+        q = _vmit_beta(params, n_B, T)
         return q.mu_B, q.mu_e, q.mu_B
 
     def wing_sweep(spec, n_B_grid, T):
@@ -953,7 +952,7 @@ def zl_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        p = _zl_beta(n_B, T, params=params)
+        p = _zl_beta(params, n_B, T)
         if not p.converged:
             raise RuntimeError(f"zl cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
@@ -961,10 +960,9 @@ def zl_phase(params=None):
     def _wing_point(spec, n_B, T):
         if spec.C is Regime.NOT_CONSERVED:
             if spec.L_e is Regime.GLOBAL:
-                return _zl_trapped(n_B, spec.targets["Y_Le"], T,
-                                   params=params)
-            return _zl_beta(n_B, T, params=params)
-        return _zl_yc(n_B, spec.targets["Y_C"], T, params=params,
+                return _zl_trapped(params, n_B, spec.targets["Y_Le"], T)
+            return _zl_beta(params, n_B, T)
+        return _zl_yc(params, n_B, spec.targets["Y_C"], T,
                       include_electrons=spec.yc_leptons)
 
     def wing_sweep(spec, n_B_grid, T):
@@ -1029,7 +1027,7 @@ def alphabag_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        p = _ab_beta(n_B, T, params=params)
+        p = _ab_beta(params, n_B, T)
         if not p.converged:
             raise RuntimeError(f"alphabag cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
@@ -1037,14 +1035,13 @@ def alphabag_phase(params=None):
     def _wing_point(spec, n_B, T):
         if spec.C is Regime.NOT_CONSERVED:
             if spec.L_e is Regime.GLOBAL:
-                return _ab_trapped(n_B, spec.targets["Y_Le"], T,
-                                   params=params)
-            return _ab_beta(n_B, T, params=params)
+                return _ab_trapped(params, n_B, spec.targets["Y_Le"], T)
+            return _ab_beta(params, n_B, T)
         if spec.S is Regime.GLOBAL:
-            return _ab_yc_ys(n_B, spec.targets["Y_C"], spec.targets["Y_S"],
-                             T, params=params,
+            return _ab_yc_ys(params, n_B, spec.targets["Y_C"],
+                             spec.targets["Y_S"], T,
                              include_electrons=spec.yc_leptons)
-        return _ab_yc(n_B, spec.targets["Y_C"], T, params=params,
+        return _ab_yc(params, n_B, spec.targets["Y_C"], T,
                       include_electrons=spec.yc_leptons)
 
     def wing_sweep(spec, n_B_grid, T):
@@ -1146,7 +1143,7 @@ def njl_phase(par, flags=None, patterns=None):
         return (th, best_state) if return_state else th
 
     def cold_start(n_B, T):
-        p = _njl_beta(n_B, T, par=par, flags=flags, patterns=patterns)
+        p = _njl_beta(par, n_B, T, flags=flags, patterns=patterns)
         if not p.converged:
             raise RuntimeError(f"eos.njl cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
@@ -1154,14 +1151,15 @@ def njl_phase(par, flags=None, patterns=None):
     def _wing_point(spec, n_B, T):
         if spec.C is Regime.NOT_CONSERVED:
             if spec.L_e is Regime.GLOBAL:
-                return _njl_trapped(n_B, spec.targets["Y_Le"], T, par=par,
+                return _njl_trapped(par, n_B, spec.targets["Y_Le"], T,
                                     flags=flags, patterns=patterns)
-            return _njl_beta(n_B, T, par=par, flags=flags, patterns=patterns)
+            return _njl_beta(par, n_B, T, flags=flags, patterns=patterns)
         if spec.S is Regime.GLOBAL:
-            return _njl_yc_ys(n_B, spec.targets["Y_C"], spec.targets["Y_S"], T,
-                              par=par, flags=flags, leptons=spec.yc_leptons,
+            return _njl_yc_ys(par, n_B, spec.targets["Y_C"],
+                              spec.targets["Y_S"], T,
+                              flags=flags, leptons=spec.yc_leptons,
                               patterns=patterns)
-        return _njl_yc(n_B, spec.targets["Y_C"], T, par=par, flags=flags,
+        return _njl_yc(par, n_B, spec.targets["Y_C"], T, flags=flags,
                        leptons=spec.yc_leptons, patterns=patterns)
 
     def wing_sweep(spec, n_B_grid, T):
@@ -1307,22 +1305,23 @@ def ccdm_phase(par, flags=None, branches=None, patterns=None):
         return (th, best_state) if return_state else th
 
     def cold_start(n_B, T):
-        p = _ccdm_beta(n_B, T, par=par, flags=flags, branches=branches,
+        p = _ccdm_beta(par, n_B, T, flags=flags, branches=branches,
                        patterns=patterns)
         if not p.converged:
             raise RuntimeError(f"eos.ccdm cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
 
     def _wing_point(spec, n_B, T):
-        kw = dict(par=par, flags=flags, branches=branches, patterns=patterns)
+        kw = dict(flags=flags, branches=branches, patterns=patterns)
         if spec.C is Regime.NOT_CONSERVED:
             if spec.L_e is Regime.GLOBAL:
-                return _ccdm_trapped(n_B, spec.targets["Y_Le"], T, **kw)
-            return _ccdm_beta(n_B, T, **kw)
+                return _ccdm_trapped(par, n_B, spec.targets["Y_Le"], T, **kw)
+            return _ccdm_beta(par, n_B, T, **kw)
         if spec.S is Regime.GLOBAL:
-            return _ccdm_yc_ys(n_B, spec.targets["Y_C"], spec.targets["Y_S"],
+            return _ccdm_yc_ys(par, n_B, spec.targets["Y_C"],
+                               spec.targets["Y_S"],
                                T, leptons=spec.yc_leptons, **kw)
-        return _ccdm_yc(n_B, spec.targets["Y_C"], T,
+        return _ccdm_yc(par, n_B, spec.targets["Y_C"], T,
                         leptons=spec.yc_leptons, **kw)
 
     def wing_sweep(spec, n_B_grid, T):

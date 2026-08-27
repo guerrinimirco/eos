@@ -60,28 +60,28 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     neutrinos = species.thermal_neutrinos
     if mode == "beta_eq_neutrinoless":
         return solve_beta_eq_neutrinoless(
-            n_B, T, params, include_photons=photons, include_gluons=gluons,
+            params, n_B, T, include_photons=photons, include_gluons=gluons,
             include_thermal_neutrinos=neutrinos, initial_guess=x0)
     if mode == "beta_eq_neutrino_trapped":
         return solve_beta_eq_neutrino_trapped(
-            n_B, conditions["Y_Le"], T, params, include_photons=photons,
+            params, n_B, conditions["Y_Le"], T, include_photons=photons,
             include_gluons=gluons, include_thermal_neutrinos=neutrinos,
             initial_guess=x0)
     if mode == "fixed_YC":
         return solve_fixed_yc(
-            n_B, conditions["Y_C"], T, params, include_photons=photons,
+            params, n_B, conditions["Y_C"], T, include_photons=photons,
             include_gluons=gluons, include_electrons=leptons,
             include_thermal_neutrinos=neutrinos, initial_guess=x0)
     if mode == "fixed_YC_YS":
         return solve_fixed_yc_ys(
-            n_B, conditions["Y_C"], conditions["Y_S"], T, params,
+            params, n_B, conditions["Y_C"], conditions["Y_S"], T,
             include_photons=photons, include_gluons=gluons,
             include_electrons=leptons, include_thermal_neutrinos=neutrinos,
             initial_guess=x0)
     if mode == "cfl":
         # The paired phase carries no lepton condition and, unlike the
         # unpaired solvers, no thermal neutrino gas -- see docs/DEFERRED.md.
-        return solve_cfl(n_B, T, conditions["Delta0"], params,
+        return solve_cfl(params, n_B, T, conditions["Delta0"],
                          include_photons=photons, include_gluons=gluons,
                          initial_guess=x0)
     raise ValueError(f"unknown mode {mode!r}; expected one of "

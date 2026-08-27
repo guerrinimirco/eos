@@ -181,7 +181,7 @@ class CFLPoint:
 # =============================================================================
 # COLD GUESSES
 # =============================================================================
-def default_guess(mode: str, n_B: float, T: float, params: Parameters,
+def default_guess(mode: str, n_B: float, T: float, par: Parameters,
                   Y_C: float = None) -> np.ndarray:
     """The cold start of one mode.
 
@@ -229,7 +229,7 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
 # =============================================================================
 def point_from_mu(
     mu_u: float, mu_d: float, mu_s: float, mu_e: float,
-    T: float, params: Parameters,
+    T: float, par: Parameters,
     include_photons: bool = True,
     include_gluons: bool = True,
     include_thermal_neutrinos: bool = True,
@@ -255,7 +255,7 @@ def point_from_mu(
         mu_u, mu_d, mu_s: quark chemical potentials (MeV)
         mu_e: electron chemical potential (MeV)
         T: temperature (MeV)
-        params: the parameter set
+        par: the parameter set
         include_photons, include_gluons, include_thermal_neutrinos: sectors
         mu_nu: electron-neutrino chemical potential (MeV)
         converged, error: the status of the solve this came from
@@ -263,7 +263,7 @@ def point_from_mu(
     Returns:
         EoSPoint
     """
-    quark = thermo_from_mu(mu_u, mu_d, mu_s, T, params)
+    quark = thermo_from_mu(mu_u, mu_d, mu_s, T, par)
 
     thermo_e = electron_thermo(mu_e, T)
 
@@ -286,7 +286,7 @@ def point_from_mu(
         s_total += thermo_gamma.s
 
     if include_gluons:
-        thermo_g = gluon_thermo(T, params.alpha)
+        thermo_g = gluon_thermo(T, par.alpha)
         P_total += thermo_g.P
         e_total += thermo_g.e
         s_total += thermo_g.s
@@ -321,7 +321,7 @@ def point_from_mu(
 
 def cfl_point_from_mu(
     mu_u: float, mu_d: float, mu_s: float, mu_e: float,
-    T: float, Delta0: float, params: Parameters,
+    T: float, Delta0: float, par: Parameters,
     include_photons: bool = True,
     include_gluons: bool = True,
     include_thermal_neutrinos: bool = True,
@@ -336,7 +336,7 @@ def cfl_point_from_mu(
     `solve_cfl` does not go through here for that reason: it returns the
     phase alone.
     """
-    cfl = cfl_thermo_from_mu(mu_u, mu_d, mu_s, T, Delta0, params)
+    cfl = cfl_thermo_from_mu(mu_u, mu_d, mu_s, T, Delta0, par)
     thermo_e = electron_thermo(mu_e, T)
 
     P_total = cfl.P + thermo_e.P
@@ -358,7 +358,7 @@ def cfl_point_from_mu(
         s_total += thermo_gamma.s
 
     if include_gluons:
-        thermo_g = gluon_thermo(T, params.alpha)
+        thermo_g = gluon_thermo(T, par.alpha)
         P_total += thermo_g.P
         e_total += thermo_g.e
         s_total += thermo_g.s
@@ -392,7 +392,7 @@ def cfl_point_from_mu(
 # SOLVER: BETA EQUILIBRIUM, NEUTRINOS FREE-STREAMING
 # =============================================================================
 def solve_beta_eq_neutrinoless(
-    n_B: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, T: float,
     include_photons: bool = True,
     include_gluons: bool = True,
     include_thermal_neutrinos: bool = True,
@@ -413,20 +413,18 @@ def solve_beta_eq_neutrinoless(
     Args:
         n_B: baryon density (fm^-3)
         T: temperature (MeV)
-        params: model parameters (the shipped set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons, include_gluons, include_thermal_neutrinos: sectors
         initial_guess: warm start in the layout above
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
-    alpha = params.alpha
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    alpha = par.alpha
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("beta_eq_neutrinoless", n_B, T, params)
+    cold = default_guess("beta_eq_neutrinoless", n_B, T, par)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
@@ -456,7 +454,7 @@ def solve_beta_eq_neutrinoless(
     mu_u, mu_d, mu_s, mu_e = x
 
     return point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, params,
+        mu_u, mu_d, mu_s, mu_e, T, par,
         include_photons=include_photons,
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
@@ -469,7 +467,7 @@ def solve_beta_eq_neutrinoless(
 # SOLVER: BETA EQUILIBRIUM WITH TRAPPED NEUTRINOS
 # =============================================================================
 def solve_beta_eq_neutrino_trapped(
-    n_B: float, Y_Le: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, Y_Le: float, T: float,
     include_photons: bool = True,
     include_gluons: bool = True,
     include_thermal_neutrinos: bool = True,
@@ -491,20 +489,18 @@ def solve_beta_eq_neutrino_trapped(
         n_B: baryon density (fm^-3)
         Y_Le: electron-family lepton fraction (n_e + n_nue)/n_B
         T: temperature (MeV)
-        params: model parameters (the shipped set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons, include_gluons, include_thermal_neutrinos: sectors
         initial_guess: warm start in the layout above
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
-    alpha = params.alpha
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    alpha = par.alpha
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, params)
+    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, par)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
@@ -537,7 +533,7 @@ def solve_beta_eq_neutrino_trapped(
     mu_u, mu_d, mu_s, mu_e, mu_nu = x
 
     point = point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, params,
+        mu_u, mu_d, mu_s, mu_e, T, par,
         include_photons=include_photons,
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
@@ -553,7 +549,7 @@ def solve_beta_eq_neutrino_trapped(
 # SOLVER: FIXED CHARGE FRACTION
 # =============================================================================
 def solve_fixed_yc(
-    n_B: float, Y_C: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, Y_C: float, T: float,
     include_photons: bool = True,
     include_gluons: bool = True,
     include_electrons: bool = False,
@@ -583,7 +579,7 @@ def solve_fixed_yc(
         n_B: baryon density (fm^-3)
         Y_C: non-leptonic charge fraction
         T: temperature (MeV)
-        params: model parameters (the shipped set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons, include_gluons, include_thermal_neutrinos: sectors
         include_electrons: add the neutralizing electron gas
         initial_guess: warm start in the layout above
@@ -591,13 +587,11 @@ def solve_fixed_yc(
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
-    alpha = params.alpha
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    alpha = par.alpha
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("fixed_YC", n_B, T, params, Y_C=Y_C)
+    cold = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
@@ -624,11 +618,11 @@ def solve_fixed_yc(
 
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     mu_u, mu_d, mu_s = x
-    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
+    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
                               initial_guess)
 
     return point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, params,
+        mu_u, mu_d, mu_s, mu_e, T, par,
         include_photons=include_photons,
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
@@ -641,8 +635,7 @@ def solve_fixed_yc(
 # SOLVER: FIXED CHARGE AND STRANGENESS FRACTIONS
 # =============================================================================
 def solve_fixed_yc_ys(
-    n_B: float, Y_C: float, Y_S: float, T: float,
-    params: Parameters = None,
+    par: Parameters, n_B: float, Y_C: float, Y_S: float, T: float,
     include_photons: bool = True,
     include_gluons: bool = True,
     include_electrons: bool = False,
@@ -669,7 +662,7 @@ def solve_fixed_yc_ys(
         Y_C: non-leptonic charge fraction
         Y_S: strangeness fraction, S = +1 per s quark
         T: temperature (MeV)
-        params: model parameters (the shipped set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons, include_gluons, include_thermal_neutrinos: sectors
         include_electrons: add the neutralizing electron gas
         initial_guess: warm start in the layout above
@@ -677,13 +670,11 @@ def solve_fixed_yc_ys(
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
-    alpha = params.alpha
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    alpha = par.alpha
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("fixed_YC_YS", n_B, T, params, Y_C=Y_C)
+    cold = default_guess("fixed_YC_YS", n_B, T, par, Y_C=Y_C)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
@@ -711,11 +702,11 @@ def solve_fixed_yc_ys(
 
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     mu_u, mu_d, mu_s = x
-    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
+    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
                               initial_guess)
 
     return point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, params,
+        mu_u, mu_d, mu_s, mu_e, T, par,
         include_photons=include_photons,
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
@@ -724,7 +715,7 @@ def solve_fixed_yc_ys(
     )
 
 
-def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
+def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
                        initial_guess):
     """mu_e of the electron gas that neutralises the solved quark charge.
 
@@ -735,10 +726,10 @@ def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
     if not include_electrons:
         return 0.0
 
-    alpha = params.alpha
-    n_u = quark_density(mu_u, T, params.m_u, alpha)
-    n_d = quark_density(mu_d, T, params.m_d, alpha)
-    n_s = quark_density(mu_s, T, params.m_s, alpha)
+    alpha = par.alpha
+    n_u = quark_density(mu_u, T, par.m_u, alpha)
+    n_d = quark_density(mu_d, T, par.m_d, alpha)
+    n_s = quark_density(mu_s, T, par.m_s, alpha)
     _, n_C, _ = quark_charges(n_u, n_d, n_s)
 
     # A warm start carrying a fourth entry brought mu_e with it.
@@ -753,8 +744,7 @@ def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, params, include_electrons,
 # THE PAIRED PHASE
 # =============================================================================
 def solve_cfl(
-    n_B: float, T: float, Delta0: float,
-    params: Parameters = None,
+    par: Parameters, n_B: float, T: float, Delta0: float,
     include_photons: bool = True,
     include_gluons: bool = True,
     initial_guess: Optional[np.ndarray] = None
@@ -783,27 +773,25 @@ def solve_cfl(
         n_B: baryon density (fm^-3)
         T: temperature (MeV)
         Delta0: zero-temperature pairing gap (MeV)
-        params: model parameters (the shipped set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons, include_gluons: sectors
         initial_guess: warm start [mu_u, mu_d, mu_s]
 
     Returns:
         CFLPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
-    alpha = params.alpha
-    m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
+    alpha = par.alpha
+    m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("cfl", n_B, T, params)
+    cold = default_guess("cfl", n_B, T, par)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
     def paired_density(mu, m):
         """One flavour's density in the condensate, Eq. (n_q) of alphabag.tex."""
         return (quark_density(mu, T, m, alpha)
-                + cfl_n_correction(mu, T, Delta0, params.tc_coeff))
+                + cfl_n_correction(mu, T, Delta0, par.tc_coeff))
 
     def residual(x):
         mu_u, mu_d, mu_s = x
@@ -820,7 +808,7 @@ def solve_cfl(
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     mu_u, mu_d, mu_s = x
 
-    cfl = cfl_thermo_from_mu(mu_u, mu_d, mu_s, T, Delta0, params)
+    cfl = cfl_thermo_from_mu(mu_u, mu_d, mu_s, T, Delta0, par)
 
     P_total = cfl.P
     e_total = cfl.e

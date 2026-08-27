@@ -1086,7 +1086,7 @@ if status == "ok":
     print("\n the composition [n_i in fm^-3, Y_i = n_i / n_B]")
     for name, n_i in p.densities.items():
         print(f"   n_{name:6s} = {n_i:10.6f}     Y_{name:6s} = "
-              f"{n_i / p.n_b_fm:9.6f}")
+              f"{n_i / p.n_B:9.6f}")
     chi_step = st.n_bQ / st.n_b if st.n_b > 0 else 0.0
     print(f"   chi        = {chi_step:10.6f}     baryon density carried by "
           f"deconfined quarks")
@@ -1095,7 +1095,7 @@ if status == "ok":
     print(f"   P     = {p.P:12.5f} MeV/fm^3")
     print(f"   eps   = {p.eps:12.5f} MeV/fm^3")
     print(f"   s     = {p.s:12.5f} fm^-3        S/B = "
-          f"{p.s / p.n_b_fm:.5f}")
+          f"{p.s / p.n_B:.5f}")
     print(f"   E/B   = {p.EperB:12.5f} MeV          eps/n_B - 938.9 MeV, the "
           f"paper's Fig. 2 ordinate")
     print(f"   Omega/V = -P = {-p.P:9.5f} MeV/fm^3   the grand potential "

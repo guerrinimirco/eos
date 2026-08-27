@@ -25,9 +25,10 @@ n_C = Y_C n_B where it is held.
 The model of Xia, Phys. Rev. D 110, 014022 (2024) is a T = 0 model, so any
 T > 0 raises. `enjl.tex` states the residual row by row.
 
-Natural units throughout except where a name says `_fm`: n_B enters in fm^-3
-at the entry points, because that is what a caller holds, and is converted
-once.
+Natural units inside, fm-based at the entry points: n_B arrives in fm^-3,
+because that is what a caller holds, and is converted once. A working
+variable in natural units carries `_nat`, which is the only place the two
+systems are named apart.
 """
 from dataclasses import dataclass
 import math
@@ -183,7 +184,7 @@ def _unpack(x, spec):
             (n_bQ, g_w, g_r, SigmaR_b, SigmaR_q))
 
 
-def default_guess(mode, n_B_fm, par, spec=None, **fractions):
+def default_guess(mode, n_B, par, spec=None, **fractions):
     """The cold starts for `mode`, in order of decreasing plausibility.
 
     Two parameter-free starting points, one on each side of the model's
@@ -202,9 +203,9 @@ def default_guess(mode, n_B_fm, par, spec=None, **fractions):
     """
     if spec is None:
         spec = mode_spec(mode, **fractions)
-    n_B = n_B_fm * hc3
-    g_w0 = par.Gamma_w(n_B) * 3.0 * n_B
-    mu_B0 = 950.0 + 400.0 * n_B_fm
+    n_B_nat = n_B * hc3
+    g_w0 = par.Gamma_w(n_B_nat) * 3.0 * n_B_nat
+    mu_B0 = 950.0 + 400.0 * n_B
     mu_C0 = -130.0 if not spec.is_fixed("C") else -60.0
 
     # mu_S = 0 is the right seed only when no strangeness is demanded. Asked
@@ -223,7 +224,7 @@ def default_guess(mode, n_B_fm, par, spec=None, **fractions):
     for mu_S0 in strangeness_seeds:
         for masses, quark_fraction, charge in (
                 ((367.6, 367.6, 549.5), 0.0, mu_C0),
-                ((par.m_u0, par.m_d0, par.m_s0 + 100.0), 0.9 * n_B,
+                ((par.m_u0, par.m_d0, par.m_s0 + 100.0), 0.9 * n_B_nat,
                  0.5 * mu_C0)):
             seed = [masses[0], masses[1], masses[2], mu_B0, charge,
                     quark_fraction, g_w0,
@@ -232,7 +233,7 @@ def default_guess(mode, n_B_fm, par, spec=None, **fractions):
             if spec.is_fixed("S"):
                 seed.append(mu_S0)
             if spec.is_fixed("L_e"):
-                n_nue = 0.5 * spec.targets["Y_Le"] * n_B
+                n_nue = 0.5 * spec.targets["Y_Le"] * n_B_nat
                 seed.append((6.0 * math.pi ** 2 * n_nue) ** (1.0 / 3.0))
             seeds.append(seed)
     return seeds
@@ -282,7 +283,7 @@ def _restored_branch(x0, par):
     return seed
 
 
-def _bounds(n_B_fm, spec):
+def _bounds(n_B, spec):
     """Box for the unknowns, widened with density.
 
     The chemical potentials, the vector fields and the rearrangement terms all
@@ -297,9 +298,9 @@ def _bounds(n_B_fm, spec):
     and positive where a held Y_C makes the matter proton-rich, so its box
     straddles zero.
     """
-    big = 3000.0 + 3000.0 * n_B_fm
+    big = 3000.0 + 3000.0 * n_B
     lo = [0.0, 0.0, 0.0, 0.0, -2000.0, 0.0, -big, -big, -big, -big]
-    hi = [1000.0, 1000.0, 1000.0, big, 2000.0, n_B_fm * hc3,
+    hi = [1000.0, 1000.0, 1000.0, big, 2000.0, n_B * hc3,
           big, big, big, big]
     if spec.is_fixed("S"):
         lo.append(-2000.0)
@@ -326,7 +327,8 @@ def _massless_density(mu, g):
     return g * mu ** 3 / (6.0 * math.pi ** 2)
 
 
-def state_at(x, par, spec, n_B, T=0.0):
+
+def state_at(x, par, spec, n_B_nat, T=0.0):
     """(densities, residuals) of the equilibrium system at `x`.
 
     The state is built forwards from the unknowns of `unknown_slots`: the
@@ -358,12 +360,13 @@ def state_at(x, par, spec, n_B, T=0.0):
     self-consistencies (Eqs. 9-10); the two rearrangement definitions
     (Eqs. 17-18); then the charge row and one row per held fraction.
 
-    Natural units: n_B in MeV^3.
+    Natural units: n_B_nat in MeV^3, the `_nat` of section 5's
+    fm-based boundary.
     """
     M_q, mu_B, mu_C, mu_S, mu_nue, inner = _unpack(x, spec)
     n_bQ, g_w, g_r, SigmaR_b, SigmaR_q = inner
     f = coupling_rescalings(par)
-    alpha_S = par.alpha_S(n_B)
+    alpha_S = par.alpha_S(n_B_nat)
     M_b = baryon_masses(par, M_q, alpha_S, n_bQ)
     m_l = {"e": par.m_e, "mu": par.m_mu}
     mass = {**M_b, **M_q, **m_l}
@@ -392,12 +395,12 @@ def state_at(x, par, spec, n_B, T=0.0):
                                          DEGENERACY[sp], T)
 
     n_s_b = _baryon_scalar_densities(nu, M_b, T)
-    fields = mean_fields(n, n_s_b, M_q, par, n_B)
+    fields = mean_fields(n, n_s_b, M_q, par, n_B_nat)
     nbar = effective_scalar_densities(nu, M_q, n_s_b, alpha_S, par.Lambda, T)
     gap = quark_masses_from_gap(nbar, par)
 
     res = [M_q[q] - gap[q] for q in QUARKS]
-    res.append(sum(BARYON_NUMBER[sp] * n[sp] for sp in SPECIES) - n_B)
+    res.append(sum(BARYON_NUMBER[sp] * n[sp] for sp in SPECIES) - n_B_nat)
     res.append(n_bQ - (n["u"] + n["d"] + n["s"]) / 3.0)
     res.append(g_w - fields.gomega_omega)
     res.append(g_r - fields.grho_rho)
@@ -407,7 +410,7 @@ def state_at(x, par, spec, n_B, T=0.0):
     # --- the charge row, and one row per held fraction ---
     if spec.is_fixed("C"):
         n_C = sum(CHARGE[sp] * n[sp] for sp in SPECIES if sp not in LEPTONS)
-        res.append(n_C - spec.targets["Y_C"] * n_B)
+        res.append(n_C - spec.targets["Y_C"] * n_B_nat)
     else:
         res.append(sum(CHARGE[sp] * n[sp] for sp in SPECIES))
     if strangeness_row_is_empty(spec, T):
@@ -424,19 +427,19 @@ def state_at(x, par, spec, n_B, T=0.0):
         res.append(mu_S)
     elif spec.is_fixed("S"):
         n_S = sum(STRANGENESS[sp] * n[sp] for sp in SPECIES)
-        res.append(n_S - spec.targets["Y_S"] * n_B)
+        res.append(n_S - spec.targets["Y_S"] * n_B_nat)
     if spec.is_fixed("L_e"):
         n_nue = _massless_density(mu_nue, 1.0)
-        res.append(n["e"] + n_nue - spec.targets["Y_Le"] * n_B)
+        res.append(n["e"] + n_nue - spec.targets["Y_Le"] * n_B_nat)
     return n, res
 
 
-def residual(x, par, spec, n_B, T=0.0):
+def residual(x, par, spec, n_B_nat, T=0.0):
     """The equations that must vanish; see `state_at`."""
-    return state_at(x, par, spec, n_B, T)[1]
+    return state_at(x, par, spec, n_B_nat, T)[1]
 
 
-def residual_scales(par, spec, n_B, T=0.0):
+def residual_scales(par, spec, n_B_nat, T=0.0):
     """The scale each row of `residual` balances, so one gate means one thing.
 
     The rows carry mixed units -- MeV for the mass gaps, the fields and the
@@ -447,23 +450,23 @@ def residual_scales(par, spec, n_B, T=0.0):
     `eos.general.solve.RESIDUAL_TOL` is then applied to.
     """
     scales = [100.0, 100.0, 100.0,                     # quark-mass gaps [MeV]
-              n_B, n_B,                                # n_B, n_B^Q [MeV^3]
-              par.Gamma_w(n_B) * 3.0 * n_B,            # g_omega omega [MeV]
-              par.Gamma_r(n_B) * n_B,                  # g_rho rho [MeV]
+              n_B_nat, n_B_nat,                        # n_B, n_B^Q [MeV^3]
+              par.Gamma_w(n_B_nat) * 3.0 * n_B_nat,    # g_omega omega [MeV]
+              par.Gamma_r(n_B_nat) * n_B_nat,          # g_rho rho [MeV]
               3000.0, 1000.0,                          # Sigma^R [MeV]
-              n_B]                                     # the charge row
+              n_B_nat]                                 # the charge row
     if strangeness_row_is_empty(spec, T):
         scales.append(100.0)              # a pinned potential [MeV]
     elif spec.is_fixed("S"):
-        scales.append(n_B)
+        scales.append(n_B_nat)
     if spec.is_fixed("L_e"):
-        scales.append(n_B)
+        scales.append(n_B_nat)
     return scales
 
 
-def _scaled_residual(x, par, spec, n_B, T=0.0):
-    scales = residual_scales(par, spec, n_B, T)
-    return [r / s for r, s in zip(residual(x, par, spec, n_B, T), scales)]
+def _scaled_residual(x, par, spec, n_B_nat, T=0.0):
+    scales = residual_scales(par, spec, n_B_nat, T)
+    return [r / s for r, s in zip(residual(x, par, spec, n_B_nat, T), scales)]
 
 
 # --------------------------------------------------------------------------
@@ -495,7 +498,7 @@ class BetaPoint:
     """
     converged: bool
     error: float
-    n_b_fm: float
+    n_B: float
     T: float
     spec: ModeSpec
     densities: dict
@@ -517,7 +520,7 @@ class BetaPoint:
         return self.point.EperB
 
 
-def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
+def solve(par, mode, n_B, x0=None, cold_start=True, leptons=True,
           T=0.0, species=None, **fractions):
     """One equilibrium solve at n_B [fm^-3], for any of the four modes.
 
@@ -537,9 +540,9 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
     once -- a construction -- and is not done here or in `eos.enjl.table`.
 
     Parameters:
+        par:        Parameters; required (CLAUDE.md section 6).
         mode:       one of CLAUDE.md section 3's four names.
-        n_B_fm:     total baryon density [fm^-3].
-        par:        Parameters (default: the shipped set).
+        n_B:        total baryon density [fm^-3].
         x0:         starting guess in the order of `unknown_slots(spec)`,
                     normally the previous point of a density sweep through
                     `warm_start`. It is the first of several starting points
@@ -572,9 +575,9 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
     T = float(T)
     species = SpeciesFlags() if species is None else species
     spec = mode_spec(mode, leptons=leptons, **fractions)
-    n_B = n_B_fm * hc3
-    lo, hi = _bounds(n_B_fm, spec)
-    x_scale = [100.0, 100.0, 100.0, 100.0, 100.0, n_B,
+    n_B_nat = n_B * hc3
+    lo, hi = _bounds(n_B, spec)
+    x_scale = [100.0, 100.0, 100.0, 100.0, 100.0, n_B_nat,
                100.0, 100.0, 3000.0, 1000.0]
     if spec.is_fixed("S"):
         x_scale.append(100.0)
@@ -587,7 +590,7 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
         seeds.append(("restored", _restored_branch(x0, par)))
     if cold_start:
         seeds.extend(("cold", g)
-                     for g in default_guess(mode, n_B_fm, par, spec=spec))
+                     for g in default_guess(mode, n_B, par, spec=spec))
 
     solved, from_seed, tried, best_error = None, None, 0, float("inf")
     already = []
@@ -599,11 +602,11 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
         already.append(seed)
         tried += 1
         sol = least_squares(
-            lambda x: _scaled_residual(x, par, spec, n_B, T), seed,
+            lambda x: _scaled_residual(x, par, spec, n_B_nat, T), seed,
             bounds=(lo, hi), x_scale=x_scale,
             xtol=1e-13, ftol=1e-13, gtol=1e-13, max_nfev=1500)
-        error = scaled_residual_max(residual(sol.x, par, spec, n_B, T),
-                                    residual_scales(par, spec, n_B, T))
+        error = scaled_residual_max(residual(sol.x, par, spec, n_B_nat, T),
+                                    residual_scales(par, spec, n_B_nat, T))
         best_error = min(best_error, error)
         if error <= RESIDUAL_TOL:
             solved, from_seed = sol.x, name
@@ -611,11 +614,11 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
 
     if solved is None:
         raise RuntimeError(
-            f"ENJL {mode} solve did not converge at n_B={n_B_fm:.4f} fm^-3 "
+            f"ENJL {mode} solve did not converge at n_B={n_B:.4f} fm^-3 "
             f"after {tried} starting points; best scaled residual "
             f"{best_error:.3e} against a {RESIDUAL_TOL:.0e} bound")
 
-    n, _ = state_at(solved, par, spec, n_B, T)
+    n, _ = state_at(solved, par, spec, n_B_nat, T)
     _, mu_B, mu_C, mu_S, mu_nue, _ = _unpack(solved, spec)
 
     # Where Y_C is held, the neutralizing leptons were not part of any row;
@@ -641,7 +644,7 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
         thermal_neutrinos=thermal_neutrino_flavours(spec, species))
     return BetaPoint(
         converged=True, error=best_error,
-        n_b_fm=n_B_fm, T=T, spec=spec,
+        n_B=n_B, T=T, spec=spec,
         densities={k: v / hc3 for k, v in n.items()},
         M_q=point.M_q, M_b=point.M_b,
         eps=point.eps / hc3, P=point.P / hc3, s=point.s / hc3,
@@ -650,7 +653,7 @@ def solve(mode, n_B_fm, par=None, x0=None, cold_start=True, leptons=True,
     )
 
 
-def solve_at_entropy(mode, n_B_fm, SnB, par=None, T_lo=0.2, T_hi=80.0,
+def solve_at_entropy(par, mode, n_B, SnB, T_lo=0.2, T_hi=80.0,
                      **kwargs):
     """The state whose entropy per baryon is `SnB`: an outer 1-D solve for T.
 
@@ -673,23 +676,23 @@ def solve_at_entropy(mode, n_B_fm, SnB, par=None, T_lo=0.2, T_hi=80.0,
     public boundary turns into a status.
     """
     if SnB == 0.0:
-        return solve(mode, n_B_fm, par=par, T=0.0, **kwargs)
+        return solve(par, mode, n_B, T=0.0, **kwargs)
 
     def entropy_per_baryon_at(T):
-        point = solve(mode, n_B_fm, par=par, T=T, **kwargs)
-        return point.s / point.n_b_fm
+        point = solve(par, mode, n_B, T=T, **kwargs)
+        return point.s / point.n_B
 
     try:
         T = temperature_at_entropy(entropy_per_baryon_at, SnB,
                                    T_lo=T_lo, T_hi=T_hi)
     except ValueError as err:
         raise RuntimeError(
-            f"ENJL could not bracket s/n_B = {SnB} at n_B={n_B_fm:.4f} fm^-3 "
+            f"ENJL could not bracket s/n_B = {SnB} at n_B={n_B:.4f} fm^-3 "
             f"between T = {T_lo} and {T_hi} MeV: {err}") from err
-    return solve(mode, n_B_fm, par=par, T=T, **kwargs)
+    return solve(par, mode, n_B, T=T, **kwargs)
 
 
-def solve_beta_eq_neutrinoless(n_B_fm, par=None, x0=None, cold_start=True):
+def solve_beta_eq_neutrinoless(par, n_B, x0=None, cold_start=True):
     """Beta equilibrium with free-streaming neutrinos, charge neutral.
 
         mu_i = B_i mu_b - q_i mu_e     Eq. (23)
@@ -697,11 +700,11 @@ def solve_beta_eq_neutrinoless(n_B_fm, par=None, x0=None, cold_start=True):
 
     i.e. mu_C + mu_e = 0 and mu_S = 0 in the conserved-charge basis.
     """
-    return solve("beta_eq_neutrinoless", n_B_fm, par=par, x0=x0,
+    return solve(par, "beta_eq_neutrinoless", n_B, x0=x0,
                  cold_start=cold_start)
 
 
-def solve_beta_eq_neutrino_trapped(n_B_fm, Y_Le, par=None, x0=None,
+def solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, x0=None,
                                    cold_start=True):
     """Beta equilibrium with the electron lepton family trapped at Y_Le.
 
@@ -709,21 +712,21 @@ def solve_beta_eq_neutrino_trapped(n_B_fm, Y_Le, par=None, x0=None,
     beta relation reads mu_C + mu_e = mu_nue. The neutrinos are massless and
     left-handed, g = 1. The muon family stays transparent.
     """
-    return solve("beta_eq_neutrino_trapped", n_B_fm, par=par, x0=x0,
+    return solve(par, "beta_eq_neutrino_trapped", n_B, x0=x0,
                  cold_start=cold_start, Y_Le=Y_Le)
 
 
-def solve_fixed_yc(n_B_fm, Y_C, par=None, x0=None, cold_start=True,
+def solve_fixed_yc(par, n_B, Y_C, x0=None, cold_start=True,
                    leptons=True):
     """Fixed non-leptonic charge fraction, n_C = Y_C n_B. Strangeness still
     self-equilibrates, mu_S = 0."""
-    return solve("fixed_YC", n_B_fm, par=par, x0=x0, cold_start=cold_start,
+    return solve(par, "fixed_YC", n_B, x0=x0, cold_start=cold_start,
                  leptons=leptons, Y_C=Y_C)
 
 
-def solve_fixed_yc_ys(n_B_fm, Y_C, Y_S, par=None, x0=None, cold_start=True,
+def solve_fixed_yc_ys(par, n_B, Y_C, Y_S, x0=None, cold_start=True,
                       leptons=True):
     """Fixed charge and strangeness. Y_C = 0.5, Y_S = 0 is symmetric nuclear
     matter; mu_S becomes an unknown, determined by the strangeness demanded."""
-    return solve("fixed_YC_YS", n_B_fm, par=par, x0=x0, cold_start=cold_start,
+    return solve(par, "fixed_YC_YS", n_B, x0=x0, cold_start=cold_start,
                  leptons=leptons, Y_C=Y_C, Y_S=Y_S)

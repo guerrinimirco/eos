@@ -141,22 +141,20 @@ def _states(par, include_csc=True):
     """
     flags = SpeciesFlags()
     out = {
-        "beta T=0": solve_beta_eq_neutrinoless(N_CHECK, 0.0, par=par,
+        "beta T=0": solve_beta_eq_neutrinoless(par, N_CHECK, 0.0,
                                                flags=flags),
-        "beta T=30": solve_beta_eq_neutrinoless(N_CHECK, 30.0, par=par,
+        "beta T=30": solve_beta_eq_neutrinoless(par, N_CHECK, 30.0,
                                                 flags=flags),
-        "YC=0.1 leptons": solve_fixed_yc(N_CHECK, 0.1, 20.0, par=par,
+        "YC=0.1 leptons": solve_fixed_yc(par, N_CHECK, 0.1, 20.0,
                                          flags=flags, leptons=True),
-        "YC=0.1 charged": solve_fixed_yc(N_CHECK, 0.1, 20.0, par=par,
+        "YC=0.1 charged": solve_fixed_yc(par, N_CHECK, 0.1, 20.0,
                                          flags=flags, leptons=False),
     }
     if include_csc:
         paired = SpeciesFlags(csc=True)
-        out["beta CSC T=0"] = solve_beta_eq_neutrinoless(N_CHECK, 0.0,
-                                                         par=par,
+        out["beta CSC T=0"] = solve_beta_eq_neutrinoless(par, N_CHECK, 0.0,
                                                          flags=paired)
-        out["beta CSC T=30"] = solve_beta_eq_neutrinoless(N_CHECK, 30.0,
-                                                          par=par,
+        out["beta CSC T=30"] = solve_beta_eq_neutrinoless(par, N_CHECK, 30.0,
                                                           flags=paired)
     return {k: v for k, v in out.items() if v.converged}
 
@@ -303,7 +301,7 @@ def check_rearrangement_placement(par, tol=1.0e-12):
 def _reference_state(par):
     """One converged unpaired state, for the checks that need a state rather
     than a mode."""
-    point = solve_beta_eq_neutrinoless(N_CHECK, 0.0, par=par,
+    point = solve_beta_eq_neutrinoless(par, N_CHECK, 0.0,
                                        flags=SpeciesFlags())
     return point.state
 
@@ -427,7 +425,7 @@ def check_colour_neutrality(par, tol=1.0e-10):
                   0.0, 0.0, 0.0, 20.0)
     unpaired = max(abs(st.n_3), abs(st.n_8))
 
-    point = solve_beta_eq_neutrinoless(N_CHECK, 0.0, par=par,
+    point = solve_beta_eq_neutrinoless(par, N_CHECK, 0.0,
                                        flags=SpeciesFlags(csc=True))
     if not point.converged:
         return CheckResult("colour neutrality", False, float("inf"),
@@ -623,7 +621,7 @@ def check_causality(par, tol=0.0):
                 f"c_s^2 is not finite at n_B = {n_B:.2f} fm^-3: the response "
                 f"did not converge there, so this sequence was not evaluated")
         values.append(cs2)
-        point = solve_beta_eq_neutrinoless(n_B, 0.0, par=par,
+        point = solve_beta_eq_neutrinoless(par, n_B, 0.0,
                                            flags=SpeciesFlags())
         if not point.converged:
             return CheckResult("causality", False, float("inf"),
@@ -661,8 +659,8 @@ def check_glue_scale_stiffens(par, tol=0.0):
     flags = SpeciesFlags()
     deltas = []
     for n in (1.8, 2.2):
-        soft_p = solve_beta_eq_neutrinoless(n, 0.0, par=par, flags=flags)
-        stiff_p = solve_beta_eq_neutrinoless(n, 0.0, par=stiff, flags=flags)
+        soft_p = solve_beta_eq_neutrinoless(par, n, 0.0, flags=flags)
+        stiff_p = solve_beta_eq_neutrinoless(stiff, n, 0.0, flags=flags)
         if not (soft_p.converged and stiff_p.converged):
             return CheckResult("glue scale stiffens", False, float("inf"),
                                f"a reference solve at n_B = {n} failed")

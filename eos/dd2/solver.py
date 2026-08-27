@@ -156,7 +156,11 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
 
     # Fixing (n_n, n_p) at a given n_B IS fixing the charge fraction, with no
     # leptons: it is `fixed_YC` asked in densities rather than in Y_C.
-    n_B_fm = float(nB_nat / hc3)
+    # Not `n_B`: that is the TARGET (n_n + n_p), while this is the density the
+    # assembly actually evaluated at, which differs at T > 0 by the inversion
+    # tolerance. `_solved` is the same distinction `eos.enjl.table` draws with
+    # `nB_solved`; `_fm` would say nothing now that a bare name IS fm.
+    n_B_solved = float(nB_nat / hc3)
     densities = {"n": float(nn_nat / hc3), "p": float(np_nat / hc3)}
     mu_B, mu_C = float(mu_n), float(mu_p - mu_n)
     matter = PhaseThermo(
@@ -168,13 +172,13 @@ def solve_composition(par, n_n, n_p, T=0.0, check_consistency=True):
               for name in densities},
         mu_eff_i={"n": float(mu_eff_n), "p": float(mu_eff_p)},
         m_eff_i={"n": float(ms_n), "p": float(ms_p)},
-        n_B=n_B_fm, n_C=float(np_nat / hc3), n_S=0.0,
+        n_B=n_B_solved, n_C=float(np_nat / hc3), n_S=0.0,
         P=float(P_nat / hc3), eps=float(eps_nat / hc3), s=float(s_nat / hc3),
         mu_dot_n=float((mu_n * nn_nat + mu_p * np_nat) / hc3),
         Sigma_R=float(Sig_R),
     )
     return EoSPoint(
-        mode="fixed_YC", n_B=n_B_fm, T=T,
+        mode="fixed_YC", n_B=n_B_solved, T=T,
         conditions={"Y_C": float(np_nat / nB_nat)},
         matter=matter, leptons=None,
         P=matter.P, eps=matter.eps, s=matter.s,

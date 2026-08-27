@@ -45,15 +45,16 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     T = conditions["T"]
     photons = species.photons
     if mode == "beta_eq_neutrinoless":
-        return solve_beta_eq_neutrinoless(n_B, T, params,
+        return solve_beta_eq_neutrinoless(params, n_B, T,
                                           include_photons=photons,
                                           initial_guess=x0)
     if mode == "beta_eq_neutrino_trapped":
-        return solve_beta_eq_neutrino_trapped(n_B, conditions["Y_Le"], T,
-                                              params, include_photons=photons,
+        return solve_beta_eq_neutrino_trapped(params, n_B,
+                                              conditions["Y_Le"], T,
+                                              include_photons=photons,
                                               initial_guess=x0)
     if mode == "fixed_YC":
-        return solve_fixed_yc(n_B, conditions["Y_C"], T, params,
+        return solve_fixed_yc(params, n_B, conditions["Y_C"], T,
                               include_photons=photons,
                               include_electrons=leptons, initial_guess=x0)
     if mode == "fixed_YC_YS":

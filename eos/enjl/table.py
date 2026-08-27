@@ -94,7 +94,7 @@ class TableResult:
     @property
     def nB_solved(self):
         """The densities that were actually reached [fm^-3]."""
-        return np.array([p.n_b_fm for p in self.points])
+        return np.array([p.n_B for p in self.points])
 
 
 def build_table(spec, progress=None, verbose=False):
@@ -130,13 +130,14 @@ def build_table(spec, progress=None, verbose=False):
 
     def solve_one(n_B, conditions, x0):
         seed = spec.x0 if x0 is None and spec.x0 is not None else x0
-        common = dict(par=spec.par, x0=seed, cold_start=seed is None,
+        common = dict(x0=seed, cold_start=seed is None,
                       leptons=spec.leptons, species=spec.species)
         if spec.SnB is None:
-            return solve(spec.mode, n_B, T=spec.T, **common, **spec.fractions)
+            return solve(spec.par, spec.mode, n_B, T=spec.T,
+                         **common, **spec.fractions)
         # An isentrope: the temperature is a different number at every
         # density, so it is solved for at every density.
-        return solve_at_entropy(spec.mode, n_B, spec.SnB,
+        return solve_at_entropy(spec.par, spec.mode, n_B, spec.SnB,
                                 **common, **spec.fractions)
 
     axis = {"T": [spec.T]} if spec.SnB is None else {"SnB": [spec.SnB]}
@@ -164,9 +165,9 @@ def beta_row(point):
     """
     state = point.point
     n = point.densities
-    return dict(n_B=point.n_b_fm, T=point.T,
+    return dict(n_B=point.n_B, T=point.T,
                 P=point.P, eps=point.eps, s=point.s,
-                S_per_B=point.s / point.n_b_fm if point.n_b_fm > 0 else 0.0,
+                S_per_B=point.s / point.n_B if point.n_B > 0 else 0.0,
                 chi=state.n_bQ / state.n_b if state.n_b > 0 else 0.0,
                 mu_B=point.mu_b, mu_C=point.mu_C, mu_S=point.mu_S,
                 mu_e=point.mu_e,
@@ -415,7 +416,7 @@ def build_constructed_table(spec, coexistences, eta=1.0, progress=None,
     grid = np.sort(np.atleast_1d(np.asarray(spec.nB, dtype=float)))
     windows = sorted(coexistences, key=lambda w: w.n_B_lo)
 
-    # `BetaPoint.n_b_fm` is the density the point was ASKED at, passed
+    # `BetaPoint.n_B` is the density the point was ASKED at, passed
     # through unchanged, so the two sweeps and the grid key alike exactly.
     #
     # The downward sweep is SEEDED FROM THE TOP OF THE UPWARD ONE rather than
@@ -441,7 +442,7 @@ def build_constructed_table(spec, coexistences, eta=1.0, progress=None,
             row = beta_row(point)
             row["branch"] = direction
             row["phase_fraction"] = float("nan")
-            branches.setdefault(round(point.n_b_fm, 10), []).append(row)
+            branches.setdefault(round(point.n_B, 10), []).append(row)
 
     rows = []
     for n_B in grid:

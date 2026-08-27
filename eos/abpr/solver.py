@@ -324,7 +324,7 @@ def point_from_mu(mu, par, converged=True, error=0.0):
     )
 
 
-def solve_cfl(n_B, par=None, T=0.0):
+def solve_cfl(par, n_B, T=0.0):
     """Colour-flavour locked quark matter at a given baryon density.
 
     The one closure this model has. Flavour locking n_u = n_d = n_s replaces
@@ -332,15 +332,15 @@ def solve_cfl(n_B, par=None, T=0.0):
     the inversion of n_B(mu) and nothing else.
 
     Args:
+        par: the parameter set; required, since model parameters are
+             arguments and never defaults reached for on the caller's behalf
+             (CLAUDE.md section 6)
         n_B: baryon density (fm^-3)
-        par: the parameter set (the shipped one if None)
         T: temperature (MeV); anything but zero raises, naming eos.alphabag
 
     Returns:
         CFLPoint; test `.converged` before using any other field.
     """
-    if par is None:
-        par = Parameters.default()
     check_temperature(T)
     mu, converged = mu_from_nB(n_B, par)
     error = abs(baryon_density(mu, par) - n_B) / n_B if n_B else 0.0

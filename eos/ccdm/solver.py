@@ -158,7 +158,7 @@ def _unpack(x, par, spec, pattern):
             got.get("mu_nue", 0.0))
 
 
-def default_guess(par, spec, branch, pattern, n_B_fm, T):
+def default_guess(par, spec, branch, pattern, n_B, T):
     """The cold start of one mode in one branch and one pattern.
 
     The fields come from the branch's own seed, scaled to this parameter
@@ -174,7 +174,7 @@ def default_guess(par, spec, branch, pattern, n_B_fm, T):
     zero. Seeded with an electron-bearing potential a CFL solve converges to a
     spurious point.
     """
-    n_q = max(3.0 * n_B_fm * hc3, 1.0)
+    n_q = max(3.0 * n_B * hc3, 1.0)
     mu_q = max((0.5 * math.pi ** 2 * n_q) ** (1.0 / 3.0), 50.0)
 
     Phi, sigma, zeta = branch_seed(par, branch)
@@ -344,7 +344,7 @@ def _charge_rows(x, par, flags, spec, pattern, st, T):
     return rows
 
 
-def residual(x, par, flags, spec, branch, pattern, n_B_fm, T):
+def residual(x, par, flags, spec, branch, pattern, n_B, T):
     """The equations of one mode in one candidate, in assembly order."""
     st = _state(x, par, spec, branch, pattern, T)
     mask = pattern_mask(pattern)
@@ -356,12 +356,12 @@ def residual(x, par, flags, spec, branch, pattern, n_B_fm, T):
     if any(mask):
         rows += [st.n_3, st.n_8]
 
-    rows.append(st.n_B_fm - n_B_fm)
+    rows.append(st.n_B_fm - n_B)
     rows += _charge_rows(x, par, flags, spec, pattern, st, T)
     return rows
 
 
-def residual_scales(par, spec, pattern, n_B_fm, mu_scale):
+def residual_scales(par, spec, pattern, n_B, mu_scale):
     """The scale each row balances, so one tolerance means one thing.
 
     The dilaton row is an energy density, judged against B_g. The two scalar
@@ -377,7 +377,7 @@ def residual_scales(par, spec, pattern, n_B_fm, mu_scale):
     """
     d = par.derived
     mask = pattern_mask(pattern)
-    n_scale = max(n_B_fm, 1.0e-3)
+    n_scale = max(n_B, 1.0e-3)
     colour_scale = max((mu_scale / 3.0) ** 3 / math.pi ** 2, 1.0)
 
     scales = [par.B_g, abs(d.eps_sigma), abs(d.eps_zeta)]
@@ -538,7 +538,7 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
 # =============================================================================
 # THE SOLVE
 # =============================================================================
-def solve_candidate(mode, n_B_fm, T, par, flags, branch, pattern, spec=None,
+def solve_candidate(par, mode, n_B, T, flags, branch, pattern, spec=None,
                     x0=None, **fractions):
     """One mode in ONE declared branch and ONE declared pattern.
 
@@ -553,7 +553,7 @@ def solve_candidate(mode, n_B_fm, T, par, flags, branch, pattern, spec=None,
             f"pattern {pattern!r} needs SpeciesFlags(csc=True): with the "
             f"colour-superconducting sector off there are no gaps to solve for")
 
-    cold = default_guess(par, spec, branch, pattern, n_B_fm, T)
+    cold = default_guess(par, spec, branch, pattern, n_B, T)
     warm = x0 is not None
     x0 = np.asarray(x0, dtype=float) if warm else cold
 
@@ -567,12 +567,12 @@ def solve_candidate(mode, n_B_fm, T, par, flags, branch, pattern, spec=None,
         drive every row to the gate rather than whichever one happens to be
         largest.
         """
-        raw = residual(x, par, flags, spec, branch, pattern, n_B_fm, T)
+        raw = residual(x, par, flags, spec, branch, pattern, n_B, T)
         return [r / s for r, s in zip(raw, scales_at(x))]
 
     def scales_at(x):
         mu_B = _unpack(x, par, spec, pattern)[7]
-        return residual_scales(par, spec, pattern, n_B_fm, max(abs(mu_B), 1.0))
+        return residual_scales(par, spec, pattern, n_B, max(abs(mu_B), 1.0))
 
     def unit_scales(x):
         return [1.0] * len(unknown_slots(par, spec, pattern))
@@ -608,7 +608,7 @@ def candidates_for(flags, branches=None, patterns=None):
     return [(b, p) for b in branches for p in patterns]
 
 
-def solve(mode, n_B_fm, T=0.0, par=None, flags=None, x0=None, branches=None,
+def solve(par, mode, n_B, T=0.0, flags=None, x0=None, branches=None,
           patterns=None, **fractions):
     """One mode at (n_B, T), with the branch and the pattern chosen by free
     energy.
@@ -626,10 +626,6 @@ def solve(mode, n_B_fm, T=0.0, par=None, flags=None, x0=None, branches=None,
     layout it was solved in, so it cannot simply be handed to whichever
     candidate comes next.
     """
-    if par is None:
-        raise TypeError("eos.ccdm.solve needs `par`: model parameters are "
-                        "arguments, never defaults reached for on the "
-                        "caller's behalf (CLAUDE.md section 6)")
     if flags is None:
         flags = SpeciesFlags()
     leptons = fractions.pop("leptons", True)
@@ -660,7 +656,7 @@ def solve(mode, n_B_fm, T=0.0, par=None, flags=None, x0=None, branches=None,
         if seed is None and reference is not None:
             seed = seed_from(reference, par, spec, branch, pattern)
         try:
-            point = solve_candidate(mode, n_B_fm, T, par, flags, branch,
+            point = solve_candidate(par, mode, n_B, T, flags, branch,
                                     pattern, spec=spec, x0=seed)
         except (ValueError, RuntimeError, np.linalg.LinAlgError):
             continue
@@ -673,31 +669,31 @@ def solve(mode, n_B_fm, T=0.0, par=None, flags=None, x0=None, branches=None,
         return min(converged, key=lambda p: p.f_total)
     if solved:
         return solved[0]
-    return solve_candidate(mode, n_B_fm, T, par, flags, wanted[0][0],
+    return solve_candidate(par, mode, n_B, T, flags, wanted[0][0],
                            wanted[0][1], spec=spec)
 
 
-def solve_beta_eq_neutrinoless(n_B_fm, T=0.0, par=None, flags=None, x0=None,
+def solve_beta_eq_neutrinoless(par, n_B, T=0.0, flags=None, x0=None,
                                **kwargs):
     """Beta equilibrium with free-streaming neutrinos. Variables (n_B, T).
 
     The specification's R1 row: mu_S = 0, mu_e = -mu_C, total electric
     neutrality including the leptons.
     """
-    return solve("beta_eq_neutrinoless", n_B_fm, T, par, flags, x0, **kwargs)
+    return solve(par, "beta_eq_neutrinoless", n_B, T, flags, x0, **kwargs)
 
 
-def solve_beta_eq_neutrino_trapped(n_B_fm, Y_Le, T=0.0, par=None, flags=None,
+def solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, T=0.0, flags=None,
                                    x0=None, **kwargs):
     """Beta equilibrium with a trapped electron family. (n_B, Y_Le, T).
 
     The specification's R3 row. Trapped neutrinos carry g = 1.
     """
-    return solve("beta_eq_neutrino_trapped", n_B_fm, T, par, flags, x0,
+    return solve(par, "beta_eq_neutrino_trapped", n_B, T, flags, x0,
                  Y_Le=Y_Le, **kwargs)
 
 
-def solve_fixed_yc(n_B_fm, Y_C, T=0.0, par=None, flags=None, x0=None,
+def solve_fixed_yc(par, n_B, Y_C, T=0.0, flags=None, x0=None,
                    leptons=True, **kwargs):
     """Fixed non-leptonic charge fraction. Variables (n_B, Y_C, T).
 
@@ -706,11 +702,11 @@ def solve_fixed_yc(n_B_fm, Y_C, T=0.0, par=None, flags=None, x0=None,
     leptons=False it is the charged pure phase a mixed-phase construction
     needs before imposing global neutrality.
     """
-    return solve("fixed_YC", n_B_fm, T, par, flags, x0, Y_C=Y_C,
+    return solve(par, "fixed_YC", n_B, T, flags, x0, Y_C=Y_C,
                  leptons=leptons, **kwargs)
 
 
-def solve_fixed_yc_ys(n_B_fm, Y_C, Y_S, T=0.0, par=None, flags=None, x0=None,
+def solve_fixed_yc_ys(par, n_B, Y_C, Y_S, T=0.0, flags=None, x0=None,
                       leptons=True, **kwargs):
     """Fixed charge and strangeness. Variables (n_B, Y_C, Y_S, T).
 
@@ -718,5 +714,5 @@ def solve_fixed_yc_ys(n_B_fm, Y_C, Y_S, T=0.0, par=None, flags=None, x0=None,
     rows. Note the fractions are PER BARYON, so Y_S = n_S/n_B differs by a
     factor three from the per-quark n_s/(3 n_B) often plotted.
     """
-    return solve("fixed_YC_YS", n_B_fm, T, par, flags, x0, Y_C=Y_C, Y_S=Y_S,
+    return solve(par, "fixed_YC_YS", n_B, T, flags, x0, Y_C=Y_C, Y_S=Y_S,
                  leptons=leptons, **kwargs)

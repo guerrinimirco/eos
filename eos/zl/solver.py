@@ -108,7 +108,7 @@ class EoSPoint:
 # =============================================================================
 # COLD GUESSES
 # =============================================================================
-def default_guess(mode: str, n_B: float, T: float, params: Parameters,
+def default_guess(mode: str, n_B: float, T: float, par: Parameters,
                   Y_C: float = None, Y_Le: float = None,
                   leptons: bool = True) -> np.ndarray:
     """The cold start of one mode.
@@ -129,11 +129,11 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
     The layouts are the unknown vectors of each mode's residual, so a guess is
     only valid within its own mode.
     """
-    m_p, m_n, n0 = params.m_p, params.m_n, params.n0
+    m_p, m_n, n0 = par.m_p, par.m_n, par.n0
 
     if mode == "fixed_YC":
         n_p, n_n = Y_C * n_B, (1.0 - Y_C) * n_B
-        mu_Hv_p, mu_Hv_n = interaction_potentials(n_p, n_n, params)
+        mu_Hv_p, mu_Hv_n = interaction_potentials(n_p, n_n, par)
         mu_p = invert_fermi_density(n_p, T, m_p, G_NUCLEON) + mu_Hv_p
         mu_n = invert_fermi_density(n_n, T, m_n, G_NUCLEON) + mu_Hv_n
         if not leptons:
@@ -159,7 +159,7 @@ def default_guess(mode: str, n_B: float, T: float, params: Parameters,
     # The mean field, estimated from the symmetric part of the interaction and
     # split evenly between the two species.
     V_est = 4.0 * n_p * n_n * (
-        params.a0 + params.b0 * (n_B/n0)**(params.gamma - 1)) / n0
+        par.a0 + par.b0 * (n_B/n0)**(par.gamma - 1)) / n0
     mu_p_est = mu_p_eff + V_est * 0.5
     mu_n_est = mu_n_eff + V_est * 0.5
     mu_e_est = max(0.0, mu_n_est - mu_p_est)
@@ -180,10 +180,10 @@ def _mu_scale(mu_n):
     return max(abs(mu_n), MU_SCALE_FLOOR)
 
 
-def _finish(result, mu_p, mu_n, n_p, n_n, T, params, include_photons,
+def _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
             e_thermo=None, nu_thermo=None):
     """Assemble the totals of a solved state: matter, leptons, photons."""
-    matter = thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, params)
+    matter = thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, par)
 
     result.P_total = matter.P
     result.e_total = matter.e
@@ -208,7 +208,7 @@ def _finish(result, mu_p, mu_n, n_p, n_n, T, params, include_photons,
 # SOLVER: BETA EQUILIBRIUM, NEUTRINOS FREE-STREAMING
 # =============================================================================
 def solve_beta_eq_neutrinoless(
-    n_B: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, T: float,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
@@ -229,24 +229,22 @@ def solve_beta_eq_neutrinoless(
     Args:
         n_B: baryon density (fm^-3)
         T: temperature (MeV)
-        params: model parameters (the published set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons: add a thermal photon gas to eps, P and s
         initial_guess: warm start in the layout above
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
     result = EoSPoint(n_B=n_B, T=T)
-    cold = default_guess("beta_eq_neutrinoless", n_B, T, params)
+    cold = default_guess("beta_eq_neutrinoless", n_B, T, par)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_p, mu_n, mu_e, n_p, n_n = x
-        state = effective_state(mu_p, mu_n, n_p, n_n, T, params)
+        state = effective_state(mu_p, mu_n, n_p, n_n, T, par)
         n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
         return [state.n_p_calc - n_p,
                 state.n_n_calc - n_n,
@@ -272,7 +270,7 @@ def solve_beta_eq_neutrinoless(
     result.n_e = e_thermo.n
     result.Y_e = result.n_e / n_B
 
-    return _finish(result, mu_p, mu_n, n_p, n_n, T, params, include_photons,
+    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
                    e_thermo=e_thermo)
 
 
@@ -280,7 +278,7 @@ def solve_beta_eq_neutrinoless(
 # SOLVER: FIXED CHARGE FRACTION
 # =============================================================================
 def solve_fixed_yc(
-    n_B: float, Y_C: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, Y_C: float, T: float,
     include_photons: bool = True,
     include_electrons: bool = True,
     initial_guess: Optional[np.ndarray] = None
@@ -304,7 +302,7 @@ def solve_fixed_yc(
         n_B: baryon density (fm^-3)
         Y_C: non-leptonic charge fraction
         T: temperature (MeV)
-        params: model parameters (the published set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons: add a thermal photon gas to eps, P and s
         include_electrons: add the neutralizing electron gas
         initial_guess: warm start in the layout above
@@ -312,14 +310,12 @@ def solve_fixed_yc(
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
     result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C)
     n_p = Y_C * n_B
     n_n = (1.0 - Y_C) * n_B
 
-    cold = default_guess("fixed_YC", n_B, T, params, Y_C=Y_C,
+    cold = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C,
                          leptons=include_electrons)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
@@ -327,7 +323,7 @@ def solve_fixed_yc(
     if include_electrons:
         def residual(x):
             mu_p, mu_n, mu_e = x
-            state = effective_state(mu_p, mu_n, n_p, n_n, T, params)
+            state = effective_state(mu_p, mu_n, n_p, n_n, T, par)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             return [state.n_p_calc - n_p,
                     state.n_n_calc - n_n,
@@ -335,7 +331,7 @@ def solve_fixed_yc(
     else:
         def residual(x):
             mu_p, mu_n = x
-            state = effective_state(mu_p, mu_n, n_p, n_n, T, params)
+            state = effective_state(mu_p, mu_n, n_p, n_n, T, par)
             return [state.n_p_calc - n_p,
                     state.n_n_calc - n_n]
 
@@ -362,7 +358,7 @@ def solve_fixed_yc(
     result.n_p, result.n_n = n_p, n_n
     result.Y_p, result.Y_n = Y_C, 1.0 - Y_C
 
-    return _finish(result, mu_p, mu_n, n_p, n_n, T, params, include_photons,
+    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
                    e_thermo=e_thermo)
 
 
@@ -385,7 +381,7 @@ def solve_fixed_yc_ys(*args, **kwargs):
 # SOLVER: BETA EQUILIBRIUM WITH TRAPPED NEUTRINOS
 # =============================================================================
 def solve_beta_eq_neutrino_trapped(
-    n_B: float, Y_Le: float, T: float, params: Parameters = None,
+    par: Parameters, n_B: float, Y_Le: float, T: float,
     include_photons: bool = True,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
@@ -405,25 +401,23 @@ def solve_beta_eq_neutrino_trapped(
         n_B: baryon density (fm^-3)
         Y_Le: electron-family lepton fraction (n_e + n_nue)/n_B
         T: temperature (MeV)
-        params: model parameters (the published set if None)
+        par: model parameters; required (CLAUDE.md section 6)
         include_photons: add a thermal photon gas to eps, P and s
         initial_guess: warm start in the layout above
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
-    if params is None:
-        params = Parameters.default()
 
     result = EoSPoint(n_B=n_B, T=T, Y_L=Y_Le)
-    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, params,
+    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, par,
                          Y_Le=Y_Le)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
         mu_p, mu_n, mu_e, mu_nu, n_p, n_n = x
-        state = effective_state(mu_p, mu_n, n_p, n_n, T, params)
+        state = effective_state(mu_p, mu_n, n_p, n_n, T, par)
         n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
         n_nu = neutrino_thermo(mu_nu, T, include_antiparticles=True).n
         return [state.n_p_calc - n_p,
@@ -455,7 +449,7 @@ def solve_beta_eq_neutrino_trapped(
     result.n_nu = nu_thermo.n
     result.Y_e = result.n_e / n_B
 
-    return _finish(result, mu_p, mu_n, n_p, n_n, T, params, include_photons,
+    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
                    e_thermo=e_thermo, nu_thermo=nu_thermo)
 
 
