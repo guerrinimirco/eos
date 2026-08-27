@@ -174,3 +174,63 @@ category the day the flag lands; nothing new is owed there.
   own "locator over a callable" in `general/`).
 - **The two `mu_B` conventions** at `E/A = mu_B + Y_S mu_S`, unchanged by 98.
 - The Fog below, unchanged: `verify/` invariant, public API, or both.
+
+## Measured 2026-08-27, while ruling ticket 98
+
+Run through the public API on python.org 3.14.2, default sets, T = 0,
+`SpeciesFlags()`, `brentq` on P(n_B):
+
+| model | mode | n_B [fm^-3] | E/A [MeV] | mu_B | Y_S | mu_S | identity rel |
+|---|---|---|---|---|---|---|---|
+| `abpr` | `cfl` | — (closed form) | **831.5839** | 831.5839 | 1.0 | 0.0 | exact |
+| `alphabag` | `cfl`, Delta0 = 100 | 0.362860 | 936.5549 | 895.8739 | 1.0 | **40.6810** | 1.2e-16 |
+| `alphabag` | `beta_eq_neutrinoless` | 0.403090 | 1046.168 | 1046.168 | 0.8128 | 0.0 | 3.0e-14 |
+| `vmit` | `beta_eq_neutrinoless` | 0.440380 | 1155.754 | 1155.754 | **0.0000** | 0.0 | 2.6e-14 |
+| `njl` | `beta_eq_neutrinoless` | — | no P = 0 root in [0.05, 1.5] | | | | |
+| `ccdm` | `beta_eq_neutrinoless` | ~0.508 | residual 5.28e-04 above the gate | | | | |
+
+### The two mu_B conventions do not need reconciling — the identity already covers both
+
+This ticket asked for them to be reconciled "before any shared code reads
+either". They are not two conventions. **`E/A = mu_B + Y_S mu_S` is right in
+both, and `E/A = mu_B` alone is the special case.**
+
+`alphabag`'s CFL surface is the witness: `mu_S = 40.68 MeV` there, and
+`mu_B + Y_S mu_S = 936.5549` reproduces `eps/n_B` to **1.2e-16**, while `mu_B`
+alone would be 895.87 — **wrong by 41 MeV**. `abpr` asserts `E/A == mu_B` and is
+correct only because it is a single-mu model where `mu_S` vanishes identically
+(measured: `mu_S = 0.0` exactly at its surface). So a shared helper reads the
+full identity and needs no per-model branch; `abpr`'s narrower assertion stays
+true as a consequence, not as a competing convention.
+
+In the beta-equilibrium modes `mu_S = 0` by §3 ("strangeness self-equilibrates"),
+so the identity collapses to `E/A = mu_B` there for any model — which is why the
+distinction only ever shows up in `cfl`.
+
+### The three-flavour arm reproduces the golden
+
+`abpr`'s 831.5839 MeV comes back through `mu_from_P(0.0, par)` +
+`solve_cfl` unchanged. Any new path is measured against it.
+
+### Two findings for the implementer
+
+**1. `P` and `eps` are NOT the same name in every model** — a §13 violation the
+shared locator hits immediately, since "a locator over a callable" still has to
+read P off a point:
+
+    P, eps          dd2, sfho, did, enjl
+    P_total, e_total    zl, vmit, alphabag, abpr, njl, ccdm
+
+Six models against four. §13: "The same job carries the same name in every
+model." This is a prerequisite for the `general/` locator, not a detail of it,
+and it is bigger than this ticket — it may deserve its own.
+
+**2. `vmit`'s default set is already two-flavour at its surface** (Y_S = 0.0000
+at n_B = 0.4404): the s quark is unpopulated below its threshold, so
+`beta_eq_neutrinoless` returns the TWO-flavour number there and there is no
+three-flavour number for that set at P = 0. That is a property of the set, not a
+route — a set with s populated at the surface gives the three-flavour number and
+still needs 98's flag for the two-flavour one. **But it means the gate must
+report the Y_S it actually found rather than the flavour content it asked for**,
+which this ticket's Gate already half-says ("with the flavour content each was
+computed at named beside it"). Read it as measured, not as requested.
