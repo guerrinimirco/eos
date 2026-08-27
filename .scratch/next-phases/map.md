@@ -274,6 +274,79 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 85 — the CLAUDE.md sentences the post-22 rulings owe](issues/85-claudemd-sentences-owed.md)**
+  (resolved). **Six sentences landed, two deliberately did not.** Landed: §1's
+  astro carve-out now names `mixed/hybrid.py` ALONE (with its
+  `docs/DEFERRED.md:145` echo, the fourth site the ticket-61 gate missed, swept
+  in the same edit); §2's Naming block gains `_nat`; §3 states that
+  `leptons=False` on a beta mode RAISES while `leptons=True` is accepted and
+  ignored; §4 states that a flag's category is judged over the modes the model
+  HAS, so a mode may refuse a sector without becoming ticket 82's forbidden
+  third category; §5's front-door clause is replaced by "in the first position
+  of every public entry point ... `adapters.default_pair(par, flags,
+  vmit_params)`, a call rather than a privileged position"; §5's composite-engine
+  file list gains `species.py`. **Every one was re-read against the code before
+  it was written**, and one grep would have lied: `grep -rn "astro\.tov" eos/`
+  hits ten model `api.py` files, all of them DOCSTRINGS saying "the result feeds
+  `eos.astro.tov`" — read as imports they would have manufactured a §1 violation
+  in ten models. The real import is `eos/mixed/hybrid.py:237-238` and nothing
+  else. **Not landed, and this is the ruling**: ticket 81 owed THREE sentences,
+  not the one 90 shipped. `leptons=` defaults to False waits on
+  [ticket 91](issues/91-leptons-default-and-drift-checks.md) (nine models still
+  disagree) and §5's units sentence naming `s` waits on
+  [ticket 97](issues/97-natural-record-leaves-the-result.md) (the `_fm`
+  accessors are still on the public result in njl and enjl) — both open, and a
+  sentence that becomes an invariant may not outrun its ruling, which is this
+  ticket's own rule turned on itself. **85 does not stay open for them**: it
+  succeeded ticket 22 in the vehicle role and a collector that never closes is
+  the failure it was created to fix; 91 and 97 land their own sentences, as 82
+  did. Ticket 82's two-category rule was verified PRESENT in §4 and not
+  duplicated. Gate is greps, not a suite run — no file under `eos/` changed. All
+  ten tickets citing ticket 22 are resolved, so nothing still names a retired
+  vehicle. Noticed for Stage 7: `docs/STRUCTURE.md` cites CLAUDE.md §§ by stale
+  numbers ("§5's six names" is §4, "the §4 name lowercased" is §3).
+
+- **[Ticket 90 — one solver signature, one unit system at the boundary](issues/90-solver-signature-and-units-sweep.md)**
+  (resolved). Ticket 81 §§2 and 5 were meant to be the no-value-moves half of
+  that ruling; **two more halves of it turned out to move frozen values and
+  were split out rather than the gate being weakened**, the treatment
+  [ticket 89](issues/89-dd2-honours-species-flags.md) was given. §4 became one
+  ticket per model — [94](issues/94-zl-solver-flags.md),
+  [95](issues/95-vmit-solver-flags.md), [96](issues/96-alphabag-solver-flags.md)
+  — because deleting `include_photons`/`include_gluons`/`include_thermal_neutrinos`
+  into the flags moves every T > 0 row in three baselines, the generators naming
+  none of the three. §5 and the record half of §3 became
+  [97](issues/97-natural-record-leaves-the-result.md), split *after* being
+  written and measured: the `_fm` names are ACCESSORS on the natural-units
+  records the baselines freeze, so the rename changes what **4128 frozen keys
+  mean** and the removal deletes **21271** (enjl 14976 nested under `.point`,
+  njl 3255 and ccdm 3040 under `.state`). All four are blocked by this ticket;
+  96 was also blocked by [92](issues/92-cfl-gluon-term.md), which has since
+  ruled.
+  **What executed moves nothing.** `par` is now first and required in all ten
+  models — the seven that lacked it gained it, and the
+  `if par is None: par = Parameters.default()` reach was DELETED from thirteen
+  zl/vmit/alphabag entry points, which is the §6 violation the signature was
+  hiding rather than a convenience. `params` -> `par`; `n_B_fm` -> `n_B` over 87
+  sites with `_nat` on every displaced natural-units variable, now stated in
+  `docs/STRUCTURE.md` §5 as the repository rule. **161 call sites moved, 139 of
+  them by an AST rewrite** that relocates the argument's exact source slice, so
+  multi-line calls move correctly. `dd2/solver.py`'s local is `n_B_solved`, not
+  `n_B`: it is the EVALUATED density against the function's TARGET `n_B`, which
+  differ at T > 0.
+  **One silent-unit trap, and only one test caught it**: two seed expressions in
+  `enjl`'s `default_guess` were natural units and became fm; every enjl test
+  passed but `test_high_density_needs_a_widened_box`, which stopped at a scaled
+  residual of 2.259e-09 against a 1e-10 bound. Confirmed against an isolated
+  reverted control. Ticket 97 is told to rename fields first and accessors
+  second for exactly this reason.
+  Gate: `test/baseline` **20 passed, UNREGENERATED** except `enjl.npz`, whose
+  **234 renamed keys are BIT-identical and whose 21044 surviving keys are
+  bit-identical, 0 moved, 0 added or lost**; twelve `verify/` entry points,
+  **136 checks, 0 FAIL**; full suite **1737 passed, 20 skipped, 0 failed**,
+  py314. Four findings reported not fixed, including a baseline generator whose
+  breakage is invisible to a partial run.
+
 - **[Ticket 92 — the CFL phase refuses the free gluon gas](issues/92-cfl-gluon-term.md)**
   (resolved). `alphabag`'s `cfl` mode raises on `gluons=True`, and the ruling
   reached a second flag the ticket had not named: `thermal_neutrinos` was being
@@ -326,47 +399,6 @@ against this file, not against the earlier `pytest_before*.txt`.
   uncommitted tree — and `eos/mixed` reaches only alphaBag's UNPAIRED
   `thermo_from_mu`, so the exclusion is outside the blast radius by
   construction.
-
-- **[Ticket 90 — one solver signature, one unit system at the boundary](issues/90-solver-signature-and-units-sweep.md)**
-  (resolved). Ticket 81 §§2 and 5 were meant to be the no-value-moves half of
-  that ruling; **two more halves of it turned out to move frozen values and
-  were split out rather than the gate being weakened**, the treatment
-  [ticket 89](issues/89-dd2-honours-species-flags.md) was given. §4 became one
-  ticket per model — [94](issues/94-zl-solver-flags.md),
-  [95](issues/95-vmit-solver-flags.md), [96](issues/96-alphabag-solver-flags.md)
-  — because deleting `include_photons`/`include_gluons`/`include_thermal_neutrinos`
-  into the flags moves every T > 0 row in three baselines, the generators naming
-  none of the three. §5 and the record half of §3 became
-  [97](issues/97-natural-record-leaves-the-result.md), split *after* being
-  written and measured: the `_fm` names are ACCESSORS on the natural-units
-  records the baselines freeze, so the rename changes what **4128 frozen keys
-  mean** and the removal deletes **21271** (enjl 14976 nested under `.point`,
-  njl 3255 and ccdm 3040 under `.state`). All four are blocked by this ticket;
-  96 was also blocked by [92](issues/92-cfl-gluon-term.md), which has since
-  ruled.
-  **What executed moves nothing.** `par` is now first and required in all ten
-  models — the seven that lacked it gained it, and the
-  `if par is None: par = Parameters.default()` reach was DELETED from thirteen
-  zl/vmit/alphabag entry points, which is the §6 violation the signature was
-  hiding rather than a convenience. `params` -> `par`; `n_B_fm` -> `n_B` over 87
-  sites with `_nat` on every displaced natural-units variable, now stated in
-  `docs/STRUCTURE.md` §5 as the repository rule. **161 call sites moved, 139 of
-  them by an AST rewrite** that relocates the argument's exact source slice, so
-  multi-line calls move correctly. `dd2/solver.py`'s local is `n_B_solved`, not
-  `n_B`: it is the EVALUATED density against the function's TARGET `n_B`, which
-  differ at T > 0.
-  **One silent-unit trap, and only one test caught it**: two seed expressions in
-  `enjl`'s `default_guess` were natural units and became fm; every enjl test
-  passed but `test_high_density_needs_a_widened_box`, which stopped at a scaled
-  residual of 2.259e-09 against a 1e-10 bound. Confirmed against an isolated
-  reverted control. Ticket 97 is told to rename fields first and accessors
-  second for exactly this reason.
-  Gate: `test/baseline` **20 passed, UNREGENERATED** except `enjl.npz`, whose
-  **234 renamed keys are BIT-identical and whose 21044 surviving keys are
-  bit-identical, 0 moved, 0 added or lost**; twelve `verify/` entry points,
-  **136 checks, 0 FAIL**; full suite **1737 passed, 20 skipped, 0 failed**,
-  py314. Four findings reported not fixed, including a baseline generator whose
-  breakage is invisible to a partial run.
 
 - **[Ticket 89 — `dd2.solver.solve` honours `flags.photons`](issues/89-dd2-honours-species-flags.md)**
   (resolved, `992fd9c`). Ticket 81 §1 executed, and kept alone because it is the
@@ -2158,7 +2190,7 @@ against this file, not against the earlier `pytest_before*.txt`.
   off any §4-conforming object, which is what lets the DD2+vMIT front door
   hand one `dd2.SpeciesFlags` to both the phase and the mixture, and why no
   existing call site grew an argument.
-  **Left where [ticket 86](issues/86-phase-pair-is-the-parameter.md) can
+  **Left where [ticket 86](issues/86-mixed-phase-pair-primary.md) can
   finish it**: the front door's default flags moved from `api.py` into
   `adapters.default_flags()`, which 86 deletes with the rest of the front
   door. `__init__.py` and `docs/DEFERRED.md` were deliberately NOT touched —
@@ -2179,9 +2211,106 @@ against this file, not against the earlier `pytest_before*.txt`.
   state the photon treatment, the split, the corrected signatures and the
   `thermal_neutrinos` refusal.
 
+- [Make the Phase pair the parameter argument in `eos/mixed`](issues/86-mixed-phase-pair-primary.md):
+  **ticket 84's ruling, executed.** `phases=(Phase, Phase)` is positional #1 on
+  `eos_point`, `eos_table`, `hybrid_table` and `eos_response`, and
+  `(par, flags, vmit_params)` is ABSENT, not deprecated — so the composite
+  engine finally reads as §5's `eos_point(par, mode, species, **conditions)`
+  with the pair in `par`'s place. `vmit_params` in `eos/` outside the
+  §1-exempt `zlvmit`: **84 -> 0** in the plumbing; the eight survivors are the
+  ruling's own `default_pair(par, flags, vmit_params)` call form, in that
+  function's signature and in six sentences quoting it.
+  `adapters.default_flags()` deleted (it absorbed into `default_pair(par,
+  flags=None, ...)`); `hybrid_table`'s narrowed trapped-mode guard deleted (the
+  DD2 adapter's `_dd2_wing_kwargs` already raises, and still before any solve);
+  `__init__.py:51`'s `from eos.dd2 import ...` — which was in the DOCSTRING,
+  not an import, which is why 29 could leave it — rewritten, and the package
+  now exports its own `SpeciesFlags`/`mixture_flags`, which ticket 29 created
+  but never put on the surface.
+  `hadronic_qn`/`hadronic_charges` moved to `general/basis.py` with
+  `active_baryons`; `charges_from_densities` does NOT do the same job (it sums
+  every non-lepton species, the other sums only the flags' active baryons, and
+  `dd2/table.py` needs the narrow one because a meson gas rides in the same
+  dict), so nothing merged and both now name each other.
+  `responses.py`'s `from eos.dd2.solver import warm_start` and its
+  `flags.phi_field and flags.hyperons` read both lived in
+  `sound_speed_frozen_hadronic`, which with `sound_speed_frozen_quark` was two
+  model-specific spellings of one idea; both retire into one
+  `sound_speed_frozen_pure(phase, th, ...)` over `Phase.frozen_thermo` — the
+  surface 84 said had been there all along.
+  One behaviour the sweep nearly lost, caught by its own test and fixed rather
+  than reverted: `hybrid_table`'s trapped-mode guard sat OUTSIDE the
+  `try/except` that turns non-convergence into a status, and the adapter raise
+  that replaces it happens INSIDE it — so a malformed trapped call stopped
+  raising and started returning `ok=False`, which §6 forbids. The three-line
+  wing pre-flight is now `hybrid.validate_wings(phases, spec, T)`, called from
+  `build_hybrid_table` as before and from `hybrid_table` before its try.
+  Gates on python.org 3.14.2 (numpy 2.3.5, scipy 1.17.0), in an isolated copy:
+  `test/mixed` + `test/baseline` **279 passed / 2 failed**, `test/mixed`
+  entirely green across all 27 files and the two failures traced to
+  `eos/njl/solver.py:solve` moving to `par` first (their ticket-90 sweep)
+  against `generate_baseline.py`'s untouched old-order call — `git diff` on
+  that file mentions njl/ccdm zero times. `test/baseline`
+  `mixed.npz` and `tov.npz` **unmoved** at their frozen tolerances (a signature
+  change moves no number, and the baseline generator had to gain an explicit
+  `species=MixedFlags(muons=True)` or it WOULD have — the front door read that
+  flag off the hadronic `flags`); `eos/mixed/verify/run_full_check.py` **PASS**,
+  all ten `[ok ]`, TOV M_max = 2.340 at 12.64 km; DD2+alphaBag, ZL+vMIT,
+  DID+NJL, DID+CCDM and the ENJL branch pair all run end to end through the new
+  primary signature.
+  The gate ran in an isolated copy because the live tree carried a concurrent
+  session that **reverted `eos/mixed/adapters.py` outright** mid-ticket
+  (`default_flags()` back, `default_pair` stripped of its new default) — and
+  because nothing imported the dead function, the suite still passed and only a
+  grep saw it. That session also moved `eos.vmit.solver`'s four mode solvers to
+  `par` as positional #1, which briefly broke `eos/mixed/adapters.py`'s own
+  `_vmit_wing_solve` and left five DIRECT `from eos.vmit.solver import ...`
+  call sites in `test/mixed` needing the new signature; those are swept here,
+  since otherwise this ticket's gate line cannot be measured. The njl/ccdm half
+  of the same shift lands in `test/baseline/generate_baseline.py`'s own cases
+  and is left to them — this ticket's baseline line names `mixed.npz`.
+  Two model imports stay inside `eos/mixed` and are named rather than swept:
+  `backends/jacobian.py` (the accelerated flavour of the two shipped adapters,
+  reached only through `Phase.jacobian_block`; §5 makes `backends/` deletable
+  and §9 keeps it off the reference path, so moving those kernels into
+  `adapters.py` would break both rules to satisfy a summary of this one) and
+  `verify/run_full_check.py` (§1's `verify/` carve-out).
+  Swept: all 27 `test/mixed` files, `test/baseline/generate_baseline.py`,
+  `test/test_nonconvergence_return.py`, `test/tov/test_solver_fast_robustness.py`,
+  `test/dd2/test_table_rows.py`, `notebooks/hybrid_eos.{py,ipynb}` (whose
+  section 3 stops being "two calling forms" and becomes one signature with
+  DD2+vMIT beside SFHo+NJL — and which was ALREADY BROKEN before this ticket,
+  still passing the `muons=` kwarg ticket 29 removed), `docs/STRUCTURE.md` §11,
+  `mixed.{md,tex}`, `eos/vmit/parameters.py`, `eos/vmit/vmit.md`, `README.md`,
+  `eos/__init__.py`, `docs/DEFERRED.md`.
+  **`../nucleation` on `paper-release` needed nothing, measured not assumed**:
+  a grep over `*.py`/`*.ipynb`/`*.md` and packaging — notebook cells and lazy
+  imports included, the fog's named blind spot — finds `eos` used there only
+  through `eos.sfho.table`. `eos.mixed` is not imported in that repo at all.
+  CLAUDE.md untouched: the §5 sentences are written out in
+  [ticket 85](issues/85-claudemd-sentences-owed.md) item 3, marked SHIPPED,
+  with the §7 note (no sentence owed for the `hadronic_qn` move — §2 already
+  required it) and the "ticket 81" renumber straggler corrected to 84.
+
 ## Not yet specified
 
 In scope, not yet sharp enough to ticket:
+
+- **`active_baryons` is a second instance of the finding ticket 84 named, and
+  nobody has counted the rest.** Ticket 86 moved `hadronic_qn` /
+  `hadronic_charges` out of `eos/dd2/species.py` into `general/basis.py` under
+  §7's single-home rule: general-purpose functions that read only the shared
+  `Particle` objects and a flags object, sitting in a model package because
+  that is where the first caller happened to be. `active_baryons` travelled
+  with them because `hadronic_qn` is written in terms of it — and
+  `eos/did/species.py` and `eos/sfho/species.py` still carry their own,
+  byte-identical copies, which ticket 86 left alone because its charter was
+  `eos/mixed`. That is three copies of one function and a fourth in
+  `general/`. The open question is not those three: it is whether a sweep of
+  every model's `species.py` (and `parameters.py`, and the small helpers
+  around them) finds more of the same shape, and what the test is for "this
+  belongs in `general/`" that does not also drag genuinely per-model physics
+  up a layer. Sharpen after someone has actually counted.
 
 - **A rename landing green is not a rename landing safe.** A concurrent session
   is renaming `eos.sfho.create_custom_parametrization` -> `from_potential_depths`

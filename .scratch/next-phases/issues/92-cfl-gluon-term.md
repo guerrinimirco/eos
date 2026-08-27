@@ -284,3 +284,8 @@ contain without changing it — is recorded as item 5 of
 cost is now known: its section 2 deletes `include_photons` /
 `include_gluons` / `include_thermal_neutrinos` into the flags, and for the
 `cfl` arm two of the three are already refusals with their reasons written.
+
+**CLAUDE.md landed** by [ticket 85](85-claudemd-sentences-owed.md): **§4**,
+the paragraph after the two-category rule — a flag's category is judged over
+the modes the model has, so a mode may refuse a sector without becoming the
+third category.

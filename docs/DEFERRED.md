@@ -142,11 +142,13 @@ to `test/<model>/`:
                                 test/did/test_did_tov.py, marked `slow`
     eos/dd2/notebook_api.py     imported astro; deleted, so the edge is gone
 
-`eos/mixed/hybrid.py` and `eos/mixed/scan.py` KEEP their imports, as the one
-named exception in section 1. `mixed` is a composite engine, not a model: it
-sits directly below `astro/` in the layering order and couples to nothing else
-downstream, and `scan.py`'s result columns ARE M_max and R_1.4 -- taking TOV
-out of it removes the point of the scan rather than fixing a layering problem.
+`eos/mixed/hybrid.py` KEEPS its import, as the one named exception in
+section 1. `mixed` is a composite engine, not a model: it sits directly below
+`astro/` in the layering order and couples to nothing else downstream, and
+`hybrid.py`'s result columns ARE M_max and R_1.4 -- taking TOV out of it
+removes the point of the hybrid table rather than fixing a layering problem.
+(`eos/mixed/scan.py` stood beside it here until the file was removed; the
+exception now names one file.)
 
 `test/test_imports.py` enforces the tightened rule with
 `test_no_model_imports_astro`, which has no `verify/` carve-out. The blanket

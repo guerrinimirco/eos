@@ -33,8 +33,9 @@ Inside the package the layers are strict:
   layer both may import); running a sequence over one is astro's side, so a
   model's M–R check is a test, in `test/<model>/`, never a `verify/` entry.
   The **composite engine is the one exception**, and a named one: `mixed/`
-  scans parameter space and its result columns ARE M_max and R_1.4, so
-  `mixed/hybrid.py` and `mixed/scan.py` import `eos.astro.tov`. The engine
+  builds hybrid stars and its result columns ARE M_max and R_1.4, so
+  `mixed/hybrid.py` imports `eos.astro.tov`. That is one file, not a
+  subpackage-wide licence. The engine
   sits directly below `astro/` in the order above and couples to nothing else
   downstream; a model does not get the same latitude.
 - **A `verify/` suite may reach sideways.** The model-to-model half of the
@@ -119,6 +120,11 @@ the recommended default because the rearrangement term and the large vector
 shift cancel out of the iteration and the effective potentials vary smoothly
 along a density sweep, which is what makes warm starts work.
 
+A variable at the fm-based boundary of §5 carries **no unit suffix**; its
+natural-units twin inside a physics module carries **`_nat`**. That suffix is
+the one place the two unit systems are named apart, and it is why a bare
+`n_B` never has to be read twice to learn which system it is in.
+
 ## 3. Modes
 
 Every model exposes the same modes; a mode fixes the independent variables:
@@ -145,6 +151,14 @@ One orthogonal flag applies to `fixed_YC` and `fixed_YC_YS`:
 - `leptons=False` — strongly-interacting matter only; the result is
   electrically charged. This is what a mixed-phase construction needs for
   each pure phase before imposing GLOBAL neutrality.
+
+**On a beta-equilibrium mode the flag is not a choice**: there the leptons are
+constitutive, not optional. `leptons=True` is a true statement redundantly
+made and is accepted and ignored; `leptons=False` asks for beta equilibrium
+without the particles that define it and **RAISES**. §4's "a flag a model does
+not implement RAISES" does not govern the `True` case, because nothing is
+unimplemented — raising on it would punish exactly the caller writing one
+uniform call across modes and models.
 
 Wherever a temperature axis is accepted, entropy per baryon `SnB` is accepted
 in its place (an outer 1-D solve for T).
@@ -196,6 +210,21 @@ category — nothing defaults to True and quietly accepts False, because that is
 the same implicit switch-on this section forbids, wearing a model-specific
 name. `enjl` is the single exemption and is the second kind throughout: it
 fixes every flag and raises on any move.
+
+**A flag's category is a property of the flag, judged over the modes the model
+has** — which is why a mode may refuse a sector its physics does not contain
+without creating that forbidden third category. `alphabag.gluons` keeps two
+legal values in the unpaired modes and is a default there, and raises in `cfl`
+because a colour-flavour-locked phase has no free gluon gas: locking leaves a
+single unbroken U(1), so of the nine gauge bosons exactly one stays massless —
+the rotated photon, which is why `photons` stays and `gluons` goes. That is
+the same statement `abpr` makes by refusing the flag outright; `abpr` IS that
+phase and nothing else, so for it the phase's statement and the flag's
+category coincide. This is not a carve-out from the rule above but §3's
+sentence about `cfl` — "not a choice of equilibrium condition but a statement
+about which phase the model describes" — applied one sector at a time, and a
+refusal is still a raise: dropping the sector silently is the no-op this
+section already forbids.
 
 ## 5. Uniform model API
 
@@ -285,9 +314,10 @@ densities) at those fixed potentials, with an optional opaque state for warm
 starts. A pairing is two declared `Phase` objects, each closing over its own
 model's parameters — for the composite engine the Phase pair IS the
 parameter argument (which is how §6's "parameters are arguments" reads
-there), with the plain (par, flags, vmit_params) signatures remaining the
-DD2+vMIT front door. Whether a phase's slot carries the kinetic or the
-physical baryon potential is a declared property of the phase, never an
+there), in the first position of every public entry point; the DD2+vMIT
+pairing is built by `adapters.default_pair(par, flags, vmit_params)`, a call
+rather than a privileged position. Whether a phase's slot carries the kinetic
+or the physical baryon potential is a declared property of the phase, never an
 engine assumption. Shipped adapters: DD2, SFHo, ZL, DID (hadronic), vMIT,
 alphaBag, NJL, CCDM (quark), and the ENJL branch pair (two branches of one
 functional); a new pairing is a new adapter, not a new engine.
@@ -350,8 +380,13 @@ is what keeps the readable implementation readable — a physicist checking the
 equations never has to walk past a jitted kernel.
 
 A composite engine (§5) is not a model and does not take this list. It carries
-`adapters.py`, `api.py`, `responses.py`, `verify/` and its own `<name>.tex`,
-plus whatever subpackages its solve needs.
+`adapters.py`, `species.py`, `api.py`, `responses.py`, `verify/` and its own
+`<name>.tex`, plus whatever subpackages its solve needs. `species.py` is on
+that list because §4 binds an engine exactly as it binds a model: the engine
+carries the six names, delegating the per-phase ones to the two `Phase`
+objects and consuming the phase-common ones (photons, thermal neutrinos) once
+at the mixture level, so an adapter's hardcoded `photons=False` is correct by
+construction rather than by accident.
 
 **`general/` carries a `verify/` too.** It is not a model either, but it is the
 single home of the Fermi and Bose integrals (§7), the conserved-charge basis

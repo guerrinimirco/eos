@@ -149,3 +149,7 @@ PASSED. `test/baseline/` is unmoved and untouched.
 
 The ticket's grep now returns only the three lines named above (the RNS
 fixture, CLAUDE.md §1 -> ticket 85, and the two historical records).
+
+**CLAUDE.md landed** by [ticket 85](85-claudemd-sentences-owed.md): **§1**'s
+astro carve-out names `mixed/hybrid.py` alone, and the echo at
+`docs/DEFERRED.md:145` was swept in the same edit.

@@ -222,3 +222,6 @@ that second run.
   always enter the totals (untracked, §11)
 - `test/mixed/test_{phase_pairs,njl_pair,ccdm_pair,enjl_pair}.py` — the
   `muons=True` call sites become `species=MU` (untracked, §11)
+
+**CLAUDE.md landed** by [ticket 85](85-claudemd-sentences-owed.md): **§5**,
+the composite-engine file list, which now names `species.py` and says why.

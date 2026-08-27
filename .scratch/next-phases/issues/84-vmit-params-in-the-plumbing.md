@@ -193,3 +193,7 @@ clause and §1's `scan.py` mention go via
 [ticket 85](85-claudemd-sentences-owed.md).
 
 Status: resolved.
+
+**CLAUDE.md landed** by [ticket 85](85-claudemd-sentences-owed.md): **§5**'s
+phase-adapter paragraph (the front-door clause is gone) and **§1**'s astro
+carve-out, together with its `docs/DEFERRED.md` echo.

@@ -161,3 +161,6 @@ reference models — and a concurrent session has that file staged for
 [ticket 72](72-enjl-branch-selection.md); sharing the implementation there is
 tidiness, and it is not worth the collision. The refactor is one import and
 five deleted lines whenever that work lands.
+
+**CLAUDE.md landed** by [ticket 85](85-claudemd-sentences-owed.md): **§3**,
+the paragraph after the `leptons=True` / `leptons=False` pair.

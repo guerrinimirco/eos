@@ -234,3 +234,10 @@ regenerated at all.
   `SpeciesFlags()`** when it is absent. That is §4's implicit switch-on wearing
   a different hat, and it is the same shape ticket 81 §1 ruled on for `dd2`.
   Not this ticket's; not measured here.
+
+**CLAUDE.md landed** by [ticket 85](85-claudemd-sentences-owed.md): **§2**'s
+Naming block gains the `_nat` convention. The other two sentences ticket 81
+owed are NOT landed — `leptons=` defaults to False waits on
+[ticket 91](91-leptons-default-and-drift-checks.md) and §5's units sentence
+naming `s` waits on [ticket 97](97-natural-record-leaves-the-result.md),
+both open.
