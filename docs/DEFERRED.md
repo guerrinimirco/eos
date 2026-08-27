@@ -1420,6 +1420,42 @@ decision that cannot be made before the tables exist.
   the two branches are compared against each other in that study. Closing it
   means passing `species.thermal_neutrinos` through `table.solve_at`'s `cfl`
   arm and regenerating those tables together.
+
+  What is no longer deferred is the SILENCE. `table.solve_at` used to accept
+  `thermal_neutrinos=True` in the `cfl` mode and drop it on the floor, which
+  section 4 forbids -- a sector a model does not implement raises, and a
+  `NotImplementedError` is never turned into a silent no-op. The `cfl` arm
+  now raises naming this entry. The physics gap above is unchanged; only the
+  way it is reported is.
+
+- **The colour-flavour-locked phase has no light bosonic sector at all**, and
+  what it should have is not what the code used to add. Locking breaks
+  `SU(3)_c x U(1)_Q` to a single unbroken `U(1)_Qtilde`, so exactly one of the
+  nine gauge bosons stays massless -- the rotated photon, which `photons=True`
+  supplies at leading order -- and all eight gluons acquire Meissner masses.
+  The light degrees of freedom the phase genuinely carries are the superfluid
+  phonon and the pseudo-Goldstone meson octet, neither of which is
+  implemented. Until the CFL branch was ruled on, `gluons=True` added the
+  UNPAIRED phase's free gas of `g_g = 2 x 8 = 16` massless bosons instead:
+  the wrong count and the wrong dispersion, worth +0.119 MeV/fm^3 in P and
+  1.4-3.0% of the phase's entropy at T = 30 MeV, and +1.900 MeV/fm^3 and
+  5-11% of the entropy at T = 60. That term is gone and `gluons=True` now
+  raises in the `cfl` mode. Closing the gap properly means a phonon
+  dispersion (`v = 1/sqrt(3)` at leading order) and the meson octet's masses
+  -- new physics with its own literature, not a mass added to the gluon gas,
+  which is why it is a deferred sector rather than a corrected one.
+
+- The legacy `TableSettings` shim defaults `include_gluons=True` and
+  `include_thermal_neutrinos=True`, so `compute_table(TableSettings(
+  phase='cfl'))` now raises where it used to return a table. That is the
+  ruling above reaching the shim, and it is correct: the first-generation
+  CFL tables of the 2fam PNS study DO contain the free gluon gas, so the shim
+  can no longer reproduce them at `T > 0` without naming
+  `include_gluons=False` (and `include_thermal_neutrinos=False`, which the
+  `cfl` arm used to drop in silence) and accepting the difference. The
+  defaults are left as they are because they are the unpaired path's legacy
+  defaults, which are unaffected; the shim's only caller in this repository
+  is `test/alphabag/test_alphabag_api.py`, where the two flags are now named.
 - The flavour densities are not constrained positive -- the same gap vmit
   has, from the same cause: at exotic fixed fractions the equations have
   solutions with net anti-down and anti-strange densities and the solver

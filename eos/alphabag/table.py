@@ -79,8 +79,22 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
             include_electrons=leptons, include_thermal_neutrinos=neutrinos,
             initial_guess=x0)
     if mode == "cfl":
-        # The paired phase carries no lepton condition and, unlike the
-        # unpaired solvers, no thermal neutrino gas -- see docs/DEFERRED.md.
+        # The paired phase carries no lepton condition, and two of the
+        # thermal sectors are not its physics. `gluons` is refused inside
+        # solve_cfl (the eight gluons are Meissner-massive; only the rotated
+        # photon stays massless), and the thermal neutrino gas is refused
+        # here, because the paired phase has never carried it -- see
+        # docs/DEFERRED.md. Neither is silently dropped: section 4 of
+        # CLAUDE.md requires a sector a model does not implement to raise
+        # rather than be ignored.
+        if neutrinos:
+            raise NotImplementedError(
+                "alphaBag 'cfl': the paired phase carries no thermal "
+                "neutrino gas, where every unpaired solver adds one. The "
+                "asymmetry is inherited from the first-generation CFL table "
+                "builder and is preserved deliberately, because closing it "
+                "moves published CFL tables; see docs/DEFERRED.md. Use "
+                "thermal_neutrinos=False in the 'cfl' mode")
         return solve_cfl(params, n_B, T, conditions["Delta0"],
                          include_photons=photons, include_gluons=gluons,
                          initial_guess=x0)

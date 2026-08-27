@@ -44,6 +44,40 @@ Collected, each with the ruling that owes it:
    found the same sentence echoed at `docs/DEFERRED.md:145` and left it here,
    so this ticket sweeps both copies together.
 
+5. **§4 — a sector flag may be refused by a MODE without stopping being a
+   default** ([ticket 92](92-cfl-gluon-term.md)). §4 now carries ticket 82's
+   two-category rule: "a flag with two legal values is a DEFAULT and is False;
+   a flag with only one legal value RAISES on the other and is a STATEMENT
+   about the model. There is no third category." Ticket 92 refuses
+   `alphabag.gluons` and `alphabag.thermal_neutrinos` in the `cfl` mode alone,
+   which reads as that forbidden third category until one notices the rule is
+   about the FLAG and this refusal is about the PHASE. State the distinction,
+   because it is not a carve-out and it must not be read as one:
+
+   > A flag's category is a property of the flag, judged over the modes the
+   > model has. A mode may refuse a sector its physics does not contain
+   > without changing the flag's category: `alphabag.gluons` keeps two legal
+   > values in the unpaired modes and is a default there, and raises in `cfl`
+   > because a colour-flavour-locked phase has no free gluon gas. That is the
+   > same statement `abpr` makes by refusing the flag outright — `abpr` is
+   > that phase and nothing else, so for it the phase's statement and the
+   > flag's category coincide.
+
+   Two things make this safe to state rather than a licence to drift. §3
+   already holds the ground: `cfl` "is not a choice of equilibrium condition
+   but a statement about which phase the model describes", so a per-mode
+   sector refusal is the same kind of claim §3 already makes about the mode
+   itself. And the drift check
+   (`test_every_species_flag_defaults_off_or_raises`) is untouched — it
+   iterates flag DEFAULTS, so a mode-conditional raise neither weakens it nor
+   needs an exemption in it, which is exactly the property ticket 82's rule
+   was chosen for.
+
+   §4's "Setting a flag a model does not implement RAISES; a
+   NotImplementedError is never turned into a silent no-op" needs no change:
+   ticket 92 is that sentence being ENFORCED, not amended. The `cfl` arm of
+   `alphabag.table.solve_at` had been dropping `thermal_neutrinos` silently.
+
 **Do not batch these blind.** §2's warning applies to the specification too: a
 sentence added to CLAUDE.md becomes an invariant the whole suite encodes, so
 each one lands only when its ruling has actually shipped — which is why this

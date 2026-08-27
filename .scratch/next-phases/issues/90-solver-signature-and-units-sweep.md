@@ -124,6 +124,17 @@ moves no value, which is the gate this ticket was given and can now keep.
 
 ---
 
+## Note from [ticket 92](92-cfl-gluon-term.md) (2026-08-27)
+
+**Resolved, and the answer is on [ticket 96](96-alphabag-solver-flags.md)**,
+which is the split that carries alphaBag. In short: `solve_cfl` raises on
+`gluons=True` and the `cfl` arm of `table.solve_at` raises on
+`thermal_neutrinos`, so for the paired phase section 2 re-points two existing
+`NotImplementedError`s rather than translating two kwargs. The alphaBag
+baseline note above is unchanged and was re-measured: the six `cfl.*` rows are
+at T = 0 and move under no answer, and `test_baseline[alphabag]` is green
+under ticket 92 in an isolated change arm.
+
 ---
 
 ## Resolution (2026-08-27)

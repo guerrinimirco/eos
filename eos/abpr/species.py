@@ -11,7 +11,9 @@ rather than unfinished work:
     electrically neutral by construction, with n_C = 0 identically, so there
     are no electrons or muons to neutralize it;
   - the thermal sectors (photons, gluons, thermal neutrinos) are identically
-    zero at T = 0, which is the only temperature this model has.
+    zero at T = 0, which is the only temperature this model has -- and the
+    gluons have a second, temperature-independent reason, below, which is the
+    one `eos.alphabag` refuses them for in its own `cfl` mode.
 
 The three flavours u, d, s are always present, the way nucleons always are in
 a hadronic model, and locked to equal densities. Asking for any sector raises
@@ -32,9 +34,11 @@ _WHY_OFF = {
     "photons": "a thermal sector, identically zero at T = 0, which is the "
                "only temperature this model has; for T > 0 use the 'cfl' "
                "mode of eos.alphabag",
-    "gluons": "a thermal sector, identically zero at T = 0, and in the CFL "
-              "phase the gluons are Meissner-massive besides; for T > 0 use "
-              "the 'cfl' mode of eos.alphabag",
+    "gluons": "a thermal sector, identically zero at T = 0 -- and refused at "
+              "every temperature besides, because locking leaves one unbroken "
+              "U(1)_Qtilde and all eight gluons are Meissner-massive. The "
+              "'cfl' mode of eos.alphabag refuses the sector for that same "
+              "reason, so T > 0 is no way around it",
     "thermal_neutrinos": "a thermal sector, identically zero at T = 0, which "
                          "is the only temperature this model has",
 }

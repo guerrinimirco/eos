@@ -274,6 +274,59 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 92 — the CFL phase refuses the free gluon gas](issues/92-cfl-gluon-term.md)**
+  (resolved). `alphabag`'s `cfl` mode raises on `gluons=True`, and the ruling
+  reached a second flag the ticket had not named: `thermal_neutrinos` was being
+  **silently dropped** by `table.solve_at`'s `cfl` arm, §4's "never a silent
+  no-op" live at the same five lines. **Three of the ticket's own premises were
+  wrong.** `abpr` is not the independent second opinion it was taken for — it
+  refuses photons, gluons AND thermal neutrinos with the same PRIMARY reason,
+  "identically zero at T = 0, the only temperature this model has", and Meissner
+  is a "besides"; the proof its T = 0 reasons do not bind alphaBag is that
+  alphaBag's `cfl` carries PHOTONS at T > 0 and nobody calls that a
+  contradiction. The physics that DOES decide it is the one the ticket never
+  stated: locking leaves a single unbroken U(1)_Qtilde, so of the NINE gauge
+  bosons exactly one stays massless — **the rotated photon, which is why
+  `photons` stays and `gluons` goes** — and the free gas is the wrong COUNT
+  (2 x 8 = 16) as well as the wrong dispersion. And candidate 1 is not "add a
+  Meissner mass": the phase's light bosons are the superfluid phonon and the
+  pseudo-Goldstone octet, a DIFFERENT sector, deferred as such. **"It is small"
+  was never the argument**: 0 exactly at T = 0, but +0.119 MeV/fm^3 and 1.4–3.0%
+  of the entropy at T = 30, and 5% of P and 10% of the entropy at T = 60,
+  n_B = 0.45. **0 baseline keys, 0 figures, 0 verify values** — the six frozen
+  `cfl.*` rows are T = 0, both notebook CFL builds are T = 0 and never named the
+  flag, and every existing `solve_cfl` caller passes `False` or nothing. So
+  `include_gluons` keeps its place and merely defaults `False` and raises on
+  `True`: zero call-site churn, a message rather than a `TypeError`, and one
+  fewer pass-through for [ticket 90](issues/90-solver-signature-and-units-sweep.md),
+  which is **unblocked**. **Ticket 82's two-category rule is untouched, and that
+  is the sentence to carry forward: 82's rule is about the FLAG, this refusal is
+  about the PHASE** — `gluons` keeps two legal values over the modes the model
+  has, so it stays a default, and the drift check needs no exemption because it
+  iterates DEFAULTS. One real cost, not glossed: the legacy `TableSettings` shim
+  has ONE sector switch set for both phases, so a legacy CFL table now raises
+  unless both flags are named, and the published first-generation CFL tables
+  contain the gluon term and can no longer be reproduced at T > 0 — recorded in
+  `docs/DEFERRED.md`, and the shim's one caller (a test) names them. The §4
+  sentence owed goes to [ticket 85](issues/85-claudemd-sentences-owed.md) item 5;
+  `CLAUDE.md` untouched here. Gate is an isolated control/change PAIR from clean
+  HEAD, both arms given the SAME `test/` so the control fails exactly the new
+  nodes and nothing else: **control 21 failed / 1455 passed, change 19 failed /
+  1457 passed** — **0 added failures and 2 fewer**, the two being this ticket's
+  own refusal tests, red by design in the control. Every other failing node id
+  is identical across the arms: `test_baseline[enjl]` plus 18 `test/enjl/`
+  nodes, which are `test/` (gitignored, so working-tree) running ahead of the
+  clean-HEAD `eos/enjl` a concurrent session holds uncommitted — measured, not
+  inferred: `test/enjl` against the WORKING tree is **127 passed, 0 failed**.
+  `test_baseline[alphabag]` green in the change arm; **`test_baseline[ccdm]`
+  was the apparatus lying again** — red in the baseline-only run, green in both
+  arms of the full one, ticket 82's concurrent-suites pattern.
+  `test/mixed` excluded from the pair — it imports
+  `sound_speed_frozen_pure`, which exists only in a concurrent session's
+  uncommitted tree — and `eos/mixed` reaches only alphaBag's UNPAIRED
+  `thermo_from_mu`, so the exclusion is outside the blast radius by
+  construction.
+
 - **[Ticket 90 — one solver signature, one unit system at the boundary](issues/90-solver-signature-and-units-sweep.md)**
   (resolved). Ticket 81 §§2 and 5 were meant to be the no-value-moves half of
   that ruling; **two more halves of it turned out to move frozen values and
