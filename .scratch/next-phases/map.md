@@ -348,7 +348,10 @@ against this file, not against the earlier `pytest_before*.txt`.
   [ticket 100](issues/100-vmit-point-Y_S-never-assigned.md). `ccdm` has no
   locatable surface: pre-existing non-convergence, reported and not hidden.
   **1754 passed / 0 failed** (+36 tests), **all 20 baselines at rtol = 1e-10 —
-  no number moves.**
+  no number moves.** **BayEoS pinged** (`OPEN_QUESTIONS.md` Q7, a second
+  UPSTREAM RULING block): both gates come off hold, with the call spelled out,
+  the `Y_S`-is-measured-not-requested trap named, `abpr`'s refusal to catch,
+  and `E_per_A_iron` to import rather than re-declare. Committed `4ceb442`.
 
 - **[Ticket 98 — `fixed_YS` is a mode the code has and §3 does not declare](issues/98-fixed-ys-undeclared-mode.md)**
   (resolved). **It is not a mode.** Arm (b) — demoted to an internal `ModeSpec`
