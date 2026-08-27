@@ -191,7 +191,7 @@ def dd2_table(par, flags, n_lo=0.08, n_hi=1.2, n_points=110):
     need the composition the table itself does not carry.
     """
     grid = np.geomspace(n_lo, n_hi, n_points)
-    pts = sweep(par, grid, flags, T=0.0, include_photons=False,
+    pts = sweep(par, grid, flags, T=0.0,
                 stop_at_boundary=True)
     P = np.array([p.P for p in pts])
     eps = np.array([p.eps for p in pts])

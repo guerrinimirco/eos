@@ -221,9 +221,9 @@ def hadronic_seed(par, flags, T, n_B_guess):
     units, the rest in MeV.
     """
     fields_only = replace(flags, thermal_mesons=False,
-                          thermal_vectors=False)
+                          thermal_vectors=False, photons=False)
     base = solve_beta_eq_neutrinoless(par, n_B_guess, fields_only, T=T,
-                               include_photons=False, check_consistency=False)
+                               check_consistency=False)
     fields = base.matter.fields
     x = [fields["sigma"], fields["omega0"], fields["rho0"]]
     if flags.phi_field and flags.hyperons:
@@ -534,9 +534,10 @@ def _dd2_frozen_block(par, flags, n_B, Y_C, Y_S, T, x0=None):
     # strange_mode='fixed' only when strangeness can actually vary; for
     # nucleonic matter it would add an inert unknown to the solve.
     strange = "fixed" if flags.has_strange_baryons else "eq"
-    p = solve(par, n_B, flags, T=T, x0=x0, charge_mode="fixed", Y_C=Y_C,
+    p = solve(par, n_B, replace(flags, photons=False), T=T, x0=x0,
+                    charge_mode="fixed", Y_C=Y_C,
                     strange_mode=strange, Y_S=Y_S, yc_leptons=False,
-                    include_photons=False, check_consistency=False)
+                    check_consistency=False)
     return p.P, p.eps, Y_C * n_B
 
 
@@ -580,9 +581,8 @@ def dd2_phase(par, flags):
         # and independent of the charge potentials. The meson gas is switched
         # off for the same reason `hadronic_seed` switches it off.
         seed_flags = replace(flags, thermal_mesons=False,
-                             thermal_vectors=False)
+                             thermal_vectors=False, photons=False)
         base = solve_beta_eq_neutrinoless(par, n_B, seed_flags, T=T,
-                                   include_photons=False,
                                    check_consistency=False)
         m = base.matter
         return m.mu_B - m.Sigma_R, base.leptons.mu_e, m.mu_B

@@ -706,7 +706,7 @@ def _residual_and_jacobian(ctx, spec, T, analytic_jac):
 
 def solve(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
                 Y_C=0.0, strange_mode="eq", Y_S=0.0, lepton_mode="transparent",
-                Y_Le=0.0, yc_leptons=False, include_photons=True,
+                Y_Le=0.0, yc_leptons=False,
                 check_consistency=True, analytic_jac=True):
     """
     General octet solve (the unified charge/strangeness scheme) at (n_B [fm^-3], T [MeV]).
@@ -754,7 +754,7 @@ def solve(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
             f"(max residual {res_max:.2e}, tol {RESIDUAL_TOL:.0e})")
 
     st = assemble(sol.x, ctx, spec)
-    if include_photons and T > 0.0:
+    if flags.photons and T > 0.0:
         # Photons carry no conserved charge and belong to no phase: they are
         # added to the totals and nowhere else.
         ph = photon_thermo(T)
@@ -910,22 +910,20 @@ def _mode_kwargs(mode, fixed, leptons=None):
 
 
 def solve_beta_eq_neutrinoless(par, n_B, flags, T=0.0, x0=None,
-                        include_photons=True, check_consistency=True,
-                        analytic_jac=True):
+                        check_consistency=True, analytic_jac=True):
     """
     Beta-equilibrium matter with the full active baryon set (
     mode 1; mu_S = mu_nue = 0, charge neutrality). Thin wrapper over solve.
     Reduces to the nucleon problem when flags.hyperons is False.
     """
     return solve(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
-                       include_photons=include_photons,
                        check_consistency=check_consistency,
                        analytic_jac=analytic_jac)
 
 
 def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
                    leptons=None, x0=None, analytic_jac=True,
-                   check_consistency=True, include_photons=True, **fracs):
+                   check_consistency=True, **fracs):
     """
     One hadronic point in a NAMED equilibrium mode — the counterpart of
     `eos.mixed.solve`, so both engines are driven the same way.
@@ -946,13 +944,11 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
     return solve(par, n_B, flags, T=T, x0=x0,
                        analytic_jac=analytic_jac,
                        check_consistency=check_consistency,
-                       include_photons=include_photons,
                        **_mode_kwargs(mode, fracs, leptons))
 
 
 def solve_fixed_yc(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
-                         leptons=False, include_photons=True,
-                         check_consistency=True):
+                         leptons=False, check_consistency=True):
     """
     Fixed hadronic charge fraction Y_C. Two flavors:
 
@@ -969,12 +965,12 @@ def solve_fixed_yc(par, n_B, Y_C, flags, T=0.0, x0=None, Y_S=None,
     strange_mode = "fixed" if Y_S is not None else "eq"
     return solve(par, n_B, flags, T=T, x0=x0, charge_mode="fixed",
                        Y_C=Y_C, strange_mode=strange_mode, Y_S=(Y_S or 0.0),
-                       yc_leptons=leptons, include_photons=include_photons,
+                       yc_leptons=leptons,
                        check_consistency=check_consistency)
 
 
 def solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, flags, T=0.0, x0=None,
-                   include_photons=True, check_consistency=True):
+                   check_consistency=True):
     """
     Neutrino-trapped matter at fixed electron lepton fraction
     Y_Le = (n_e + n_nue)/n_B. Charge-neutral, mu_nue unknown,
@@ -986,13 +982,12 @@ def solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, flags, T=0.0, x0=None,
                          "SpeciesFlags(neutrinos=True)")
     return solve(par, n_B, flags, T=T, x0=x0, charge_mode="neutral",
                        lepton_mode="trapped", Y_Le=Y_Le,
-                       include_photons=include_photons,
                        check_consistency=check_consistency)
 
 
 def sweep(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
                 strange_mode="eq", Y_S=0.0, lepton_mode="transparent", Y_Le=0.0,
-                yc_leptons=False, include_photons=True, max_bisect=6,
+                yc_leptons=False, max_bisect=6,
                 stop_at_boundary=False, analytic_jac=True, max_skip=3):
     """
     Warm-started density sweep for any octet mode, with the same
@@ -1024,7 +1019,6 @@ def sweep(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
         return solve(par, n_B, flags, T=T, x0=x0, charge_mode=charge_mode,
                            Y_C=Y_C, strange_mode=strange_mode, Y_S=Y_S,
                            lepton_mode=lepton_mode, Y_Le=Y_Le, yc_leptons=yc_leptons,
-                           include_photons=include_photons,
                            analytic_jac=analytic_jac)
 
     def step(n_prev, n_target, x0, depth):

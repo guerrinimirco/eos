@@ -19,7 +19,7 @@ Checks (those with data/deps available in eos_ref):
      present.
 Backend parity (eos_ref vs eos_fast) is checked alongside.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import os
 
 import numpy as np
@@ -231,9 +231,10 @@ def _check_backend_parity(par, flags, grid):
     """eos_fast (analytic Jacobian) vs eos_ref (numeric): same root (report
     §3.7 check 4). Same math, different derivative path — agree to ~round-off."""
     worst = 0.0
+    bare = replace(flags, photons=False)
     for n_B in grid:
-        a = solve(par, n_B, flags, include_photons=False, analytic_jac=True)
-        r = solve(par, n_B, flags, include_photons=False, analytic_jac=False)
+        a = solve(par, n_B, bare, analytic_jac=True)
+        r = solve(par, n_B, bare, analytic_jac=False)
         for va, vr in ((a.eps, r.eps), (a.P, r.P),
                        (a.matter.mu_B, r.matter.mu_B),
                        (a.matter.fields["sigma"], r.matter.fields["sigma"]),

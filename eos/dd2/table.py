@@ -59,8 +59,7 @@ def solve_at_entropy(par, n_B, S_per_B, flags, x0=None, T_lo=0.2,
     Returns the converged EoSPoint (at the solved T).
     """
     def point(T):
-        return solve(par, n_B, flags, T=T, x0=x0,
-                           include_photons=flags.photons, **mode_kwargs)
+        return solve(par, n_B, flags, T=T, x0=x0, **mode_kwargs)
 
     def f(T):
         return point(T).s / n_B - S_per_B
@@ -213,8 +212,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
             def solve_at(n, x0):
                 if spec._temp_key == "T":
                     return solve(spec.parametrization, float(n), flags,
-                                       T=float(tv), x0=x0,
-                                       include_photons=flags.photons, **mode_kw)
+                                       T=float(tv), x0=x0, **mode_kw)
                 return solve_at_entropy(spec.parametrization, float(n),
                                               float(tv), flags, x0=x0,
                                               **mode_kw)
@@ -224,8 +222,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
             # Fast path: the whole line in one warm-started sweep (T axis only).
             if spec._temp_key == "T" and not skip_errors:
                 line = sweep(spec.parametrization, nB, flags,
-                                   T=float(tv), include_photons=flags.photons,
-                                   **mode_kw)
+                                   T=float(tv), **mode_kw)
             else:
                 # Tolerant / entropy path: per-point, warm-started, may skip.
                 line, x0 = [], None
@@ -303,9 +300,7 @@ def build_core_table(par, flags, n_lo=0.05, n_hi=1.25, n_points=150):
     grid = np.geomspace(n_lo, n_hi, n_points)
     # stop_at_boundary: a Δ model may hit scalar collapse (m*->0) before n_hi;
     # take the valid prefix as the core EoS.
-    points = sweep(par, grid, flags, T=0.0,
-                                 include_photons=flags.photons,
-                                 stop_at_boundary=True)
+    points = sweep(par, grid, flags, T=0.0, stop_at_boundary=True)
     P = np.array([p.P for p in points])
     eps = np.array([p.eps for p in points])
     nB = np.array([p.n_B for p in points])

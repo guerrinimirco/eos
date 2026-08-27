@@ -69,8 +69,8 @@ def engine_point(par, n_B, Y_q, T, include_electrons=True, flags=None):
         par = _dc_replace(par, nucleon_mass_mode="physical")
     if flags is not None and flags.hyperons:
         from eos.dd2.solver import solve_fixed_yc
-        base = solve_fixed_yc(par, n_B, Y_q, flags, T=T,
-                                    include_photons=False)
+        base = solve_fixed_yc(par, n_B, Y_q, _dc_replace(flags, photons=False),
+                                    T=T)
     else:
         base = solve_composition(par, (1.0 - Y_q) * n_B, Y_q * n_B, T=T)
     P, eps, s = base.P, base.eps, base.s

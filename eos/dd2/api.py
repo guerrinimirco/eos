@@ -108,8 +108,7 @@ def eos_point(par, mode, species, n_B, T=None, SnB=None, leptons=None,
                                            **kwargs)
         else:
             point = solve(par, n_B, species, T=T, x0=x0,
-                                analytic_jac=analytic_jac,
-                                include_photons=species.photons, **kwargs)
+                                analytic_jac=analytic_jac, **kwargs)
         return PointResult(True, "converged", point)
     except NotImplementedError:
         raise                       # an unwired request must never be a status

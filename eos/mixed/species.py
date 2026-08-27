@@ -22,10 +22,13 @@ PER-PHASE — hyperons, deltas, thermal_mesons, and the muons that join the
 PHASE-COMMON — photons and thermal_neutrinos. These belong to neither phase:
     like the eta-split leptons of `eos.mixed.thermodynamics` they are uniform
     across the whole mixture and are counted ONCE, at the mixture level. That
-    is why every shipped adapter passes `include_photons=False` into the phase
-    it wraps (`eos.mixed.adapters`): the phases contribute matter, the mixture
-    contributes the radiation. With the flag here, that hardcoded False is
-    correct by construction rather than correct by accident.
+    is why every shipped adapter hands the phase it wraps a flag object with
+    `photons=False` (`eos.mixed.adapters`): the phases contribute matter, the
+    mixture contributes the radiation. With the flag here, that hardcoded
+    False is correct by construction rather than correct by accident. The one
+    exception is a phase's `wing_sweep`, whose rows are stitched into the
+    hybrid table as they stand, with no mixture layer above them to add the
+    radiation: those carry the caller's own `photons`.
 
 The engine's OWN physics — eta, the quark volume fraction chi — is not a
 species flag and is not carried here; it is an argument of the solve.

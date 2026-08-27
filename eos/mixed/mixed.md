@@ -369,9 +369,8 @@ models being coupled, and are delegated: each `Phase` carries its own model's
 flags. `photons` and `thermal_neutrinos` belong to NEITHER phase — like the
 eta-split leptons they are uniform across the mixture — and are consumed at
 the mixture level, counted once. That is why every adapter solves its phase
-with `include_photons=False`: the phases contribute matter, the mixture
-contributes the radiation, and (photons) appears exactly once in
-(Ptot)-(stot). `thermal_neutrinos` is carried and raises: the flavours a
+with `photons=False`: the phases contribute matter, the mixture contributes
+the radiation, and (photons) appears exactly once in (Ptot)-(stot). `thermal_neutrinos` is carried and raises: the flavours a
 mode does not track are not wired in the engine.
 
 **Euler / Hugenholtz-Van Hove.** The identity

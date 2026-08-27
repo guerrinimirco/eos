@@ -18,6 +18,8 @@ Two Jacobian products:
   n_B and T give d(P,eps,s)/d(n_B,T), and the standard thermodynamic
   combinations give the three responses.
 """
+from dataclasses import replace
+
 import numpy as np
 
 from eos.general.physics_constants import hc3
@@ -35,7 +37,8 @@ _BETA = beta_eq_neutrinoless()
 
 def _state(par, n_B, flags, T):
     """Converged beta-eq point, its unknown vector x0, ctx and Jacobian."""
-    p = solve_beta_eq_neutrinoless(par, n_B, flags, T=T, include_photons=False)
+    p = solve_beta_eq_neutrinoless(par, n_B, replace(flags, photons=False),
+                                   T=T)
     has_phi = flags.phi_field and flags.hyperons
     x0 = np.array(warm_start(p, has_phi, False, False))
     ctx0 = build_matter_ctx(par, n_B, flags, T=T)
@@ -106,7 +109,8 @@ def susceptibilities(par, n_B, flags, T=0.0):
     (chi = -d^2 Omega / dmu_a dmu_b). Evaluated at the beta-eq state (mu_S = 0).
     Returns a 3x3 numpy array in SUSCEPT_LABELS order.
     """
-    p = solve_beta_eq_neutrinoless(par, n_B, flags, T=T, include_photons=False)
+    p = solve_beta_eq_neutrinoless(par, n_B, replace(flags, photons=False),
+                                   T=T)
     has_phi = flags.phi_field and flags.hyperons
     # fixed+fixed ctx exposes the mu_S column and the hadronic charge/strange
     # rows; the Y_C/Y_S targets don't enter the (pointwise) Jacobian.
