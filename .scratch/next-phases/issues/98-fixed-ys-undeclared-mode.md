@@ -58,6 +58,30 @@ Whether `fixed_YS` is a mode.
 
 Either way `general/modes.py:124` gets its count fixed.
 
+### A second site, and it is better evidence than a miscount
+
+Found by a peer session spot-checking this ticket, reported as "the same
+off-by-one in a different file". It is **not** the same defect, and the
+difference is the point. `eos/dd2/solver.py:882-883` reads:
+
+    #: Mirrors `eos.mixed.MODE_FRACTIONS`, which names the four modes both
+    #: engines share.
+
+"Four" is CORRECT about `eos/mixed`: `eos/mixed/table.py:53` genuinely has
+four entries. What is false is **"Mirrors"** — the dict directly beneath that
+comment has five, and the fifth is `fixed_YS`. So this is not a stale count
+that nobody updated; it is a claimed invariant between two engines that the
+code one line below breaks, and it breaks it on exactly the mode this ticket
+is about. `general/modes.py:124`'s "four names of CLAUDE.md section 3" IS a
+plain miscount (§3 has five, `cfl` was added and the line was not) and the two
+should not be fixed with the same edit or described in the same sentence.
+
+Which way this one resolves follows the ruling above rather than preceding it:
+if `fixed_YS` is a §3 mode, `eos/mixed` is the engine that is missing it and
+the comment is describing a real gap in the wrong tone; if it is an internal
+arm, dd2's public `MODE_FRACTIONS` should not carry it and the mirror becomes
+true by deletion.
+
 ### One input, weighted as an input and not as a decision
 
 The BayEoS session (a §6 use case 5 consumer — a downstream physics package)
