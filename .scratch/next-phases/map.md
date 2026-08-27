@@ -31,8 +31,11 @@ criteria block's first line is "pytest ... fully green".
 Acceptance criteria pass.** The eleventh — "its mode coverage matches what
 CLAUDE.md claims" — fails on exactly one name in exactly one model, `dd2`'s
 `fixed_YS`, which is [ticket 98](issues/98-fixed-ys-undeclared-mode.md) and is
-open. That is the only thing between this map and its Destination; the eight
-other open tickets are all non-gating by their own text.
+open. That is the only thing between this map and its Destination; the nine
+other open tickets are all non-gating by their own text — the ninth is
+[ticket 99](issues/99-quark-ea-at-zero-pressure.md), charted 2026-08-27 on
+the user's request: E/A at P = 0 for two- and three-flavour quark matter, the
+Bodmer-Witten window, whose two-flavour arm waits on ticket 98's ruling.
 
 Reached when every ticket here is resolved and the Stage 7 report can be written
 with real tool output behind every claim. **Ticket 80 is RESOLVED** (`2b2b72f`,

@@ -127,6 +127,17 @@ and never relies on a model default, so it is insensitive to
 [ticket 91](91-leptons-default-and-drift-checks.md)'s ruling and should not be
 weighted there.
 
+**The same request has since arrived from the user directly**, as
+[ticket 99](99-quark-ea-at-zero-pressure.md): E/A at P = 0 for two- AND
+three-flavour quark matter. It adds one cost to this ticket's ledger that the
+BayEoS input did not carry — holding Y_S = 0 where no populated species carries
+S is exactly what [ticket 75](75-undetermined-potential-check.md)'s screen fires
+on, and [ticket 72](72-enjl-branch-selection.md) measured the price. Ticket 99
+also names a route this ticket's two arms do not cover: a SPECIES FLAG that
+switches the s quark off, which reaches two-flavour matter through
+`beta_eq_neutrinoless` and needs no sixth mode at all. Weigh it here; 99's
+two-flavour arm is blocked on the answer.
+
 **Whoever rules this owes a ping downstream.** BayEoS is holding its
 two-flavour gate at `skipped` — logging `two_flavour_stable: skipped` rather
 than passing silently — and its `OPEN_QUESTIONS` entry points at this ticket
