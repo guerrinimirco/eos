@@ -26,6 +26,14 @@ Stage 7 report on a rewrite no criterion measures would hold it hostage.
 same test: the port left two `nucleation` goldens comparing round-off, and the
 criteria block's first line is "pytest ... fully green".
 
+**THE STAGE 7 REPORT IS WRITTEN** ([ticket 25](issues/25-acceptance.md),
+2026-08-27), with real tool output behind every claim. **Ten of the eleven
+Acceptance criteria pass.** The eleventh — "its mode coverage matches what
+CLAUDE.md claims" — fails on exactly one name in exactly one model, `dd2`'s
+`fixed_YS`, which is [ticket 98](issues/98-fixed-ys-undeclared-mode.md) and is
+open. That is the only thing between this map and its Destination; the eight
+other open tickets are all non-gating by their own text.
+
 Reached when every ticket here is resolved and the Stage 7 report can be written
 with real tool output behind every claim. **Ticket 80 is RESOLVED** (`2b2b72f`,
 pushed to `origin/paper-release`), so the carve-out it was granted here — the one
@@ -130,6 +138,21 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
   reference it, and §10's worked figure example lives in its §12.
 
 ## Suite status
+
+**CURRENT, measured by [ticket 25](issues/25-acceptance.md) on 2026-08-27:**
+
+    python.org 3.14  1737 passed, 20 skipped, 0 failed  (1757 collected, 20:26)
+                     output/_audit/pytest_ticket25_py314.txt
+    nucleation         72 passed,  0 skipped, 0 failed  (72 collected, 4.31s)
+                     output/_audit/nucleation_ticket25_py314.txt
+
+Collection is **1757**, not 1696 — +61 since ticket 74. Against
+`pytest_after_ticket74_py314.txt` that is **0 added failures**, and the
+arithmetic closes with nothing left over: passed +57, skipped +5, failed -1,
+and 57 + 5 - 1 = 61. The 20 skips are all availability guards (RNS binary, BPS
+crust, CompOSE slices) plus one physics-conditional. **`eos` is NOT
+pip-installed on 3.14** — both numbers above need
+`PYTHONPATH=<eos>:<nucleation>`, which is the standing trap, not a repo defect.
 
 **[Ticket 57](issues/57-canonical-stack.md)'s ruling is EXECUTED.**
 python.org 3.14 is canonical; [ticket 62](issues/62-regenerate-baselines-py314.md)
@@ -2291,6 +2314,38 @@ against this file, not against the earlier `pytest_before*.txt`.
   [ticket 85](issues/85-claudemd-sentences-owed.md) item 3, marked SHIPPED,
   with the §7 note (no sentence owed for the `hadronic_qn` move — §2 already
   required it) and the "ticket 81" renumber straggler corrected to 84.
+
+- [Run the Acceptance criteria block and write the Stage 7 report](issues/25-acceptance.md):
+  **ten of eleven criteria pass with real tool output behind each; the eleventh
+  fails on one name.** eos **1737 passed, 20 skipped, 0 failed (1757 collected,
+  20:26)**; nucleation **72 passed, 0 failed (72 collected)**; python.org 3.14.2.
+  **0 added failures against `pytest_after_ticket74_py314.txt`**, and the
+  arithmetic closes exactly: collection +61 = passed +57, skipped +5, failed -1.
+  All 13 baselines reproduce at rtol = 1e-10 (`20 passed`); 13/13 `.tex` compile
+  under `-halt-on-error`; the rcParams grep hits exactly one file; 454 tracked
+  files, none over 5 MB; no dependency added (the four optional imports all
+  predate the map by weeks); §1 holds both ways.
+  **The failure is criterion 4, and it is [ticket 98](issues/98-fixed-ys-undeclared-mode.md):**
+  probing all 60 model x mode pairs through `eos_point` returns
+  `{'dd2': ['fixed_YS']}` as the only name reachable that no specification
+  declares — and `docs/STRUCTURE.md:397` prints it, inside the block
+  demonstrating good refusal messages, while §4's mode table lists five.
+  **The 500-set script needed ±95%, not ±25%**, before the sample left the
+  convergent region: 4 samples / 2000 evaluations, 11 `ok=False`, **0 raised,
+  0 hung**, slowest task 0.19 s. Its first draft was rejected by
+  `Parameters.__post_init__` for drawing `a` and `d` free when `couplings.py`
+  derives both — the validator was right and the script was wrong.
+  **25 document examples run in order**: 18 byte-identical, 4 differ, and every
+  difference is stale prose or a wall-clock field — no physics number in any
+  document is wrong. STRUCTURE.md §12's worked figure regenerates
+  byte-identically; `docs/figures/dd2_MR.png` does **not** (D4), which puts the
+  map's tracked-figures fog item in `eos` as well as `nucleation`.
+  Nine defects reported not fixed (D1–D9), incl. a library loader that prints
+  with no off switch, `np.trapz` deprecated under an unbounded `numpy>=2.0` pin,
+  and `nucleation` `37af659` unpushed. Logs:
+  `output/_audit/{pytest,nucleation,baseline}_ticket25_py314.txt`,
+  `output/_audit/{inference_stress_500,mode_species_coverage,doc_examples_*}*`.
+
 
 ## Not yet specified
 
