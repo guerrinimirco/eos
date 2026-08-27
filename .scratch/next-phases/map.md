@@ -274,6 +274,27 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 89 — `dd2.solver.solve` honours `flags.photons`](issues/89-dd2-honours-species-flags.md)**
+  (resolved, `992fd9c`). Ticket 81 §1 executed, and kept alone because it is the
+  only commit in that ruling that moves frozen values. `include_photons` deleted
+  from `solve` and its four wrappers and from `sweep`; `solve_beta_eq` keeps its
+  own, having no flags object. **162 of dd2.npz's 4692 keys moved** — 54 points
+  x P, eps, s — every other key BIT-identical, **0 of 2454 T = 0 and NMP keys**,
+  composition unmoved, and every moved key moved by exactly one photon gas to
+  under 1 ulp of the total. `mixed.npz` ASSERTED unmoved, 2497 keys, 0 moved.
+  **Ticket 81 §1's own arithmetic is wrong and should not be requoted**: it
+  predicted "456 of 976 rows"; the file holds 4692 keys and 162 moved, and the
+  per-temperature split is not a constant multiple either. Its substantive
+  clauses all hold. Work item 3 also under-counted the callers: `_dd2_frozen_block`
+  is not a seed (its P/eps ARE the frozen sound speed), `verify/compose.py` adds
+  its own photon gas against a CompOSE golden, and `backends/responses_jac.py`
+  has two more — all three given `replace(flags, photons=False)`. One site now
+  follows the caller's flag on purpose: `dd2_phase.wing_sweep`, whose rows reach
+  `build_hybrid_table` with no mixture layer above them to add the radiation, and
+  which until now had photons even at `SpeciesFlags(photons=False)`.
+  **0 added failures** — test/dd2 + test/mixed + test/baseline, **492 collected,
+  492 passed, 0 failed**, py314.
+
 - **[Ticket 79 — three routes to a parameter set, in every model](issues/79-parametrization-surface.md)**
   (resolved, `ff7888e`). `named()` added to `zl`, `vmit`, `alphabag`, `abpr` as
   a ONE-ENTRY MAP in dd2/did's shape, keyed on the set's own `name` field — the
@@ -371,6 +392,41 @@ against this file, not against the earlier `pytest_before*.txt`.
   [91](issues/91-leptons-default-and-drift-checks.md). Three sentences owed to
   [ticket 85](issues/85-claudemd-sentences-owed.md); ticket 82 becomes decisive
   rather than half an answer.
+
+- [Should `alphabag.gluons` default False like the six?](issues/82-alphabag-gluons-default.md):
+  **yes, and the rule is bigger than the flag.** §4 binds a model's OWN flags
+  too, by a test that needs no list: **a flag with two legal values is a
+  DEFAULT and is False, whatever its name; a flag with only one legal value
+  RAISES on the other and is a STATEMENT. No third category.** That third
+  category was where both defects lived, and it had exactly two members in ten
+  models: `alphabag.gluons` and `dd2.phi_field`, both flipped to `False`.
+  `sfho`/`did`'s `phi_field` and `abpr`'s `gluons` already raise and are
+  untouched; `njl`/`ccdm`'s `csc` was already False. **Zero baseline keys, zero
+  golden references, zero test failures** — established from the source before
+  the first edit: `dd2` reads `phi_field` only as `phi_field and hyperons` so
+  it is inert nucleonically, `case_dd2` already names it explicitly, and
+  `case_alphabag` calls raw solvers the flag never reaches. Gate through the
+  public surface instead: every alphaBag delta equals **minus `P_gluon(T)` to
+  machine precision**, T = 0 unmoved. The widened drift check
+  (`test_every_species_flag_defaults_off_or_raises`) **retired ticket 65's
+  `enjl` exemption** — self-invalidating as designed, because under the
+  two-category rule `enjl` is not an exemption, it IS the second category.
+  Three findings: README example 1 carried a **wrong captured number since
+  ticket 65** (recaptured, verified); ticket 90's "no value moves" premise is
+  **false for alphaBag** (recorded there); the CFL phase's free gluon gas
+  contradicts alphaBag's own document -> [ticket 92](issues/92-cfl-gluon-term.md).
+  Gate is an isolated control/change PAIR from clean HEAD: the first full run
+  had to be thrown away because a concurrent session was mid-edit on
+  [ticket 67](issues/67-dd2-t0-adoption.md) in `dd2/thermodynamics.py`. Change
+  arm run alone: **1734 passed, 0 failed**. The pair caught one real failure —
+  `test_thermal_meson_feedback`'s helper named `hyperons=True` and INHERITED
+  `phi_field`, while the Jacobian test hand-builds its unknown vector with
+  `phi0` in it, so a default was deciding that vector's length (6 rows -> 5,
+  `IndexError`). Flag named; 11 passed in BOTH arms, which is the proof it
+  restores rather than patches. It also caught the apparatus lying twice:
+  `test_baseline[ccdm]` went red in both arms and passes solo — concurrent
+  suites, not a failure. `hadronic_eos` notebook sites deferred: a concurrent
+  session held those files.
 
 - [Phase 6, second half — the conformance pass on nucleation](issues/80-phase6-conformance.md):
   **all four items landed and pushed (`2b2b72f` on `origin/paper-release`); the
