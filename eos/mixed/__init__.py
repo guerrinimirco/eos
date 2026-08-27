@@ -44,19 +44,23 @@ CLAUDE.md §2 before assuming either sign.
 
 Typical use
 -----------
-The three entry points every model in this repository exposes, with `eta` and
-the quark parameters added because a hybrid equation of state has a transition
-and two models in it:
+The three entry points every model in this repository exposes, with `eta`
+added because a hybrid equation of state has a transition in it. The parameter
+argument is the PAIRING — two `Phase` objects, each closing over its own
+model's parameters (CLAUDE.md section 5) — so no model holds a privileged
+position in a signature:
 
-    from eos.dd2 import Parameters, SpeciesFlags
-    from eos.mixed import eos_point, eos_table, eos_response
+    from eos.mixed import (eos_point, eos_table, SpeciesFlags,
+                           default_pair, sfho_phase, njl_phase)
 
-    par = Parameters.default()
-    flags = SpeciesFlags(hyperons=True, deltas=True, muons=True)
+    species = SpeciesFlags(hyperons=True, deltas=True, muons=True)
 
-    state = eos_point(par, "beta_eq_neutrinoless", flags,
+    pair = default_pair(dd2_par, dd2_flags, vmit_par)   # the DD2 + vMIT hybrid
+    pair = (sfho_phase(sfho_par, sfho_flags), njl_phase(njl_par))   # or another
+
+    state = eos_point(pair, "beta_eq_neutrinoless", species,
                       n_B=0.6, T=0.0, eta=0.5)
-    rows, windows = eos_table(par, "beta_eq_neutrinoless", flags,
+    rows, windows = eos_table(pair, "beta_eq_neutrinoless", species,
                               axes={"nB": nB_grid, "T": [0.0, 10.0]}, eta=0.5)
 
 A mixed table is rows PLUS windows: the phase boundaries found on each line are
@@ -73,6 +77,9 @@ from eos.mixed.charges import (
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
     QUARK_QN, quark_charges, hadronic_qn, hadronic_charges,
 )
+
+# --- the engine's own species flags (CLAUDE.md section 4) ------------------
+from eos.mixed.species import SpeciesFlags, mixture_flags
 
 # --- the phase-adapter contract: the only surface onto a bulk engine --------
 from eos.mixed.adapters import (
@@ -116,8 +123,8 @@ from eos.mixed.api import (
 
 # --- thermodynamic responses --------------------------------------------
 from eos.mixed.responses import (
-    sound_speed_eq, sound_speed_frozen, sound_speed_frozen_hadronic,
-    sound_speed_frozen_quark, adiabatic_index, frozen_along,
+    sound_speed_eq, sound_speed_frozen, sound_speed_frozen_pure,
+    adiabatic_index, frozen_along,
 )
 
 __all__ = [
@@ -126,6 +133,8 @@ __all__ = [
     "fixed_YC", "fixed_YC_YS", "MODE_FRACTIONS", "make_charge_spec",
     # regime machinery, for combinations the named modes do not cover
     "ChargeSpec", "Regime", "Locality",
+    # the engine's own species flags
+    "SpeciesFlags", "mixture_flags",
     # quantum numbers
     "QUARK_QN", "quark_charges", "hadronic_qn", "hadronic_charges",
     # phase adapters and pairings
@@ -151,6 +160,6 @@ __all__ = [
     "eos_point", "eos_table", "eos_response", "PointResult",
     "hybrid_table", "HybridResult", "RESPONSE_FREEZES",
     # responses
-    "sound_speed_eq", "sound_speed_frozen", "sound_speed_frozen_hadronic",
-    "sound_speed_frozen_quark", "adiabatic_index", "frozen_along",
+    "sound_speed_eq", "sound_speed_frozen", "sound_speed_frozen_pure",
+    "adiabatic_index", "frozen_along",
 ]

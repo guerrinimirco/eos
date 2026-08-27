@@ -137,9 +137,9 @@ def composition_row(r):
     return row
 
 
-def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
+def solve_at_entropy(phases, n_B, SnB, eta, spec,
                            x0=None, T_lo=0.5, T_hi=50.0, T_cap=250.0,
-                           xtol=1e-4, phases=None, species=None):
+                           xtol=1e-4, species=None):
     """Mixed solve at fixed entropy per baryon S = s/n_B.
 
     An outer one-dimensional root on T, mirroring
@@ -150,9 +150,8 @@ def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
     from scipy.optimize import brentq
 
     def point(T):
-        return solve(par, flags, n_B, eta, spec, vmit_params=vmit_params,
-                           T=T, x0=x0, check_consistency=False, phases=phases,
-                           species=species)
+        return solve(phases, n_B, eta, spec, T=T, x0=x0,
+                           check_consistency=False, species=species)
 
     def f(T):
         return point(T).s / n_B - SnB
@@ -167,16 +166,14 @@ def solve_at_entropy(par, flags, n_B, SnB, eta, spec, vmit_params=None,
     return point(brentq(f, T_lo, T_hi, xtol=xtol))
 
 
-def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
-                      phases=None, species=None):
+def _sweep_at_entropy(phases, n_B_grid, SnB, eta, spec, species=None):
     """Warm-started n_B sweep at fixed S = s/n_B (one T solve per point)."""
-    slots = mixed_slots(spec, eta, flags, pair=phases)
+    slots = mixed_slots(spec, eta, phases)
     out, x0 = [], None
     for n in n_B_grid:
         try:
-            r = solve_at_entropy(par, flags, float(n), SnB, eta, spec,
-                                       vmit_params=vmit_params, x0=x0,
-                                       phases=phases, species=species)
+            r = solve_at_entropy(phases, float(n), SnB, eta, spec,
+                                       x0=x0, species=species)
         except (RuntimeError, ValueError):
             x0 = None                     # reset the warm start past the gap
             continue
@@ -189,7 +186,9 @@ def _sweep_at_entropy(par, flags, n_B_grid, SnB, eta, spec, vmit_params,
 class TableSpec:
     """One multi-axis mixed-EoS table request.
 
-    par, flags : DD2 `Parameters` and `SpeciesFlags`
+    phases     : the pairing — two `Phase` objects (`eos.mixed.adapters`),
+                 each closing over its own model's parameters. This is the
+                 engine's parameter argument (CLAUDE.md section 5)
     mode       : one of `MODE_FRACTIONS`
     axes       : {'nB': grid, exactly one of 'T'/'SnB': grid, and optionally
                  any of 'Y_C'/'Y_S'/'Y_Le': grid to sweep that fraction}
@@ -207,20 +206,17 @@ class TableSpec:
                  and marches those solves along the temperature axis (see
                  `_locate_chained`); "bisect" stops at half a grid spacing.
     """
-    par: object
-    flags: object
+    phases: object
     mode: str
     axes: dict
     eta: float = 0.0
-    vmit_params: object = None
     fixed: dict = field(default_factory=dict)
     leptons: bool = True
     window_only: bool = True
     analytic_jac: bool = False
     refine: str = "exact"
-    phases: object = None      # a Phase pair for a non-default pairing
     species: object = None     # the engine's own SpeciesFlags (section 4);
-                               # read off `flags` on the front-door path
+                               # every sector off when omitted
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -236,7 +232,7 @@ class TableSpec:
                              f"got {self.refine!r}")
 
 
-def _march_boundaries(spec, nB, cs, vp, T, history):
+def _march_boundaries(spec, nB, cs, T, history):
     """Both boundaries by direct fixed-chi solves, seeded by extrapolating
     the last two converged boundary vectors along the temperature axis.
 
@@ -258,8 +254,7 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
     if T2 == T1:
         return None
     w = (T - T2) / (T2 - T1)
-    slots = mixed_slots(cs, spec.eta, spec.flags, fixed_chi=True,
-                        pair=spec.phases)
+    slots = mixed_slots(cs, spec.eta, spec.phases, fixed_chi=True)
     i_n = slots.index("n_B")
 
     def extrap(a, b):
@@ -270,14 +265,12 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
     x_on, x_off = extrap(on1, on2), extrap(off1, off2)
     lo, hi = float(np.min(nB)), float(np.max(nB))
     try:
-        on = solve_fixed_chi(spec.par, spec.flags, 0.0, spec.eta, cs,
-                             vmit_params=vp, T=T, n_B0=x_on[i_n], x0=x_on,
-                             phases=spec.phases, species=spec.species)
+        on = solve_fixed_chi(spec.phases, 0.0, spec.eta, cs, T=T,
+                             n_B0=x_on[i_n], x0=x_on, species=spec.species)
         # The offset's hadronic phase no longer tracks n_B; its internal
         # solve is seeded from the previous isotherm's own hadronic density.
-        off = solve_fixed_chi(spec.par, spec.flags, 1.0, spec.eta, cs,
-                              vmit_params=vp, T=T, n_B0=off2.th_H.n_B,
-                              x0=x_off, phases=spec.phases,
+        off = solve_fixed_chi(spec.phases, 1.0, spec.eta, cs, T=T,
+                              n_B0=off2.th_H.n_B, x0=x_off,
                               species=spec.species)
     except (RuntimeError, ValueError):
         return None
@@ -286,7 +279,7 @@ def _march_boundaries(spec, nB, cs, vp, T, history):
     return Window(float(on.n_B), float(off.n_B), [], on, off)
 
 
-def _locate_chained(spec, nB, cs, vp, T, hint, history=()):
+def _locate_chained(spec, nB, cs, T, hint, history=()):
     """`locate_window`, told where the previous temperature found the window.
 
     A search over the whole density grid spreads its dozen probes across a
@@ -311,21 +304,21 @@ def _locate_chained(spec, nB, cs, vp, T, hint, history=()):
     found -- the hint is an accelerator, never the source of the answer.
     """
     if spec.refine == "exact":
-        window = _march_boundaries(spec, nB, cs, vp, T, history)
+        window = _march_boundaries(spec, nB, cs, T, history)
         if window is not None:
             return window
-    kw = dict(vmit_params=vp, T=T, analytic_jac=spec.analytic_jac,
-              refine=spec.refine, phases=spec.phases, species=spec.species)
+    kw = dict(T=T, analytic_jac=spec.analytic_jac,
+              refine=spec.refine, species=spec.species)
     if hint is not None:
         lo, hi = hint
         pad = max(0.15, hi - lo)          # generous: the docstring's advice
         edge = 0.5 * float(np.min(np.diff(np.sort(nB))))
-        window = locate_window(spec.par, spec.flags, nB, spec.eta, cs,
+        window = locate_window(spec.phases, nB, spec.eta, cs,
                                hint=(lo - pad, hi + pad), **kw)
         if (window.exists and window.n_onset > lo - pad + edge
                 and window.n_offset < hi + pad - edge):
             return window
-    return locate_window(spec.par, spec.flags, nB, spec.eta, cs, **kw)
+    return locate_window(spec.phases, nB, spec.eta, cs, **kw)
 
 
 def build_table(spec, progress=None, verbose=False):
@@ -368,10 +361,6 @@ def build_table(spec, progress=None, verbose=False):
     axes = {k: v for k, v in spec.axes.items() if k in TEMPERATURE_AXES}
     axes.update((k, spec.axes[k]) for k in frac_keys)
     lines = lines_from_axes(axes, fixed=spec.fixed)
-    vp = spec.vmit_params
-    if spec.phases is None and vp is None:
-        from eos.vmit.parameters import Parameters as VMITParameters
-        vp = VMITParameters.default()
 
     rows, windows = [], {}
     hint_of = {}                  # last located window, per fraction combo
@@ -388,13 +377,12 @@ def build_table(spec, progress=None, verbose=False):
         key = (float(tv),) + tuple(round(float(c), 6) for c in combo)
 
         if temp_key == "SnB":
-            results = _sweep_at_entropy(spec.par, spec.flags, nB,
-                                        float(tv), spec.eta, cs, vp,
-                                        phases=spec.phases,
+            results = _sweep_at_entropy(spec.phases, nB, float(tv),
+                                        spec.eta, cs,
                                         species=spec.species)
             window, n_requested = None, len(nB)
         elif spec.window_only:
-            window = _locate_chained(spec, nB, cs, vp, float(tv),
+            window = _locate_chained(spec, nB, cs, float(tv),
                                      hint_of.get(combo),
                                      history_of.get(combo, ()))
             if window.exists:
@@ -411,27 +399,23 @@ def build_table(spec, progress=None, verbose=False):
                                                  window.onset_state,
                                                  window.offset_state)])[-2:]
                     x_on = dict(window.onset_state.potentials, chi=0.0)
-                    slots_n = mixed_slots(cs, spec.eta, spec.flags,
-                                          pair=spec.phases)
+                    slots_n = mixed_slots(cs, spec.eta, spec.phases)
                     sweep_kw = dict(
                         x0=[x_on[name] for name in slots_n],
                         nH0=window.onset_state.th_H.n_B)
                 inside = nB[(nB >= window.n_onset) & (nB <= window.n_offset)]
-                results = sweep(spec.par, spec.flags, inside,
-                                      spec.eta, cs, vmit_params=vp,
+                results = sweep(spec.phases, inside, spec.eta, cs,
                                       T=float(tv),
                                       analytic_jac=spec.analytic_jac,
-                                      phases=spec.phases, species=spec.species,
-                                      **sweep_kw)
+                                      species=spec.species, **sweep_kw)
                 n_requested = len(inside)
             else:
                 results, n_requested = [], 0
             windows[key] = window
         else:
-            results = sweep(spec.par, spec.flags, nB, spec.eta, cs,
-                                  vmit_params=vp, T=float(tv),
+            results = sweep(spec.phases, nB, spec.eta, cs, T=float(tv),
                                   analytic_jac=spec.analytic_jac,
-                                  phases=spec.phases, species=spec.species)
+                                  species=spec.species)
             window, n_requested = None, len(nB)
 
         for r in results:

@@ -68,9 +68,7 @@ from eos.mixed.charges import (
     ChargeSpec, Regime,
     beta_eq_neutrinoless, beta_eq_neutrino_trapped, fixed_YC, fixed_YC_YS,
 )
-from eos.mixed.adapters import (
-    PhaseThermo, default_pair, hadronic_phase, hadronic_seed, quark_phase,
-)
+from eos.mixed.adapters import PhaseThermo
 from eos.mixed.thermodynamics import (
     LeptonDomain, charged_leptons, assemble, euler_residual,
 )
@@ -173,7 +171,7 @@ def warm_start(point, slots):
     return [point.potentials[name] for name in slots]
 
 
-def seed_across_eta(result, spec, eta, flags=None, phases=None):
+def seed_across_eta(result, spec, eta, phases=None):
     """Re-express a solved point as a starting vector for a different eta.
 
     eta changes the *shape* of the unknown vector — at eta = 0 only a global
@@ -202,8 +200,7 @@ def seed_across_eta(result, spec, eta, flags=None, phases=None):
     if mu_eG is None:                      # came from eta = 1
         mu_eG = (1.0 - chi) * mu_eL_H + chi * mu_eL_Q
     filled = dict(p, mu_eG=mu_eG, mu_eL_H=mu_eL_H, mu_eL_Q=mu_eL_Q)
-    return [filled[name] for name in mixed_slots(spec, eta, flags,
-                                                 pair=phases)]
+    return [filled[name] for name in mixed_slots(spec, eta, phases)]
 
 
 # ---------------------------------------------------------------------------
@@ -221,16 +218,16 @@ def has_leptons(spec: ChargeSpec):
             or (spec.C is Regime.GLOBAL and spec.yc_leptons))
 
 
-def mixed_slots(spec: ChargeSpec, eta: float, flags=None, fixed_chi=False,
-                pair=None):
+def mixed_slots(spec: ChargeSpec, eta: float, pair=None, fixed_chi=False):
     """Ordered unknown-vector slot names implied by `spec` at `eta`.
 
     Always present: the two baryon-potential slots and chi. The positions are
     labelled H and Q; each slot's PREFIX says what it carries, as declared by
     that phase's `potential_kind` — `mu_tilde_B_<pos>` for a kinetic-potential
     phase, `mu_B_<pos>` for a physical-potential one. Without a `pair` the
-    names are the historical DD2+vMIT ones (kinetic H, physical Q), which are
-    exactly what `eos.mixed.adapters.default_pair` derives.
+    names are the (kinetic H, physical Q) ones every hadron-quark pairing with
+    a density-dependent hadronic phase derives, which is what lets a caller ask
+    for the slot ORDER of a spec without holding a pairing.
 
     `fixed_chi=True` swaps exactly one slot: chi becomes a GIVEN and the total
     density n_B becomes the unknown in its place. Every residual row is
@@ -261,10 +258,6 @@ def mixed_slots(spec: ChargeSpec, eta: float, flags=None, fixed_chi=False,
         raise NotImplementedError(
             "trapped neutrinos are defined on top of beta-equilibrium charge; "
             "combining fixed Y_C with a fixed Y_Le is not a defined mode")
-    if flags is not None and getattr(flags, "sigma_star", False):
-        raise NotImplementedError(
-            "SpeciesFlags.sigma_star (hidden-strange scalar) is not wired in "
-            "the hadronic phase")
     if pair is not None and spec.S is Regime.GLOBAL:
         for phase in pair:
             if not phase.supports_S:
@@ -324,11 +317,6 @@ class MixedCtx:
     # domains. The per-phase sectors travel inside each `Phase`.
     species: SpeciesFlags = SpeciesFlags()
     chi: float = None   # the imposed volume fraction in the fixed-chi layout
-    # The DD2+vMIT front door's raw arguments, kept for callers that read
-    # them; the solve itself goes through `pair`.
-    par: object = None
-    flags: object = None
-    vmit_params: object = None
     # residual normalization, so every row is dimensionless and O(1)
     n_scale: float = 1.0
     mu_scale: float = 100.0
@@ -353,24 +341,23 @@ class MixedCtx:
         return self.phase_seed(self.pair[0], "H")
 
 
-def build_mixed_ctx(spec, eta, n_B, par=None, flags=None, vmit_params=None,
-                    T=0.0, n_B_guess=None, chi=None, phases=None,
-                    species=None):
+def build_mixed_ctx(spec, eta, n_B, phases, T=0.0, n_B_guess=None,
+                    chi=None, species=None):
     """Context for one solve. Exactly one of `n_B` (the given total density,
     chi unknown) and `chi` (the imposed volume fraction, n_B unknown) is set;
     the second flavour is the fixed-chi layout of `mixed_slots` and needs
     `n_B_guess` because the target density is now an unknown.
 
-    The phases come either from the DD2+vMIT front door — (par, flags,
-    vmit_params), as every signature has always read — or from `phases`, a
-    pair of `Phase` objects each closing over its own model's parameters.
-    Passing both raises: two sources of truth is a caller error.
+    `phases` is the pairing: two `Phase` objects, each closing over its own
+    model's parameters. It IS the engine's parameter argument (CLAUDE.md
+    section 5) — no model's parameter set reaches this function by any other
+    route, and `eos.mixed.adapters.default_pair` is how a caller who wants the
+    DD2 + vMIT pairing builds one.
 
     `species` is the ENGINE's own `SpeciesFlags` (CLAUDE.md section 4): the
-    phase-common photon gas and the muons of the eta-split lepton domains.
-    Omitted, it is read off `flags` on the front-door path — a model's flag
-    object carries the same six names — and is every sector off otherwise,
-    because no phase can answer a question about the shared leptons.
+    phase-common photon gas and the muons of the eta-split lepton domains. It
+    defaults to every sector off, because no phase can answer a question about
+    the shared leptons — the per-phase sectors travel inside each `Phase`.
     """
     if not (0.0 <= eta <= 1.0):
         raise ValueError(f"eta must be in [0, 1], got {eta}")
@@ -381,25 +368,20 @@ def build_mixed_ctx(spec, eta, n_B, par=None, flags=None, vmit_params=None,
         raise ValueError("the fixed-chi layout needs n_B_guess: the density "
                          "is an unknown and its solve must start somewhere")
     if phases is None:
-        if par is None or flags is None:
-            raise ValueError("either (par, flags[, vmit_params]) or phases= "
-                             "must be given")
-        phases = default_pair(par, flags, vmit_params)
-    elif par is not None or flags is not None or vmit_params is not None:
-        raise ValueError("pass either (par, flags, vmit_params) or phases=, "
-                         "not both")
+        raise ValueError(
+            "the mixed engine needs a pairing: phases=(Phase, Phase). For the "
+            "DD2 + vMIT hybrid write "
+            "phases=eos.mixed.adapters.default_pair(par, flags, vmit_params)")
     for phase in phases:
         if phase.max_T is not None and T > phase.max_T:
             raise NotImplementedError(
                 f"the {phase.name} phase is wired for T <= {phase.max_T} "
                 f"MeV only, got T={T}")
-    species = mixture_flags(flags if species is None else species)
-    slots = mixed_slots(spec, eta, flags, fixed_chi=(n_B is None),
-                        pair=phases)
+    species = mixture_flags(species)
+    slots = mixed_slots(spec, eta, phases, fixed_chi=(n_B is None))
     return MixedCtx(
         spec=spec, eta=eta, n_B=n_B, T=T, pair=tuple(phases), slots=slots,
-        chi=chi, species=species, par=par, flags=flags,
-        vmit_params=vmit_params,
+        chi=chi, species=species,
         n_B_guess=(n_B if n_B_guess is None else n_B_guess),
         n_scale=max(n_B if n_B is not None else n_B_guess, 0.01),
 )
@@ -588,41 +570,32 @@ def _jac_with_fallback(ctx):
     return jac
 
 
-def solve(par, flags, n_B, eta, spec, vmit_params=None, T=0.0,
-                x0=None, n_B_guess=None, check_consistency=True,
-                analytic_jac=False, phases=None, species=None):
+def solve(phases, n_B, eta, spec, T=0.0, x0=None, n_B_guess=None,
+                check_consistency=True, analytic_jac=False, species=None):
     """Solve the mixed phase at (n_B, T, eta) for the regime assignment `spec`.
 
-    par         : DD2 `Parameters` (the DD2+vMIT front door; None with
-                  `phases`)
-    flags       : `SpeciesFlags` — which baryons, leptons and meson gases exist
+    phases      : the pairing — two `Phase` objects, each closing over its own
+                  model's parameters. This is the engine's parameter argument
+                  (CLAUDE.md section 5); `adapters.default_pair(par, flags,
+                  vmit_params)` builds the DD2 + vMIT one.
     n_B         : total baryon density [fm^-3]
     eta         : local-neutrality fraction in [0, 1] (0 Gibbs, 1 Maxwell)
     spec        : `ChargeSpec` from one of the named mode factories
     x0          : optional warm start, in the slot order of
-                  `mixed_slots(spec, eta, flags, pair=phases)`
+                  `mixed_slots(spec, eta, phases)`
     analytic_jac: supply the hand-assembled Jacobian instead of the solver's
                   own numeric one. The numeric path is the correctness oracle.
                   Honoured only when both phases advertise a Jacobian block.
-    phases      : a pair of `Phase` objects for any other pairing; the
-                  parameters travel inside them, so par/flags/vmit_params
-                  must then be None.
     species     : the ENGINE's own `SpeciesFlags` — the phase-common photon
-                  gas and the muons of the eta-split lepton domains. On the
-                  front-door path it defaults to `flags`, which carries the
-                  same six names; with `phases` it defaults to every sector
-                  off, because no phase can answer a question about the
-                  shared leptons.
+                  gas and the muons of the eta-split lepton domains. Defaults
+                  to every sector off, because no phase can answer a question
+                  about the shared leptons.
 
     Returns a `Result`; raises RuntimeError if the residual gate is not
     met from any guess, so non-convergence is never silent.
     """
-    if phases is None and vmit_params is None:
-        from eos.vmit.parameters import Parameters as VMITParameters
-        vmit_params = VMITParameters.default()
-    ctx = build_mixed_ctx(spec, eta, n_B, par, flags, vmit_params, T=T,
-                          n_B_guess=n_B_guess, phases=phases,
-                          species=species)
+    ctx = build_mixed_ctx(spec, eta, n_B, phases, T=T,
+                          n_B_guess=n_B_guess, species=species)
     jac = _jac_with_fallback(ctx) if analytic_jac else None
 
     # Lazy: the cold start costs a full DD2 solve plus a full vMIT solve, so it
@@ -712,43 +685,40 @@ def result_from_root(x, ctx, res_max, check_consistency=True):
 # ---------------------------------------------------------------------------
 # Each is the general solve at the ChargeSpec its mode factory declares — the
 # residual is never duplicated per mode. `**kw` passes solve's tuning
-# (vmit_params, x0, n_B_guess, check_consistency, analytic_jac) through.
+# (x0, n_B_guess, species, check_consistency, analytic_jac) through.
 
-def solve_beta_eq_neutrinoless(par, flags, n_B, eta, T=0.0, **kw):
+def solve_beta_eq_neutrinoless(phases, n_B, eta, T=0.0, **kw):
     """Beta equilibrium, free-streaming neutrinos, charge neutral: (n_B, T)."""
-    return solve(par, flags, n_B, eta, beta_eq_neutrinoless(), T=T, **kw)
+    return solve(phases, n_B, eta, beta_eq_neutrinoless(), T=T, **kw)
 
 
-def solve_beta_eq_neutrino_trapped(par, flags, n_B, Y_Le, eta, T=0.0, **kw):
+def solve_beta_eq_neutrino_trapped(phases, n_B, Y_Le, eta, T=0.0, **kw):
     """Beta equilibrium with trapped neutrinos: (n_B, Y_Le, T)."""
-    return solve(par, flags, n_B, eta, beta_eq_neutrino_trapped(Y_Le),
-                       T=T, **kw)
+    return solve(phases, n_B, eta, beta_eq_neutrino_trapped(Y_Le), T=T, **kw)
 
 
-def solve_fixed_yc(par, flags, n_B, Y_C, eta, T=0.0, leptons=True, **kw):
+def solve_fixed_yc(phases, n_B, Y_C, eta, T=0.0, leptons=True, **kw):
     """Fixed non-leptonic charge fraction: (n_B, Y_C, T).
 
     leptons=True adds electrons (and muons if enabled) enforcing total
     neutrality; leptons=False is a charged, eta-independent slice.
     """
-    return solve(par, flags, n_B, eta, fixed_YC(Y_C, leptons=leptons),
-                       T=T, **kw)
+    return solve(phases, n_B, eta, fixed_YC(Y_C, leptons=leptons), T=T, **kw)
 
 
-def solve_fixed_yc_ys(par, flags, n_B, Y_C, Y_S, eta, T=0.0, leptons=True,
-                      **kw):
+def solve_fixed_yc_ys(phases, n_B, Y_C, Y_S, eta, T=0.0, leptons=True, **kw):
     """Fixed charge and strangeness fractions: (n_B, Y_C, Y_S, T)."""
-    return solve(par, flags, n_B, eta,
-                       fixed_YC_YS(Y_C, Y_S, leptons=leptons), T=T, **kw)
+    return solve(phases, n_B, eta, fixed_YC_YS(Y_C, Y_S, leptons=leptons),
+                       T=T, **kw)
 
 
 # ---------------------------------------------------------------------------
 # the density sweep
 # ---------------------------------------------------------------------------
 
-def sweep(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
+def sweep(phases, n_B_grid, eta, spec, T=0.0,
                 max_bisect=6, x0=None, analytic_jac=False,
-                mixed_only=False, nH0=None, phases=None, species=None):
+                mixed_only=False, nH0=None, species=None):
     """Warm-started sweep over `n_B_grid` at fixed eta.
 
     A cold seed only converges near the transition onset; through the window
@@ -767,17 +737,17 @@ def sweep(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     otherwise the first step re-derives that point from a guess known to stall.
     `mixed_only=True` keeps only the points genuinely inside the window.
     """
-    slots = mixed_slots(spec, eta, flags, pair=phases)
+    slots = mixed_slots(spec, eta, phases)
 
     def solve_from(n_B, seed, nH):
         # `nH` seeds the first phase's own internal solve. It must be that
         # phase's density, NOT the total: deep in the window the low-density
         # phase thins out and stops tracking n_B at all, and seeding it at
         # the total density walks it towards collapse and stalls the solve.
-        return solve(par, flags, n_B, eta, spec, vmit_params=vmit_params,
-                           T=T, x0=seed, n_B_guess=(nH if nH is not None else n_B),
+        return solve(phases, n_B, eta, spec, T=T, x0=seed,
+                           n_B_guess=(nH if nH is not None else n_B),
                            check_consistency=False, analytic_jac=analytic_jac,
-                           phases=phases, species=species)
+                           species=species)
 
     def step(n_prev, n_target, seed, nH, depth):
         try:

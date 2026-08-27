@@ -76,10 +76,11 @@ MODES = ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
 #: All ten models carry all six names: the six keywords construct a
 #: `SpeciesFlags` anywhere, and no model answers them with a TypeError that
 #: would read as the caller's bug. Carrying a name is not wiring the sector --
-#: `dd2` (and `eos.mixed`, which reuses its flags) raises NotImplementedError
-#: on `thermal_neutrinos=True`, the flavours a mode does not track being
-#: unwired there; dd2's own `neutrinos` is the matter-composition electron
-#: neutrino of the trapped modes, a different sector with its own flag.
+#: `dd2` (and `eos.mixed`, whose own flags carry the same six names) raises
+#: NotImplementedError on `thermal_neutrinos=True`, the flavours a mode does
+#: not track being unwired there; dd2's own `neutrinos` is the
+#: matter-composition electron neutrino of the trapped modes, a different
+#: sector with its own flag.
 #:
 #: All six DEFAULT TO FALSE in every model: off unless asked for, so
 #: `SpeciesFlags()` means the same thing everywhere and no call inherits a

@@ -102,8 +102,10 @@ the working set of this repository and the set `test/baseline` is frozen at;
 `Parameters(B4=..., a=..., m_s=...)` returns a parametrization with any
 subset changed and the rest left at the table. There is no scan driver in the
 library: parameters are arguments, so a sweep over `(B4, a, m_s)` is a loop in
-the caller that builds one parametrization per sample and calls the mixed
-engine (`eos.mixed.eos_table(..., vmit_params=...)`) once on each. The literature values these sit
+the caller that builds one parametrization per sample, wraps it in a `Phase`
+and calls the mixed engine
+(`eos.mixed.eos_table((hadronic, vmit_phase(params)), ...)`) once on each.
+The literature values these sit
 near are `B^(1/4) ~ 180 MeV` and `a` in 0–0.3 fm^2, as used by Gomes et al. and
 Constantinou et al., who write the same vector term as `G_V` or `g_V^2/m_V^2`.
 

@@ -42,6 +42,7 @@ from eos.mixed.charges import ChargeSpec, Regime
 from eos.mixed.solver import solve
 from eos.mixed.solver import sweep
 from eos.mixed.solver import build_mixed_ctx, residual, mixed_slots
+from eos.mixed.adapters import default_pair
 from eos.mixed.hybrid import build_hybrid_table
 
 
@@ -108,21 +109,21 @@ def _free_energy_resid(r):
     return abs((r.eps - r.T * r.s) - (-r.P + _mu_dot_n(r))) / abs(r.eps)
 
 
-def _window(par, flags, vp, grid, eta, T=0.0):
-    return [r for r in sweep(par, flags, grid, eta, beta_eq_neutrinoless(),
-                                   vmit_params=vp, T=T) if r.in_mixed_phase]
+def _window(pair, grid, eta, T=0.0):
+    return [r for r in sweep(pair, grid, eta, beta_eq_neutrinoless(),
+                                   T=T) if r.in_mixed_phase]
 
 
-def _check_euler(par, flags, vp, grid):
+def _check_euler(pair, grid):
     worst = 0.0
     for eta in (0.0, 0.5):
-        for r in _window(par, flags, vp, grid, eta):
+        for r in _window(pair, grid, eta):
             worst = max(worst, _euler_resid(r))
     return CheckResult("euler/HVH", worst < 1e-8, worst,
                        "eps+P = Ts + sum mu_i n_i over window (eta=0,0.5)")
 
 
-def _check_free_energy(par, flags, vp, grid):
+def _check_free_energy(pair, grid):
     """f = eps - T s = -P + sum_i mu_i n_i across the mixed window.
 
     CLAUDE.md section 8 lists this beside the Euler relation, and the engine
@@ -143,7 +144,7 @@ def _check_free_energy(par, flags, vp, grid):
     worst = 0.0
     n_rows = 0
     for eta in (0.0, 0.5):
-        for r in _window(par, flags, vp, grid, eta):
+        for r in _window(pair, grid, eta):
             n_rows += 1
             worst = max(worst, _free_energy_resid(r))
     return CheckResult("free energy", worst < 1e-8, worst,
@@ -151,10 +152,10 @@ def _check_free_energy(par, flags, vp, grid):
                        f"(eta=0,0.5)")
 
 
-def _check_mechanical(par, flags, vp, grid):
+def _check_mechanical(pair, grid):
     worst = 0.0
     for eta in (0.0, 0.5, 1.0):
-        for r in _window(par, flags, vp, grid, eta):
+        for r in _window(pair, grid, eta):
             dP = ((r.th_H.P + eta * r.extras["L_H"].P)
                   - (r.th_Q.P + eta * r.extras["L_Q"].P))
             worst = max(worst, abs(dP) / max(abs(r.P), 1.0))
@@ -162,9 +163,9 @@ def _check_mechanical(par, flags, vp, grid):
                        "P_H+eta P_eL_H = P_Q+eta P_eL_Q")
 
 
-def _check_gibbs_maxwell(par, flags, vp, grid):
-    Pg = [r.P for r in _window(par, flags, vp, grid, 0.0)]
-    Pm = [r.P for r in _window(par, flags, vp, grid, 1.0)]
+def _check_gibbs_maxwell(pair, grid):
+    Pg = [r.P for r in _window(pair, grid, 0.0)]
+    Pm = [r.P for r in _window(pair, grid, 1.0)]
     gibbs_spread = (max(Pg) - min(Pg)) if Pg else 0.0
     maxwell_spread = (max(Pm) - min(Pm)) if Pm else 1.0
     # Gibbs: P genuinely varies; Maxwell: flat plateau.
@@ -173,22 +174,21 @@ def _check_gibbs_maxwell(par, flags, vp, grid):
                        f"dP_Gibbs={gibbs_spread:.1f}, dP_Maxwell={maxwell_spread:.1e}")
 
 
-def _check_cross_mode(par, flags, vp, n_B=0.65):
-    rA = solve(par, flags, n_B, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
+def _check_cross_mode(pair, n_B=0.65):
+    rA = solve(pair, n_B, 0.0, beta_eq_neutrinoless())
     Y_C = ((1 - rA.chi) * rA.th_H.n_C + rA.chi * rA.th_Q.n_C) / rA.n_B
     Y_S = ((1 - rA.chi) * rA.th_H.n_S + rA.chi * rA.th_Q.n_S) / rA.n_B
-    rC = solve(par, flags, n_B, 0.0, fixed_YC(Y_C, leptons=True), vmit_params=vp)
-    rD = solve(par, flags, n_B, 0.0,
+    rC = solve(pair, n_B, 0.0, fixed_YC(Y_C, leptons=True))
+    rD = solve(pair, n_B, 0.0,
                      ChargeSpec(ModeSpec(S=Conservation.FIXED,
-                                         targets={"Y_S": Y_S})),
-                     vmit_params=vp)
+                                         targets={"Y_S": Y_S})))
     worst = max(abs(rC.chi - rA.chi), abs(rD.chi - rA.chi),
                 abs(rD.potentials.get("mu_S", 0.0)))
     return CheckResult("cross-mode repro", worst < 1e-6, worst,
                        "fixing Y_C / Y_S at their beta-eq values recovers beta eq")
 
 
-def _check_jacobian(par, flags, vp, n_B=0.6):
+def _check_jacobian(pair, n_B=0.6):
     # Deferred, not module-scope: CLAUDE.md section 5 defines `backends/`
     # by the property that deleting it changes no number, and a suite that
     # imports it at module scope cannot be run without it at all.
@@ -196,11 +196,11 @@ def _check_jacobian(par, flags, vp, n_B=0.6):
 
     worst = 0.0
     for eta in (0.0, 0.5):
-        r = solve(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
+        r = solve(pair, n_B, eta, beta_eq_neutrinoless(),
                         check_consistency=False)
-        slots = mixed_slots(beta_eq_neutrinoless(), eta)
+        slots = mixed_slots(beta_eq_neutrinoless(), eta, pair)
         x = np.array([r.potentials[s] for s in slots])
-        ctx = build_mixed_ctx(beta_eq_neutrinoless(), eta, n_B, par, flags, vp)
+        ctx = build_mixed_ctx(beta_eq_neutrinoless(), eta, n_B, pair)
         Ja = mixed_jacobian(x, ctx)
         Jn = np.zeros_like(Ja)
         for j in range(len(x)):
@@ -214,23 +214,23 @@ def _check_jacobian(par, flags, vp, n_B=0.6):
                        "mixed_jacobian vs FD (eta=0,0.5)")
 
 
-def _check_backend_parity(par, flags, vp, n_B=0.6):
+def _check_backend_parity(pair, n_B=0.6):
     worst = 0.0
     for eta in (0.0, 0.5):
-        r = solve(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
+        r = solve(pair, n_B, eta, beta_eq_neutrinoless(),
                         check_consistency=False)
-        slots = mixed_slots(beta_eq_neutrinoless(), eta)
+        slots = mixed_slots(beta_eq_neutrinoless(), eta, pair)
         x0 = [r.potentials[s] for s in slots]
-        ra = solve(par, flags, n_B, eta, beta_eq_neutrinoless(), vmit_params=vp,
+        ra = solve(pair, n_B, eta, beta_eq_neutrinoless(),
                          check_consistency=False, analytic_jac=True, x0=x0)
         worst = max(worst, abs(ra.P / r.P - 1.0), abs(ra.chi - r.chi))
     return CheckResult("backend parity", worst < 1e-6, worst,
                        "analytic-J solve reaches numeric-J root")
 
 
-def _check_causality(par, flags, vp, grid):
+def _check_causality(pair, grid):
     from eos.mixed.responses import sound_speed_eq
-    t = build_hybrid_table(par, flags, grid, 0.0, beta_eq_neutrinoless(), vmit_params=vp)
+    t = build_hybrid_table(pair, grid, 0.0, beta_eq_neutrinoless())
     cs2 = sound_speed_eq(t.P, t.eps)
     mono = np.all(np.diff(t.P) > -1e-6)
     ok = mono and np.all(cs2 >= -1e-6) and np.all(cs2 <= 1.0 + 1e-6)
@@ -238,7 +238,7 @@ def _check_causality(par, flags, vp, grid):
                        f"0<=c_s^2<=1, P monotone (max c_s^2={np.max(cs2):.3f})")
 
 
-def _check_sound_speeds(par, flags, vp, grid):
+def _check_sound_speeds(pair, grid):
     """Frozen vs equilibrium through a Maxwell window.
 
     At eta = 1 the pressure is constant across the mixed phase, so c_eq must
@@ -251,16 +251,16 @@ def _check_sound_speeds(par, flags, vp, grid):
     from eos.mixed.solver import sweep
 
     spec = beta_eq_neutrinoless()
-    window = locate_window(par, flags, grid, 1.0, spec, vmit_params=vp)
+    window = locate_window(pair, grid, 1.0, spec)
     if not window.exists:
         return CheckResult("sound speeds", False, float("nan"),
                            "no eta=1 window on this grid")
     inside = grid[(grid >= window.n_onset) & (grid <= window.n_offset)]
-    rs = sweep(par, flags, inside, 1.0, spec, vmit_params=vp)
+    rs = sweep(pair, inside, 1.0, spec)
     P = np.array([r.P for r in rs])
     eps = np.array([r.eps for r in rs])
     c_eq = sound_speed_eq(P, eps)
-    c_ad = frozen_along(par, flags, rs, vmit_params=vp)
+    c_ad = frozen_along(pair, rs)
     good = np.isfinite(c_eq) & np.isfinite(c_ad)
     ok = bool(good.any()
               and np.all(c_ad[good] > c_eq[good])
@@ -271,37 +271,44 @@ def _check_sound_speeds(par, flags, vp, grid):
                        f"c_ad={np.mean(c_ad[good]):.3f}")
 
 
-def _check_tov(par, flags, vp, grid):
+def _check_tov(pair, grid):
     from eos.mixed.hybrid import mass_radius_mixed
-    r = mass_radius_mixed(par, flags, grid, 1.0, beta_eq_neutrinoless(), vmit_params=vp,
+    r = mass_radius_mixed(pair, grid, 1.0, beta_eq_neutrinoless(),
                           n_ec=40, backend="fast")
     ok = 1.9 < r["M_max"] < 2.6 and 10.0 < r["R_Mmax"] < 15.0
     return CheckResult("TOV M_max", ok, max(0.0, 2.0 - r["M_max"]),
                        f"M_max={r['M_max']:.3f} R={r['R_Mmax']:.2f}km")
 
 
-def run_full_check(par=None, flags=None, vmit_params=None, grid=None,
-                   include_tov=True):
-    """Run the mixed-phase verification suite. Returns a FullCheckReport()."""
-    par = par or Parameters.default()
-    flags = flags or SpeciesFlags(hyperons=False, muons=False)
-    vp = vmit_params or VMITParameters.default()
+def run_full_check(pair=None, grid=None, include_tov=True):
+    """Run the mixed-phase verification suite. Returns a FullCheckReport().
+
+    `pair` is the pairing to check — two `Phase` objects, the engine's
+    parameter argument (CLAUDE.md section 5). It defaults to the DD2 + vMIT
+    one, which is what the tolerances and the grid below were tuned on; the
+    suite may be pointed at another pairing, but a grid that brackets ITS
+    window has to come with it.
+    """
+    if pair is None:
+        pair = default_pair(Parameters.default(),
+                            SpeciesFlags(hyperons=False, muons=False),
+                            VMITParameters.default())
     # window sweep grid (default vMIT: mixed window ~0.44-1.0); wing for causality.
     grid = np.array(grid) if grid is not None else np.round(np.arange(0.45, 0.86, 0.05), 3)
     full = np.round(np.arange(0.10, 1.25, 0.03), 3)
 
     report = FullCheckReport()
-    report.results.append(_check_euler(par, flags, vp, grid))
-    report.results.append(_check_free_energy(par, flags, vp, grid))
-    report.results.append(_check_mechanical(par, flags, vp, grid))
-    report.results.append(_check_gibbs_maxwell(par, flags, vp, grid))
-    report.results.append(_check_cross_mode(par, flags, vp))
-    report.results.append(_check_jacobian(par, flags, vp))
-    report.results.append(_check_backend_parity(par, flags, vp))
-    report.results.append(_check_causality(par, flags, vp, full))
-    report.results.append(_check_sound_speeds(par, flags, vp, full))
+    report.results.append(_check_euler(pair, grid))
+    report.results.append(_check_free_energy(pair, grid))
+    report.results.append(_check_mechanical(pair, grid))
+    report.results.append(_check_gibbs_maxwell(pair, grid))
+    report.results.append(_check_cross_mode(pair))
+    report.results.append(_check_jacobian(pair))
+    report.results.append(_check_backend_parity(pair))
+    report.results.append(_check_causality(pair, full))
+    report.results.append(_check_sound_speeds(pair, full))
     if include_tov:
-        report.results.append(_check_tov(par, flags, vp, full))
+        report.results.append(_check_tov(pair, full))
     return report
 
 

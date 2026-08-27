@@ -145,8 +145,10 @@ mix freely in one pair.
 
 **The Phase declaration.** Concretely a pairing is two `Phase` records
 (`eos.mixed.adapters`), each closing over its own model's parameters — for the
-composite engine the pair IS the parameter argument, and the plain
-`(par, flags, vmit_params)` signatures remain the DD2+vMIT front door. Beyond
+composite engine the pair IS the parameter argument, in the first position of
+every public entry point, and DD2+vMIT is one pairing among the shipped ones
+with `adapters.default_pair(par, flags, vmit_params)` as its named
+constructor. Beyond
 the adapter map (adapter) and the potential kind, a phase declares how it may
 be seeded (a per-solve cache is FORBIDDEN for a branch-declared adapter,
 because there the seed chooses the root — caching would change physics, not
@@ -254,10 +256,11 @@ message:
   on top of beta-equilibrium charge, so combining a fixed `Y_C` with a fixed
   `Y_Le` is not a defined mode.
 
-Two further refusals are declarations of a phase rather than of a mode: a
+One further refusal is a declaration of a phase rather than of a mode: a
 `ChargeSpec` conserving `S` globally raises if either phase declares
-`supports_S = False`, and `SpeciesFlags.sigma_star` (a hidden-strange scalar)
-is not wired in the hadronic phase.
+`supports_S = False`. A sector a phase does not implement is that adapter's
+own refusal — `SpeciesFlags.sigma_star`, a hidden-strange scalar, is refused
+by the DD2 adapter and by DD2's own flag object, not by the engine.
 
 
 ## The equilibrium system
@@ -359,9 +362,9 @@ The photons are
 
 and they enter only when `SpeciesFlags.photons` is set, and only at `T > 0`.
 The engine carries its own `SpeciesFlags` (`eos/mixed/species.py`) with the
-six names of CLAUDE.md section 4, all defaulting to False; the DD2 + vMIT
-front door reads the same six off the hadronic model's own flag object, since
-every model carries them.
+six names of CLAUDE.md section 4, all defaulting to False. Every model carries
+the same six names, so a caller may hand one model's flag object to both a
+`Phase` and the mixture without translating it (`mixture_flags`).
 
 The six split by where they are consumed. `hyperons`, `deltas`,
 `thermal_mesons` and the `muons` of the lepton gases are sectors of the
@@ -508,21 +511,27 @@ instability no construction has resolved, is refused.
 Three entry points, with the signatures every model in this repository carries,
 plus the two the composite engine adds:
 
-    eos_point(par, mode, species, n_B=, T=|SnB=, eta=0.0, vmit_params=,
+    eos_point(phases, mode, species, n_B=, T=|SnB=, eta=0.0,
               leptons=True, x0=, analytic_jac=, check_consistency=True,
-              phases=, **conditions)
-    eos_table(par, mode, species, axes=, eta=0.0, fixed=, leptons=True,
-              vmit_params=, window_only=True, analytic_jac=, refine="exact",
-              phases=, progress=, verbose=)
-    eos_response(par, mode, species, frozen="equilibrium", n_B=, T=0.0,
-                 eta=0.0, vmit_params=, leptons=True, rel_dn=1e-3,
-                 phases=, **conditions)
+              **conditions)
+    eos_table(phases, mode, species, axes=, eta=0.0, fixed=, leptons=True,
+              window_only=True, analytic_jac=, refine="exact",
+              progress=, verbose=)
+    eos_response(phases, mode, species, frozen="equilibrium", n_B=, T=0.0,
+                 eta=0.0, leptons=True, rel_dn=1e-3, **conditions)
+
+`phases` is the pairing — two `Phase` objects — and it occupies the position
+`par` occupies in a single-phase model, because for a composite engine the pair
+IS the parameter argument. There is no second signature: a caller who wants the
+DD2+vMIT hybrid writes `phases=adapters.default_pair(par, flags, vmit_params)`,
+and `phases=(sfho_phase(...), njl_phase(...))` is written the same way.
+`species` is the ENGINE's own `eos.mixed.SpeciesFlags` — the phase-common
+sectors (photons) and the muons of the eta-split lepton domains; the per-phase
+sectors travel inside each `Phase`, in that model's own flag object.
 
 `n_B` is always the TOTAL baryon density of the mixture, volume-averaged over
-both phases, not the density of either one. `par`, `species` and `vmit_params`
-are the DD2+vMIT front door; `phases` is the general form, and then all three
-must be None because the two `Phase` objects carry both models' parameters.
-`x0` is a warm start in the slot order of `mixed_slots(spec, eta, species)`.
+both phases, not the density of either one. `x0` is a warm start in the slot
+order of `mixed_slots(spec, eta, phases)`.
 
 `eos_table` takes `axes = {'nB': grid, exactly one of 'T'/'SnB': grid, and
 optionally any of 'Y_C'/'Y_S'/'Y_Le' to sweep that fraction}`. The density axis

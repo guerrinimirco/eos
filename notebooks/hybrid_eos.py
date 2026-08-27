@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.4
+#       jupytext_version: 1.19.5
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -76,6 +76,7 @@ sys.path.insert(0, str(ROOT))
 
 from eos.general.table_io import save_table, standard_name, table_path
 from eos.mixed import eos_point, eos_table, hybrid_table
+from eos.mixed.species import SpeciesFlags as MixedFlags
 import eos.mixed.adapters as adapters
 
 # %% [markdown]
@@ -116,9 +117,10 @@ class Knobs:
     hadronic_parameters: object = "default"
     quark_parameters: object = "default"
 
-    # The DD2 + vMIT front door takes (par, flags, vmit_params) directly; any
-    # other pairing goes through `phases=`. Section 3 runs both and compares.
-    front_door: bool = True
+    # A second pairing to run beside the headline one, so section 3 can show
+    # that two pairings are written the same way. (hadronic, quark) names, or
+    # None to skip.
+    second_pairing: tuple = ("sfho", "njl")
 
     # --- the construction ------------------------------------------------
     # A SCALAR per call. eta = 0 is Gibbs (charge neutrality imposed on the
@@ -275,21 +277,26 @@ def hadronic_flags(name):
 
 
 # %% [markdown]
-# ## 3. The pairing — two calling forms for the same physics
+# ## 3. The pairing — the parameter argument of a composite engine
 #
-# The parameter argument of a composite engine is two parameter sets, and there
-# are two ways to hand them over.
+# A hybrid equation of state has two models in it, so its parameter argument is
+# two parameter sets. The engine takes them as **one pairing**: `(hadronic,
+# quark)`, two declared `Phase` objects, each built by a factory that closes
+# over its own model's parameters. That pair sits in the first position of
+# `eos_point`, `eos_table`, `hybrid_table` and `eos_response` — the position
+# `par` occupies in every single-phase model.
 #
-# The **front door** is the DD2 + vMIT signature: the hadronic parameters and
-# species flags in the positions every model uses, and `vmit_params` beside
-# them. It exists because that pairing is the one with published results behind
-# it, and it keeps those calls looking like every other model call.
+# There is no second signature. DD2 + vMIT is the pairing with published
+# results behind it and it gets a named convenience for building the pair,
+# `adapters.default_pair(par, flags, vmit_params)`, but it is handed over
+# exactly the way `(sfho_phase(...), njl_phase(...))` is. The cell below runs
+# two pairings side by side to show that the calls are one call.
 #
-# The **general form** is `phases=(hadronic, quark)`: two declared `Phase`
-# objects, each built by a factory that closes over its own model's parameters.
-# `par`, `species` and `vmit_params` must then all be `None` — the pair carries
-# everything — and `muons=` says whether muons join the neutralizing lepton
-# domains, a question the flags answered in the front door.
+# The `species` argument is separate and is the **engine's own**
+# `eos.mixed.SpeciesFlags`: the sectors that belong to the mixture rather than
+# to either phase — the photon gas, and whether muons join the neutralizing
+# lepton domains. The per-phase sectors (hyperons, Deltas, the meson gas)
+# travel inside each `Phase`, in that model's own flag object.
 #
 # A `Phase` bundles the adapter callable with what the engine must *know* about
 # a phase and must not *assume*: whether its baryon slot carries the kinetic
@@ -299,28 +306,37 @@ def hadronic_flags(name):
 # which optional capabilities — wings, a frozen-composition block, an analytic
 # Jacobian — it provides. Everything else about the model stays behind the
 # adapter.
-#
-# The two forms are the same solve, so they agree to the last bit.
 
 # %%
-def phase_pair():
-    """The `(hadronic, quark)` Phase pair the knobs name.
+def phase_pair(hadronic_name=None, quark_name=None,
+               hadronic_choice=None, quark_choice=None):
+    """The `(hadronic, quark)` Phase pair, for any two shipped models.
 
     Each factory closes over its model's own parameters, which is how "model
-    parameters are arguments" reads for a composite engine.
+    parameters are arguments" reads for a composite engine. `default_pair` in
+    `eos.mixed.adapters` is this same construction spelled out for DD2 + vMIT.
     """
-    had_par = parameters_for(KNOBS.hadronic, KNOBS.hadronic_parameters)
-    quark_par = parameters_for(KNOBS.quark, KNOBS.quark_parameters)
-    factory = getattr(adapters, f"{KNOBS.hadronic}_phase")
+    hadronic_name = hadronic_name or KNOBS.hadronic
+    quark_name = quark_name or KNOBS.quark
+    had_par = parameters_for(hadronic_name,
+                             hadronic_choice or KNOBS.hadronic_parameters)
+    quark_par = parameters_for(quark_name,
+                               quark_choice or KNOBS.quark_parameters)
+    factory = getattr(adapters, f"{hadronic_name}_phase")
     # zl is written in (n_p, n_n) and takes no species flags; the other three
     # hadronic adapters take the model's own flags.
-    if KNOBS.hadronic == "zl":
+    if hadronic_name == "zl":
         hadronic = factory(had_par)
     else:
-        hadronic = factory(had_par, hadronic_flags(KNOBS.hadronic))
-    quark = getattr(adapters, f"{KNOBS.quark}_phase")(quark_par)
+        hadronic = factory(had_par, hadronic_flags(hadronic_name))
+    quark = getattr(adapters, f"{quark_name}_phase")(quark_par)
     return hadronic, quark
 
+
+#: The MIXTURE's own sectors (CLAUDE.md section 4): photons and the muons of
+#: the eta-split lepton domains. The per-phase ones travel inside each `Phase`.
+SPECIES = MixedFlags(muons=KNOBS.species["muons"],
+                     photons=KNOBS.species["photons"])
 
 PAIR = phase_pair()
 print("pairing:", PAIR[0].name, "+", PAIR[1].name)
@@ -339,22 +355,38 @@ par = parameters_for(KNOBS.hadronic, KNOBS.hadronic_parameters)
 flags = hadronic_flags(KNOBS.hadronic)
 quark_par = parameters_for(KNOBS.quark, KNOBS.quark_parameters)
 
-status, general = run(
-    "phases=", eos_point, None, "beta_eq_neutrinoless", None,
-    n_B=PROBE_N_B, T=0.0, eta=KNOBS.eta, phases=PAIR,
-    muons=KNOBS.species["muons"])
+status, headline = run(
+    f"{PAIR[0].name}+{PAIR[1].name}", eos_point, PAIR,
+    "beta_eq_neutrinoless", SPECIES,
+    n_B=PROBE_N_B, T=0.0, eta=KNOBS.eta)
+if status == "ok":
+    a = headline.point
+    print(f"  {PAIR[0].name}+{PAIR[1].name:9s}: chi={a.chi:+.10f}  "
+          f"P={a.P:.10f}  eps={a.eps:.10f}")
 
-if KNOBS.front_door and (KNOBS.hadronic, KNOBS.quark) == ("dd2", "vmit"):
-    status_fd, front = run(
-        "front door", eos_point, par, "beta_eq_neutrinoless", flags,
-        n_B=PROBE_N_B, T=0.0, eta=KNOBS.eta, vmit_params=quark_par)
-    if status == "ok" and status_fd == "ok":
-        a, b = general.point, front.point
-        print(f"  front door : chi={b.chi:+.10f}  P={b.P:.10f}  eps={b.eps:.10f}")
-        print(f"  phases=    : chi={a.chi:+.10f}  P={a.P:.10f}  eps={a.eps:.10f}")
-        print(f"  identical  : {a.chi == b.chi and a.P == b.P and a.eps == b.eps}")
-else:
-    print("  front door is DD2 + vMIT only; this pairing goes through phases=")
+# The DD2 + vMIT pairing has a named constructor; it builds the SAME kind of
+# object `phase_pair` above does, and is handed to the same argument.
+if (KNOBS.hadronic, KNOBS.quark) == ("dd2", "vmit"):
+    named = adapters.default_pair(par, flags, quark_par)
+    status_n, byname = run("default_pair", eos_point, named,
+                           "beta_eq_neutrinoless", SPECIES,
+                           n_B=PROBE_N_B, T=0.0, eta=KNOBS.eta)
+    if status == "ok" and status_n == "ok":
+        b = byname.point
+        print(f"  default_pair : chi={b.chi:+.10f}  P={b.P:.10f}  eps={b.eps:.10f}")
+        print(f"  identical    : {a.chi == b.chi and a.P == b.P and a.eps == b.eps}")
+
+# A pairing that is neither DD2 nor vMIT, through the same signature.
+if KNOBS.second_pairing:
+    other = phase_pair(*KNOBS.second_pairing,
+                       hadronic_choice="default", quark_choice="default")
+    status_o, result_o = run(f"{other[0].name}+{other[1].name}", eos_point,
+                             other, "beta_eq_neutrinoless", SPECIES,
+                             n_B=PROBE_N_B, T=0.0, eta=KNOBS.eta)
+    if status_o == "ok":
+        c = result_o.point
+        print(f"  {other[0].name}+{other[1].name:9s}: chi={c.chi:+.10f}  "
+              f"P={c.P:.10f}  eps={c.eps:.10f}")
 
 # %% [markdown]
 # ## 4. The shipped pairings
@@ -388,10 +420,8 @@ for had_name in HADRONIC:
             hadronic = (had_factory(had_par) if had_name == "zl"
                         else had_factory(had_par, hadronic_flags(had_name)))
             quark = getattr(adapters, f"{quark_name}_phase")(quark_par)
-            return eos_point(None, "beta_eq_neutrinoless", None,
-                             n_B=PROBE_N_B, T=0.0, eta=KNOBS.eta,
-                             phases=(hadronic, quark),
-                             muons=KNOBS.species["muons"])
+            return eos_point((hadronic, quark), "beta_eq_neutrinoless",
+                             SPECIES, n_B=PROBE_N_B, T=0.0, eta=KNOBS.eta)
 
         label = f"{had_name}+{quark_name}"
         status, result = run(label, solve)
@@ -431,9 +461,8 @@ header("eta, one scalar call at a time")
 for eta in KNOBS.eta_examples:
 
     def solve(eta=eta):
-        return eos_point(None, "beta_eq_neutrinoless", None, n_B=PROBE_N_B,
-                         T=0.0, eta=eta, phases=PAIR,
-                         muons=KNOBS.species["muons"])
+        return eos_point(PAIR, "beta_eq_neutrinoless", SPECIES,
+                         n_B=PROBE_N_B, T=0.0, eta=eta)
 
     status, result = run(f"eta={eta}", solve)
     if status == "ok":
@@ -459,9 +488,8 @@ for eta in (0.0, 1.0):
     for n_B in PLATEAU_N_B:
 
         def solve(n_B=n_B, eta=eta):
-            return eos_point(None, "beta_eq_neutrinoless", None, n_B=n_B,
-                             T=0.0, eta=eta, phases=PAIR,
-                             muons=KNOBS.species["muons"])
+            return eos_point(PAIR, "beta_eq_neutrinoless", SPECIES,
+                             n_B=n_B, T=0.0, eta=eta)
 
         status, result = run(f"eta={eta} n_B={n_B}", solve)
         if status != "ok":
@@ -507,9 +535,9 @@ for mode in KNOBS.modes:
     def build(mode=mode, axes=axes):
         extra = ({"leptons": KNOBS.leptons} if mode.startswith("fixed_")
                  else {})
-        return eos_table(None, mode, None, axes, eta=KNOBS.eta, phases=PAIR,
-                         muons=KNOBS.species["muons"],
-                         window_only=KNOBS.window_only, verbose=True, **extra)
+        return eos_table(PAIR, mode, SPECIES, axes, eta=KNOBS.eta,
+                         window_only=KNOBS.window_only, verbose=True,
+                         **extra)
 
     status, result = run(f"{KNOBS.hadronic}+{KNOBS.quark}", build)
     if status != "ok":
@@ -615,9 +643,8 @@ for mode in KNOBS.modes:
     def build(mode=mode):
         extra = ({"leptons": KNOBS.leptons} if mode.startswith("fixed_")
                  else {})
-        return hybrid_table(None, mode, None, n_B_grid=KNOBS.n_B_grid(),
-                            eta=KNOBS.eta, T=0.0, phases=PAIR,
-                            muons=KNOBS.species["muons"],
+        return hybrid_table(PAIR, mode, SPECIES,
+                            n_B_grid=KNOBS.n_B_grid(), eta=KNOBS.eta, T=0.0,
                             **KNOBS.conditions(mode), **extra)
 
     status, result = run(f"{KNOBS.hadronic}+{KNOBS.quark}", build)
@@ -711,9 +738,7 @@ figure_tables = {}
 for eta in FIG_ETAS:
 
     def build(eta=eta):
-        return hybrid_table(None, FIG_MODE, None, n_B_grid=FIG_N_B, eta=eta,
-                            T=FIG_T, phases=PAIR,
-                            muons=KNOBS.species["muons"])
+        return hybrid_table(PAIR, FIG_MODE, SPECIES, n_B_grid=FIG_N_B, eta=eta, T=FIG_T)
 
     status, result = run(f"eta={eta}", build)
     if status != "ok":
@@ -807,10 +832,9 @@ charge_rows = {}
 for eta in FIG_ETAS:
 
     def build(eta=eta):
-        return eos_table(None, FIG_MODE, None,
-                         {"nB": FIG_N_B, "T": np.array([FIG_T])}, eta=eta,
-                         phases=PAIR, muons=KNOBS.species["muons"],
-                         window_only=True, verbose=False)
+        return eos_table(PAIR, FIG_MODE, SPECIES,
+                         {"nB": FIG_N_B, "T": np.array([FIG_T])},
+                         eta=eta, window_only=True, verbose=False)
 
     status, result = run(f"eta={eta}", build)
     if status != "ok":
@@ -862,11 +886,9 @@ for eta in FIG_ETAS:
     for temperature in FIG_T_CURVE:
 
         def build(eta=eta, temperature=temperature):
-            return eos_table(None, FIG_MODE, None,
+            return eos_table(PAIR, FIG_MODE, SPECIES,
                              {"nB": FIG_N_B, "T": np.array([temperature])},
-                             eta=eta, phases=PAIR,
-                             muons=KNOBS.species["muons"],
-                             window_only=True, verbose=False)
+                             eta=eta, window_only=True, verbose=False)
 
         status, result = run(f"eta={eta} T={temperature}", build)
         if status != "ok":
@@ -1044,11 +1066,9 @@ for had_name, quark_name in SWAP_PAIRINGS:
         hadronic = getattr(adapters, f"{had_name}_phase")(
             had_par, hadronic_flags(had_name))
         quark = getattr(adapters, f"{quark_name}_phase")(quark_par)
-        return eos_table(None, FIG_MODE, None,
+        return eos_table((hadronic, quark), FIG_MODE, SPECIES,
                          {"nB": SWAP_N_B, "T": np.array([FIG_T])},
-                         eta=KNOBS.eta, phases=(hadronic, quark),
-                         muons=KNOBS.species["muons"], window_only=True,
-                         verbose=False)
+                         eta=KNOBS.eta, window_only=True, verbose=False)
 
     label = f"{had_name}+{quark_name}"
     status, result = run(label, build)
@@ -1174,10 +1194,9 @@ if retired_pair is not None:
     for eta, (was_onset, was_offset) in RETIRED_WINDOWS.items():
 
         def build(eta=eta):
-            return eos_table(None, "beta_eq_neutrinoless", None,
-                             {"nB": FIG_N_B, "T": np.array([0.0])}, eta=eta,
-                             phases=retired_pair, muons=True,
-                             window_only=True, verbose=False)
+            return eos_table(retired_pair, "beta_eq_neutrinoless", SPECIES,
+                             {"nB": FIG_N_B, "T": np.array([0.0])},
+                             eta=eta, window_only=True, verbose=False)
 
         status, result = run(f"eta={eta}", build)
         if status != "ok":

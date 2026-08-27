@@ -28,7 +28,13 @@ SU(6) phi coupling, and omitting the field leaves that coupling unused.
 """
 from dataclasses import dataclass
 
-from eos.general.particles import NUCLEONS, HYPERONS_OCTET, DELTAS
+# The baryon quantum-number maps are general-purpose -- they read only the
+# shared `Particle` objects and a flags object carrying `hyperons`/`deltas`
+# -- so their single home is `general/basis` (CLAUDE.md section 7). They are
+# re-exported here because every dd2 caller reaches for them beside the
+# flags they take.
+from eos.general.basis import (active_baryons, hadronic_qn,
+                               hadronic_charges)
 
 
 @dataclass(frozen=True)
@@ -66,41 +72,3 @@ class SpeciesFlags:
     @property
     def has_strange_baryons(self):
         return self.hyperons  # (or deltas carrying strangeness — none do)
-
-
-def active_baryons(flags):
-    """Ordered list of active baryon Particles for the given flags."""
-    baryons = list(NUCLEONS)
-    if flags.hyperons:
-        baryons += list(HYPERONS_OCTET)
-    if flags.deltas:
-        baryons += list(DELTAS)
-    return baryons
-
-
-def hadronic_qn(flags):
-    """(name, B, C, S) for each baryon active under `flags`.
-
-    Strangeness is S = +1 per s-quark, so Lambda has S = +1 and Xi has S = +2.
-    That is the opposite of the PDG sign and is used consistently throughout
-    this repository.
-    """
-    return tuple((b.name, b.baryon_no, b.charge, b.strangeness)
-                 for b in active_baryons(flags))
-
-
-def hadronic_charges(flags, densities):
-    """(n_B, n_C, n_S) of hadronic matter from a {name: n} map.
-
-    n_C is the NON-leptonic electric charge density; total electric neutrality
-    is a separate condition that also counts the leptons. `densities` and the
-    result share whatever units the caller passes in, and baryons absent from
-    the map contribute zero.
-    """
-    n_B = n_C = n_S = 0.0
-    for name, B, C, S in hadronic_qn(flags):
-        n = densities.get(name, 0.0)
-        n_B += B * n
-        n_C += C * n
-        n_S += S * n
-    return n_B, n_C, n_S

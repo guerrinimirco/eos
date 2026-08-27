@@ -29,7 +29,8 @@ fm^-3; potentials in MeV give potentials in MeV.
 """
 from __future__ import annotations
 
-from eos.general.particles import Up, Down, Strange, get_particle
+from eos.general.particles import (Up, Down, Strange, get_particle,
+                                   NUCLEONS, HYPERONS_OCTET, DELTAS)
 
 #: The three light flavours, in the fixed order used by every quark map here.
 QUARK_FLAVOURS = (Up, Down, Strange)
@@ -72,6 +73,56 @@ def charges_from_densities(densities):
         if particle.is_lepton:
             continue
         B, C, S = charges_of(particle)
+        n_B += B * n
+        n_C += C * n
+        n_S += S * n
+    return n_B, n_C, n_S
+
+
+def active_baryons(flags):
+    """Ordered list of the baryon `Particle` objects active under `flags`.
+
+    Nucleons are always present; `flags.hyperons` adds the Lambda-Sigma-Xi
+    octet and `flags.deltas` the Delta quartet (CLAUDE.md section 4). Any
+    object carrying those two booleans serves, so this reads a model's flag
+    set without knowing which model it belongs to.
+    """
+    baryons = list(NUCLEONS)
+    if flags.hyperons:
+        baryons += list(HYPERONS_OCTET)
+    if flags.deltas:
+        baryons += list(DELTAS)
+    return baryons
+
+
+def hadronic_qn(flags):
+    """(name, B, C, S) for each baryon active under `flags`.
+
+    Strangeness is S = +1 per s-quark, so Lambda has S = +1 and Xi has S = +2.
+    That is the opposite of the PDG sign and is used consistently throughout
+    this repository.
+    """
+    return tuple((b.name, b.baryon_no, b.charge, b.strangeness)
+                 for b in active_baryons(flags))
+
+
+def hadronic_charges(flags, densities):
+    """(n_B, n_C, n_S) of the ACTIVE BARYONS in a {name: n} map.
+
+    The baryon counterpart of `quark_charges`, and narrower than
+    `charges_from_densities`: it sums the baryons `flags` declares active and
+    ignores everything else in the map, so a thermal meson gas travelling in
+    the same dictionary does not enter. Use `charges_from_densities` for the
+    sum over every strongly-interacting species present.
+
+    n_C is the NON-leptonic electric charge density; total electric neutrality
+    is a separate condition that also counts the leptons. `densities` and the
+    result share whatever units the caller passes in, and baryons absent from
+    the map contribute zero.
+    """
+    n_B = n_C = n_S = 0.0
+    for name, B, C, S in hadronic_qn(flags):
+        n = densities.get(name, 0.0)
         n_B += B * n
         n_C += C * n
         n_S += S * n

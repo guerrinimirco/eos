@@ -66,8 +66,9 @@ class Parameters:
         model it is paired with. The library ships no scan driver: model
         parameters are arguments (CLAUDE.md section 6), so a sweep over
         (B4, a, m_s) is a loop in the caller that builds one `Parameters` per
-        sample and passes it to the mixed engine
-        (`eos.mixed.eos_table(..., vmit_params=...)`), one call per sample.
+        sample, wraps it in a `Phase` and passes the pairing to the mixed
+        engine (`eos.mixed.eos_table((hadronic, vmit_phase(params)), ...)`),
+        one call per sample.
 
         A NEW set is `Parameters(B4=..., a=..., m_s=...)` -- every field
         carries a default, so only the ones that change need naming -- or

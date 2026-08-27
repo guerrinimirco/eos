@@ -50,10 +50,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from eos.general.particles import Up, Down, Strange
-from eos.general.basis import quark_charges
+from eos.general.basis import quark_charges, hadronic_qn, hadronic_charges
 from eos.general import modes
 from eos.general.modes import ModeSpec
-from eos.dd2.species import hadronic_qn, hadronic_charges
 
 
 class Regime(Enum):
@@ -162,8 +161,11 @@ QUARK_QN = {q.name: (q.baryon_no, q.charge, q.strangeness)
 # engine one function of that name in scope rather than two.
 
 
-# The hadronic quantum numbers depend only on the DD2 species set, so they live
-# with it in eos/dd2/species.py and are re-exported here beside the quark ones.
+# `hadronic_qn` / `hadronic_charges` are not redefined here either. They read
+# only the shared `Particle` objects and a flags object's hyperons/deltas, so
+# their home is `eos.general.basis` beside the quark map (CLAUDE.md section 7);
+# this re-export keeps `eos.mixed.hadronic_charges` working. A composite engine
+# borrowing a MODEL's copy is what this replaced.
 
 
 # =============================================================================

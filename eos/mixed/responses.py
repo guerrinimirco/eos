@@ -65,13 +65,9 @@ c^2 in units of the speed of light.
 """
 import numpy as np
 
-from eos.dd2.solver import warm_start
 from eos.general.sound_speeds import sound_speed_eq
 from eos.general.thermodynamics_leptons import neutralizing_leptons
 from eos.mixed.species import mixture_flags
-from eos.mixed.adapters import (
-    _dd2_frozen_block, _vmit_frozen_block, default_pair,
-)
 
 
 # `sound_speed_eq(P, eps)` is imported above rather than defined here: it
@@ -127,31 +123,29 @@ def _frozen_mixture(pair, result, scale, muons, leptons=True):
     return P_tot, eps_tot
 
 
-def sound_speed_frozen(par, flags, result, vmit_params=None, rel_dn=1e-3,
-                       leptons=True, phases=None, species=None):
+def sound_speed_frozen(phases, result, rel_dn=1e-3, leptons=True,
+                       species=None):
     """Frozen-composition c_ad^2 = dP/deps at the state `result`.
 
-    par, flags   : the DD2 `Parameters` and `SpeciesFlags` the state was
-                   solved with
+    phases       : the pairing the state was solved with — two `Phase`
+                   objects (`eos.mixed.adapters`), the engine's parameter
+                   argument (CLAUDE.md section 5)
     result       : a `Result` from `solve` — pure phases included,
                    chi = 0 and chi = 1 are handled and give the pure-phase
                    frozen sound speed
-    vmit_params  : the `Parameters` the state was solved with
     rel_dn       : relative density step for the central difference
     leptons      : re-neutralise with leptons (the physical choice for stellar
                    matter, and the default). False gives the matter-only value,
-                   which at chi = 0 reproduces
+                   which for a DD2 hadronic phase at chi = 0 reproduces
                    `eos.dd2.responses.sound_speed_adiabatic` exactly.
+    species      : the ENGINE's own `SpeciesFlags`; only `muons` is read, for
+                   the neutralizing lepton gas.
 
     Read the module docstring before comparing this to a number from elsewhere:
     "frozen" is a convention, and this one freezes chi and each phase's Y_C and
     Y_S. Returns nan if the perturbed states do not bracket a positive deps.
     """
-    if phases is None:
-        phases = default_pair(par, flags, vmit_params)
-    # The engine's own section-4 flags; on the front-door path the hadronic
-    # model's own object carries the same six names.
-    muons = mixture_flags(flags if species is None else species).muons
+    muons = mixture_flags(species).muons
     chi = float(np.clip(result.chi, 0.0, 1.0))
     if chi != result.chi:                       # a drifted point: use the wing
         result = _clipped(result, chi)
@@ -176,73 +170,41 @@ def _clipped(result, chi):
     return replace(result, chi=chi)
 
 
-def sound_speed_frozen_hadronic(par, flags, point, rel_dn=1e-3, leptons=True):
-    """Frozen c_ad^2 of PURE hadronic matter at a solved octet point.
+def sound_speed_frozen_pure(phase, th, T=0.0, rel_dn=1e-3, leptons=True,
+                            muons=True, mu_slot=None):
+    """Frozen c_ad^2 of ONE phase on its own, at the block `th`.
 
-    The chi -> 0 limit of `sound_speed_frozen`, for a state that was solved on
-    its own rather than as one phase of a mixture — the wing below the onset.
-    Same convention: Y_C and Y_S held, the individual species free to
-    re-equilibrate within them, leptons re-neutralised against the frozen
-    charge. The two therefore join continuously at the onset, which is the
-    point of having them agree — c_ad is a property of the matter, not of the
-    machinery that solved it.
+    The chi -> 0 and chi -> 1 limits of `sound_speed_frozen` — the wings
+    outside the coexistence window, for a state solved as a pure phase rather
+    than as one half of a mixture. Same convention as the mixture: each
+    phase's own composition is held by its `frozen_thermo` capability, and the
+    leptons are re-neutralised against the frozen charge. The two therefore
+    join continuously at a boundary, which is the point of having them agree —
+    c_ad is a property of the matter, not of the machinery that solved it.
 
-    `point` is an `EoSPoint` from any of the `eos.dd2` octet solvers, and
-    supplies its own warm start, so no seeding argument is needed.
+    `phase` is a `Phase` and `th` its `PhaseThermo` block, so this knows no
+    model: whatever a pairing's hadronic side freezes at fixed Y_C and Y_S,
+    and whatever its quark side freezes at fixed flavour ratios, is that
+    adapter's declaration and not this function's business.
 
-    This is NOT the equilibrium sound speed of the same wing: there the
-    composition follows beta equilibrium (or the fixed-Y_C condition) as the
-    density changes, and the gap between the two is exactly what drives a
-    composition g-mode in the pure hadronic phase.
+    `mu_slot` is the phase's own baryon-slot potential where it is known; an
+    adapter may use it to seed its internal solve (the DD2 one does, and a
+    mixed-phase state is nowhere near the nucleonic beta equilibrium its
+    fallback seed assumes). `muons` selects whether the neutralising lepton
+    gas may contain muons, the role `species.muons` plays in the mixture.
 
-    The fractions held are the point's own Y_C and Y_S, which are the TOTAL
-    non-leptonic ones -- baryons plus any thermal meson gas. Summing the baryon
-    densities instead would freeze a different composition from the one the
-    fixed-Y_C solve then imposes, since that condition is stated on the total:
-    at T = 40 MeV with a pion gas the two differ by about 16%, and the curve
-    would step at the onset instead of joining the mixture's.
+    Returns nan if the perturbed states do not bracket a positive deps.
     """
-    n_B = point.n_B
-    if n_B <= 0.0:
+    if phase.frozen_thermo is None:
+        raise NotImplementedError(
+            f"the {phase.name} phase has no frozen_thermo capability, so the "
+            f"frozen-composition sound speed is not defined for it "
+            f"(see docs/DEFERRED.md)")
+    if th.n_B <= 0.0:
         return float("nan")
-    Y_C, Y_S, T = point.matter.Y_C, point.matter.Y_S, point.T
-    x0 = warm_start(point, flags.phi_field and flags.hyperons,
-                          has_muS=flags.has_strange_baryons)
 
     def at(scale):
-        P, eps, n_C_s = _dd2_frozen_block(par, flags, n_B * scale, Y_C, Y_S,
-                                          T, x0=x0)
-        if leptons:
-            P_l, eps_l = _lepton_block(n_C_s, flags.muons, T)
-            P, eps = P + P_l, eps + eps_l
-        return P, eps
-
-    P_lo, e_lo = at(1.0 - rel_dn)
-    P_hi, e_hi = at(1.0 + rel_dn)
-    if not (e_hi > e_lo):
-        return float("nan")
-    return (P_hi - P_lo) / (e_hi - e_lo)
-
-
-def sound_speed_frozen_quark(n_u, n_d, n_s, T=0.0, vmit_params=None,
-                             rel_dn=1e-3, leptons=True, muons=True):
-    """Frozen c_ad^2 of PURE quark matter at the given flavour densities.
-
-    The chi -> 1 limit of `sound_speed_frozen` — the wing above the offset.
-    The three flavour densities are rescaled together, which freezes the quark
-    composition exactly, and the leptons are re-neutralised as in the mixture.
-    Nothing is re-solved on the quark side.
-
-    Densities are fm^-3. `muons` selects whether the neutralising lepton gas
-    may contain muons, the role `flags.muons` plays elsewhere.
-    """
-    if vmit_params is None:
-        from eos.vmit.parameters import Parameters as VMITParameters
-        vmit_params = VMITParameters.default()
-
-    def at(scale):
-        P, eps, n_C = _vmit_frozen_block(vmit_params, n_u * scale,
-                                         n_d * scale, n_s * scale, T)
+        P, eps, n_C = phase.frozen_thermo(th, scale, T, mu_slot=mu_slot)
         if leptons:
             P_l, eps_l = _lepton_block(n_C, muons, T)
             P, eps = P + P_l, eps + eps_l
@@ -255,8 +217,8 @@ def sound_speed_frozen_quark(n_u, n_d, n_s, T=0.0, vmit_params=None,
     return (P_hi - P_lo) / (e_hi - e_lo)
 
 
-def frozen_along(par, flags, results, vmit_params=None, rel_dn=1e-3,
-                 leptons=True, phases=None, species=None):
+def frozen_along(phases, results, rel_dn=1e-3, leptons=True,
+                 species=None):
     """`sound_speed_frozen` at every state in a sequence, as an array.
 
     Non-convergent points come back nan rather than aborting the sequence: a
@@ -265,10 +227,8 @@ def frozen_along(par, flags, results, vmit_params=None, rel_dn=1e-3,
     out = []
     for r in results:
         try:
-            out.append(sound_speed_frozen(par, flags, r,
-                                          vmit_params=vmit_params,
-                                          rel_dn=rel_dn, leptons=leptons,
-                                          phases=phases, species=species))
+            out.append(sound_speed_frozen(phases, r, rel_dn=rel_dn,
+                                          leptons=leptons, species=species))
         except (RuntimeError, ValueError):
             out.append(np.nan)
     return np.asarray(out, dtype=float)

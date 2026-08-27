@@ -5,9 +5,9 @@ Every engine in this repository exposes these three entry points with the same
 shape, so a caller -- a table pipeline, a sampler, a downstream package --
 drives the mixed phase exactly the way it drives a single-phase model:
 
-    eos_point(par, mode, species, n_B=..., T=..., eta=...)   one state
-    eos_table(par, mode, species, axes, eta=...)             a solved grid
-    eos_response(par, mode, species, frozen=..., ...)        second derivatives
+    eos_point(phases, mode, species, n_B=..., T=..., eta=...)  one state
+    eos_table(phases, mode, species, axes, eta=...)            a solved grid
+    eos_response(phases, mode, species, frozen=..., ...)       2nd derivatives
 
 Modes are the repository's named equilibria: 'beta_eq_neutrinoless',
 'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_YS'. Conditions are named
@@ -25,9 +25,13 @@ the surface tension and Coulomb cost of the mixed-phase structures. It is a
 scalar per call, not an axis, because it changes the shape of the unknown
 vector.
 
-`vmit_params` is the quark phase's parameter set, alongside `par` for the
-hadronic one: a hybrid equation of state has two models in it and both sets of
-parameters are arguments (CLAUDE.md section 6).
+`phases` is the pairing, and it is THE parameter argument of this engine
+(CLAUDE.md section 5): two `Phase` objects from `eos.mixed.adapters`, each
+closing over its own model's parameters, so a hybrid's two parameter sets are
+arguments (section 6) without either model taking a privileged position in a
+signature. `adapters.default_pair(par, flags, vmit_params)` builds the DD2 +
+vMIT pairing; `(sfho_phase(...), njl_phase(...))` builds another, and the two
+are written the same way.
 
 And `eos_table` returns `(rows, windows)`, not just rows. The phase boundaries
 found on each line are part of the answer -- they are what the transition
@@ -46,12 +50,12 @@ import numpy as np
 
 from eos.general.tabulate import (temperature_at_entropy,
                                   unconverged_response)
-from eos.mixed.adapters import default_flags
 from eos.mixed.species import SpeciesFlags
 from eos.mixed.responses import sound_speed_frozen
 from eos.mixed.solver import mixed_slots
 from eos.mixed.solver import Result, solve
-from eos.mixed.hybrid import EoSTable, build_hybrid_table
+from eos.mixed.hybrid import (EoSTable, build_hybrid_table,
+                              validate_wings)
 from eos.mixed.table import (
     MODE_FRACTIONS, TableSpec, build_table, make_charge_spec,
 )
@@ -96,24 +100,25 @@ def _engine_fractions(mode, conditions):
     return fracs
 
 
-def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
-              vmit_params=None, leptons=True, x0=None, analytic_jac=False,
-              check_consistency=True, phases=None, **conditions):
+def eos_point(phases, mode, species=None, n_B=None, T=None, SnB=None,
+              eta=0.0, leptons=True, x0=None, analytic_jac=False,
+              check_consistency=True, **conditions):
     """One solved mixed-phase state; non-convergence is a return value.
 
     Parameters
     ----------
-    par : dd2 Parameters
-        The hadronic parameters -- always an argument, never module state.
-        None with `phases`, whose two Phase objects then carry both models'
-        parameters (CLAUDE.md section 5).
+    phases : (Phase, Phase)
+        The pairing (see `eos.mixed.adapters`): two `Phase` objects, each
+        closing over its own model's parameters. This is the engine's
+        parameter argument (CLAUDE.md section 5) -- always an argument, never
+        module state. `adapters.default_pair(par, flags, vmit_params)` is the
+        DD2 + vMIT one.
     mode : str
         One of the keys of `MODE_FRACTIONS`.
     species : SpeciesFlags
-        The active degrees of freedom. `eos.mixed.species.SpeciesFlags` is
-        the engine's own set (CLAUDE.md section 4); on the DD2 + vMIT front
-        door it is that pairing's hadronic flags, which carry the same six
-        names. The per-phase sectors reach the models through their
+        The active degrees of freedom: `eos.mixed.species.SpeciesFlags`,
+        the engine's own set (CLAUDE.md section 4), every sector off when
+        omitted. The per-phase sectors reach the models through their
         `Phase`; the phase-common ones — photons above all — are consumed
         once at the mixture level.
     n_B : float
@@ -124,16 +129,10 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
         outer 1-D solve for T.
     eta : float
         Local-neutrality fraction in [0, 1]; 0 Gibbs, 1 Maxwell.
-    vmit_params : Parameters
-        The quark phase's parameters; the published default if omitted.
     leptons : bool
         For the fixed-fraction modes: whether neutralizing leptons are present.
     x0 : sequence
-        Warm start in the slot order of `mixed_slots(spec, eta, species)`.
-    phases : (Phase, Phase)
-        Any other pairing (see `eos.mixed.adapters`); par, species and
-        vmit_params must then be None; `species` is then the engine's own
-        `SpeciesFlags` and defaults to every sector off.
+        Warm start in the slot order of `mixed_slots(spec, eta, phases)`.
     conditions : the fractions the mode fixes (Y_C, Y_S, Y_Le).
 
     Returns
@@ -142,8 +141,6 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
     chi lies outside [0, 1] is a pure phase, not a failure: that is how the
     engine reports which side of the transition the density is on.
     """
-    if species is None and phases is None:
-        species = default_flags()
     if n_B is None:
         raise ValueError("n_B is required")
     if n_B <= 0.0:
@@ -156,12 +153,9 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
     spec = make_charge_spec(mode, fracs, leptons=leptons)
 
     def point_at(temperature):
-        return solve(par, species if phases is None else None,
-                     float(n_B), float(eta), spec,
-                     vmit_params=vmit_params, T=float(temperature),
-                     x0=x0, analytic_jac=analytic_jac,
-                     check_consistency=check_consistency,
-                     phases=phases, species=species)
+        return solve(phases, float(n_B), float(eta), spec,
+                     T=float(temperature), x0=x0, analytic_jac=analytic_jac,
+                     check_consistency=check_consistency, species=species)
 
     try:
         if SnB is not None:
@@ -174,9 +168,9 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None, eta=0.0,
     return PointResult(True, "converged", point)
 
 
-def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
-              leptons=True, vmit_params=None, window_only=True,
-              analytic_jac=False, refine="exact", phases=None,
+def eos_table(phases, mode, species=None, axes=None, eta=0.0, fixed=None,
+              leptons=True, window_only=True,
+              analytic_jac=False, refine="exact",
               progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes], with the phase
     boundaries found on each line.
@@ -205,18 +199,15 @@ def eos_table(par, mode, species=None, axes=None, eta=0.0, fixed=None,
         elapsed_s} plus the mixed extras {eta, window}. verbose=True installs
         the built-in one-line printer.
     """
-    if species is None and phases is None:
-        species = default_flags()
     if not 0.0 <= eta <= 1.0:
         raise ValueError(f"eta must lie in [0, 1], got {eta}")
     axes = dict(axes or {})
     fixed = dict(fixed or {})
-    spec = TableSpec(par=par, flags=species if phases is None else None,
-                          mode=mode, axes=axes,
-                          eta=float(eta), vmit_params=vmit_params, fixed=fixed,
+    spec = TableSpec(phases=phases, mode=mode, axes=axes,
+                          eta=float(eta), fixed=fixed,
                           leptons=leptons, window_only=window_only,
                           analytic_jac=analytic_jac, refine=refine,
-                          phases=phases, species=species)
+                          species=species)
     return build_table(spec, progress=progress, verbose=verbose)
 
 
@@ -233,9 +224,9 @@ class HybridResult:
     table: EoSTable = None
 
 
-def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
-                 vmit_params=None, leptons=True, window=None,
-                 analytic_jac=False, phases=None, **conditions):
+def hybrid_table(phases, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
+                 leptons=True, window=None,
+                 analytic_jac=False, **conditions):
     """The stitched hadronic + mixed + quark core EoS at ONE equilibrium.
 
     The mode holds in all three segments: the wings are the pure models' own
@@ -252,27 +243,21 @@ def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
     return value). A malformed call — an unknown mode, a fraction the mode
     does not take, a species flag the mode needs — raises before any solve.
     """
-    if species is None and phases is None:
-        species = default_flags()
     if n_B_grid is None:
         raise ValueError("n_B_grid is required")
     if not 0.0 <= eta <= 1.0:
         raise ValueError(f"eta must lie in [0, 1], got {eta}")
     fracs = _engine_fractions(mode, conditions)      # caller errors raise here
     spec = make_charge_spec(mode, fracs, leptons=leptons)
-    if (mode == "beta_eq_neutrino_trapped" and phases is None
-            and not species.neutrinos):
-        raise ValueError(
-            "beta_eq_neutrino_trapped needs SpeciesFlags(neutrinos=True): "
-            "the hadronic wing solves at fixed Y_Le and must carry the "
-            "neutrino population")
+    # A wing a phase cannot solve at this mode is a MALFORMED CALL, so it
+    # raises here, outside the try below that turns non-convergence into a
+    # status: each adapter validates the spec against its own flags (the DD2
+    # one refuses a trapped spec carrying no neutrino population).
+    validate_wings(phases, spec, T)
     try:
-        table = build_hybrid_table(par, species if phases is None else None,
-                                   n_B_grid, eta, spec,
-                                   vmit_params=vmit_params, T=T,
+        table = build_hybrid_table(phases, n_B_grid, eta, spec, T=T,
                                    analytic_jac=analytic_jac,
-                                   window=window, phases=phases,
-                                   species=species)
+                                   window=window, species=species)
     except NotImplementedError:
         raise                       # an unwired request must never be a status
     except (RuntimeError, ValueError) as err:
@@ -296,9 +281,8 @@ def hybrid_table(par, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
 RESPONSE_FREEZES = ("equilibrium", "chi")
 
 
-def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
-                 T=0.0, eta=0.0, vmit_params=None, leptons=True, rel_dn=1e-3,
-                 phases=None, **conditions):
+def eos_response(phases, mode, species=None, frozen="equilibrium", n_B=None,
+                 T=0.0, eta=0.0, leptons=True, rel_dn=1e-3, **conditions):
     """Second-derivative quantities at one mixed-phase state.
 
     frozen='equilibrium' -- everything re-equilibrates under the perturbation.
@@ -347,13 +331,11 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
         raise NotImplementedError(
             f"frozen={frozen!r} is not wired for the mixed engine; "
             f"implemented: {RESPONSE_FREEZES} (see docs/DEFERRED.md)")
-    if species is None and phases is None:
-        species = default_flags()
     if n_B is None:
         raise ValueError("n_B is required")
     fracs = _engine_fractions(mode, conditions)
     spec = make_charge_spec(mode, fracs, leptons=leptons)
-    slots = mixed_slots(spec, float(eta), species)
+    slots = mixed_slots(spec, float(eta), phases)
 
     if frozen == "chi":
         names = ("chi", "cs2_frozen")
@@ -362,8 +344,8 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     else:
         names = ("chi", "cs2_eq")
 
-    centre = eos_point(par, mode, species, n_B=n_B, T=T, eta=eta,
-                       vmit_params=vmit_params, leptons=leptons, **conditions)
+    centre = eos_point(phases, mode, species, n_B=n_B, T=T, eta=eta,
+                       leptons=leptons, **conditions)
     if not centre.ok:
         out = unconverged_response(
             f"eos_response could not solve its central point "
@@ -376,9 +358,7 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
 
     if frozen == "chi":
         out["cs2_frozen"] = sound_speed_frozen(
-            par, species if phases is None else None, point,
-            vmit_params=vmit_params, rel_dn=rel_dn,
-            leptons=leptons, phases=phases, species=species)
+            phases, point, rel_dn=rel_dn, leptons=leptons, species=species)
         out["converged"] = True
         out["reason"] = "converged"
         return out
@@ -399,9 +379,8 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     x0 = [point.potentials[name] for name in slots]
 
     def state(n, temperature):
-        result = eos_point(par, mode, species, n_B=n, T=temperature, eta=eta,
-                           vmit_params=vmit_params, leptons=leptons, x0=x0,
-                           phases=phases, **conditions)
+        result = eos_point(phases, mode, species, n_B=n, T=temperature,
+                           eta=eta, leptons=leptons, x0=x0, **conditions)
         if not result.ok:
             raise RuntimeError(
                 f"eos_response could not solve its stencil point "

@@ -10,16 +10,16 @@ TOV integration.
 `build_hybrid_table` produces one monotone (n_B, P, eps) table made of three
 segments:
 
-    n_B < n_onset     the pure hadronic phase          (eos/dd2)
+    n_B < n_onset     the pairing's first phase, pure
     in the window     the eta-mixed phase              (eos/mixed)
-    n_B > n_offset    the pure quark phase             (eos/vmit)
+    n_B > n_offset    the pairing's second phase, pure
 
 The whole hybrid is at ONE equilibrium: the mode the `ChargeSpec` declares
 holds in the wings and the window alike — if Y_C is fixed, it is fixed in all
 three segments; if neutrinos are trapped at Y_Le, both wings trap them too.
 Each wing is that phase's own per-mode pure solve, carried as the
-`wing_sweep` capability of its `Phase` (`eos.mixed.adapters`): the DD2 phase
-sweeps `eos.dd2.sweep` in the spec's mode, the vMIT phase its four mode
+`wing_sweep` capability of its `Phase` (`eos.mixed.adapters`) — for the
+DD2 + vMIT pairing, `eos.dd2.sweep` in the spec's mode and vMIT's four mode
 solvers. Only the neutrality locality — eta, local against global — is
 specific to the mixed region: a pure phase has one phase to neutralize, so
 eta has nothing to distribute. A leptonless fixed-Y_C hybrid is a charged
@@ -42,7 +42,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from eos.mixed.adapters import default_pair
 from eos.mixed.boundaries import locate_window
 from eos.mixed.solver import sweep
 
@@ -115,9 +114,33 @@ def _enforce_monotone_pressure(P, n_B):
     return np.maximum.accumulate(P)
 
 
-def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
-                       T=0.0, analytic_jac=False, window=None, phases=None,
-                       species=None):
+def validate_wings(phases, spec, T=0.0):
+    """Raise if either phase cannot supply its pure wing at this spec.
+
+    Two different refusals, both before any solve. A phase with no
+    `wing_sweep` at all cannot be stitched, and says so naming itself. A
+    phase that HAS one but cannot dispatch this spec — a trapped-neutrino
+    spec handed to a hadronic adapter whose flags carry no neutrino
+    population — refuses inside its own `wing_sweep`, which is why the check
+    is a call on an empty grid rather than a list of conditions here: the
+    adapter owns the question.
+
+    `hybrid_table` runs this itself, BEFORE the try/except that turns
+    non-convergence into a status, so a malformed call still raises
+    (CLAUDE.md section 6) instead of coming back as a failed table.
+    """
+    empty = np.asarray((), dtype=float)
+    for phase in phases:
+        if phase.wing_sweep is None:
+            raise NotImplementedError(
+                f"the {phase.name} phase has no wing_sweep capability: the "
+                f"stitched hybrid needs each phase's pure per-mode solve "
+                f"(see docs/DEFERRED.md)")
+        phase.wing_sweep(spec, empty, T)
+
+
+def build_hybrid_table(phases, n_B_grid, eta, spec, T=0.0,
+                       analytic_jac=False, window=None, species=None):
     """Stitch pure hadronic, eta-mixed and pure quark segments into one core
     EoS — every segment at the equilibrium the `spec` declares.
 
@@ -131,28 +154,12 @@ def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
     Returns a `EoSTable` sorted ascending in n_B.
     """
     grid = np.asarray(n_B_grid, dtype=float)
-    if phases is None:
-        if vmit_params is None:
-            from eos.vmit.parameters import Parameters as VMITParameters
-            vmit_params = VMITParameters.default()
-        phases = default_pair(par, flags, vmit_params)
-    for phase in phases:
-        if phase.wing_sweep is None:
-            raise NotImplementedError(
-                f"the {phase.name} phase has no wing_sweep capability: the "
-                f"stitched hybrid needs each phase's pure per-mode solve "
-                f"(see docs/DEFERRED.md)")
+    validate_wings(phases, spec, T)
     p_H, p_Q = phases
-    # Validate the wing dispatch before locating anything (a malformed call
-    # raises here, e.g. a trapped spec without the neutrino population).
-    p_H.wing_sweep(spec, grid[:0], T)
-    p_Q.wing_sweep(spec, grid[:0], T)
 
     if window is None:
-        window = locate_window(par, flags, grid, eta, spec,
-                               vmit_params=vmit_params, T=T,
-                               analytic_jac=analytic_jac, phases=None if par
-                               is not None else phases, species=species)
+        window = locate_window(phases, grid, eta, spec, T=T,
+                               analytic_jac=analytic_jac, species=species)
 
     rows = []                       # (n_B, P, eps, chi, phase)
     n_lo = window.n_onset if window.exists else np.inf
@@ -170,10 +177,8 @@ def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
     if window.exists:
         win_grid = grid[(grid >= n_lo) & (grid <= n_hi)]
         if win_grid.size:
-            for r in sweep(par, flags, win_grid, eta, spec,
-                                 vmit_params=vmit_params, T=T,
+            for r in sweep(phases, win_grid, eta, spec, T=T,
                                  analytic_jac=analytic_jac,
-                                 phases=None if par is not None else phases,
                                  species=species):
                 # A point that drifted outside (0,1) belongs to a pure wing;
                 # the wings below already cover it.
@@ -202,8 +207,7 @@ def build_hybrid_table(par, flags, n_B_grid, eta, spec, vmit_params=None,
                          n_offset=window.n_offset, P_trans=P_trans)
 
 
-def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
-                      phases=None, species=None,
+def mass_radius_mixed(phases, n_B_grid, eta, spec, T=0.0, species=None,
                       crust="BPS", n_transition=0.08, n_ec=160,
                       e_c_min=150.0, e_c_max=3000.0, compute_tidal=True,
                       backend="fast", table=None, tov_parallel=True):
@@ -233,9 +237,8 @@ def mass_radius_mixed(par, flags, n_B_grid, eta, spec, vmit_params=None, T=0.0,
     from eos.astro.tov.crust import have_crust
     from eos.astro.tov.solver import compute_tov_sequence, find_mmax_precise, generate_ec_logspace
     if table is None:
-        table = build_hybrid_table(par, flags, n_B_grid, eta, spec,
-                                   vmit_params=vmit_params, T=T,
-                                   phases=phases, species=species)
+        table = build_hybrid_table(phases, n_B_grid, eta, spec, T=T,
+                                   species=species)
     if crust == "BPS" and not have_crust("BPS"):
         crust = "No"
     e_c_vec = generate_ec_logspace(e_c_min, e_c_max, n_ec)

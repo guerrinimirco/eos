@@ -207,8 +207,11 @@ assembly for a kinetic one --- so the two kinds mix freely in one pair.
 
 \paragraph{The Phase declaration.} Concretely a pairing is two \texttt{Phase}
 records (\texttt{eos.mixed.adapters}), each closing over its own model's
-parameters --- for the composite engine the pair IS the parameter argument.
-Beyond the adapter map (\ref{eq:adapter}) and the potential kind, a phase
+parameters --- for the composite engine the pair IS the parameter argument, in
+the first position of every public entry point, with DD2$+$vMIT one pairing
+among the shipped ones and
+\texttt{adapters.default\_pair(par, flags, vmit\_params)} its named
+constructor. Beyond the adapter map (\ref{eq:adapter}) and the potential kind, a phase
 declares how it may be seeded (a per-solve cache is FORBIDDEN for a
 branch-declared adapter, because there the seed chooses the root --- caching
 would change physics, not speed), an optional cold start from its own
@@ -331,10 +334,12 @@ $C$ is refused because trapped neutrinos are defined on top of
 $\beta$-equilibrium charge, so a fixed $Y_C$ combined with a fixed $Y_{L_e}$ is
 not a defined mode.
 
-Two further refusals are declarations of a \emph{phase} rather than of a mode:
+One further refusal is a declaration of a \emph{phase} rather than of a mode:
 a charge spec conserving $S$ globally raises if either phase declares
-\texttt{supports\_S = False}, and \texttt{SpeciesFlags.sigma\_star} (a
-hidden-strange scalar) is not wired in the hadronic phase.
+\texttt{supports\_S = False}. A sector a phase does not implement is that
+adapter's own refusal --- \texttt{SpeciesFlags.sigma\_star}, a hidden-strange
+scalar, is refused by the DD2 adapter and by DD2's own flag object, not by the
+engine.
 
 \section{The equilibrium system}
 
@@ -470,8 +475,9 @@ s_\gamma = \frac{4\pi^2 T^3}{45 (\hbar c)^3} , \qquad \mu_\gamma = 0 ,
 and they enter only when \texttt{SpeciesFlags.photons} is set, and only at
 $T > 0$. The engine carries its own \texttt{SpeciesFlags}
 (\texttt{eos/mixed/species.py}) with the six names of CLAUDE.md section 4, all
-defaulting to \texttt{False}; the DD2$+$vMIT front door reads the same six off
-the hadronic model's own flag object, since every model carries them.
+defaulting to \texttt{False}. Every model carries the same six names, so a
+caller may hand one model's flag object to both a \texttt{Phase} and the
+mixture without translating it (\texttt{mixture\_flags}).
 
 The six split by where they are consumed. \texttt{hyperons},
 \texttt{deltas}, \texttt{thermal\_mesons} and the \texttt{muons} of the
@@ -657,23 +663,29 @@ Three entry points, with the signatures every model in this repository carries
 plus the arguments a composite engine adds:
 %
 \begin{verbatim}
-eos_point(par, mode, species, n_B=, T=|SnB=, eta=0.0, vmit_params=,
+eos_point(phases, mode, species, n_B=, T=|SnB=, eta=0.0,
           leptons=True, x0=, analytic_jac=, check_consistency=True,
-          phases=, **conditions)
-eos_table(par, mode, species, axes=, eta=0.0, fixed=, leptons=True,
-          vmit_params=, window_only=True, analytic_jac=, refine="exact",
-          phases=, progress=, verbose=)
-eos_response(par, mode, species, frozen="equilibrium", n_B=, T=0.0,
-             eta=0.0, vmit_params=, leptons=True, rel_dn=1e-3,
-             phases=, **conditions)
+          **conditions)
+eos_table(phases, mode, species, axes=, eta=0.0, fixed=, leptons=True,
+          window_only=True, analytic_jac=, refine="exact",
+          progress=, verbose=)
+eos_response(phases, mode, species, frozen="equilibrium", n_B=, T=0.0,
+             eta=0.0, leptons=True, rel_dn=1e-3, **conditions)
 \end{verbatim}
 %
+\texttt{phases} is the pairing --- two \texttt{Phase} objects --- and it
+occupies the position \texttt{par} occupies in a single-phase model, because
+for a composite engine the pair IS the parameter argument. There is no second
+signature: a caller who wants the DD2$+$vMIT hybrid writes
+\texttt{phases=adapters.default\_pair(par, flags, vmit\_params)}, and
+\texttt{phases=(sfho\_phase(...), njl\_phase(...))} is written the same way.
+\texttt{species} is the ENGINE's own \texttt{SpeciesFlags}: the phase-common
+sectors and the muons of the $\eta$-split lepton domains, the per-phase ones
+travelling inside each \texttt{Phase}.
+
 $\nB$ is always the TOTAL baryon density of the mixture, volume-averaged over
-both phases, not the density of either one. \texttt{par}, \texttt{species} and
-\texttt{vmit\_params} are the DD2$+$vMIT front door; \texttt{phases} is the
-general form, and then all three must be \texttt{None}, the two \texttt{Phase}
-objects carrying both models' parameters. \texttt{x0} is a warm start in the
-slot order of \texttt{mixed\_slots(spec, eta, species)}.
+both phases, not the density of either one. \texttt{x0} is a warm start in the
+slot order of \texttt{mixed\_slots(spec, eta, phases)}.
 
 \texttt{eos\_table} takes \texttt{axes} $=$ \texttt{\{'nB': grid, exactly one
 of 'T'/'SnB': grid, and optionally any of 'Y\_C'/'Y\_S'/'Y\_Le'\}} and returns
