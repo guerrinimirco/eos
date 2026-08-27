@@ -2296,6 +2296,12 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 In scope, not yet sharp enough to ticket:
 
+- *(A patch graduated on 2026-08-27: the mode list divergence is now
+  [ticket 98](issues/98-fixed-ys-undeclared-mode.md), surfaced by a BayEoS
+  design session reading `eos` as a downstream consumer. `fixed_YS` is a
+  sixth mode reachable through dd2's public `eos_point` that CLAUDE.md §3
+  does not declare, and the shared `ModeSpec` can build a seventh.)*
+
 - **`active_baryons` is a second instance of the finding ticket 84 named, and
   nobody has counted the rest.** Ticket 86 moved `hadronic_qn` /
   `hadronic_charges` out of `eos/dd2/species.py` into `general/basis.py` under
