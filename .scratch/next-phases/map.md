@@ -428,6 +428,47 @@ against this file, not against the earlier `pytest_before*.txt`.
   suites, not a failure. `hadronic_eos` notebook sites deferred: a concurrent
   session held those files.
 
+- [dd2 cannot adopt the shared T = 0 door without re-freezing three NMP entries](issues/67-dd2-t0-adoption.md):
+  **it adopts, and the title's premise is false — zero `.npz` acts.** dd2 was
+  the last model carrying its own T = 0 Fermi integrals; `kinetic_thermo` now
+  calls `general.fermi_integrals.solve_fermi_t0(mu_eff, m, g, False)` and four
+  closed forms delete, closing §7's finding 24. The re-freeze the title demands
+  is forced only by a gate that **asserts below the stencil**. An `h`-sweep of
+  `compute_nmp` over [5e-5, 3e-3], control vs adoption, put every shifted key
+  under its own noise floor: `Q_sat` 5.1e-4 against 1.5e-3, `K_sat` 1.9e-8
+  against 3.1e-6, `K_sym` 3.1e-9 against 7.7e-6 — and found a FOURTH key on the
+  same floor, `L_sym`, passing `rtol = 1e-10` today by luck of magnitude. So the
+  answer is a **per-key gate, not a re-freeze**: `MEASURED_RTOL` partitions the
+  baseline by h-exact vs h-sensitive (1e-10 / 1e-5 / 3e-3), a partition the
+  sweep draws with no judgement call. Dropping the keys instead would let a
+  genuine 10% `K_sat` regression pass; 1e-5 still catches that with four orders
+  to spare. **A cost the ticket never anticipated**: dd2's EoS quantities are
+  stable to 5.9e-15 but a TOV sequence integrated over that table moves 1.24e-07
+  — and perturbing the table by 1e-15 moves it 1.22e-07, at 1e-12 1.26e-07, a
+  PLATEAU rather than growth, which identifies adaptive-step placement rather
+  than propagated error. Same ruling, same reason. **`test_dd2_m8` was asserting
+  a lottery**: at DD2's OWN NMPs a relative 1e-14 nudge of the target flips the
+  5x5 between converging to 6.7e-11 and returning the published seed
+  bit-for-bit, with `ok = True` either way because ISO_GATE admits the seed's
+  own 2.2e-3 violation. Re-targeting is NOT available — 48 configurations over
+  eight targets, not one holds its verdict across its own six — so the test now
+  asserts the 5x5 default closure at K_sat = 220, stable across all twelve
+  configurations measured. That lottery is larger than this ticket and spun out
+  to [ticket 93](issues/93-invert-nmp-basin-lottery.md), cross-referenced to
+  [ticket 47](issues/47-dd2-nmp-inversion.md), which found the same floor from
+  the other side. **What this ticket got wrong twice, both by generalising a
+  measurement past what it covered**: "the cost is not real" (four tests failed,
+  three outside dd2) and "re-target the knife edge" (no such point exists).
+  Landing note: `test/` is gitignored, so decisions 2 and 3 are landed-in-tree
+  only and never became commits — the `MEASURED_RTOL` dict was instead shown
+  green on HEAD *without* the adoption (`test/baseline` 20 passed, solo), which
+  is the independence the ruling claimed for it.
+  Gate, python.org 3.14.2 on `3781907`, each run solo: **1734 passed, 20
+  skipped, 0 failed** WITH the adoption, byte-identical to the same suite
+  without it, so the adoption changes no test outcome. dd2 `run_full_check`
+  PASS, golden SNM(0.16) `1.40e-05` and CompOSE HS(DD2) `2.83e-05` both
+  UNMOVED; `eos/general/verify` PASS.
+
 - [Phase 6, second half — the conformance pass on nucleation](issues/80-phase6-conformance.md):
   **all four items landed and pushed (`2b2b72f` on `origin/paper-release`); the
   notebook EXECUTES in production mode, 39/39 code cells, zero error outputs.**

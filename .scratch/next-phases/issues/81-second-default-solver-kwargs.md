@@ -243,9 +243,12 @@ Three sentences are owed to CLAUDE.md via
 `_nat` convention, §3 states that `leptons=` defaults to False, and §5's units
 sentence names `s` alongside `n`, `T`, `mu`, `eps` and `P`.
 
-**Noticed, not fixed** (map hard rule — these go to the Stage 7 report): two
-tickets share the number 88 (`88-fixed-composition-coexistence.md` and
-`88-invert-nmp-basin-lottery.md`).
+**Noticed** (map hard rule — these go to the Stage 7 report): two tickets
+shared the number 88, `88-fixed-composition-coexistence.md` and
+`88-invert-nmp-basin-lottery.md`. **Fixed when [ticket 67](67-dd2-t0-adoption.md)
+landed**, which is the ticket that spun the second one out: it is now
+[ticket 93](93-invert-nmp-basin-lottery.md), and the map, ticket 67 and
+`docs/DEFERRED.md` all point at the new number.
 
 Open for execution.
 

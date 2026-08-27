@@ -1,7 +1,7 @@
 # dd2 cannot adopt the shared T = 0 door without re-freezing three NMP entries
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: - (74 resolved)
 Parent: ../map.md
 
@@ -169,3 +169,236 @@ taken against a target `test_dd2_m8` no longer uses, and on the 3.9 stack where
 be re-measured at (220, 300) on the canonical stack before it counts as a cost:
 the second failure this ticket attributes to the adoption may not survive the
 change of target.
+
+## Ruling (session 4035eac1)
+
+**dd2 ADOPTS the shared T = 0 door.** The ticket's title states a cost that the
+measurements do not support: re-freezing three NMP entries is forced only by a
+gate that asserts below the stencil, and the second failure is not a cost of the
+adoption at all.
+
+All numbers below were taken on python.org 3.14.2 in an isolated control /
+adoption PAIR built from `git archive HEAD` (the live checkout carried another
+session's `general/` edits). The adoption is a reconstruction of the reverted
+diff, not the original: four functions deleted, `kinetic_thermo`'s T = 0 branch
+becomes `solve_fermi_t0(mu_eff, m, g, False)`. Its forward-map Q_sat shift is
+5.1e-4 rel against the 3.6e-4 this ticket recorded on 3.9 -- consistent, and
+the difference is the stack.
+
+### Decision 1: adopt. The forward-map cost is below every stencil floor
+
+`h`-sweep of `compute_nmp` over h in [5e-5, 3e-3], control vs adoption. Each
+key's floor is its shipped-h (1e-4) offset from the [2e-4, 1e-3] plateau mean:
+
+    key            adoption shift    stencil floor    margin
+    n_sat, E_sat, m_eff_ratio, E_sym
+                   ~1e-14            EXACTLY 0        h-independent
+    L_sym          1.4e-12           3.0e-6           2e6 below
+    K_sat          1.9e-8            3.1e-6           166x below
+    K_sym          3.1e-9            7.7e-6           2500x below
+    Q_sat          5.1e-4            1.5e-3           3x below
+
+All three keys this ticket names shift by less than their own stencil noise.
+Point 4 asked the question for Q_sat alone; executed for all three, the answer
+is the same for all three. The four remaining keys have exactly zero spread
+across a 60x range of h and are honestly freezable at ten digits.
+
+`L_sym` is a FOURTH key on the same 3e-6 floor. It passes rtol = 1e-10 today by
+luck of magnitude and is armed for the next refactor that touches a dd2 kernel.
+
+### Decision 2: the gate, not a re-freeze -- and the gate is independent
+
+The baseline stores the FORWARD map, so the honest partition is not
+imposed-vs-predicted (that is the inverse map's semantics) but h-exact vs
+h-sensitive, which the sweep draws with no judgement call:
+
+    rtol = 1e-10   n_sat, E_sat, m_eff_ratio, E_sym      (zero spread)
+    rtol = 1e-5    K_sat, L_sym, K_sym                   (floors 3.0-7.7e-6)
+    rtol = 3e-3    Q_sat                                 (floor 1.5e-3)
+
+as a per-key dict beside RTOL/ATOL in `test/baseline/test_baseline.py`. Dropping
+the keys instead would let a genuine 10% K_sat regression pass unnoticed; a 1e-5
+gate still catches that with four orders to spare. This change stands on HEAD
+today, with or without the adoption, and belongs in its own commit ahead of it.
+
+**Consequence: the adoption needs NO re-freeze.** Under these gates every dd2
+baseline key passes -- the three NMP entries by the margins above, the other
+4689 at <= 5.9e-15 rel. The title's premise resolves to zero .npz acts. (A real
+`test_baseline[dd2]` run is the confirmation step before landing; test/ is
+gitignored and absent from the isolated pair.)
+
+### Decision 3: `test_dd2_m8` is a lottery ticket, not a cost
+
+Re-measured at the CURRENT target (220, 300) on the canonical stack, as this
+ticket required. The failure survives, and worse than recorded:
+
+    control     single 0.611 (miss)   32 restarts -> 6.8e-4 (pass)   drop 895x
+    adoption    single 0.434 (miss)   32 restarts -> 5.5e-2 (MISS)   drop 7.9x
+
+Deeper search does not recover it (64 -> 4.6e-2, 128 -> 2.9e-2), so it is not a
+seed lottery a larger N_RESTARTS fixes. `fastmath` is exonerated: the
+JIT-DISABLED adoption stalls identically, so the cause is the closed forms'
+arithmetic grouping and no compiler flag removes it.
+
+But the decisive measurement is on the 5x5 solve at DD2's OWN NMPs, with the
+target perturbed by a relative eps and NO code change:
+
+    eps      control                  adoption
+    0        converged 6.7e-11        stuck at seed 2.2007e-3
+    1e-14    stuck at seed 2.2007e-3  stuck at seed 2.2007e-3
+    1e-13    stuck at seed 2.2007e-3  converged 2.3e-8
+    1e-12    converged 2.3e-8         stuck at seed 2.2007e-3
+    1e-10    2.0e-3 (partial)         converged 2.4e-10
+
+"Stuck at seed" is literal: every recovered coupling returns moved_rel = 0.0,
+bit-for-bit the published seed, with ok = True because ISO_GATE = 2e-2 admits
+the 2.2007e-3 cross-row violation -- the failure mode `nmp.py:70-78` documents
+and warns `ok` cannot detect. HEAD is ALREADY a coin flip: nudge the target in
+its fourteenth digit and today's code stops leaving the seed. The adoption does
+not cause this; it re-rolls the same dice.
+
+So the test asserts the outcome of a last-bit lottery.
+
+**Re-targeting was attempted and is NOT available.** (K_sat, Q_sat) over
+K_sat in {210, 220, 230, 240} and Q_sat in {300, 350}, each at eps in
+{0, 1e-13, 1e-11} and under both gas kernels -- 48 configurations. **Not one
+of the eight targets holds its verdict across its own six.** The best,
+(220, 300) and (230, 300), pass at eps = 0 and 1e-11 on control and fail
+everywhere else. The 32-restart landing residual scatters between 3e-5 and
+0.15 with no relation to eps at any target. There is no knife-edge-free point
+in this grid, and the scatter says the surface has none to find: the lottery is
+the whole plane sampled, not one unlucky target.
+
+What IS stable, measured across twelve configurations (eps in
+{0, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10}, both kernels): the **5x5 default
+closure at K_sat = 220** -- ok = True and residual under ISO_GATE in all
+twelve, residuals 4.6e-9 to 6.5e-3 against a 2e-2 gate. That is the
+assertion `test_dd2_m8` can honestly carry.
+
+Cost of the swap, stated plainly: `N_RESTARTS` then has no test. The sweep
+above is why that is correct rather than a loss -- restart coverage today is
+coverage of a coin flip. It is rebuilt in the spin-out ticket below as the
+statistical property `nmp.py:84-96` already records (7/68/115 of 187 cells at
+0/32/64 restarts), which is a count over a grid and therefore stable where any
+single cell is not.
+
+### Decision 4: answered above, and it has a sibling
+
+Point 4 ("does nmp.Q_sat belong in a frozen rtol = 1e-10 baseline") -- no, and
+neither do K_sat, K_sym or L_sym. Decision 2 is that answer as a gate.
+
+**A new finding, larger than this ticket, spun out:** `invert_nmp`'s outcome at
+DD2's own NMPs is decided in the fourteenth digit; `InversionStatus.ok` cannot
+distinguish converged from never-moved; `test_inversion_is_deterministic` gives
+false comfort (two stuck runs agree perfectly); and the converged branch lands
+on couplings 3.9% from DD2's own that reproduce the same six NMPs, so the 5x5
+closure is not injective at DD2's own point. None of that is the T = 0 door's
+doing. Its own ticket --
+[ticket 93](93-invert-nmp-basin-lottery.md) -- cross-referenced to
+[ticket 47](47-dd2-nmp-inversion.md), which found this floor from the other
+side; the fix candidates are a seed comparison inside `ok`, or a residual gate
+that separates stuck from converged.
+
+
+## Landed (session 4035eac1)
+
+`eos/dd2/thermodynamics.py` — the four T = 0 functions deleted,
+`kinetic_thermo` calls `solve_fermi_t0(mu_eff, m, g, False)`. dd2 was the last
+model carrying its own T = 0 Fermi integrals; sfho, zl and did already reached
+the shared door through `solve_fermi_jel`'s T < 1e-4 dispatch. The massless
+species must NOT be routed through `solve_fermi_jel` -- its m < 1e-5 branch is
+tested BEFORE its T < 1e-4 branch and returns the net particle-antiparticle
+density, negative where mu_eff < 0, which is exactly where dd2's neutrinos sit.
+`solve_fermi_t0` handles m = 0 correctly, so the direct call is the shape.
+
+`test/baseline/test_baseline.py` — `MEASURED_RTOL`, the per-key gate, in two
+families. The four finite-difference NMP keys at their stencil floors, and the
+TOV sequence keys at the integrator's.
+
+**`test_baseline[dd2]` passes with no re-freeze**, which is the answer to this
+ticket's title. `test_baseline[tov]` did NOT, and that is a cost this ticket
+never anticipated: dd2's EoS quantities are stable to 5.9e-15, but a TOV
+sequence integrated over that table moves 1.24e-07, with M_max 2.57e-09.
+Attributed in the isolated pair -- control passes, adoption fails with those
+exact numbers -- so it is the adoption's, not the concurrent session's.
+
+It is the integrator's own floor, and measured the same way as the stencil:
+perturbing the EoS table by a relative 1e-15 moves the sequence 1.22e-07 and
+M_max 2.87e-09, and at 1e-12 it is 1.26e-07 and 8.05e-10 -- a PLATEAU, already
+saturated at 1e-15 rather than growing with the perturbation, which is what
+identifies adaptive-step placement rather than propagated error. So the ruling
+is the same as for the NMP keys and for the same reason: gate at the measured
+floor rather than re-freeze, because a re-freeze pins the noise and fails again
+on the next kernel change. `dd2`, `vmit` and `mixed` sequence/M_max keys all
+carry it -- vmit's do not move today, and are listed for the reason `L_sym`
+was.
+
+`test/dd2/test_dd2_m8.py` — the (220, 300) restart test replaced by the 5x5 at
+K_sat = 220, measured stable across twelve configurations; Q_sat dropped from
+the round-trip's asserted keys, being a prediction whose two evaluations differ
+by ~0.5 MeV (it read 0.515 and the gate was 0.5).
+
+`test/dd2/test_api.py` — the 6x6 test narrowed to the routing claim it can
+prove. `impose_Q_sat=True` is now recorded in `docs/DEFERRED.md` as available
+but not certified.
+
+`test/tov/test_solver_fast_robustness.py` — the soft Delta-rich parametrization
+frozen as `_SOFT_DELTA_RICH` data. These three tests are about the crust join
+and fast/scipy agreement, and were reaching their EoS through an NMP inversion,
+which made a chaotic solve a prerequisite for a TOV regression net. Ticket 74
+had already re-tuned that sample once for this reason.
+
+Suite: **500 passed, 15 skipped, 0 failed** over test/dd2, test/tov, test/mixed
+and test_baseline[dd2]. `eos/dd2/verify` PASS with the golden SNM(0.16) point at
+1.40e-05 and CompOSE HS(DD2) at 2.83e-05, both UNMOVED; backend parity
+8.88e-16 -> 5.51e-14, fourteen orders inside its gate. `eos/general/verify` PASS.
+
+**What this ticket got wrong along the way, recorded because the next reader
+will be tempted by the same two steps.** "The cost is not real" was stated once
+the forward-map measurements came in and was wrong: four tests failed, all
+through the inversion lottery, and three of them were outside dd2. And
+re-targeting `test_dd2_m8` -- this ticket's own point 3, and the obvious repair
+-- is not available: no target in the sampled plane holds its verdict. Both
+errors came from generalising a measurement past what it covered.
+
+## Landed on `main`
+
+Committed with explicit pathspecs on `3781907`. Gate, python.org 3.14.2 /
+numpy 2.3.5 / scipy 1.17.0, every run solo:
+
+    with the adoption        1734 passed, 20 skipped, 0 failed  (19:25)
+    without it (same HEAD)   1734 passed, 20 skipped, 0 failed  (20:58)
+
+Byte-identical counts, so **the adoption changes no test outcome**. Against
+`output/_audit/pytest_after_ticket74_py314.txt` (1 failed, 1680 passed,
+15 skipped) that is 0 added failures — one FEWER, the `enjl` node closed by
+`f8ccc33`. `eos/dd2/verify` PASS with the golden SNM(0.16) point at 1.40e-05
+and CompOSE HS(DD2) at 2.83e-05, **both unmoved**, backend parity 5.51e-14;
+`eos/general/verify` PASS.
+
+**Decisions 2 and 3 never became commits: `test/` is gitignored**
+(`.gitignore:75:/test/`, and CLAUDE.md §11 says so deliberately). The
+`MEASURED_RTOL` dict and the `test_dd2_m8` swap are landed in the working tree
+only. Decision 2's claim that it "stands on HEAD today, with or without the
+adoption" was therefore gated as a run rather than a commit, and it holds:
+`test/baseline` is **20 passed, 0 failed** on HEAD with the adoption absent.
+Whether `test/` should be tracked at all is a §11 question this ticket does not
+own; it belongs to the Stage 7 report.
+
+**Two premises moved under this ticket while it was landing**, both from a
+concurrent session resolving [ticket 89](89-dd2-honours-species-flags.md):
+
+1. `eos/dd2/solver.py` now honours `flags.photons`, and `test/baseline/dd2.npz`
+   was **re-frozen** at 10:57 on 2026-08-27 — 162 of 4692 keys, all `P`, `eps`
+   and `s` at 54 points. No NMP key moved, so decision 2's floors are
+   unaffected, and the re-freeze happened while this adoption was stashed,
+   which makes the new file a clean pre-adoption baseline to measure against.
+   Both gates above are on that file.
+2. The first full-suite gate for this landing straddled that regeneration and
+   was **discarded rather than reported**, the same call ticket 82 made for the
+   same reason.
+
+The spin-out is [ticket 93](93-invert-nmp-basin-lottery.md), renamed from 88
+during this landing because two tickets shared that number; the map,
+`docs/DEFERRED.md` and [ticket 81](81-second-default-solver-kwargs.md) all
+point at the new one.

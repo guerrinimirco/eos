@@ -1079,6 +1079,33 @@ decision that cannot be made before the tables exist.
 ## Per model
 
 ### dd2
+- `nmp.invert_nmp(impose_Q_sat=True)` — the 6x6 isoscalar closure — has no
+  target known to converge reproducibly, so the option is available but not
+  certified. At DD2's own nuclear-matter parameters it does not converge at
+  all: hybr returns the published seed after 25 evaluations with status 5 and
+  48 jittered restarts never beat the 2.201e-03 cross-constraint violation the
+  published couplings carry. Away from that point the verdict is decided in the
+  target's last bits — a relative 1e-14 perturbation flips it between
+  converging to 6.7e-11 and returning the seed bit-for-bit — and a sweep of
+  eight targets over K_sat in {210, 220, 230, 240} and Q_sat in {300, 350},
+  each at three perturbations under two gas kernels, found none that holds its
+  verdict across its own configurations. The cause is the stencil: the Q_sat
+  row, scaled by 1e-2, moves 7.1e-04 under hybr's own 1.49e-08 probe step
+  against a base residual of 1.5e-03, so half of its Jacobian column is
+  finite-difference noise.
+
+  The same lottery reaches the 5x5 default closure, which is the more serious
+  half: it too returns the seed unmoved on a 1e-14 target perturbation, and
+  `InversionStatus.ok` cannot tell that from a converged solve because
+  ISO_GATE = 2e-2 admits the seed's own 2.2e-03 violation. What is NOT
+  available as a workaround is dropping Q_sat: the 5x5 keeps the system square
+  by PINNING c_omega, so it has less freedom than the 6x6, not more, and at a
+  hard target (K_sat = 220 with L_sym = 30) it fails where the 6x6 succeeds.
+
+  Ticket 93 owns this. What depends on it today: nothing in the library — every
+  shipped path uses the 5x5 default at targets near DD2's own — and no test
+  asserts a 6x6 verdict, `test_api.test_Q_sat_in_the_dict_selects_the_6x6_closure`
+  having been narrowed to the routing claim.
 - `table.hadronic_row` emits a Y_C and Y_S that are BARYONS ONLY, while the
   `EoSPoint` it flattens carries the totals. It recomputes them itself:
 
