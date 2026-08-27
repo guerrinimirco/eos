@@ -82,6 +82,37 @@ the comment is describing a real gap in the wrong tone; if it is an internal
 arm, dd2's public `MODE_FRACTIONS` should not carry it and the mirror becomes
 true by deletion.
 
+### The blast radius differs by a factor of ten between the two arms
+
+Counted, not assumed, after a peer session raised it: the package holds
+**eleven** `MODE_FRACTIONS` dicts — `abpr`, `alphabag`, `ccdm`, `dd2`, `did`,
+`enjl`, `njl`, `zl` solvers plus `mixed`, `sfho`, `vmit` tables — and
+`"fixed_YS"` appears as a key in **exactly one of them, dd2**
+(`solver.py:885`, and in dd2's other public dict `MODES` at `:875`; the two
+are consistent with each other).
+
+This cuts against reading it as a §3 mode the rest of the package merely has
+not caught up to. A §3 mode is one every model either exposes or explicitly
+raises on with a message saying which; ten of eleven do neither — the key is
+simply absent, so a caller falls through to `ValueError: unknown mode` listing
+what that model does have. Declaring it in §3 makes the fix **ten models
+wide**; demoting it makes the fix one comment and one key.
+
+And the absence is not a physics limitation. `sfho/table.py:75` and
+`did/solver.py:81` both carry `fixed_YC_YS`, so both already hold Y_S fixed —
+they have the strangeness machinery and lack only the charge-EQUILIBRATED
+variant. `sfho` is the other DD-RMF, the model closest to dd2 in physics and
+in shape, and it does not have the key. (`zl` lacking `fixed_YC_YS` altogether
+is the one case §3 already explains: "physically meaningless (fixed_YC_YS for
+nucleonic ZL)". Spec and code agree there.)
+
+So the one-model footprint, plus `general/modes.py` being able to build the
+name structurally, reads as the second arm: an internal capability of the
+shared `ModeSpec` that leaked into a single model's public surface. **That is
+evidence for the ruling, not the ruling** — a mode wanted by a downstream
+consumer on models that do not have it is exactly how a real gap would also
+look from here.
+
 ### One input, weighted as an input and not as a decision
 
 The BayEoS session (a §6 use case 5 consumer — a downstream physics package)
