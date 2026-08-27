@@ -757,7 +757,8 @@ par   = DD2Parameters.default()          # the hadronic side's parameters
 flags = DD2Flags(muons=True)             # and its species flags
 qpar  = VMITParameters.default()         # the quark side's parameters
 
-for phase in (adapters.dd2_phase(par, flags), adapters.vmit_phase(qpar)):
+pair = adapters.default_pair(par, flags, qpar)   # == (dd2_phase, vmit_phase)
+for phase in pair:
     print(f"{phase.name:5s} baryon slot = {phase.slot('H'):16s} "
           f"supports_S = {phase.supports_S}")
 ```
@@ -774,18 +775,26 @@ property of the phase, never an engine assumption. That is the phase-adapter
 contract: the engine maps `(baryon potential, mu_C, mu_S, T)` to a
 `PhaseThermo` block and knows nothing else about either model.
 
-DD2 + vMIT is the pairing with published results behind it, so it also has a
-front door — `par`, `flags`, `vmit_params=` in the positions every model uses
-— which is what the rest of this example calls. The general form is
-`phases=(hadronic, quark)`, with `par` and `species` then `None`.
+That pair IS the engine's parameter argument, and it sits in the first
+position of every public entry point — the position `par` occupies in a
+single-phase model. DD2 + vMIT is the pairing with published results behind
+it, so it gets a named constructor, `adapters.default_pair(par, flags,
+vmit_params)`; it is then handed over exactly the way
+`(sfho_phase(...), njl_phase(...))` is. The `species` argument beside it is
+the ENGINE's own `eos.mixed.SpeciesFlags`: the sectors that belong to the
+mixture — photons, and whether muons join the neutralizing lepton domains —
+with the per-phase sectors travelling inside each `Phase`.
 
 ### 11.2 One point inside the mixed phase
 
 ```python
 from eos.mixed.api import eos_point
 
-res = eos_point(par, "beta_eq_neutrinoless", flags,
-                n_B=0.75, T=0.0, eta=0.0, vmit_params=qpar)
+from eos.mixed import SpeciesFlags as MixedFlags
+
+species = MixedFlags(muons=True)         # the mixture's own sectors
+res = eos_point(pair, "beta_eq_neutrinoless", species,
+                n_B=0.75, T=0.0, eta=0.0)
 print(res.ok, res.message)
 
 pt = res.point
@@ -842,8 +851,8 @@ import numpy as np
 from eos.mixed.api import hybrid_table
 
 n_B_grid = np.linspace(0.05, 1.30, 220)
-out = hybrid_table(par, "beta_eq_neutrinoless", flags, n_B_grid=n_B_grid,
-                   eta=0.0, T=0.0, vmit_params=qpar)
+out = hybrid_table(pair, "beta_eq_neutrinoless", species,
+                   n_B_grid=n_B_grid, eta=0.0, T=0.0)
 print(out.ok, out.message)
 
 tab = out.table
@@ -926,8 +935,8 @@ conditioning is always explicit, and a returned name says which — never a bare
 from eos.mixed.api import eos_response
 
 for frozen in ("equilibrium", "chi"):
-    r = eos_response(par, "beta_eq_neutrinoless", flags, frozen=frozen,
-                     n_B=0.75, T=0.0, eta=0.0, vmit_params=qpar)
+    r = eos_response(pair, "beta_eq_neutrinoless", species, frozen=frozen,
+                     n_B=0.75, T=0.0, eta=0.0)
     name = "cs2_eq" if frozen == "equilibrium" else "cs2_frozen"
     print(f"frozen={frozen:12s} phase={r['phase']:3s} chi={r['chi']:.6f}  "
           f"{name} = {r[name]:.6f}")

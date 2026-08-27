@@ -555,8 +555,8 @@ def _vmit_frozen_block(params, n_u, n_d, n_s, T):
 # THE SHIPPED PAIRINGS
 # =============================================================================
 # Each factory closes over one model's parameters and returns a `Phase`.
-# A pairing is any two of them; `default_pair` is the DD2 + vMIT hybrid the
-# engine's plain (par, flags, vmit_params) signatures have always meant.
+# A pairing is any two of them, and every one of them is written the same
+# way; `default_pair` names the DD2 + vMIT one for convenience only.
 
 def dd2_phase(par, flags):
     """The DD2 hadronic phase as a `Phase` (kinetic potential slot)."""
@@ -682,21 +682,18 @@ def vmit_phase(params=None):
                  frozen_thermo=frozen_thermo, jacobian_block=jac)
 
 
-def default_flags():
-    """The hadronic flags the DD2 + vMIT front door falls back on.
+def default_pair(par, flags=None, vmit_params=None):
+    """The DD2 + vMIT pairing, as a `Phase` pair.
 
-    That front door is a named convenience for ONE pairing (CLAUDE.md §5), so
-    its default species set is that pairing's hadronic model's own — which
-    carries §4's six names, and therefore serves the mixture as well
-    (`eos.mixed.species.mixture_flags`).
+    A named convenience for ONE pairing, and nothing more: it occupies no
+    position in any signature that `(sfho_phase(...), njl_phase(...))` cannot
+    occupy equally, which is the whole of what makes DD2 and vMIT ordinary
+    here. `flags` is DD2's own `SpeciesFlags` (the hadronic phase's per-model
+    sectors); the mixture's phase-common ones are the engine's `species=`
+    argument, not this.
     """
-    return DD2SpeciesFlags()
-
-
-def default_pair(par, flags, vmit_params=None):
-    """The DD2 + vMIT pairing every plain (par, flags, vmit_params)
-    signature builds — the engine's historical default."""
-    return dd2_phase(par, flags), vmit_phase(vmit_params)
+    return dd2_phase(par, DD2SpeciesFlags() if flags is None else flags), \
+           vmit_phase(vmit_params)
 
 
 def sfho_phase(par, flags):
