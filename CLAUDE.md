@@ -186,6 +186,17 @@ be zero" — if a sector is off, its flag is False. Setting a flag a model does
 not implement RAISES; a NotImplementedError is never turned into a silent
 no-op.
 
+**Defaults, including a model's own flags.** Every flag above defaults to
+False, so `SpeciesFlags()` means one thing in every model and no call inherits
+a sector it did not name. A model may add flags for physics only it has
+(`phi_field`, `gluons`, `csc`), and those follow the same rule: **a flag with
+two legal values is a DEFAULT and is False; a flag with only one legal value
+RAISES on the other and is a STATEMENT about the model.** There is no third
+category — nothing defaults to True and quietly accepts False, because that is
+the same implicit switch-on this section forbids, wearing a model-specific
+name. `enjl` is the single exemption and is the second kind throughout: it
+fixes every flag and raises on any move.
+
 ## 5. Uniform model API
 
 Every model exposes the same entry points with the same signatures:

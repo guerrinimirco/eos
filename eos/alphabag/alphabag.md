@@ -212,7 +212,10 @@ own correction factor:
 They satisfy `eps_g + P_g = 4 P_g = T s_g` and carry no conserved charge, so
 switching them on shifts `P`, `eps` and `s` and nothing else. They vanish
 identically at `T = 0`. `gluons` is this model's own sector flag: no other
-model in the repository has one.
+model in the repository has one. It defaults to `False`, like every other flag
+here: a flag with two legal values is a default and is off unless asked for,
+whatever its name, and a bag model without a thermal gluon gas is the standard
+MIT configuration rather than a broken one.
 
 
 ## The colour-flavour locked phase

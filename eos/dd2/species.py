@@ -17,6 +17,14 @@ matter-composition electron neutrino of the trapped modes, a different sector.
 
 Also wired, as dd2's own physics: trapped neutrinos and the hidden-strange
 vector phi. The hidden-strange scalar sigma* is not.
+
+EVERY flag here defaults to False, dd2's own included. A flag with two legal
+values is a default and must be off unless asked for; a flag with only one
+legal value raises on the other instead of defaulting (sigma_star,
+thermal_neutrinos). `phi_field` is the case worth naming: it is read only as
+`flags.phi_field and flags.hyperons`, so it is inert in nucleonic matter, but
+a hyperonic DD2Y run must ask for it -- Fortin (2017) fits the octet with the
+SU(6) phi coupling, and omitting the field leaves that coupling unused.
 """
 from dataclasses import dataclass
 
@@ -34,7 +42,10 @@ class SpeciesFlags:
     photons: bool = False               # radiation (matters only at T>0)
     neutrinos: bool = False             # matter-composition ν_e of the trapped
                                         # modes — NOT thermal_neutrinos above
-    phi_field: bool = True              # hidden-strange VECTOR φ (DD2Y default)
+    phi_field: bool = False             # hidden-strange VECTOR φ: inert unless
+                                        # hyperons are on, and off unless asked
+                                        # for. DD2Y carries it -- a hyperonic
+                                        # DD2Y run wants phi_field=True
     sigma_star: bool = False            # hidden-strange SCALAR σ* (later)
     thermal_vectors: bool = False       # thermal ρ,ω,K*,φ Bose gas: section 4's
                                         # "optionally the vector nonet"

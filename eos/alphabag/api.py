@@ -80,8 +80,8 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     mode : str
         One of the keys of `eos.alphabag.solver.MODE_FRACTIONS`.
     species : SpeciesFlags
-        The active degrees of freedom; the default has photons, gluons and
-        the untracked thermal neutrino flavours on.
+        The active degrees of freedom. Every flag defaults to False, `gluons`
+        included: a sector is off unless the caller asks for it.
     n_B : float
         Baryon density [fm^-3].
     T, SnB : float

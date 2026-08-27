@@ -14,7 +14,12 @@ condition (both beta-equilibrium modes, and the fixed-fraction modes with
 
 `gluons` is this model's own sector, which no other model in the repository
 has: a thermal gluon gas with its own alpha_s correction. It contributes to
-eps, P and s only, carries no conserved charge, and vanishes at T = 0.
+eps, P and s only, carries no conserved charge, and vanishes at T = 0. It
+defaults to False like every other sector here: a flag with two legal values
+is a default and must be off unless asked for, whether or not its name is one
+the whole repository shares. A bag model without a thermal gluon gas is the
+standard MIT configuration, not a broken one, which is why this flag defaults
+rather than being fixed the way `abpr` fixes it.
 """
 from dataclasses import dataclass
 
@@ -28,7 +33,11 @@ class SpeciesFlags:
     gluons            -- a thermal gluon gas, 16 massless bosons at mu = 0
                          with the correction factor 1 - 15 alpha_s/(4 pi).
                          Same bookkeeping as the photons, and this model's
-                         own sector.
+                         own sector. In the `cfl` mode the gluons are massive
+                         through the Meissner effect and their thermal
+                         population is suppressed, so the free gas this flag
+                         adds is not part of the paired phase's own potential;
+                         see the model document.
     thermal_neutrinos -- the neutrino flavours NOT tracked in the composition,
                          carried as mu = 0 gases: three where the electron
                          neutrino is free-streaming, two where it is trapped
@@ -41,7 +50,7 @@ class SpeciesFlags:
     thermal_mesons    -- hadronic sectors, meaningless in a deconfined phase.
     """
     photons: bool = False
-    gluons: bool = True
+    gluons: bool = False
     thermal_neutrinos: bool = False
     muons: bool = False
     hyperons: bool = False

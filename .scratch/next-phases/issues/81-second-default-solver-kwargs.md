@@ -253,17 +253,27 @@ Open for execution.
 
 ## Note from [ticket 82](82-alphabag-gluons-default.md) (2026-08-26)
 
-`alphabag.SpeciesFlags.gluons` flipped `True -> False`, so `include_gluons`
-joins the list this ticket owns. All three of alphaBag's thermal sectors are
-now in the same state: the flag says off, the bare solver kwarg says
-`True`. 82 deliberately did NOT flip one of the three — flipping
-`include_gluons` alone would make `alphabag/solver.py` internally inconsistent
-with `include_photons` and `include_thermal_neutrinos`, which is worse than the
-layer disagreement this ticket exists to close wholesale.
+Written after this ticket was resolved, and it does not reopen anything —
+§2's answer (delete the three kwargs into the flags) already covers `gluons`.
+What it adds is a measurement §2 could not have had, and one consequence for
+[ticket 90](90-solver-signature-and-units-sweep.md), which executes §2.
 
-**Measured cost, for this ticket's planning.** `test/baseline/case_alphabag`
-calls the raw solvers and names none of the three kwargs, so flipping them
-WILL move alphaBag baseline keys — which ticket 82 did not. The size is
-exactly the thermal terms: at n_B = 0.8, `beta.T10` moves `P` by
--1.465838e-03 and `beta.T30` by -1.187329e-01 MeV/fm^3 for the gluons alone,
-and `T0` rows do not move at all.
+Ticket 82 flipped `alphabag.SpeciesFlags.gluons` `True -> False`, on the rule
+that a flag with two legal values is a default and is off. So all three of
+alphaBag's thermal sectors now read the same way: flag `False`, bare solver
+kwarg still `True`, pending §2.
+
+**The consequence.** `test/baseline/case_alphabag` calls the raw solvers and
+names none of the three kwargs. Once §2 deletes them into the flags, those
+rows pick up the flag defaults, which are now all `False` — so the deletion
+MOVES alphaBag baseline values. Ticket 90 currently says "no value moves in
+any of it". That was already untrue for `photons` and `thermal_neutrinos`
+(ticket 65 flipped those defaults); ticket 82 adds `gluons` to the same list.
+Sizes, at n_B = 0.8 through `eos_point`:
+
+    beta.T0     P unchanged (every thermal sector vanishes at T = 0)
+    beta.T10    P  -1.465838e-03 MeV/fm^3   gluons alone
+    beta.T30    P  -1.187329e-01 MeV/fm^3   gluons alone
+
+Ticket 82 itself moved NO baseline key, because the flag never reaches those
+raw solvers today — which is exactly the coverage gap §2 closes.

@@ -70,7 +70,8 @@ MODES = ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
 #: `SpeciesFlags` carries under these names. Nucleons are always present;
 #: everything else is an explicit boolean, and setting one a model does not
 #: implement raises rather than being silently ignored. A model adds flags of
-#: its own for physics only it has (`phi_field`, `gluons`, `csc`).
+#: its own for physics only it has (`phi_field`, `gluons`, `csc`); those
+#: default by the same rule as these six, below.
 #:
 #: All ten models carry all six names: the six keywords construct a
 #: `SpeciesFlags` anywhere, and no model answers them with a TypeError that
@@ -86,9 +87,16 @@ MODES = ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
 #: flag is False" costs at the default row, and it is a behaviour change from
 #: the versions where `photons` defaulted True in six models and `muons` in
 #: five -- a T > 0 call that relied on the default no longer carries the
-#: photon gas, and must ask for it. A model's OWN flags are not covered:
-#: `phi_field`, `gluons` and `csc` are that model's physics and default where
-#: the model says. `enjl` is the one exemption, and a different kind of
+#: photon gas, and must ask for it. A MODEL'S OWN FLAGS FOLLOW THE SAME RULE:
+#: a flag with two legal values is a DEFAULT and is False, whatever its name;
+#: a flag with only one legal value RAISES on the other and is a STATEMENT
+#: about the model rather than a default. There is no third category. So
+#: `alphabag.gluons` and `dd2.phi_field` are False (both values are legal
+#: physics -- a bag model without a thermal gluon gas is the standard MIT
+#: configuration, and dd2 reads `phi_field` only as `phi_field and hyperons`),
+#: while `sfho.phi_field` and `did.phi_field` stay True and raise on False,
+#: because those two models always solve the field. `njl.csc` and `ccdm.csc`
+#: were already False. `enjl` is the one exemption, and a different kind of
 #: default -- it fixes every flag and RAISES on any move, so its
 #: `hyperons=True` states which baryons the model has rather than a
 #: convenience the caller inherited.

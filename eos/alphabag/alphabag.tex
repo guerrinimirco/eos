@@ -282,7 +282,11 @@ n_g = 0 .
 %
 They satisfy $\varepsilon_g + P_g = 4 P_g = T s_g$ and carry no conserved
 charge, so switching them on shifts $P$, $\varepsilon$ and $s$ and nothing
-else. They vanish identically at $T = 0$. \texttt{gluons} is this model's own
+else. They vanish identically at $T = 0$. The flag defaults to \texttt{False},
+like every other flag of this model: a flag with two legal values is a default
+and is off unless asked for, whatever its name, and a bag model without a
+thermal gluon gas is the standard MIT configuration rather than a broken one.
+\texttt{gluons} is this model's own
 sector flag: no other model in the repository has one.
 
 \section{The colour--flavour locked phase}

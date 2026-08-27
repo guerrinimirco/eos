@@ -66,3 +66,26 @@ njl/ccdm/enjl. `par` is required in two models, optional in seven, and spelled
   because `flags` is required, the generator's 6 call sites name
   `photons=True` and reproduce the frozen rows exactly. A moved row there
   means the flags were mis-translated, not that the numbers were due to move.
+
+---
+
+## Note from [ticket 82](82-alphabag-gluons-default.md) (2026-08-26)
+
+**"No value moves" does not hold for alphaBag.** Section 2's deletion of
+`include_photons` / `include_gluons` / `include_thermal_neutrinos` into the
+flags moves `test/baseline/case_alphabag`, because that generator calls the
+raw solvers and names none of the three; once they read the flags it picks up
+the defaults, and all three alphaBag defaults are now `False` — `photons` and
+`thermal_neutrinos` since [ticket 65](65-species-flag-defaults.md), `gluons`
+since [ticket 82](82-alphabag-gluons-default.md).
+
+Measured through `eos_point` at n_B = 0.8, for the gluon sector alone:
+
+    beta.T0     unchanged — every thermal sector vanishes at T = 0
+    beta.T10    P  -1.465838e-03 MeV/fm^3
+    beta.T30    P  -1.187329e-01 MeV/fm^3
+
+`zl` and `vmit` carry the same shape for `include_photons`. So this ticket
+needs a baseline regeneration and its own key-by-key diff after all, or the
+three affected models split out the way [ticket 89](89-dd2-honours-species-flags.md)
+was — which was the right instinct applied to the wrong model.

@@ -67,13 +67,14 @@ the library and the examples but no `test/` directory.)
 import eos                                   # milliseconds; no model is imported yet
 
 par   = eos.dd2.Parameters.named("DD2Y")     # parameters are ARGUMENTS
-flags = eos.dd2.SpeciesFlags(hyperons=True)  # every degree of freedom is explicit
+flags = eos.dd2.SpeciesFlags(hyperons=True,  # every degree of freedom is explicit
+                             phi_field=True) # DD2Y is fitted with the SU(6) phi
 res   = eos.dd2.eos_point(par, "beta_eq_neutrinoless", flags, n_B=0.32, T=10.0)
 print(res.ok, res.point.P)                   # convergence is a RETURN VALUE
 ```
 
 ```
-True 32.27157556177297
+True 32.431587607228806
 ```
 
 The model packages, the composite engine and `eos.astro` are imported on first
@@ -159,8 +160,19 @@ matter-composition electron neutrino of the trapped modes, a different sector.
 `SpeciesFlags()` means the same thing everywhere and no call quietly inherits
 a sector it did not name. Ask for what the physics needs:
 `SpeciesFlags(muons=True, photons=True)` is the usual neutron-star matter at
-T > 0. Only the six are covered; a model's own flags (`phi_field`, `gluons`,
-`csc`) default where that model's physics says. `enjl` is the one exemption
+T > 0.
+
+**A model's own flags follow the same rule.** A flag with two legal values is
+a *default* and is `False`, whatever its name; a flag with only one legal
+value *raises* on the other and is a *statement* about the model rather than a
+default. There is no third category — nothing defaults to `True` and quietly
+accepts `False`. So `alphabag.gluons` and `dd2.phi_field` are `False` (both
+values are legal physics: a bag model without a thermal gluon gas is the
+standard MIT configuration, and `dd2` reads `phi_field` only in conjunction
+with `hyperons`, so it is inert in nucleonic matter), while `sfho.phi_field`
+and `did.phi_field` are `True` and raise on `False`, because those two models
+always solve the field. A **hyperonic DD2Y** run must therefore ask:
+`SpeciesFlags(hyperons=True, muons=True, phi_field=True)`. `enjl` is the one exemption
 and a different kind of default: it fixes every flag and raises on any move,
 so its `hyperons=True` states which baryons the model has (p, n, Lambda)
 rather than a default a caller could have changed.
@@ -324,7 +336,8 @@ table raises rather than quietly returning a smaller star.
 from eos.dd2 import Parameters, SpeciesFlags, eos_point
 
 par = Parameters.named("DD2Y")                    # the hyperonic parameter set
-flags = SpeciesFlags(hyperons=True, muons=True, photons=True)
+flags = SpeciesFlags(hyperons=True, muons=True, photons=True,
+                     phi_field=True)              # DD2Y carries the SU(6) phi
 
 res = eos_point(par, "beta_eq_neutrinoless", flags, n_B=0.6, T=0.0)
 print(res.ok, res.message)
