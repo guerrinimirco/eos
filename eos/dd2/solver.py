@@ -861,7 +861,6 @@ def solve(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
 #:   beta_eq_neutrino_trapped  ... with neutrinos trapped at fixed Y_Le
 #:   fixed_YC                  fixed non-leptonic charge fraction
 #:                             (the CompOSE general-purpose (nB, T, Y_q) slice)
-#:   fixed_YS                  charge-neutral, strangeness fraction fixed
 #:   fixed_YC_YS               both fractions fixed
 #:
 #: Whether the neutralizing leptons are present is the orthogonal `leptons`
@@ -872,7 +871,6 @@ def solve(par, n_B, flags, T=0.0, x0=None, charge_mode="neutral",
 MODES = {
     "beta_eq_neutrinoless": dict(charge_mode="neutral"),
     "fixed_YC": dict(charge_mode="fixed", takes_leptons=True),
-    "fixed_YS": dict(charge_mode="neutral", strange_mode="fixed"),
     "fixed_YC_YS": dict(charge_mode="fixed", strange_mode="fixed"),
     "beta_eq_neutrino_trapped": dict(charge_mode="neutral",
                                      lepton_mode="trapped"),
@@ -882,7 +880,7 @@ MODES = {
 #: grid or as a scalar in `TableSpec.fixed`. Mirrors
 #: `eos.mixed.MODE_FRACTIONS`, which names the four modes both engines share.
 MODE_FRACTIONS = {
-    "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",), "fixed_YS": ("Y_S",),
+    "beta_eq_neutrinoless": (), "fixed_YC": ("Y_C",),
     "fixed_YC_YS": ("Y_C", "Y_S"), "beta_eq_neutrino_trapped": ("Y_Le",),
 }
 
@@ -933,7 +931,7 @@ def solve_hadronic(par, flags, n_B, T=0.0, mode="beta_eq_neutrinoless",
     `eos.mixed.solve`, so both engines are driven the same way.
 
     mode  : one of `eos.dd2.MODES` — 'beta_eq_neutrinoless',
-            'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YS', 'fixed_YC_YS'.
+            'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_YS'.
     leptons: for fixed_YC, whether the neutralizing leptons are present. The
             orthogonal flag of CLAUDE.md section 3, not part of the mode name.
             None leaves it at DD2's leptonless default; on a beta-equilibrium

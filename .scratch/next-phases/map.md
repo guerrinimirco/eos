@@ -27,15 +27,20 @@ same test: the port left two `nucleation` goldens comparing round-off, and the
 criteria block's first line is "pytest ... fully green".
 
 **THE STAGE 7 REPORT IS WRITTEN** ([ticket 25](issues/25-acceptance.md),
-2026-08-27), with real tool output behind every claim. **Ten of the eleven
-Acceptance criteria pass.** The eleventh — "its mode coverage matches what
-CLAUDE.md claims" — fails on exactly one name in exactly one model, `dd2`'s
-`fixed_YS`, which is [ticket 98](issues/98-fixed-ys-undeclared-mode.md) and is
-open. That is the only thing between this map and its Destination; the nine
-other open tickets are all non-gating by their own text — the ninth is
-[ticket 99](issues/99-quark-ea-at-zero-pressure.md), charted 2026-08-27 on
-the user's request: E/A at P = 0 for two- and three-flavour quark matter, the
-Bodmer-Witten window, whose two-flavour arm waits on ticket 98's ruling.
+2026-08-27), with real tool output behind every claim. **All eleven Acceptance
+criteria now pass.** The eleventh — "its mode coverage matches what CLAUDE.md
+claims" — failed on exactly one name in exactly one model, `dd2`'s `fixed_YS`,
+and [ticket 98](issues/98-fixed-ys-undeclared-mode.md) **ruled it on
+2026-08-27**: not a mode, demoted to an internal `ModeSpec` label. Re-probing
+10 models x 7 names through `eos_point` now returns `{}` where it returned
+`{'dd2': ['fixed_YS']}`, and the result is held by
+`test_imports.py::test_every_model_exposes_only_section_3_modes` rather than
+by prose. **That was this map's last gating criterion.** The remaining open
+tickets are non-gating by their own text — among them
+[ticket 99](issues/99-quark-ea-at-zero-pressure.md), charted 2026-08-27 on the
+user's request: E/A at P = 0 for two- and three-flavour quark matter, the
+Bodmer-Witten window, whose two-flavour arm 98 has now unblocked (route 2, a
+species flag, with its category ruled and inherited).
 
 Reached when every ticket here is resolved and the Stage 7 report can be written
 with real tool output behind every claim. **Ticket 80 is RESOLVED** (`2b2b72f`,
@@ -142,7 +147,20 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
-**CURRENT, measured by [ticket 25](issues/25-acceptance.md) on 2026-08-27:**
+**CURRENT, measured by [ticket 98](issues/98-fixed-ys-undeclared-mode.md) on
+2026-08-27:**
+
+    python.org 3.14  1738 passed, 20 skipped, 0 failed  (1758 collected, 18:13)
+
+Two runs covering every test (`test/dd2` and `test/test_imports.py` in both,
+green in both): `--ignore=test/baseline` gave 1718 passed / 20 skipped / 0
+failed, and `test/baseline test/dd2 test/test_imports.py` gave 431 passed / 0
+failed with all 13 baselines at rtol = 1e-10.
+**1757 -> 1758 is ticket 98's one added test** and nothing else — the gate
+`test_every_model_exposes_only_section_3_modes`. Quote the denominator with the
+count or an added test is indistinguishable from a fixed failure.
+
+**Previously, [ticket 25](issues/25-acceptance.md), same day:**
 
     python.org 3.14  1737 passed, 20 skipped, 0 failed  (1757 collected, 20:26)
                      output/_audit/pytest_ticket25_py314.txt
@@ -299,6 +317,64 @@ freezing an undetermined `mu_S` under six derived names. Compare later work
 against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
+
+- **[Ticket 98 — `fixed_YS` is a mode the code has and §3 does not declare](issues/98-fixed-ys-undeclared-mode.md)**
+  (resolved). **It is not a mode.** Arm (b) — demoted to an internal `ModeSpec`
+  label, unreachable by name — and arm (a) refused *because of* arm (c), the
+  route [ticket 99](issues/99-quark-ea-at-zero-pressure.md) added. **The two
+  `fixed_YS`es are different jobs wearing one word.** On `dd2` with hyperons on,
+  Y_S is a free fraction with strange baryons to carry it and `mu_S` determined.
+  On a quark model at Y_S = 0 — the only use ever requested, by BayEoS and then
+  by the user — it is a sector REMOVED: `n_S = 0` holds over a range of `mu_S`,
+  which is [ticket 75](issues/75-undetermined-potential-check.md)'s null column
+  and [ticket 72](issues/72-enjl-branch-selection.md)'s priced receipt
+  (residual within round-off of a 1e-10 gate, seed fallthrough, round-off
+  choosing a chiral branch). §4 already refuses it in words — "if a sector is
+  off, its flag is False" — so **two-flavour quark matter is
+  `beta_eq_neutrinoless` with the strange flag False**, and route (c) is not a
+  rival to (a) but the correct spelling of the job (a) would have been misused
+  for. What (a) would have bought: a capability on 1 model of 11 with 0 baseline
+  keys, 0 notebooks, 0 `verify/` entries, 0 document mentions and 0 tests naming
+  it, for ten model audits and ten `DEFERRED.md` entries. What (b) cost: two
+  dict keys. **(c) has no ten-model cost either** — the quark flavour content is
+  physics only quark models have, so the flag joins §4's
+  `phi_field`/`gluons`/`csc` class, five models, not a seventh mandatory name.
+  **The flag's category is ruled here and binds 99**, on the user's constraint
+  that `strange=False` is meaningless under CFL: it is `alphabag.gluons`'s shape
+  exactly — two legal values in unpaired and 2SC, RAISES under CFL pairing,
+  `abpr` refusing it outright — which §4's `gluons` paragraph already licenses,
+  so no new §4 category and **no CLAUDE.md amendment at all**; a ruling needing
+  one would have been arm (a). **Gate**:
+  `test_imports.py::test_every_model_exposes_only_section_3_modes`, two halves —
+  every model's registry is a SUBSET of `eos.MODES` ("same set" is
+  unsatisfiable: `cfl` is only on `alphabag`/`abpr`, and `abpr` has nothing
+  else), and a §3 name a model lacks raises with the mode NAMED, §3's own
+  sentence and the half that stops a model passing the subset test by exposing
+  nothing. Half 2 passes across all ten today with no behaviour change; half 1
+  was mutation-tested red-then-green. It closes the direction
+  `test_the_top_level_carries_the_mode_and_species_vocabulary` could not see:
+  that one asks whether every `eos.MODES` name is buildable, never whether a
+  model exposes a name outside it. **The two comment defects took different
+  edits, as the ticket demanded**: `general/modes.py` was a plain miscount
+  ("four" where §3 has five) and is rewritten to say why `cfl` is not a
+  `ModeSpec` and that the two structural labels are not modes;
+  `dd2/solver.py`'s false "Mirrors `eos.mixed.MODE_FRACTIONS`" is made true **by
+  deleting the key**, and its "four" was never wrong. Three further sites the
+  ticket had not found: `dd2/api.py`'s "DD2 also offers the extras in
+  eos.dd2.MODES" (there are none), `solve_hadronic`'s mode list, and
+  `docs/STRUCTURE.md:397`, where `fixed_YS` was printed inside the block
+  demonstrating good refusal messages — regenerated from the code, not
+  hand-edited. Also renamed `test_fixed_YS_counts_thermal_kaons`, which passes
+  `charge_mode="fixed"` and has always solved `fixed_YC_YS`: this ticket's own
+  subject, prose outliving behaviour, in the test directory. **No number
+  moves** — names were removed, not equations; no `.npz` held a `fixed_YS` key.
+  **BayEoS pinged**; its `two_flavour_stable: skipped` comes off hold when 99
+  ships the flag, its `OPEN_QUESTIONS` must not be rewritten to request a mode,
+  and its recommended `m_s -> 1e4 MeV` workaround is killed in the same note as
+  the same defect one layer down. **Suite: 1758 collected, 1738 passed, 20
+  skipped, 0 failed** on the canonical python.org 3.14.2 stack, across two runs
+  covering everything; all 13 baselines reproduce at rtol = 1e-10. 1757 -> 1758 is this ticket's one added test and
+  nothing else.
 
 - **[Ticket 85 — the CLAUDE.md sentences the post-22 rulings owe](issues/85-claudemd-sentences-owed.md)**
   (resolved). **Six sentences landed, two deliberately did not.** Landed: §1's

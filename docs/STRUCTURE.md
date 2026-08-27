@@ -394,7 +394,7 @@ for name, mode, conds in probes:
 ```
 zl.fixed_YC_YS: NotImplementedError: fixed_YC_YS is meaningless for ZL: the model has no strange degree of freedom, so n_S = 0 identically and no Y_S can be imposed. Use fixed_YC, or a model with a strange sector (eos.dd2, eos.sfho, eos.vmit).
 abpr.beta_eq_neutrinoless: NotImplementedError: eos.abpr does not support mode 'beta_eq_neutrinoless': beta equilibrium fixes the charge potential through mu_C + mu_e = 0, but colour-flavour locking has already fixed the composition and left mu_C = 0 with no electrons to equilibrate against, so the condition has no free variable to determine. Unpaired quark matter in beta equilibrium is eos.alphabag or eos.vmit
-dd2.cfl: ValueError: unknown mode 'cfl'; expected one of ['beta_eq_neutrinoless', 'fixed_YC', 'fixed_YS', 'fixed_YC_YS', 'beta_eq_neutrino_trapped']
+dd2.cfl: ValueError: unknown mode 'cfl'; expected one of ['beta_eq_neutrinoless', 'fixed_YC', 'fixed_YC_YS', 'beta_eq_neutrino_trapped']
 ```
 
 Note the split between raising and returning. A malformed **call** — an

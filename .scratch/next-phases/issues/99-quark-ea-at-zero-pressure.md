@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 98 (the two-flavour arm only; the three-flavour arm is unblocked)
+Blocked by: - (98 ruled 2026-08-27; both arms unblocked)
 Parent: ../map.md
 
 ## Question
@@ -133,3 +133,44 @@ API, or both — §5 answers this shape of question for the response functions
 and does not answer it here. It should be decided WITH the route rather than
 after it, because route 3 answers it by construction and routes 1 and 2 do
 not.
+
+
+## Unblocked by ticket 98 (2026-08-27)
+
+[Ticket 98](98-fixed-ys-undeclared-mode.md) ruled, and it rules **route 2**
+above: `fixed_YS` is not a §3 mode and is demoted to an internal `ModeSpec`
+label. Two-flavour quark matter is reached as **`beta_eq_neutrinoless` with the
+strange sector's flag False**.
+
+Route 1 is closed, and closed on this ticket's own evidence: holding Y_S = 0
+where no populated species carries S is [ticket 75](75-undetermined-potential-check.md)'s
+null column, [ticket 72](72-enjl-branch-selection.md) priced it, and §4 forbids
+switching a sector off through a fraction that happens to vanish. Route 3 (a
+standalone routine) is not ruled out as the *shape* of the deliverable — the
+question this ticket still owns — but it no longer needs a private two-flavour
+residual, because route 2 gives it one through the existing mode.
+
+### Inherited, not open
+
+98 ruled the flag's **category**, which is binding here:
+
+- **two legal values in the unpaired and 2SC modes**, defaulting False (§4);
+- **RAISES under CFL pairing** — `alphabag`, `njl`, `ccdm` each carry both
+  regimes, so each gets both behaviours;
+- **`abpr` refuses it outright**, as it does `gluons`: `cfl` is its only mode,
+  so this ticket's "`cfl` has no two-flavour arm by construction" is expressed
+  by the flag refusing rather than by a NaN, which is what the Gate asked for.
+
+The flag is in §4's `phi_field`/`gluons`/`csc` class — physics only quark
+models have — **not** a seventh mandatory name, so its footprint is five
+models, not ten. `test_every_species_flag_defaults_off_or_raises` checks the
+category the day the flag lands; nothing new is owed there.
+
+### Still this ticket's to decide
+
+- **The flag's NAME.** §13: the same name in every model, mandatory once
+  coined. §4's `hyperons` is the strange BARYON sector and is taken.
+- **Where the P = 0 locator lives** and its §13 entry-point name (the ticket's
+  own "locator over a callable" in `general/`).
+- **The two `mu_B` conventions** at `E/A = mu_B + Y_S mu_S`, unchanged by 98.
+- The Fog below, unchanged: `verify/` invariant, public API, or both.

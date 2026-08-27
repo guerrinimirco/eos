@@ -121,13 +121,28 @@ class ModeSpec:
     def name(self):
         """The mode's name, built from which charges it holds.
 
-        The four names of CLAUDE.md section 3, plus the two combinations the
-        named factories below do not have a word for: strangeness held with
-        the charge equilibrated (`fixed_YS`), and that on top of a trapped
-        lepton family. `leptons` is deliberately not in the name -- section 3
-        makes it an orthogonal flag on the fixed-fraction modes, so
-        `fixed_YC` asked with and without neutralizing leptons is one mode
-        asked two ways, not two modes.
+        Four of the five names of CLAUDE.md section 3 -- `cfl` is a statement
+        about which phase a model describes rather than a choice of
+        conserved-charge conditions, so it is not a `ModeSpec` and no factory
+        below builds it.
+
+        Two further combinations are reachable structurally, because holding S
+        is independent of what C and the lepton families do: strangeness held
+        with the charge equilibrated (`fixed_YS`), and that on top of a
+        trapped lepton family. **These are internal labels, not modes.** No
+        model accepts either as its `mode` argument, and none should: holding
+        Y_S with the charge equilibrated is a fixed FRACTION only where
+        strange species are populated to carry it, and at Y_S = 0 it is a
+        sector switched off through a fraction that happens to vanish, which
+        section 4 forbids -- that case is a species flag set False, leaving
+        mu_S out of the unknown vector rather than in it as a null column.
+        A model's public mode registry therefore holds section 3's names and
+        no others, so neither label can leak back into an API.
+
+        `leptons` is deliberately not in the name -- section 3 makes it an
+        orthogonal flag on the fixed-fraction modes, so `fixed_YC` asked with
+        and without neutralizing leptons is one mode asked two ways, not two
+        modes.
         """
         if self.is_fixed("C"):
             return "fixed_YC_YS" if self.is_fixed("S") else "fixed_YC"

@@ -9,10 +9,9 @@ drives any model the same way:
     eos_response(par, mode, species, frozen=..., ...)    second derivatives
 
 Modes are the repository's named equilibria: 'beta_eq_neutrinoless',
-'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_YS' (DD2 also offers the
-extras in eos.dd2.MODES). Conditions are named exactly n_B, T (or SnB), Y_C,
-Y_S, Y_Le. Units at this boundary are fm-based: n_B in fm^-3, T and potentials
-in MeV, eps and P in MeV/fm^3.
+'beta_eq_neutrino_trapped', 'fixed_YC', 'fixed_YC_YS'. Conditions are named
+exactly n_B, T (or SnB), Y_C, Y_S, Y_Le. Units at this boundary are fm-based:
+n_B in fm^-3, T and potentials in MeV, eps and P in MeV/fm^3.
 
 NON-CONVERGENCE IS A RETURN VALUE here, not an exception: a sampler walks
 into unphysical corners constantly and must be able to score the point and
