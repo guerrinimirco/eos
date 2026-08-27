@@ -127,6 +127,15 @@ and never relies on a model default, so it is insensitive to
 [ticket 91](91-leptons-default-and-drift-checks.md)'s ruling and should not be
 weighted there.
 
+**Whoever rules this owes a ping downstream.** BayEoS is holding its
+two-flavour gate at `skipped` — logging `two_flavour_stable: skipped` rather
+than passing silently — and its `OPEN_QUESTIONS` entry points at this ticket
+instead of proposing a fix. It is waiting on the ruling, not guessing at it,
+which is the behaviour that deserves to be told when the answer lands. It is
+in the sibling checkout
+(`/Users/mircoguerrini/Desktop/Research/Python_codes/BayEoS`), design-only,
+and does not write to this tree.
+
 ## Gate
 
 Whatever is ruled, the check is that the §3 list and the set of mode names a
