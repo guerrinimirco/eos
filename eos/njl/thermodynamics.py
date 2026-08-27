@@ -55,7 +55,7 @@ import math
 import numpy as np
 
 from eos.general.fermi_integrals import (
-    ModeThermo, kinetic_thermo, surface_term,
+    ABSENT, ModeThermo, kinetic_thermo, surface_term,
 )
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
@@ -334,7 +334,8 @@ class NJLState:
 
 
 def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
-             vac=None, pattern="unpaired", pair_nodes_per_panel=None):
+             vac=None, pattern="unpaired", pair_nodes_per_panel=None,
+             two_flavour=False):
     """One state, evaluated. No equilibrium condition is imposed here.
 
     The assembly, in the order it is written (section 6.1 of the
@@ -373,13 +374,32 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
     Delta = np.asarray(Delta, dtype=float)
     if vac is None:
         vac = vacuum_solution(par)
+    if two_flavour and (pattern_mask(pattern)[0] or pattern_mask(pattern)[1]):
+        raise NotImplementedError(
+            f"eos.njl: pattern {pattern!r} condenses a diquark containing an "
+            f"s quark (Delta_1 pairs d-s, Delta_2 pairs u-s), which is not a "
+            f"state two-flavour matter has -- with the strange sector off "
+            f"there is no s quark to pair. The patterns that survive "
+            f"two_flavour=True are 'unpaired' and '2SC', the u-d condensate; "
+            f"the flag keeps both its values there and is a statement about "
+            f"the phase in the flavour-locked ones, exactly as "
+            f"eos.alphabag.SpeciesFlags.gluons is")
 
     mu_modes = mode_potentials(mu_B, mu_C, mu_S, mu_3, mu_8)
     mu_star = mu_modes - Sigma_V
     M_mode = M[FLAVOUR_OF_MODE]
 
     # --- the nine modes as cut Fermi gases -------------------------------
-    modes = [kinetic_thermo(mu_star[j], M_mode[j], T, par.Lambda_medium)
+    # WITH THE STRANGE SECTOR OFF THE THREE s MODES CARRY NO MEDIUM, and only
+    # the medium: the DIRAC SEA of the s quark stays, and so does phi_s and
+    # the gap equation that determines M_s. That is the physics of two-flavour
+    # quark matter -- the s Fermi sea is empty, the s condensate of the QCD
+    # vacuum is not -- and it is why the flag does not touch
+    # `masses_from_condensates`. Dropping phi_s from the 't Hooft determinant
+    # instead would move M_u and M_d and the subtracted vacuum constant, which
+    # would change the MODEL rather than the matter content it is asked about.
+    modes = [(ABSENT if two_flavour and FLAVOUR_OF_MODE[j] == 2
+              else kinetic_thermo(mu_star[j], M_mode[j], T, par.Lambda_medium))
              for j in range(N_MODES)]
     n_med = np.array([m.n for m in modes])
     P_med = sum(m.P for m in modes)

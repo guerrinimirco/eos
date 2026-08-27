@@ -21,9 +21,10 @@ the whole repository shares. A bag model without a thermal gluon gas is the
 standard MIT configuration, not a broken one, which is why this flag defaults
 rather than being fixed the way `abpr` fixes it.
 
-Two flags carry a further restriction that is a property of the PHASE rather
+Three flags carry a further restriction that is a property of the PHASE rather
 than of the model, so it binds the `cfl` mode alone and leaves the unpaired
-modes untouched: `gluons` and `thermal_neutrinos` both RAISE there. Neither is
+modes untouched: `gluons`, `thermal_neutrinos` and `two_flavour` all RAISE
+there. Neither is
 a second default -- the flags still default False and still take either value
 in the unpaired modes -- and neither is silently dropped, which is what the
 `cfl` arm of `table.solve_at` used to do with `thermal_neutrinos`. The reasons
@@ -59,6 +60,20 @@ class SpeciesFlags:
     muons             -- the muon lepton family. Not wired: alphaBag's lepton
                          sector is electrons (and, in the trapped mode,
                          electron neutrinos) only.
+    two_flavour       -- the strange QUARK sector, off. With it on the matter
+                         is u and d only: n_s = 0, Y_S = 0 and mu_S = 0
+                         identically, and the s flavour leaves the unknown
+                         vector rather than being emptied by a fraction that
+                         happens to vanish. This is how two-flavour quark
+                         matter is reached -- `beta_eq_neutrinoless` with the
+                         sector off -- and it is the upper half of the
+                         Bodmer-Witten window; see `zero_pressure_point`.
+                         RAISES in the `cfl` mode, the third flag to do so and
+                         for the same reason as `gluons`: locking pairs the
+                         three flavours at equal densities, so Y_S = +1
+                         identically and no strangeness fraction is free.
+                         `hyperons` is the strange BARYON sector and is a
+                         different flag in a different phase.
     hyperons,
     deltas,
     thermal_mesons    -- hadronic sectors, meaningless in a deconfined phase.
@@ -70,6 +85,7 @@ class SpeciesFlags:
     hyperons: bool = False
     deltas: bool = False
     thermal_mesons: bool = False
+    two_flavour: bool = False
 
     def __post_init__(self):
         for flag in ("hyperons", "deltas", "thermal_mesons"):

@@ -58,26 +58,29 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     T = conditions["T"]
     photons, gluons = species.photons, species.gluons
     neutrinos = species.thermal_neutrinos
+    two_flavour = species.two_flavour
     if mode == "beta_eq_neutrinoless":
         return solve_beta_eq_neutrinoless(
             params, n_B, T, include_photons=photons, include_gluons=gluons,
-            include_thermal_neutrinos=neutrinos, initial_guess=x0)
+            include_thermal_neutrinos=neutrinos, initial_guess=x0,
+            two_flavour=two_flavour)
     if mode == "beta_eq_neutrino_trapped":
         return solve_beta_eq_neutrino_trapped(
             params, n_B, conditions["Y_Le"], T, include_photons=photons,
             include_gluons=gluons, include_thermal_neutrinos=neutrinos,
-            initial_guess=x0)
+            initial_guess=x0, two_flavour=two_flavour)
     if mode == "fixed_YC":
         return solve_fixed_yc(
             params, n_B, conditions["Y_C"], T, include_photons=photons,
             include_gluons=gluons, include_electrons=leptons,
-            include_thermal_neutrinos=neutrinos, initial_guess=x0)
+            include_thermal_neutrinos=neutrinos, initial_guess=x0,
+            two_flavour=two_flavour)
     if mode == "fixed_YC_YS":
         return solve_fixed_yc_ys(
             params, n_B, conditions["Y_C"], conditions["Y_S"], T,
             include_photons=photons, include_gluons=gluons,
             include_electrons=leptons, include_thermal_neutrinos=neutrinos,
-            initial_guess=x0)
+            initial_guess=x0, two_flavour=two_flavour)
     if mode == "cfl":
         # The paired phase carries no lepton condition, and two of the
         # thermal sectors are not its physics. `gluons` is refused inside
@@ -87,6 +90,15 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
         # docs/DEFERRED.md. Neither is silently dropped: section 4 of
         # CLAUDE.md requires a sector a model does not implement to raise
         # rather than be ignored.
+        if two_flavour:
+            raise NotImplementedError(
+                "alphaBag 'cfl': colour-flavour locking pairs the three "
+                "flavours at equal densities, so Y_S = +1 identically and "
+                "there is no strangeness fraction free to switch off. "
+                "two_flavour is refused here for the same reason gluons is: "
+                "the flag keeps both its values in the unpaired modes and is "
+                "a statement about the phase in this one. Two-flavour quark "
+                "matter is 'beta_eq_neutrinoless' with two_flavour=True")
         if neutrinos:
             raise NotImplementedError(
                 "alphaBag 'cfl': the paired phase carries no thermal "
@@ -212,7 +224,8 @@ def build_table(spec, skip_errors=True, rows=False, progress=None,
                         spec.leptons, x0=x0)
 
     def seed(point):
-        return warm_start(point, spec.mode)
+        return warm_start(point, spec.mode,
+                          two_flavour=spec.include.two_flavour)
 
     points = sweep_lines(lines, spec.axes["nB"], solve, warm_start=seed,
                          skip_errors=skip_errors, progress=progress,

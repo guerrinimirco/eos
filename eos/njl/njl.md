@@ -845,6 +845,135 @@ composition and gap freezes of `eos_response`, and the susceptibility matrix;
 and the dilaton/colour-dielectric graft, which the specification marks as
 unverified for transition order, pairing coexistence and finite temperature.
 
+## The self-bound surface, and the two-flavour arm
+
+### What is computed
+
+A parametrization whose pressure crosses zero at finite density describes
+**self-bound** matter: the phase ends there, with no crust below it. The
+quantity reported at that endpoint is the energy per baryon,
+
+    E/A = eps / n_B      at   P(n_B) = 0,  T = 0      [MeV]
+
+which is what a lump of this matter at rest weighs per baryon. The entry point
+is `zero_pressure_point(par, species)`, and it returns a `ZeroPressurePoint`
+carrying `n_B`, `E_per_A`, `mu_B`, `Y_S`, `mu_S`, the identity residual below,
+the pressure actually reached, the flavour content requested, and whether
+`E_per_A` fell below the 930.4 MeV of iron.
+
+### The identity that makes the read self-checking
+
+At T = 0 the Euler relation is
+
+    eps + P = sum_i mu_i n_i ,
+
+so at P = 0 the energy per baryon IS the Gibbs energy per baryon. Expanding
+the species potentials in the conserved-charge basis, mu_i = B_i mu_B +
+C_i mu_C + S_i mu_S, and using beta equilibrium (mu_C + mu_e = 0) together with
+total electric neutrality (n_C = n_e), the charge term and the lepton term
+cancel exactly:
+
+    sum_i mu_i n_i = mu_B n_B + mu_C n_C + mu_S n_S + mu_e n_e
+                   = mu_B n_B + mu_S n_S          (since mu_C n_C + mu_e n_e = 0)
+
+and therefore
+
+    E/A = mu_B + Y_S mu_S ,      Y_S = n_S / n_B .            (*)
+
+**The full form is the one to use.** `E/A = mu_B` is the special case
+Y_S mu_S = 0, which holds in every beta-equilibrium mode because strangeness
+self-equilibrates there and mu_S = 0. It does NOT hold in a colour-flavour
+locked phase, where the condensate pairs the three flavours at equal densities
+and unequal masses force unequal potentials: on the CFL surface of `eos.alphabag`
+at Delta_0 = 100 MeV, mu_S = 40.68 MeV, and mu_B alone gives 895.87 MeV where
+E/A is 936.55 MeV. There are not two conventions here, only one identity and
+the cases in which a term of it drops out.
+
+`(*)` is checked at every located root; a root that misses it is a root of
+something other than P.
+
+### How the root is found
+
+`eos.general.zero_pressure.locate_zero_pressure` samples P(n_B) on a grid,
+takes the LOWEST density at which P rises through zero, and refines it by
+Brent's method. The scan is not a convenience: P(n_B) can cross zero more than
+once, and a crossing where P FALLS is the top of a mechanically unstable
+region rather than a surface. It takes the state as a callable, so it holds no
+model and lives in `general/`; a density where the solve does not converge
+thins the scan rather than aborting it, and a set with no surface at all comes
+back as a status, never as an exception.
+
+### The Bodmer-Witten window
+
+The pair of numbers is a two-sided gate on a parameter set:
+
+| arm | condition | what it says |
+|---|---|---|
+| three-flavour | `E/A < 930.4 MeV` | strange quark matter is absolutely stable |
+| two-flavour | `E/A > 930.4 MeV` | ordinary nuclei are not already decaying into it |
+
+A set failing either is excluded. **Both facts are REPORTED and neither is
+asserted**: whether a set sits in the window is a property of the set, so
+`below_iron` is a field on the result and no `verify/` entry fails on it. Note
+that the same `below_iron = True` reads in opposite directions on the two arms.
+
+**The content requested and the content found can differ, and the result
+carries both.** A three-flavour request returns whatever strangeness the
+equilibrium actually populated: a set whose surface sits below the s quark's
+threshold returns `Y_S = 0` and the two-flavour number from the three-flavour
+call. Read the content off `Y_S`, never off `two_flavour`.
+
+### The `two_flavour` flag
+
+Two-flavour quark matter is `beta_eq_neutrinoless` with the strange sector
+switched off — which is what it physically is — and not `fixed_YC_YS` at
+Y_S = 0. The distinction is not stylistic. With no populated species carrying
+strangeness, n_S = 0 holds for a whole range of mu_S, so the row
+n_S = Y_S n_B leaves mu_S undetermined and its Jacobian column null; a solve
+then converges on round-off. Switching the sector off removes the flavour from
+the unknown vector instead, and CLAUDE.md section 4 states the rule directly:
+*no sector is enabled or disabled implicitly because its coupling happens to
+be zero — if a sector is off, its flag is False.*
+
+Accordingly ``eos.njl`` **raises** on `fixed_YC_YS` with the flag on.
+
+The flag defaults to `False`, meaning the u, d, s matter this model has always
+solved, so `SpeciesFlags()` moves no existing number. It is named for the
+restriction rather than for the sector because a sector-voiced
+`strange_quarks` would have had to default `True` to keep that, which section 4
+forbids.
+
+With the flag on:
+
+- n_s = 0, Y_S = 0 and mu_S = 0 identically, exactly rather than approximately;
+- mu_B = mu_u + 2 mu_d and mu_C = mu_u - mu_d are unchanged, neither reading
+  mu_s, so `(*)` collapses to E/A = mu_B with both strange terms vanishing;
+- mu_s is reported as the weak-equilibrium value mu_d — the relation
+  s <-> d still holds, there is simply nothing populated at it.
+
+### What stays when the strange flavour goes
+
+**The s condensate stays; only the s Fermi sea is emptied.** The three strange
+colour-flavour modes contribute nothing to the medium — no density, no scalar
+density, no pressure, energy or entropy — but `phi_s = <sbar s>` is still solved
+from its own field equation, and it still feeds the light-quark masses through
+the 't Hooft determinant term, 2 K phi_d phi_s in M_u and 2 K phi_u phi_s in M_d. That is the physics of two-flavour quark matter: the strange Fermi
+sea is empty, while the strange condensate of the QCD vacuum is not.
+
+Dropping the strange field from the equations instead would move M_u, M_d and
+the subtracted vacuum constant with them — it would change the MODEL, not the
+flavour content asked of it — so the flag does not touch them.
+
+### Pairing patterns
+
+A diquark containing an s quark is not a state two-flavour matter has. With
+the flag on, `Delta_1` (d-s) and `Delta_2` (u-s) therefore have nothing to
+pair, so the patterns that carry them — `CFL`, `uSC`, `dSC`, `free` — leave
+the default enumeration, and an explicitly requested one raises. The patterns
+that survive are `unpaired` and `2SC`, the u-d condensate. This is the same
+split the `csc` flag already makes: a candidate that loses on free energy is
+dropped, a call that asks for a state the flags forbid is refused.
+
 ## References
 
 - P. Rehberg, S. P. Klevansky, J. Hüfner, Phys. Rev. C **53**, 410 (1996),

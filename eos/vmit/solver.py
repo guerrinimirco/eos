@@ -104,9 +104,42 @@ class EoSPoint:
 # =============================================================================
 # COLD GUESSES
 # =============================================================================
+def two_flavour_state(x, mode: str, leptons: bool = True):
+    """(mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s) from a two-flavour vector.
+
+    With the strange sector off the unknown vector is two entries shorter than
+    the three-flavour one: neither mu_s nor n_s is solved for, because a
+    flavour that is not in the matter has no density to close and no potential
+    to close it at. Leaving them in as unknowns pinned by their own rows was
+    tried and is measurably worse -- the near-empty Jacobian columns cost the
+    beta-equilibrium solve three decades of residual, 6e-11 against 1e-12 --
+    which is the same conditioning hazard, in a milder form, that made holding
+    Y_S = 0 the wrong way to reach this state.
+
+    The two are filled in afterwards: n_s = 0, and mu_s = mu_d because the
+    weak relation s <-> d still holds, there is simply nothing populated at
+    it. That is what makes mu_S = mu_s - mu_d vanish, so the reported
+    strangeness potential agrees with the zero strangeness the state carries
+    and E/A = mu_B + Y_S mu_S needs no special case.
+    """
+    if mode == "beta_eq_neutrinoless":
+        mu_u, mu_d, mu_e, n_u, n_d = x
+        mu_nu = 0.0
+    elif mode == "beta_eq_neutrino_trapped":
+        mu_u, mu_d, mu_e, mu_nu, n_u, n_d = x
+    elif mode == "fixed_YC":
+        mu_u, mu_d, n_u, n_d = x[:4]
+        mu_e = x[4] if leptons else 0.0
+        mu_nu = 0.0
+    else:
+        raise ValueError(f"mode {mode!r} has no two-flavour vector")
+    return mu_u, mu_d, mu_d, mu_e, mu_nu, n_u, n_d, 0.0
+
+
 def default_guess(mode: str, n_B: float, T: float, par: Parameters,
                   Y_C: float = None, Y_S: float = None, Y_Le: float = None,
-                  leptons: bool = True) -> np.ndarray:
+                  leptons: bool = True,
+                  two_flavour: bool = False) -> np.ndarray:
     """The cold start of one mode.
 
     Where the composition is unknown the quark densities are estimated first
@@ -145,7 +178,12 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
         # low density, and thermally populated as either rises.
         strange_fraction = min(0.9, max(0.01, T / 100.0 + n_B / 0.5))
         n_u, n_d = n_B, n_B
-        n_s = n_B * strange_fraction
+        n_s = 0.0 if two_flavour else n_B * strange_fraction
+        if two_flavour:
+            # Two light flavours carry the whole baryon number between them,
+            # and near-neutrality without a strange quark to help needs about
+            # twice as many d as u: 2 n_u - n_d = 3 n_e with few electrons.
+            n_u, n_d = n_B, 2.0 * n_B
 
         mu_u = mu_of_n(n_u, m_u)
         mu_d = mu_of_n(n_d, m_d)
@@ -154,14 +192,18 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
         V = par.a * hc * (n_u + n_d + n_s)
 
         if mode == "beta_eq_neutrinoless":
+            if two_flavour:
+                return np.array([mu_u + V, mu_d + V, mu_e, n_u, n_d])
             return np.array([mu_u + V, mu_d + V, mu_s + V, mu_e,
                              n_u, n_d, n_s])
         mu_nu = 10.0
+        if two_flavour:
+            return np.array([mu_u + V, mu_d + V, mu_e, mu_nu, n_u, n_d])
         return np.array([mu_u + V, mu_d + V, mu_s + V, mu_e, mu_nu,
                          n_u, n_d, n_s])
 
     if mode == "fixed_YC":
-        n_s = n_B * 0.3
+        n_s = 0.0 if two_flavour else n_B * 0.3
         n_u = max(n_B + Y_C * n_B + n_s / 3.0, n_B * 0.3)
         n_d = max(n_B - Y_C * n_B / 2.0, n_B * 0.3)
     elif mode == "fixed_YC_YS":
@@ -173,8 +215,11 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
     else:
         raise ValueError(f"unknown mode {mode!r}")
 
-    x = [mu_of_n(n_u, m_u), mu_of_n(n_d, m_d), mu_of_n(n_s, m_s),
-         n_u, n_d, n_s]
+    if two_flavour:
+        x = [mu_of_n(n_u, m_u), mu_of_n(n_d, m_d), n_u, n_d]
+    else:
+        x = [mu_of_n(n_u, m_u), mu_of_n(n_d, m_d), mu_of_n(n_s, m_s),
+             n_u, n_d, n_s]
     if leptons:
         x.append(mu_e_of_n(n_B * Y_C))    # n_e = n_C = Y_C n_B
     return np.array(x)
@@ -186,7 +231,8 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
 def solve_beta_eq_neutrinoless(
     par: Parameters, n_B: float, T: float,
     include_photons: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """
     Solve vMIT EOS in beta equilibrium with charge neutrality.
@@ -197,6 +243,17 @@ def solve_beta_eq_neutrinoless(
         - Weak equilibrium: μ_d = μ_u + μ_e, μ_s = μ_d
         - Charge neutrality: (2/3)n_u - (1/3)n_d - (1/3)n_s - n_e = 0
         - Baryon number: (n_u + n_d + n_s)/3 = n_B
+
+    TWO-FLAVOUR MATTER IS THIS MODE WITH THE STRANGE SECTOR OFF
+    (`two_flavour`, `eos.vmit.SpeciesFlags`), which is what two-flavour quark
+    matter physically is. The layout does not change and the rows do not
+    change: the s flavour stops being a degree of freedom of the matter, so
+    `n_s_calc` is zero and row 3 pins n_s there, while row 7 keeps mu_s tied
+    to mu_d. That is deliberate -- it leaves the strange slot DETERMINED
+    rather than a null Jacobian column, which is the hazard that made holding
+    Y_S = 0 the wrong way to reach this state -- and mu_S = mu_s - mu_d comes
+    out zero as a consequence, matching the zero strangeness the state
+    carries.
     
     Args:
         n_B: Baryon density (fm⁻³)
@@ -204,6 +261,7 @@ def solve_beta_eq_neutrinoless(
         par: vMIT parameters
         include_photons: Include photon contributions
         initial_guess: Initial guess [μ_u, μ_d, μ_s, μ_e, n_u, n_d, n_s]
+        two_flavour: u and d only; the s flavour leaves the matter
         
     Returns:
         EoSPoint with all thermodynamic quantities
@@ -213,34 +271,45 @@ def solve_beta_eq_neutrinoless(
     
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
-    x0_default = default_guess("beta_eq_neutrinoless", n_B, T, par)
+    x0_default = default_guess("beta_eq_neutrinoless", n_B, T, par,
+                               two_flavour=two_flavour)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
 
     def equations(x):
-        mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
+        if two_flavour:
+            mu_u, mu_d, mu_s, mu_e, _, n_u, n_d, n_s = two_flavour_state(
+                x, "beta_eq_neutrinoless")
+        else:
+            mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
 
         # Compute effective μ and densities
-        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                  two_flavour)
         n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
 
-        eq1 = qmd.n_u_calc - n_u
-        eq2 = qmd.n_d_calc - n_d
-        eq3 = qmd.n_s_calc - n_s
-        eq4 = qmd.n_B - n_B
-        eq5 = qmd.n_C - n_e
-        eq6 = mu_u + mu_e - mu_d
-        eq7 = mu_d - mu_s
-
-        return [eq1, eq2, eq3, eq4, eq5, eq6, eq7]
+        rows = [qmd.n_u_calc - n_u, qmd.n_d_calc - n_d]
+        if not two_flavour:
+            rows.append(qmd.n_s_calc - n_s)
+        rows += [qmd.n_B - n_B, qmd.n_C - n_e, mu_u + mu_e - mu_d]
+        if not two_flavour:
+            rows.append(mu_d - mu_s)
+        return rows
 
     def scales_at(x):
-        """Five densities against n_B, two potential equalities against mu_B."""
-        return [n_B, n_B, n_B, n_B, n_B, _mu_scale(x[0], x[1]),
-                _mu_scale(x[0], x[1])]
+        """Every density row against n_B, every potential equality against
+        mu_B; one of each goes when the strange flavour does."""
+        mu_B = _mu_scale(x[0], x[1])
+        if two_flavour:
+            return [n_B, n_B, n_B, n_B, mu_B]
+        return [n_B, n_B, n_B, n_B, n_B, mu_B, mu_B]
 
     x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
-    mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
+    if two_flavour:
+        mu_u, mu_d, mu_s, mu_e, _, n_u, n_d, n_s = two_flavour_state(
+            x, "beta_eq_neutrinoless")
+    else:
+        mu_u, mu_d, mu_s, mu_e, n_u, n_d, n_s = x
     result.converged = converged
     result.error = error
 
@@ -249,7 +318,8 @@ def solve_beta_eq_neutrinoless(
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                two_flavour)
     
     # Add electron contribution
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
@@ -284,7 +354,8 @@ def solve_fixed_yc(
     par: Parameters, n_B: float, Y_C: float, T: float,
     include_photons: bool = True,
     include_electrons: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """
     Solve vMIT EOS with fixed charge fraction Y_C (strangeness equilibrium).
@@ -297,6 +368,11 @@ def solve_fixed_yc(
         - Charge: n_Q = (2/3)n_u - (1/3)n_d - (1/3)n_s = n_B * Y_C
         - Baryon: (n_u + n_d + n_s)/3 = n_B
         - Strangeness eq: μ_s = μ_d
+
+    `two_flavour` removes the strange flavour from the matter, as in
+    `solve_beta_eq_neutrinoless`. Y_C is still a free fraction with it on --
+    u and d carry charge between them -- which is why this mode takes the flag
+    and `solve_fixed_yc_ys` refuses it.
     """
     
     result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C)
@@ -304,35 +380,47 @@ def solve_fixed_yc(
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
     x0_default = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C,
-                               leptons=include_electrons)
+                               leptons=include_electrons,
+                               two_flavour=two_flavour)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
 
     if include_electrons:
         # Solve 7 equations with electron charge neutrality
         def equations(x):
-            mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
+            if two_flavour:
+                mu_u, mu_d, mu_s, mu_e, _, n_u, n_d, n_s = two_flavour_state(
+                    x, "fixed_YC", leptons=True)
+            else:
+                mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                  two_flavour)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
-            eq1 = qmd.n_u_calc - n_u
-            eq2 = qmd.n_d_calc - n_d
-            eq3 = qmd.n_s_calc - n_s
-            eq4 = qmd.n_B - n_B
-            eq5 = qmd.n_C - n_B * Y_C
-            eq6 = mu_d - mu_s
-            eq7 = n_e - qmd.n_C  # Charge neutrality: n_e = n_C
-            
-            return [eq1, eq2, eq3, eq4, eq5, eq6, eq7]
+            rows = [qmd.n_u_calc - n_u, qmd.n_d_calc - n_d]
+            if not two_flavour:
+                rows.append(qmd.n_s_calc - n_s)
+            rows += [qmd.n_B - n_B, qmd.n_C - n_B * Y_C]
+            if not two_flavour:
+                rows.append(mu_d - mu_s)
+            rows.append(n_e - qmd.n_C)      # charge neutrality: n_e = n_C
+            return rows
 
         def scales_at(x):
-            """Six densities against n_B, the mu_s = mu_d equality against mu_B."""
+            """Every density row against n_B, the mu_s = mu_d equality against
+            mu_B; that equality and one density row go with the flavour."""
+            if two_flavour:
+                return [n_B, n_B, n_B, n_B, n_B]
             return [n_B, n_B, n_B, n_B, n_B, _mu_scale(x[0], x[1]), n_B]
 
         x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
-        mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
+        if two_flavour:
+            mu_u, mu_d, mu_s, mu_e, _, n_u, n_d, n_s = two_flavour_state(
+                x, "fixed_YC", leptons=True)
+        else:
+            mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
         result.converged = converged
         result.error = error
 
@@ -347,26 +435,37 @@ def solve_fixed_yc(
     else:
         # Solve 6 equations without electrons
         def equations(x):
-            mu_u, mu_d, mu_s, n_u, n_d, n_s = x
+            if two_flavour:
+                mu_u, mu_d, mu_s, _, _, n_u, n_d, n_s = two_flavour_state(
+                    x, "fixed_YC", leptons=False)
+            else:
+                mu_u, mu_d, mu_s, n_u, n_d, n_s = x
 
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                  two_flavour)
 
-            eq1 = qmd.n_u_calc - n_u
-            eq2 = qmd.n_d_calc - n_d
-            eq3 = qmd.n_s_calc - n_s
-            eq4 = qmd.n_B - n_B
-            eq5 = qmd.n_C - n_B * Y_C
-            eq6 = mu_d - mu_s
-
-            return [eq1, eq2, eq3, eq4, eq5, eq6]
+            rows = [qmd.n_u_calc - n_u, qmd.n_d_calc - n_d]
+            if not two_flavour:
+                rows.append(qmd.n_s_calc - n_s)
+            rows += [qmd.n_B - n_B, qmd.n_C - n_B * Y_C]
+            if not two_flavour:
+                rows.append(mu_d - mu_s)
+            return rows
 
         def scales_at(x):
-            """Five densities against n_B, the mu_s = mu_d equality against mu_B."""
+            """Every density row against n_B, the mu_s = mu_d equality against
+            mu_B; that equality and one density row go with the flavour."""
+            if two_flavour:
+                return [n_B, n_B, n_B, n_B]
             return [n_B, n_B, n_B, n_B, n_B, _mu_scale(x[0], x[1])]
 
         x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
-        mu_u, mu_d, mu_s, n_u, n_d, n_s = x
+        if two_flavour:
+            mu_u, mu_d, mu_s, _, _, n_u, n_d, n_s = two_flavour_state(
+                x, "fixed_YC", leptons=False)
+        else:
+            mu_u, mu_d, mu_s, n_u, n_d, n_s = x
         result.converged = converged
         result.error = error
 
@@ -378,7 +477,8 @@ def solve_fixed_yc(
     result.Y_s = n_s / n_B 
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                two_flavour)
     
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
@@ -411,7 +511,8 @@ def solve_fixed_yc_ys(
     par: Parameters, n_B: float, Y_C: float, Y_S: float, T: float,
     include_photons: bool = True,
     include_electrons: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """
     Solve vMIT EOS with fixed charge fraction Y_C AND strangeness fraction Y_S.
@@ -419,7 +520,25 @@ def solve_fixed_yc_ys(
     If include_electrons=False: 6 equations, 6 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s]
     If include_electrons=True:  7 equations, 7 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e]
         with charge neutrality n_e(μ_e) = n_Q = n_B * Y_C
+
+    THIS IS THE ONE MODE THAT REFUSES `two_flavour`, and the refusal is the
+    same statement the flag makes. This mode holds Y_S; with the strange
+    sector off no species left in the state carries strangeness, so the row
+    n_S = Y_S n_B reads 0 = Y_S n_B -- unsatisfiable for Y_S != 0, and for
+    Y_S = 0 satisfied for every mu_S at once, which leaves mu_S undetermined
+    and its Jacobian column null. Reaching two-flavour matter by asking for
+    Y_S = 0 is exactly the route CLAUDE.md section 4 forbids ("no sector is
+    disabled implicitly because its coupling happens to be zero"); it is
+    reached by switching the sector off, in `beta_eq_neutrinoless`.
     """
+    if two_flavour:
+        raise NotImplementedError(
+            "solve_fixed_yc_ys: this mode holds Y_S, and with the strange "
+            "sector off there is no species left to carry strangeness -- the "
+            "row is unsatisfiable for Y_S != 0 and leaves mu_S undetermined "
+            "for Y_S = 0. Two-flavour quark matter is 'beta_eq_neutrinoless' "
+            "with SpeciesFlags(two_flavour=True), never fixed_YC_YS at "
+            "Y_S = 0")
     
     result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C, Y_S=Y_S)
     
@@ -436,7 +555,8 @@ def solve_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
             
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                  two_flavour)
             n_e = electron_thermo(mu_e, T, include_antiparticles=True).n
             
             eq1 = qmd.n_u_calc - n_u
@@ -472,7 +592,8 @@ def solve_fixed_yc_ys(
             mu_u, mu_d, mu_s, n_u, n_d, n_s = x
             
             # Compute effective μ and densities
-            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+            qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                  two_flavour)
             
             eq1 = qmd.n_u_calc - n_u
             eq2 = qmd.n_d_calc - n_d
@@ -500,7 +621,8 @@ def solve_fixed_yc_ys(
     result.Y_s = n_s / n_B 
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                two_flavour)
     
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
@@ -532,12 +654,17 @@ def solve_fixed_yc_ys(
 def solve_beta_eq_neutrino_trapped(
     par: Parameters, n_B: float, Y_L: float, T: float,
     include_photons: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """
     Solve vMIT EOS with trapped neutrinos (fixed lepton fraction Y_L).
     
     8 equations, 8 unknowns: [μ_u, μ_d, μ_s, μ_e, μ_ν, n_u, n_d, n_s]
+
+    `two_flavour` removes the strange flavour from the matter exactly as in
+    `solve_beta_eq_neutrinoless`; the lepton rows are untouched, the flag
+    being orthogonal to the mode.
     """
     
     result = EoSPoint(n_B=n_B, T=T, Y_L=Y_L)
@@ -545,39 +672,50 @@ def solve_beta_eq_neutrino_trapped(
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
     x0_default = default_guess("beta_eq_neutrino_trapped", n_B, T, par,
-                               Y_Le=Y_L)
+                               Y_Le=Y_L, two_flavour=two_flavour)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
 
     def equations(x):
-        mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
+        if two_flavour:
+            mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = two_flavour_state(
+                x, "beta_eq_neutrino_trapped")
+        else:
+            mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
         
         # Compute effective μ and densities
-        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+        qmd = effective_state(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                  two_flavour)
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
         nu_thermo = neutrino_thermo(mu_nu, T, include_antiparticles=True)
         
         n_L = e_thermo.n + nu_thermo.n
         
-        eq1 = qmd.n_u_calc - n_u
-        eq2 = qmd.n_d_calc - n_d
-        eq3 = qmd.n_s_calc - n_s
-        eq4 = qmd.n_B - n_B
-        eq5 = qmd.n_C - e_thermo.n  # Charge neutrality
-        eq6 = mu_d - mu_s  # Strangeness eq
-        eq7 = mu_u + mu_e - mu_d - mu_nu  # Beta eq with neutrinos
-        eq8 = n_L / n_B - Y_L  # Lepton fraction
-        
-        return [eq1, eq2, eq3, eq4, eq5, eq6, eq7, eq8]
+        rows = [qmd.n_u_calc - n_u, qmd.n_d_calc - n_d]
+        if not two_flavour:
+            rows.append(qmd.n_s_calc - n_s)
+        rows += [qmd.n_B - n_B, qmd.n_C - e_thermo.n]   # charge neutrality
+        if not two_flavour:
+            rows.append(mu_d - mu_s)                    # strangeness eq
+        rows += [mu_u + mu_e - mu_d - mu_nu,            # beta eq, trapped
+                 n_L / n_B - Y_L]                       # lepton fraction
+        return rows
 
     def scales_at(x):
-        """Five densities against n_B, two potential equalities against mu_B;
-        the lepton-fraction equation is already dimensionless."""
+        """Every density row against n_B, every potential equality against
+        mu_B; the lepton-fraction equation is already dimensionless, and one
+        density row and one equality go when the strange flavour does."""
         mu_B = _mu_scale(x[0], x[1])
+        if two_flavour:
+            return [n_B, n_B, n_B, n_B, mu_B, 1.0]
         return [n_B, n_B, n_B, n_B, n_B, mu_B, mu_B, 1.0]
 
     x, error, converged = solve_system(equations, x0, scales_at, x0_fallback)
-    mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
+    if two_flavour:
+        mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = two_flavour_state(
+            x, "beta_eq_neutrino_trapped")
+    else:
+        mu_u, mu_d, mu_s, mu_e, mu_nu, n_u, n_d, n_s = x
     result.converged = converged
     result.error = error
 
@@ -585,7 +723,8 @@ def solve_beta_eq_neutrino_trapped(
     result.n_u, result.n_d, result.n_s = n_u, n_d, n_s
     
     # Compute quark thermodynamics using helper function
-    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par)
+    q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
+                                two_flavour)
     
     # Add lepton contributions
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
@@ -621,23 +760,35 @@ def solve_beta_eq_neutrino_trapped(
 # WARM START
 # =============================================================================
 def warm_start(point: EoSPoint, mode: str,
-               leptons: bool = True) -> np.ndarray:
+               leptons: bool = True,
+               two_flavour: bool = False) -> np.ndarray:
     """The seed the next density takes from a solved point.
 
     The layouts are the unknown vectors of each mode's residual, so a warm
-    start is only valid within its own mode. Along a density sweep the
-    potentials and the flavour densities vary smoothly, which is what carries
-    the continuation through the strange quark's onset.
+    start is only valid within its own mode -- and, since `two_flavour`
+    shortens the vector by the two strange entries, within its own flavour
+    content. Along a density sweep the potentials and the flavour densities
+    vary smoothly, which is what carries the continuation through the strange
+    quark's onset; with the strange sector off there is no onset to carry.
     """
     if mode == "beta_eq_neutrinoless":
+        if two_flavour:
+            return np.array([point.mu_u, point.mu_d, point.mu_e,
+                             point.n_u, point.n_d])
         return np.array([point.mu_u, point.mu_d, point.mu_s, point.mu_e,
                          point.n_u, point.n_d, point.n_s])
     if mode == "beta_eq_neutrino_trapped":
+        if two_flavour:
+            return np.array([point.mu_u, point.mu_d, point.mu_e, point.mu_nu,
+                             point.n_u, point.n_d])
         return np.array([point.mu_u, point.mu_d, point.mu_s, point.mu_e,
                          point.mu_nu, point.n_u, point.n_d, point.n_s])
     if mode in ("fixed_YC", "fixed_YC_YS"):
-        x = [point.mu_u, point.mu_d, point.mu_s,
-             point.n_u, point.n_d, point.n_s]
+        if two_flavour:
+            x = [point.mu_u, point.mu_d, point.n_u, point.n_d]
+        else:
+            x = [point.mu_u, point.mu_d, point.mu_s,
+                 point.n_u, point.n_d, point.n_s]
         if leptons:
             x.append(point.mu_e)
         return np.array(x)

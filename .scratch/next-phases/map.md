@@ -318,6 +318,38 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 99 — E/A at P = 0 for two- and three-flavour quark matter](issues/99-quark-ea-at-zero-pressure.md)**
+  (resolved 2026-08-27). **Both numbers ship, through one name in five models.**
+  `zero_pressure_point(par, species)` in `vmit`, `alphabag`, `njl`, `ccdm` and
+  `abpr`, over `eos/general/zero_pressure.py`'s `locate_zero_pressure`, which
+  takes the state as a CALLABLE and so imports no model (§1). The flag 98
+  ruled is **`two_flavour`**, named for the restriction and not the sector
+  because §4 forces a two-valued flag to default False and `strange_quarks`
+  would then have made `SpeciesFlags()` mean two-flavour matter — moving every
+  quark number in the repository. **Ruled here for NJL/CCDM: two-flavour matter
+  empties the s FERMI SEA and keeps the s CONDENSATE**, so `phi_s`/`zeta` still
+  feed the light-quark masses through the 't Hooft determinant; dropping them
+  would change the model, not the flavour content. `fixed_YC_YS` refuses the
+  flag in all four (98's null column, stated as behaviour); `abpr` refuses it
+  outright — no NaN. The **Fog is answered: both, split by job** — the number
+  is public API, the identity `E/A = mu_B + Y_S mu_S` is the `verify/`
+  invariant, the Bodmer–Witten verdict is a reported `below_iron` field
+  asserted nowhere. **The golden reproduces**: 831.5839 MeV through the
+  bracketed locator against `abpr.mu_from_P`'s closed form, agreeing to 5.5e-16;
+  every identity is ≥ 3 decades inside the 1e-12 gate. The two `mu_B`
+  conventions are now a TEST rather than a measurement — `alphabag/verify`
+  locates the **CFL** surface, where `mu_S = 40.68 MeV` and `E/A = mu_B` alone
+  would be wrong by 41 MeV, the only such case in the package.
+  **Two of the ticket's own findings turned over under the build**: `njl` DOES
+  have a surface (0.3824 fm^-3, E/A = 1102.02) — the scan for the lowest RISING
+  crossing finds what a bare bracket missed — and `vmit`'s surface is NOT
+  two-flavour (Y_S = 0.8379, not 0.0000), the zero having come from a field
+  three of vMIT's four solvers never assign, now
+  [ticket 100](issues/100-vmit-point-Y_S-never-assigned.md). `ccdm` has no
+  locatable surface: pre-existing non-convergence, reported and not hidden.
+  **1754 passed / 0 failed** (+36 tests), **all 20 baselines at rtol = 1e-10 —
+  no number moves.**
+
 - **[Ticket 98 — `fixed_YS` is a mode the code has and §3 does not declare](issues/98-fixed-ys-undeclared-mode.md)**
   (resolved). **It is not a mode.** Arm (b) — demoted to an internal `ModeSpec`
   label, unreachable by name — and arm (a) refused *because of* arm (c), the
@@ -2427,6 +2459,13 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 
 ## Not yet specified
+
+Two patches graduated on 2026-08-27 out of
+[ticket 99](issues/99-quark-ea-at-zero-pressure.md) and are now
+[ticket 100](issues/100-vmit-point-Y_S-never-assigned.md) (a cached conserved
+fraction its solvers never fill, frozen into a baseline) and
+[ticket 101](issues/101-pressure-and-energy-field-names.md) (`P`/`eps` against
+`P_total`/`e_total`, six models against four).
 
 In scope, not yet sharp enough to ticket:
 

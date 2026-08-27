@@ -86,6 +86,7 @@ from eos.ccdm.couplings import (
 )
 from eos.ccdm.species import pattern_mask
 from eos.general.fermi_integrals import kinetic_thermo, unbounded_k_max
+from eos.general.fermi_integrals import ABSENT
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
     mode_potentials, pair_block,
@@ -357,7 +358,8 @@ class CCDMState:
 
 
 def state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S, mu_3,
-             mu_8, T, branch="restored", pattern="unpaired"):
+             mu_8, T, branch="restored", pattern="unpaired",
+             two_flavour=False):
     """One state, evaluated. No equilibrium condition is imposed here.
 
     The assembly, in the order it is written:
@@ -399,8 +401,25 @@ def state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S, mu_3,
     mu_star = mu_modes - Sigma_V
     M_mode = M_star[FLAVOUR_OF_MODE]
 
+    if two_flavour and (pattern_mask(pattern)[0] or pattern_mask(pattern)[1]):
+        raise NotImplementedError(
+            f"eos.ccdm: pattern {pattern!r} condenses a diquark containing an "
+            f"s quark (Delta_1 pairs d-s, Delta_2 pairs u-s), which is not a "
+            f"state two-flavour matter has -- with the strange sector off "
+            f"there is no s quark to pair. The patterns that survive "
+            f"two_flavour=True are 'unpaired' and '2SC'")
+
     # --- the nine modes as unregularised ideal gases ----------------------
-    modes = [mode_thermo(mu_star[j], M_mode[j], T) for j in range(N_MODES)]
+    # WITH THE STRANGE SECTOR OFF THE THREE s MODES CARRY NO MEDIUM, and only
+    # the medium: sigma and zeta are still solved, and the s quark still has
+    # its dielectric-scaled mass M*_s, because those are the CONDENSATES of
+    # the model's vacuum rather than a population in the matter. Two-flavour
+    # quark matter is an empty s Fermi sea, not a two-flavour Lagrangian, and
+    # dropping zeta from the field equations instead would move the whole
+    # vacuum and with it every mass in the model.
+    modes = [(ABSENT if two_flavour and FLAVOUR_OF_MODE[j] == 2
+              else mode_thermo(mu_star[j], M_mode[j], T))
+             for j in range(N_MODES)]
     n_med = np.array([m.n for m in modes])
     P_med = sum(m.P for m in modes)
     eps_med = sum(m.eps for m in modes)

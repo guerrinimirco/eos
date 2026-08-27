@@ -29,6 +29,23 @@ class SpeciesFlags:
     thermal_mesons   -- hadronic sectors, meaningless in a deconfined phase.
     thermal_neutrinos-- neutrino flavours not tracked in the composition,
                         carried as mu = 0 gases. Not wired.
+    two_flavour      -- the strange QUARK sector, off. With it on the matter
+                        is u and d only: n_s = 0, Y_S = 0 and mu_S = 0
+                        identically, and the s flavour leaves the state rather
+                        than being emptied by a fraction that happens to
+                        vanish. This is how two-flavour quark matter is
+                        reached -- `beta_eq_neutrinoless` with the sector
+                        off -- and it is the upper half of the Bodmer-Witten
+                        window: two-flavour E/A at P = 0 must sit ABOVE the
+                        930.4 MeV of iron or ordinary nuclei would already
+                        have decayed into it. See `zero_pressure_point`.
+
+                        It defaults False like every other sector here, so
+                        `SpeciesFlags()` is the three-flavour matter this
+                        model has always solved and no existing number moves.
+                        `hyperons` is the strange BARYON sector and is a
+                        different flag in a different phase; the two are never
+                        both meaningful.
     """
     photons: bool = False
     muons: bool = False
@@ -36,6 +53,7 @@ class SpeciesFlags:
     deltas: bool = False
     thermal_mesons: bool = False
     thermal_neutrinos: bool = False
+    two_flavour: bool = False
 
     def __post_init__(self):
         for flag in ("hyperons", "deltas", "thermal_mesons"):

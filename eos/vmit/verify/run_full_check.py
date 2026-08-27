@@ -22,6 +22,7 @@ import numpy as np
 from eos.general.basis import quark_charges, charge_potentials_from_quarks
 from eos.general.physics_constants import hc, hc3
 from eos.vmit import (
+    zero_pressure_point,
     RESIDUAL_TOL, SpeciesFlags, Parameters, eos_point, eos_response,
     kinetic_thermo, vector_field, Parameters,
     solve_beta_eq_neutrinoless, solve_fixed_yc, solve_fixed_yc_ys,
@@ -241,6 +242,47 @@ def _check_causality(par, grid):
                        f"c_s^2 in [{min(values):.3f}, {max(values):.3f}]")
 
 
+def _check_zero_pressure(par):
+    """E/A = mu_B + Y_S mu_S at the self-bound surface, both flavour contents.
+
+    THE IDENTITY IS THE INVARIANT; THE ENERGIES ARE REPORTED. At T = 0 the
+    Euler relation read at P = 0 gives eps/n_B as the Gibbs energy per baryon
+    exactly, so a located root that misses `mu_B + Y_S mu_S` is a root of
+    something other than P -- the one failure a locator driven by a callable
+    can have that nothing else would catch.
+
+    WHERE EACH ENERGY SITS AGAINST IRON IS NOT ASSERTED. Three-flavour E/A
+    below the 930.4 MeV of iron means absolutely stable strange quark matter,
+    and two-flavour E/A above it means ordinary nuclei are safe, but both are
+    properties of the PARAMETER SET: a legitimately excluded point is a normal
+    draw for a sampler, and a suite that failed on one would be asserting the
+    Bodmer-Witten hypothesis rather than checking an implementation. The
+    numbers go in the detail line instead.
+
+    A set with no self-bound surface, and a flavour content this phase
+    refuses, are reported the same way and fail nothing.
+    """
+    worst, detail = 0.0, []
+    for two_flavour in (False, True):
+        try:
+            flags = SpeciesFlags(two_flavour=two_flavour)
+        except NotImplementedError:
+            detail.append("two-flavour: no such arm in this phase")
+            continue
+        surface = zero_pressure_point(par, flags)
+        label = "two" if two_flavour else "three"
+        if not surface.ok:
+            detail.append(f"{label}-flavour: {surface.message}")
+            continue
+        worst = max(worst, surface.identity_error)
+        detail.append(
+            f"{label}-flavour: E/A={surface.E_per_A:.2f} MeV at "
+            f"n_B={surface.n_B:.4f} fm^-3, Y_S={surface.Y_S:.4f}, "
+            f"{'below' if surface.below_iron else 'above'} iron")
+    return CheckResult("zero-pressure surface", worst < 1e-12, worst,
+                       "; ".join(detail))
+
+
 def run_full_check(par=None, grid=None, T=10.0):
     """Run the vMIT verification suite; returns a structured report.
 
@@ -259,6 +301,7 @@ def run_full_check(par=None, grid=None, T=10.0):
     report.results.append(_check_free_gas_limit(par, grid, T))
     report.results.append(_check_residual_gate(par, grid, T))
     report.results.append(_check_causality(par, grid))
+    report.results.append(_check_zero_pressure(par))
     return report
 
 

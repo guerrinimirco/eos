@@ -311,12 +311,13 @@ def thermal_sectors(T, flags, trapped):
 # =============================================================================
 # THE RESIDUAL
 # =============================================================================
-def _state(x, par, spec, branch, pattern, T):
+def _state(x, par, spec, branch, pattern, T, two_flavour=False):
     """The `CCDMState` an unknown vector describes."""
     (Phi, sigma, zeta, Sigma_V, Delta, mu_3, mu_8,
      mu_B, mu_C, mu_S, _) = _unpack(x, par, spec, pattern)
     return state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S,
-                    mu_3, mu_8, T, branch=branch, pattern=pattern)
+                    mu_3, mu_8, T, branch=branch, pattern=pattern,
+                    two_flavour=two_flavour)
 
 
 def _charge_rows(x, par, flags, spec, pattern, st, T):
@@ -345,8 +346,14 @@ def _charge_rows(x, par, flags, spec, pattern, st, T):
 
 
 def residual(x, par, flags, spec, branch, pattern, n_B, T):
-    """The equations of one mode in one candidate, in assembly order."""
-    st = _state(x, par, spec, branch, pattern, T)
+    """The equations of one mode in one candidate, in assembly order.
+
+    `flags.two_flavour` reaches the state and nothing else: the rows are the
+    same equations on matter the s Fermi sea has left. The field rows STAY --
+    sigma and zeta are still solved, with their medium terms gone -- because
+    they are condensates of the model's vacuum rather than a population.
+    """
+    st = _state(x, par, spec, branch, pattern, T, flags.two_flavour)
     mask = pattern_mask(pattern)
 
     rows = list(st.field_residual[:3])
@@ -538,6 +545,30 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
 # =============================================================================
 # THE SOLVE
 # =============================================================================
+def _refuse_fixed_YS(flags, spec, model):
+    """A mode that HOLDS Y_S has no meaning with the strange sector off.
+
+    With no species left carrying strangeness, n_S = 0 identically: the row
+    n_S = Y_S n_B is unsatisfiable for Y_S != 0, and for Y_S = 0 it is
+    satisfied at every mu_S at once. mu_S is then an unknown with a null
+    Jacobian column -- `eos.general.basis.undetermined_potential`'s screen
+    firing, and the failure that put one `eos.enjl` mode's residual within
+    round-off of the acceptance gate and let round-off pick a chiral branch.
+
+    Reaching two-flavour matter by asking for Y_S = 0 is disabling a sector
+    through a fraction that happens to vanish, which CLAUDE.md section 4
+    forbids in so many words. It is reached by switching the sector off, in
+    `beta_eq_neutrinoless`.
+    """
+    if flags.two_flavour and spec.is_fixed("S"):
+        raise NotImplementedError(
+            f"{model}: a mode that holds Y_S has no state with "
+            f"SpeciesFlags(two_flavour=True) -- no species left carries "
+            f"strangeness, so the row is unsatisfiable for Y_S != 0 and "
+            f"leaves mu_S undetermined for Y_S = 0. Two-flavour quark matter "
+            f"is 'beta_eq_neutrinoless' with two_flavour=True")
+
+
 def solve_candidate(par, mode, n_B, T, flags, branch, pattern, spec=None,
                     x0=None, **fractions):
     """One mode in ONE declared branch and ONE declared pattern.
@@ -548,6 +579,7 @@ def solve_candidate(par, mode, n_B, T, flags, branch, pattern, spec=None,
     if spec is None:
         spec = mode_spec(mode, leptons=fractions.pop("leptons", True),
                          **fractions)
+    _refuse_fixed_YS(flags, spec, "eos.ccdm")
     if not flags.csc and pattern != "unpaired":
         raise ValueError(
             f"pattern {pattern!r} needs SpeciesFlags(csc=True): with the "
@@ -588,7 +620,7 @@ def solve_candidate(par, mode, n_B, T, flags, branch, pattern, spec=None,
         if err_cold < err:
             x, err, ok = x_cold, err_cold, ok_cold
 
-    st = _state(x, par, spec, branch, pattern, T)
+    st = _state(x, par, spec, branch, pattern, T, flags.two_flavour)
     return point_from_state(st, par, flags, spec, mode, x,
                             bool(ok and st.valid), err, T)
 
@@ -605,6 +637,26 @@ def candidates_for(flags, branches=None, patterns=None):
         branches = DENSITY_BRANCHES
     if patterns is None:
         patterns = DEFAULT_PATTERNS if flags.csc else ("unpaired",)
+        if flags.two_flavour:
+            # A diquark containing an s quark is not a state two-flavour
+            # matter has, so those patterns leave the ENUMERATION rather than
+            # being solved and rejected. An explicitly requested one still
+            # raises, below: the same split the `csc` flag already makes
+            # between a candidate that loses on free energy and a call that
+            # asks for a state the flags forbid.
+            patterns = tuple(p for p in patterns
+                             if not (pattern_mask(p)[0] or pattern_mask(p)[1]))
+    elif flags.two_flavour and any(pattern_mask(p)[0] or pattern_mask(p)[1]
+                                   for p in patterns):
+        raise ValueError(
+            f"patterns {tuple(patterns)!r} condense a diquark containing an "
+            f"s quark (Delta_1 pairs d-s, Delta_2 pairs u-s), and "
+            f"SpeciesFlags(two_flavour=True) leaves no s quark to pair. The "
+            f"patterns two-flavour matter has are 'unpaired' and '2SC'")
+    if not patterns:
+        raise ValueError(
+            "no pairing pattern survives SpeciesFlags(two_flavour=True) here; "
+            "'unpaired' and '2SC' are the two-flavour patterns")
     return [(b, p) for b in branches for p in patterns]
 
 
@@ -630,6 +682,7 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, branches=None,
         flags = SpeciesFlags()
     leptons = fractions.pop("leptons", True)
     spec = mode_spec(mode, leptons=leptons, **fractions)
+    _refuse_fixed_YS(flags, spec, "eos.ccdm")
 
     if patterns is not None and not flags.csc and any(
             p != "unpaired" for p in patterns):

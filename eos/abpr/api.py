@@ -34,7 +34,11 @@ from eos.abpr.solver import (
     response_at_mu, solve_cfl,
 )
 from eos.abpr.species import SpeciesFlags
+from eos.general.basis import quark_charges
 from eos.general.tabulate import unconverged_response
+from eos.general.zero_pressure import (
+    N_HI_DEFAULT, N_LO_DEFAULT, N_SCAN_DEFAULT, locate_zero_pressure,
+)
 
 
 @dataclass(frozen=True)
@@ -247,3 +251,51 @@ def eos_response(par, mode="cfl", species=None, frozen="equilibrium",
     out["converged"] = True
     out["reason"] = "converged"
     return out
+
+
+def zero_pressure_point(par, species=None, n_lo=N_LO_DEFAULT,
+                        n_hi=N_HI_DEFAULT, n_scan=N_SCAN_DEFAULT):
+    """E/A at the self-bound surface, P = 0 and T = 0.
+
+    The locked phase is self-bound: P falls to zero at finite density with no
+    crust below it, and eps/n_B there is the energy per baryon of a lump of
+    this matter at rest. For the shipped set it is 831.58 MeV, below the
+    930.4 MeV of iron, which is what "absolutely stable strange quark matter"
+    means for this parametrization.
+
+    THERE IS NO TWO-FLAVOUR ARM HERE, and the absence is physics rather than
+    an omission: `cfl` is the only mode this model has, and flavour locking
+    fixes Y_S = +1 identically, so no strangeness fraction is free to switch
+    off. `SpeciesFlags(two_flavour=True)` therefore raises, naming the reason,
+    rather than this function returning a nan for a number that does not
+    exist. The two-flavour half of the Bodmer-Witten window is asked of a
+    model that has an unpaired phase -- `eos.vmit`, `eos.alphabag`, `eos.njl`,
+    `eos.ccdm` -- in `beta_eq_neutrinoless`.
+
+    The root find is `eos.general.zero_pressure.locate_zero_pressure` over
+    this model's own `eos_point`, deliberately, even though `mu_from_P` gives
+    the same surface in closed form one line at a time: the closed form does
+    not generalise past a polynomial pressure, and driving the shared locator
+    with the model that has an exact answer is what measures the locator.
+    `verify/run_full_check.py` compares the two.
+
+    Returns a `ZeroPressurePoint`; test `.ok`. `below_iron` is reported, never
+    asserted -- whether a set sits in the Bodmer-Witten window is a property
+    of the set.
+    """
+    flags = SpeciesFlags() if species is None else species
+
+    def point_at(n_B):
+        result = eos_point(par, "cfl", flags, n_B=n_B, T=0.0)
+        if not result.ok:
+            return None
+        p = result.point
+        # n_B from the solved flavour densities, as in every other model: the
+        # locked phase closes n_B to a residual too, and eps goes with the
+        # densities rather than with the request.
+        n_B_solved, _, n_S = quark_charges(p.n_u, p.n_d, p.n_s)
+        return (p.P_total, p.e_total / n_B_solved, p.mu_B,
+                n_S / n_B_solved, p.mu_S)
+
+    return locate_zero_pressure(point_at, two_flavour=False, n_lo=n_lo,
+                                n_hi=n_hi, n_scan=n_scan)

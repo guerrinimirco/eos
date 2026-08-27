@@ -93,7 +93,7 @@ from eos.ccdm.solver import (
     solve_fixed_yc_ys, warm_start,
 )
 from eos.ccdm.table import TableSpec, TableResult, build_table, quark_row
-from eos.ccdm.api import PointResult, eos_point, eos_response, eos_table
+from eos.ccdm.api import PointResult, eos_point, eos_response, eos_table, zero_pressure_point
 
 __all__ = [
     "Parameters", "Derived", "PUBLISHED_SETS",
@@ -111,4 +111,5 @@ __all__ = [
     "solve_fixed_yc", "solve_fixed_yc_ys",
     "TableSpec", "TableResult", "build_table", "quark_row",
     "PointResult", "eos_point", "eos_response", "eos_table",
+    "zero_pressure_point",
 ]

@@ -32,7 +32,7 @@ from eos.vmit.table import (
     solve_at, MODE_FRACTIONS,
 )
 from eos.vmit.api import (
-    eos_point, eos_table, eos_response, PointResult, RESPONSE_FREEZES,
+    eos_point, eos_table, eos_response, zero_pressure_point, PointResult, RESPONSE_FREEZES,
 )
 from eos.general.table_io import save_table, load_table, export_csv
 
@@ -51,7 +51,8 @@ __all__ = [
     "solve_beta_eq_neutrino_trapped", "warm_start", "default_guess",
     "TableSpec", "TableResult", "build_table", "rows_from_result",
     "quark_row", "solve_at", "MODE_FRACTIONS",
-    "eos_point", "eos_table", "eos_response", "PointResult",
+    "eos_point", "eos_table", "eos_response",
+    "zero_pressure_point", "PointResult",
     "RESPONSE_FREEZES",
     "save_table", "load_table", "export_csv",
 ]

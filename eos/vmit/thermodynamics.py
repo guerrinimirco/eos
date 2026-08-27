@@ -99,6 +99,13 @@ def kinetic_thermo(mu_eff: float, T: float, m: float,
     )
 
 
+#: A flavour that is not a degree of freedom of the matter: no population, no
+#: pressure, no energy, no entropy. What `SpeciesFlags.two_flavour` puts in
+#: the strange slot, so the sector is off because the flag says so and not
+#: because its potential happened to sit below a threshold.
+_EMPTY_FLAVOUR = QuarkThermo()
+
+
 def quark_density(mu_eff: float, T: float, m: float,
                   include_antiparticles: bool = True) -> float:
     """Number density of one flavour at effective potential `mu_eff`."""
@@ -250,7 +257,7 @@ class QuarkMuDensity:
 def effective_state(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
-    T: float, params: Parameters
+    T: float, params: Parameters, two_flavour: bool = False
 ) -> QuarkMuDensity:
     """Effective potentials at the given mean field, and the densities they
     imply — the inner step of every solver in `eos.vmit.solver`.
@@ -258,6 +265,13 @@ def effective_state(
     `n_u, n_d, n_s` enter only through the vector field V; the returned
     `n_*_calc` are what the resulting effective potentials produce. The solvers
     require `n_*_calc == n_*`, which is the self-consistency of V.
+
+    `two_flavour` is `SpeciesFlags.two_flavour`: with it on the strange
+    flavour is not a degree of freedom of the matter, so `n_s_calc` is zero
+    whatever mu_eff_s happens to be. The solvers' own `n_s_calc == n_s` row
+    then pins n_s to zero, which is what removes the sector rather than
+    letting it be emptied by a fraction that happens to vanish (CLAUDE.md
+    section 4).
     """
     m_u, m_d, m_s = params.m_u, params.m_d, params.m_s
 
@@ -266,7 +280,7 @@ def effective_state(
 
     n_u_calc = quark_density(mu_eff_u, T, m_u)
     n_d_calc = quark_density(mu_eff_d, T, m_d)
-    n_s_calc = quark_density(mu_eff_s, T, m_s)
+    n_s_calc = 0.0 if two_flavour else quark_density(mu_eff_s, T, m_s)
 
     return QuarkMuDensity(
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s,
@@ -289,7 +303,7 @@ def physical_potentials(mu_eff: float, n_u: float, n_d: float, n_s: float,
 def thermo_from_mu_n(
     mu_u: float, mu_d: float, mu_s: float,
     n_u: float, n_d: float, n_s: float,
-    T: float, params: Parameters = None
+    T: float, params: Parameters = None, two_flavour: bool = False
 ) -> MatterThermo:
     """Assemble a full quark-matter state from potentials and the mean field.
 
@@ -299,6 +313,14 @@ def thermo_from_mu_n(
     densities. A converged state satisfies n_q(mu_eff_q, T) = n_q, which is
     what the solvers in `eos.vmit.solver` impose; away from a solution the
     returned densities are the computed ones, not the ones passed in.
+
+    `two_flavour` is `SpeciesFlags.two_flavour`: the strange flavour carries
+    no population, no pressure, no energy and no entropy, and mu_S is zero
+    because no species left in the state carries strangeness. mu_B and mu_C
+    are untouched -- the basis map has mu_B = mu_u + 2 mu_d and
+    mu_C = mu_u - mu_d, neither of which reads mu_s -- so the two-flavour
+    surface satisfies the same E/A = mu_B + Y_S mu_S with both strange terms
+    identically zero.
     """
     if params is None:
         params = Parameters.default()
@@ -312,7 +334,8 @@ def thermo_from_mu_n(
     # Kinetic contributions from the Fermi integrals
     thermo_u = kinetic_thermo(mu_eff_u, T, m_u)
     thermo_d = kinetic_thermo(mu_eff_d, T, m_d)
-    thermo_s = kinetic_thermo(mu_eff_s, T, m_s)
+    thermo_s = (_EMPTY_FLAVOUR if two_flavour
+                else kinetic_thermo(mu_eff_s, T, m_s))
 
     n_u_calc = thermo_u.n
     n_d_calc = thermo_d.n
@@ -339,6 +362,15 @@ def thermo_from_mu_n(
     Y_S = n_S / n_B
 
     mu_B, mu_C, mu_S = charge_potentials_from_quarks(mu_u, mu_d, mu_s)
+    if two_flavour:
+        # No populated species carries strangeness, so S has no potential
+        # conjugate to it. mu_s stays tied to mu_d by the solvers' own
+        # strangeness-equilibrium row -- which is what keeps its slot
+        # DETERMINED rather than a null Jacobian column -- and mu_S = mu_s -
+        # mu_d is zero as a consequence rather than by assignment. It is set
+        # here so that round-off in that row cannot leak into a reported
+        # potential of a charge the state does not carry.
+        mu_S = 0.0
 
     return MatterThermo(
         n_u=n_u_calc, n_d=n_d_calc, n_s=n_s_calc, n_B=n_B, n_C=n_C, n_S=n_S,

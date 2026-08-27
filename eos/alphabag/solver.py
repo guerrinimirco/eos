@@ -182,7 +182,8 @@ class CFLPoint:
 # COLD GUESSES
 # =============================================================================
 def default_guess(mode: str, n_B: float, T: float, par: Parameters,
-                  Y_C: float = None) -> np.ndarray:
+                  Y_C: float = None,
+                  two_flavour: bool = False) -> np.ndarray:
     """The cold start of one mode.
 
     All of them start from the massless relation n = mu^3/(pi^2 (hbar c)^3) at
@@ -206,6 +207,8 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
         mu_d = mu_estimate * 1.1
         mu_s = mu_d
         mu_u = mu_d * (1.0 + 0.5 * Y_C)
+        if two_flavour:
+            return np.array([mu_u, mu_d])
         return np.array([mu_u, mu_d, mu_s])
 
     # Beta equilibrium: mu_d = mu_s by strangeness equilibrium, and mu_u sits
@@ -215,10 +218,14 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
     mu_e = mu_d * 0.1
     mu_u = mu_d - mu_e
     if mode == "beta_eq_neutrinoless":
+        if two_flavour:
+            return np.array([mu_u, mu_d, mu_e])
         return np.array([mu_u, mu_d, mu_s, mu_e])
     if mode == "beta_eq_neutrino_trapped":
         # A trapped electron family holds mu_nue positive and of the order of
         # the electron potential itself.
+        if two_flavour:
+            return np.array([mu_u, mu_d, mu_e, mu_e])
         return np.array([mu_u, mu_d, mu_s, mu_e, mu_e])
     raise ValueError(f"unknown mode {mode!r}; expected one of "
                      f"{list(MODE_FRACTIONS)}")
@@ -235,7 +242,8 @@ def point_from_mu(
     include_thermal_neutrinos: bool = True,
     mu_nu: float = 0.0,
     converged: bool = True,
-    error: float = 0.0
+    error: float = 0.0,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """The totals of an unpaired state at given potentials.
 
@@ -259,11 +267,12 @@ def point_from_mu(
         include_photons, include_gluons, include_thermal_neutrinos: sectors
         mu_nu: electron-neutrino chemical potential (MeV)
         converged, error: the status of the solve this came from
+        two_flavour: u and d only; the s flavour leaves the matter
 
     Returns:
         EoSPoint
     """
-    quark = thermo_from_mu(mu_u, mu_d, mu_s, T, par)
+    quark = thermo_from_mu(mu_u, mu_d, mu_s, T, par, two_flavour)
 
     thermo_e = electron_thermo(mu_e, T)
 
@@ -396,7 +405,8 @@ def solve_beta_eq_neutrinoless(
     include_photons: bool = True,
     include_gluons: bool = True,
     include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """Charge-neutral beta equilibrium with mu_nue = 0.
 
@@ -410,12 +420,24 @@ def solve_beta_eq_neutrinoless(
     with n_C = (2 n_u - n_d - n_s)/3. Row r3 is d <-> u + e- + nubar_e with
     the neutrinos free-streaming, r4 is s <-> d.
 
+    TWO-FLAVOUR MATTER IS THIS MODE WITH THE STRANGE SECTOR OFF
+    (`two_flavour`, `eos.alphabag.SpeciesFlags`), which is what two-flavour
+    quark matter physically is. Row r4 and the unknown mu_s go together: a
+    flavour that is not in the matter has no potential to solve for, and
+    holding Y_S = 0 instead would leave mu_S undetermined with a null Jacobian
+    column, which is the route CLAUDE.md section 4 forbids. So the vector is
+    x = [mu_u, mu_d, mu_e] and three rows close it. mu_s is reported as the
+    weak-equilibrium value mu_d -- the s <-> d relation still holds, nothing
+    is populated at it -- so mu_S vanishes with the strangeness it is
+    conjugate to.
+
     Args:
         n_B: baryon density (fm^-3)
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
         include_photons, include_gluons, include_thermal_neutrinos: sectors
         initial_guess: warm start in the layout above
+        two_flavour: u and d only; the s flavour leaves the matter
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
@@ -424,34 +446,44 @@ def solve_beta_eq_neutrinoless(
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("beta_eq_neutrinoless", n_B, T, par)
+    cold = default_guess("beta_eq_neutrinoless", n_B, T, par,
+                         two_flavour=two_flavour)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
-        mu_u, mu_d, mu_s, mu_e = x
+        if two_flavour:
+            mu_u, mu_d, mu_e = x
+            mu_s = mu_d
+        else:
+            mu_u, mu_d, mu_s, mu_e = x
 
         n_u = quark_density(mu_u, T, m_u, alpha)
         n_d = quark_density(mu_d, T, m_d, alpha)
-        n_s = quark_density(mu_s, T, m_s, alpha)
+        n_s = 0.0 if two_flavour else quark_density(mu_s, T, m_s, alpha)
         n_e = electron_thermo(mu_e, T).n
 
         n_B_calc, n_C, _ = quark_charges(n_u, n_d, n_s)
 
-        return [
-            n_B_calc - n_B,
-            n_C - n_e,
-            mu_d - mu_u - mu_e,
-            mu_s - mu_d,
-        ]
+        rows = [n_B_calc - n_B, n_C - n_e, mu_d - mu_u - mu_e]
+        if not two_flavour:
+            rows.append(mu_s - mu_d)
+        return rows
 
     def scales_at(x):
-        """Two densities against n_B, two potential equalities against mu_B."""
+        """Two densities against n_B, the potential equalities against mu_B;
+        the strangeness-equilibrium row goes with the flavour."""
         mu_B = _mu_scale(x[0], x[1])
+        if two_flavour:
+            return [n_B, n_B, mu_B]
         return [n_B, n_B, mu_B, mu_B]
 
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
-    mu_u, mu_d, mu_s, mu_e = x
+    if two_flavour:
+        mu_u, mu_d, mu_e = x
+        mu_s = mu_d
+    else:
+        mu_u, mu_d, mu_s, mu_e = x
 
     return point_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, par,
@@ -459,7 +491,8 @@ def solve_beta_eq_neutrinoless(
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
         converged=converged,
-        error=error
+        error=error,
+        two_flavour=two_flavour
     )
 
 
@@ -471,7 +504,8 @@ def solve_beta_eq_neutrino_trapped(
     include_photons: bool = True,
     include_gluons: bool = True,
     include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """Beta equilibrium with the electron family trapped at Y_Le.
 
@@ -500,37 +534,47 @@ def solve_beta_eq_neutrino_trapped(
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, par)
+    cold = default_guess("beta_eq_neutrino_trapped", n_B, T, par,
+                         two_flavour=two_flavour)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
-        mu_u, mu_d, mu_s, mu_e, mu_nu = x
+        if two_flavour:
+            mu_u, mu_d, mu_e, mu_nu = x
+            mu_s = mu_d
+        else:
+            mu_u, mu_d, mu_s, mu_e, mu_nu = x
 
         n_u = quark_density(mu_u, T, m_u, alpha)
         n_d = quark_density(mu_d, T, m_d, alpha)
-        n_s = quark_density(mu_s, T, m_s, alpha)
+        n_s = 0.0 if two_flavour else quark_density(mu_s, T, m_s, alpha)
         n_e = electron_thermo(mu_e, T).n
         n_nu = neutrino_thermo(mu_nu, T).n
 
         n_B_calc, n_C, _ = quark_charges(n_u, n_d, n_s)
 
-        return [
-            n_B_calc - n_B,
-            n_C - n_e,
-            mu_d - mu_u - mu_e + mu_nu,
-            mu_s - mu_d,
-            (n_e + n_nu) / n_B - Y_Le,
-        ]
+        rows = [n_B_calc - n_B, n_C - n_e, mu_d - mu_u - mu_e + mu_nu]
+        if not two_flavour:
+            rows.append(mu_s - mu_d)
+        rows.append((n_e + n_nu) / n_B - Y_Le)
+        return rows
 
     def scales_at(x):
-        """Two densities against n_B, two potential equalities against mu_B;
-        the lepton-fraction row is already dimensionless."""
+        """Two densities against n_B, the potential equalities against mu_B;
+        the lepton-fraction row is already dimensionless, and the
+        strangeness-equilibrium row goes with the flavour."""
         mu_B = _mu_scale(x[0], x[1])
+        if two_flavour:
+            return [n_B, n_B, mu_B, 1.0]
         return [n_B, n_B, mu_B, mu_B, 1.0]
 
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
-    mu_u, mu_d, mu_s, mu_e, mu_nu = x
+    if two_flavour:
+        mu_u, mu_d, mu_e, mu_nu = x
+        mu_s = mu_d
+    else:
+        mu_u, mu_d, mu_s, mu_e, mu_nu = x
 
     point = point_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, par,
@@ -539,7 +583,8 @@ def solve_beta_eq_neutrino_trapped(
         include_thermal_neutrinos=include_thermal_neutrinos,
         mu_nu=mu_nu,
         converged=converged,
-        error=error
+        error=error,
+        two_flavour=two_flavour
     )
     point.Y_L = Y_Le
     return point
@@ -554,7 +599,8 @@ def solve_fixed_yc(
     include_gluons: bool = True,
     include_electrons: bool = False,
     include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """Fixed non-leptonic charge fraction, with strangeness equilibrium.
 
@@ -591,35 +637,46 @@ def solve_fixed_yc(
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
-    cold = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C)
+    cold = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C,
+                         two_flavour=two_flavour)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
     def residual(x):
-        mu_u, mu_d, mu_s = x
+        if two_flavour:
+            mu_u, mu_d = x
+            mu_s = mu_d
+        else:
+            mu_u, mu_d, mu_s = x
 
         n_u = quark_density(mu_u, T, m_u, alpha)
         n_d = quark_density(mu_d, T, m_d, alpha)
-        n_s = quark_density(mu_s, T, m_s, alpha)
+        n_s = 0.0 if two_flavour else quark_density(mu_s, T, m_s, alpha)
 
         n_B_calc, n_C, _ = quark_charges(n_u, n_d, n_s)
         Y_C_calc = n_C / n_B_calc if n_B_calc > 0 else 0.0
 
-        return [
-            n_B_calc - n_B,
-            Y_C_calc - Y_C,
-            mu_s - mu_d,
-        ]
+        rows = [n_B_calc - n_B, Y_C_calc - Y_C]
+        if not two_flavour:
+            rows.append(mu_s - mu_d)
+        return rows
 
     def scales_at(x):
         """One density against n_B, one potential equality against mu_B; the
-        charge-fraction row is already dimensionless."""
+        charge-fraction row is already dimensionless, and the equality goes
+        with the flavour."""
+        if two_flavour:
+            return [n_B, 1.0]
         return [n_B, 1.0, _mu_scale(x[0], x[1])]
 
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
-    mu_u, mu_d, mu_s = x
+    if two_flavour:
+        mu_u, mu_d = x
+        mu_s = mu_d
+    else:
+        mu_u, mu_d, mu_s = x
     mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
-                              initial_guess)
+                              initial_guess, two_flavour)
 
     return point_from_mu(
         mu_u, mu_d, mu_s, mu_e, T, par,
@@ -627,7 +684,8 @@ def solve_fixed_yc(
         include_gluons=include_gluons,
         include_thermal_neutrinos=include_thermal_neutrinos,
         converged=converged,
-        error=error
+        error=error,
+        two_flavour=two_flavour
     )
 
 
@@ -640,7 +698,8 @@ def solve_fixed_yc_ys(
     include_gluons: bool = True,
     include_electrons: bool = False,
     include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None
+    initial_guess: Optional[np.ndarray] = None,
+    two_flavour: bool = False
 ) -> EoSPoint:
     """Fixed charge AND strangeness fractions -- no strangeness equilibrium.
 
@@ -667,9 +726,26 @@ def solve_fixed_yc_ys(
         include_electrons: add the neutralizing electron gas
         initial_guess: warm start in the layout above
 
+    THIS IS THE ONE UNPAIRED MODE THAT REFUSES `two_flavour`, and the refusal
+    is the same statement the flag makes. This mode holds Y_S; with the
+    strange sector off no species left in the state carries strangeness, so
+    row r3' reads 0 = Y_S -- unsatisfiable for Y_S != 0, and for Y_S = 0
+    satisfied at every mu_S at once, which leaves mu_S undetermined and its
+    Jacobian column null. Reaching two-flavour matter by asking for Y_S = 0 is
+    exactly the route CLAUDE.md section 4 forbids; it is reached by switching
+    the sector off, in `beta_eq_neutrinoless`.
+
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
+    if two_flavour:
+        raise NotImplementedError(
+            "solve_fixed_yc_ys: this mode holds Y_S, and with the strange "
+            "sector off there is no species left to carry strangeness -- the "
+            "row is unsatisfiable for Y_S != 0 and leaves mu_S undetermined "
+            "for Y_S = 0. Two-flavour quark matter is 'beta_eq_neutrinoless' "
+            "with SpeciesFlags(two_flavour=True), never fixed_YC_YS at "
+            "Y_S = 0")
 
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
@@ -716,7 +792,7 @@ def solve_fixed_yc_ys(
 
 
 def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
-                       initial_guess):
+                       initial_guess, two_flavour=False):
     """mu_e of the electron gas that neutralises the solved quark charge.
 
     Shared by the two fixed-fraction modes, which close the same way: the
@@ -729,13 +805,16 @@ def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
     alpha = par.alpha
     n_u = quark_density(mu_u, T, par.m_u, alpha)
     n_d = quark_density(mu_d, T, par.m_d, alpha)
-    n_s = quark_density(mu_s, T, par.m_s, alpha)
+    n_s = 0.0 if two_flavour else quark_density(mu_s, T, par.m_s, alpha)
     _, n_C, _ = quark_charges(n_u, n_d, n_s)
 
-    # A warm start carrying a fourth entry brought mu_e with it.
+    # A warm start carrying one entry past the flavour potentials brought mu_e
+    # with it; there are two flavour potentials with the strange sector off
+    # and three with it on.
+    n_flavours = 2 if two_flavour else 3
     mu_e_guess = None
-    if initial_guess is not None and len(initial_guess) > 3:
-        mu_e_guess = initial_guess[3]
+    if initial_guess is not None and len(initial_guess) > n_flavours:
+        mu_e_guess = initial_guess[n_flavours]
 
     return electron_thermo_from_density(n_C, T, mu_e_guess=mu_e_guess).mu
 
@@ -870,7 +949,7 @@ def solve_cfl(
 # =============================================================================
 # WARM START
 # =============================================================================
-def warm_start(point, mode: str) -> np.ndarray:
+def warm_start(point, mode: str, two_flavour: bool = False) -> np.ndarray:
     """The seed the next density takes from a solved point.
 
     The layouts are the unknown vectors of each mode's residual, so a warm
@@ -881,13 +960,22 @@ def warm_start(point, mode: str) -> np.ndarray:
 
     Along a density sweep the potentials vary smoothly, which is what makes
     the continuation work.
+
+    With `two_flavour` the vector is one entry shorter in every unpaired
+    mode: mu_s is not solved for, the flavour not being in the matter.
     """
     if mode == "beta_eq_neutrinoless":
+        if two_flavour:
+            return np.array([point.mu_u, point.mu_d, point.mu_e])
         return np.array([point.mu_u, point.mu_d, point.mu_s, point.mu_e])
     if mode == "beta_eq_neutrino_trapped":
+        if two_flavour:
+            return np.array([point.mu_u, point.mu_d, point.mu_e, point.mu_nu])
         return np.array([point.mu_u, point.mu_d, point.mu_s, point.mu_e,
                          point.mu_nu])
     if mode in ("fixed_YC", "fixed_YC_YS", "cfl"):
+        if two_flavour:
+            return np.array([point.mu_u, point.mu_d])
         return np.array([point.mu_u, point.mu_d, point.mu_s])
     raise ValueError(f"unknown mode {mode!r}; expected one of "
                      f"{list(MODE_FRACTIONS)}")

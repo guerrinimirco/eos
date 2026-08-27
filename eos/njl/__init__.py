@@ -74,7 +74,10 @@ from eos.njl.solver import (
     solve_fixed_yc, solve_fixed_yc_ys, solve_pattern, warm_start,
 )
 from eos.njl.table import TableSpec, TableResult, build_table, quark_row
-from eos.njl.api import PointResult, eos_point, eos_response, eos_table
+from eos.njl.api import (
+    PointResult, eos_point, eos_response, eos_table,
+    zero_pressure_point,
+)
 
 __all__ = [
     "Parameters", "PUBLISHED_SETS", "VECTOR_FORMS",
@@ -91,4 +94,5 @@ __all__ = [
     "solve_beta_eq_neutrino_trapped", "solve_fixed_yc", "solve_fixed_yc_ys",
     "TableSpec", "TableResult", "build_table", "quark_row",
     "PointResult", "eos_point", "eos_table", "eos_response",
+    "zero_pressure_point",
 ]

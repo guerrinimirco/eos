@@ -47,10 +47,12 @@ from eos.general.physics_constants import hc3
 from eos.alphabag.parameters import Parameters as AlphaBagParameters
 from eos.alphabag.thermodynamics import cfl_thermo_from_mu
 from eos.abpr import (
-    Parameters, baryon_density, energy_density, eos_point, eos_response,
+    Parameters, SpeciesFlags, baryon_density, energy_density, eos_point,
+    eos_response, zero_pressure_point,
     mu_from_eps, mu_from_nB, mu_from_P, pressure, solve_cfl,
     sound_speed_squared, thermo_from_mu,
 )
+from eos.general.physics_constants import E_per_A_iron
 
 
 @dataclass
@@ -300,9 +302,71 @@ def check_refusals():
                        "; ".join(failures) or "all four modes and T > 0 raise")
 
 
+def check_zero_pressure():
+    """The shared locator reproduces the closed form, to the last digit.
+
+    `check_surface` above finds the surface the way this model always has,
+    by inverting P(mu) analytically. This one finds it the way every OTHER
+    quark model must -- `eos.general.zero_pressure.locate_zero_pressure`,
+    a bracketed root find over `eos_point` -- and puts the two side by side.
+    ABPR is the only model in the repository where both routes exist, which
+    makes it the only place the locator can be measured against an exact
+    answer rather than against itself. E/A = 831.58 MeV for the shipped set
+    is the golden reference (CLAUDE.md section 12); code that needs a
+    different number is wrong until proven otherwise.
+
+    The identity E/A = mu_B + Y_S mu_S is checked here too, and this phase is
+    where the FULL form matters: locking holds Y_S = +1, so a helper reading
+    E/A = mu_B alone would be right here only by the accident that this
+    parametrization carries a single mu and mu_S vanishes identically. The
+    same identity on the CFL surface of `eos.alphabag`, which resolves the
+    strange mass through the Fermi integrals instead of expanding it, has
+    mu_S = 40.68 MeV and would miss by that much; `eos.alphabag`'s suite
+    checks it there.
+
+    THERE IS NO TWO-FLAVOUR ARM, and `SpeciesFlags(two_flavour=True)` raising
+    is what says so -- the check asserts the refusal rather than tolerating a
+    nan, because the number does not exist in a flavour-locked phase rather
+    than being unimplemented.
+    """
+    worst, detail = 0.0, []
+    try:
+        SpeciesFlags(two_flavour=True)
+    except NotImplementedError:
+        pass
+    else:
+        return CheckResult(
+            "zero-pressure surface", False, np.inf,
+            "SpeciesFlags(two_flavour=True) was accepted; a flavour-locked "
+            "phase has no two-flavour arm and must refuse the flag")
+
+    for par in SETS:
+        located = zero_pressure_point(par)
+        if not located.ok:
+            return CheckResult("zero-pressure surface", False, np.inf,
+                               f"{par.name}: {located.message}")
+        mu0, converged = mu_from_P(0.0, par)
+        if not converged:
+            return CheckResult("zero-pressure surface", False, np.inf,
+                               f"{par.name}: the closed form found no root")
+        closed = solve_cfl(par, baryon_density(mu0, par))
+        for err, name in (
+                (located.identity_error, "E/A - (mu_B + Y_S mu_S)"),
+                (abs(located.n_B - closed.n_B) / closed.n_B, "n_B"),
+                (abs(located.E_per_A - closed.e_total / closed.n_B)
+                 / located.E_per_A, "E/A vs the closed form")):
+            if err > worst:
+                worst, = (err,)
+        detail.append(f"{par.name}: E/A={located.E_per_A:.2f} MeV, "
+                      f"{'below' if located.E_per_A < E_per_A_iron else 'above'}"
+                      f" iron")
+    return CheckResult("zero-pressure surface", worst < 1e-12, worst,
+                       "; ".join(detail))
+
+
 CHECKS = (check_euler, check_free_energy, check_derivatives, check_charges,
           check_surface, check_causality, check_round_trips,
-          check_alphabag_limit, check_refusals)
+          check_alphabag_limit, check_refusals, check_zero_pressure)
 
 
 def run_full_check():

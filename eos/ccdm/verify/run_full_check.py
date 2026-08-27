@@ -90,6 +90,7 @@ import numpy as np
 from eos.ccdm.api import eos_response
 from eos.ccdm.parameters import Parameters
 from eos.ccdm.solver import solve_beta_eq_neutrinoless, solve_fixed_yc
+from eos.ccdm.api import zero_pressure_point
 from eos.ccdm.species import SpeciesFlags
 from eos.ccdm.thermodynamics import (
     PHI_CEIL, bag_constant, chiral_potential, glue_potential, mode_thermo,
@@ -673,6 +674,49 @@ def check_glue_scale_stiffens(par, tol=0.0):
         f"2.2 fm^-3")
 
 
+def _check_zero_pressure(par):
+    """E/A = mu_B + Y_S mu_S at the self-bound surface, both flavour contents.
+
+    THE IDENTITY IS THE INVARIANT; THE ENERGIES ARE REPORTED. At T = 0 the
+    Euler relation read at P = 0 gives eps/n_B as the Gibbs energy per baryon
+    exactly, so a located root that misses `mu_B + Y_S mu_S` is a root of
+    something other than P -- the one failure a locator driven by a callable
+    can have that nothing else would catch.
+
+    WHERE EACH ENERGY SITS AGAINST IRON IS NOT ASSERTED. Three-flavour E/A
+    below the 930.4 MeV of iron means absolutely stable strange quark matter,
+    and two-flavour E/A above it means ordinary nuclei are safe, but both are
+    properties of the PARAMETER SET: a legitimately excluded point is a normal
+    draw for a sampler, and a suite that failed on one would be asserting the
+    Bodmer-Witten hypothesis rather than checking an implementation. The
+    numbers go in the detail line instead.
+
+    A set with no self-bound surface, and a flavour content this phase
+    refuses, are reported the same way and fail nothing.
+    """
+    worst, detail = 0.0, []
+    for two_flavour in (False, True):
+        try:
+            flags = SpeciesFlags(two_flavour=two_flavour)
+        except NotImplementedError:
+            detail.append("two-flavour: no such arm in this phase")
+            continue
+        surface = zero_pressure_point(par, flags,
+                                        n_lo=0.30, n_hi=1.00,
+                                        n_scan=8)
+        label = "two" if two_flavour else "three"
+        if not surface.ok:
+            detail.append(f"{label}-flavour: {surface.message}")
+            continue
+        worst = max(worst, surface.identity_error)
+        detail.append(
+            f"{label}-flavour: E/A={surface.E_per_A:.2f} MeV at "
+            f"n_B={surface.n_B:.4f} fm^-3, Y_S={surface.Y_S:.4f}, "
+            f"{'below' if surface.below_iron else 'above'} iron")
+    return CheckResult("zero-pressure surface", worst < 1e-12, worst,
+                       "; ".join(detail))
+
+
 def run_all(par=None, include_csc=True, include_onset=False):
     """Run every check and return the report.
 
@@ -698,6 +742,7 @@ def run_all(par=None, include_csc=True, include_onset=False):
         check_charge_basis(par, states),
         check_residual_gate(par, states),
         check_causality(par),
+        _check_zero_pressure(par),
     ]
     if include_csc:
         report.results += [

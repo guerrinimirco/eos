@@ -720,7 +720,13 @@ class ModeThermo:
 
 
 #: What `kinetic_thermo` returns for a mode that is not in the medium at all.
+#: Public under the name ABSENT as well, because a model that removes a
+#: FLAVOUR from the matter rather than finding it below threshold needs the
+#: same block and must not build a second one: `SpeciesFlags.two_flavour` puts
+#: this in the strange modes. Same statement, reached by declaration instead
+#: of by a threshold.
 _ABSENT = ModeThermo(n=0.0, rho_s=0.0, eps=0.0, P=0.0, s=0.0, P_k4=0.0)
+ABSENT = _ABSENT
 
 
 def _occupation(x, T):

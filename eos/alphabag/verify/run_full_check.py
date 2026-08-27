@@ -40,7 +40,10 @@ from eos.general.thermodynamics_leptons import (
     electron_thermo, neutrino_thermo, photon_thermo,
 )
 from eos.general.solve import RESIDUAL_TOL
+from eos.general.zero_pressure import locate_zero_pressure
+from eos.alphabag.api import eos_point
 from eos.alphabag import (
+    SpeciesFlags, zero_pressure_point,
     Parameters, T_critical, bag_energy, bag_pressure, cfl_dgap_dT, cfl_gap,
     cfl_thermo_from_mu, e_massless, eos_response, gluon_thermo,
     kinetic_thermo, n_massless, P_massless, s_massless,
@@ -422,6 +425,90 @@ def _check_causality(par, grid):
                        f"c_s^2 in [{min(values):.3f}, {max(values):.3f}]")
 
 
+#: The pairing gap the paired surface is checked at [MeV]. A condition of the
+#: `cfl` mode rather than a parameter, so it is named here; the value is in the
+#: middle of the range a hybrid-star study scans and is large enough that the
+#: flavour-locking shift in mu_S is unmistakable.
+CFL_GAP = 100.0
+
+
+def _check_zero_pressure(par):
+    """E/A = mu_B + Y_S mu_S at the self-bound surface, both flavour contents.
+
+    THE IDENTITY IS THE INVARIANT; THE ENERGIES ARE REPORTED. At T = 0 the
+    Euler relation read at P = 0 gives eps/n_B as the Gibbs energy per baryon
+    exactly, so a located root that misses `mu_B + Y_S mu_S` is a root of
+    something other than P -- the one failure a locator driven by a callable
+    can have that nothing else would catch.
+
+    WHERE EACH ENERGY SITS AGAINST IRON IS NOT ASSERTED. Three-flavour E/A
+    below the 930.4 MeV of iron means absolutely stable strange quark matter,
+    and two-flavour E/A above it means ordinary nuclei are safe, but both are
+    properties of the PARAMETER SET: a legitimately excluded point is a normal
+    draw for a sampler, and a suite that failed on one would be asserting the
+    Bodmer-Witten hypothesis rather than checking an implementation. The
+    numbers go in the detail line instead.
+
+    A set with no self-bound surface, and a flavour content this phase
+    refuses, are reported the same way and fail nothing.
+    """
+    worst, detail = 0.0, []
+    for two_flavour in (False, True):
+        try:
+            flags = SpeciesFlags(two_flavour=two_flavour)
+        except NotImplementedError:
+            detail.append("two-flavour: no such arm in this phase")
+            continue
+        surface = zero_pressure_point(par, flags)
+        label = "two" if two_flavour else "three"
+        if not surface.ok:
+            detail.append(f"{label}-flavour: {surface.message}")
+            continue
+        worst = max(worst, surface.identity_error)
+        detail.append(
+            f"{label}-flavour: E/A={surface.E_per_A:.2f} MeV at "
+            f"n_B={surface.n_B:.4f} fm^-3, Y_S={surface.Y_S:.4f}, "
+            f"{'below' if surface.below_iron else 'above'} iron")
+    # ---- the paired surface, where the identity actually bites -----------
+    # THIS IS THE ONE PLACE IN THE REPOSITORY WHERE mu_S IS NONZERO AT P = 0,
+    # and it is why `E/A = mu_B + Y_S mu_S` is the form every reader of a
+    # surface must use. Locking pairs the three flavours at EQUAL DENSITIES,
+    # and equal densities at unequal masses need unequal potentials, so
+    # mu_S = mu_s - mu_d does not vanish here the way strangeness equilibrium
+    # makes it vanish in every beta-equilibrium mode. For the shipped set at
+    # Delta0 = 100 MeV it is about 41 MeV: a helper reading E/A = mu_B alone
+    # would report 895.87 instead of 936.55 and this check would catch it,
+    # while every unpaired check above would still pass.
+    #
+    # There is no two-flavour arm here, by construction: locking fixes
+    # Y_S = +1 identically. `SpeciesFlags(two_flavour=True)` is refused in
+    # this mode for the same reason `gluons` is, and `_check_refusals` pins
+    # that; this check is about the identity, not the refusal.
+    def cfl_point_at(n_B):
+        result = eos_point(par, "cfl", SpeciesFlags(), n_B=n_B, T=0.0,
+                           Delta0=CFL_GAP)
+        if not result.ok:
+            return None
+        q = result.point
+        n_B_solved, _, n_S = quark_charges(q.n_u, q.n_d, q.n_s)
+        return (q.P_total, q.e_total / n_B_solved, q.mu_B,
+                n_S / n_B_solved, q.mu_S)
+
+    paired = locate_zero_pressure(cfl_point_at, n_lo=0.20, n_hi=0.70,
+                                  n_scan=25)
+    if not paired.ok:
+        detail.append(f"cfl: {paired.message}")
+    else:
+        worst = max(worst, paired.identity_error)
+        detail.append(
+            f"cfl (Delta0={CFL_GAP:.0f}): E/A={paired.E_per_A:.2f} MeV, "
+            f"mu_B={paired.mu_B:.2f}, mu_S={paired.mu_S:.2f} MeV, "
+            f"{'below' if paired.below_iron else 'above'} iron")
+
+    return CheckResult("zero-pressure surface", worst < 1e-12, worst,
+                       "; ".join(detail))
+
+
 def run_full_check(par=None, grid=None, T=10.0):
     """Run the alphaBag verification suite; returns a structured report.
 
@@ -443,6 +530,7 @@ def run_full_check(par=None, grid=None, T=10.0):
     report.results.append(_check_cfl(par, grid, T))
     report.results.append(_check_causality(par, grid))
     report.results.append(_check_residual_gate(par, grid, T))
+    report.results.append(_check_zero_pressure(par))
     return report
 
 

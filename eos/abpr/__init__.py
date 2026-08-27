@@ -36,7 +36,7 @@ from eos.abpr.solver import (
 )
 from eos.abpr.api import (
     PointResult, TableResult, RESPONSE_FREEZES, cfl_row,
-    eos_point, eos_table, eos_response,
+    eos_point, eos_table, eos_response, zero_pressure_point,
 )
 
 __all__ = [
@@ -47,5 +47,5 @@ __all__ = [
     "check_temperature", "mu_from_nB", "mu_from_P", "mu_from_eps",
     "point_from_mu", "response_at_mu", "solve_cfl",
     "PointResult", "TableResult", "RESPONSE_FREEZES", "cfl_row",
-    "eos_point", "eos_table", "eos_response",
+    "eos_point", "eos_table", "eos_response", "zero_pressure_point",
 ]

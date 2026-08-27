@@ -25,6 +25,10 @@ from dataclasses import dataclass
 from eos.general.tabulate import (temperature_at_entropy,
                                   unconverged_response)
 from eos.general.modes import resolve_leptons
+from eos.general.basis import quark_charges
+from eos.general.zero_pressure import (
+    N_HI_DEFAULT, N_LO_DEFAULT, N_SCAN_DEFAULT, locate_zero_pressure,
+)
 from eos.vmit.solver import EoSPoint
 from eos.vmit.species import SpeciesFlags
 from eos.vmit.table import (
@@ -229,3 +233,65 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     out["converged"] = True
     out["reason"] = "converged"
     return out
+
+
+def zero_pressure_point(par, species=None, n_lo=N_LO_DEFAULT,
+                        n_hi=N_HI_DEFAULT, n_scan=N_SCAN_DEFAULT):
+    """E/A at the self-bound surface: P = 0, T = 0, beta_eq_neutrinoless.
+
+    A parametrization whose pressure crosses zero at finite density describes
+    SELF-BOUND matter: the phase ends there with no crust below it, and
+
+        E/A = eps/n_B
+
+    at that density is the energy per baryon of a lump of it at rest. The pair
+    of numbers this returns for the two flavour contents is the Bodmer-Witten
+    window, and it is a two-sided gate on a parameter set:
+
+        three-flavour E/A BELOW the 930.4 MeV of iron
+            -- strange quark matter is absolutely stable;
+        two-flavour E/A ABOVE it
+            -- ordinary nuclei are not already decaying into quark matter.
+
+    A set failing either is excluded, so both are wanted per sample. Which one
+    this call returns is decided by `SpeciesFlags.two_flavour`:
+
+        zero_pressure_point(par, SpeciesFlags())                    three
+        zero_pressure_point(par, SpeciesFlags(two_flavour=True))    two
+
+    THE CONTENT REQUESTED AND THE CONTENT FOUND CAN DIFFER, and the result
+    carries both. A three-flavour request returns whatever strangeness the
+    equilibrium actually populated at the surface, which is zero for a set
+    whose surface sits below the s quark's threshold; read it off `Y_S`, not
+    off `two_flavour`. Y_S is computed here through
+    `eos.general.basis.quark_charges`, the shared conserved-charge map, from
+    the solved flavour densities.
+
+    The root find is `eos.general.zero_pressure.locate_zero_pressure` over
+    this model's own `eos_point`: the locator takes the state as a callable,
+    so it is one implementation for every model and imports none of them.
+    Non-convergence, and a set with no self-bound surface at all, come back on
+    the result (CLAUDE.md section 6); `below_iron` is reported, never
+    asserted, because whether a set sits in the window is a property of the
+    set rather than an invariant of the code.
+
+    Returns a `ZeroPressurePoint`; test `.ok`.
+    """
+    flags = SpeciesFlags() if species is None else species
+
+    def point_at(n_B):
+        result = eos_point(par, "beta_eq_neutrinoless", flags, n_B=n_B, T=0.0)
+        if not result.ok:
+            return None
+        p = result.point
+        # n_B and n_S from the SOLVED flavour densities through the shared
+        # conserved-charge map, not from the requested density and not from a
+        # cached field: eps was computed at these densities, so this is the
+        # n_B that makes eps/n_B the Gibbs energy per baryon the Euler
+        # relation names.
+        n_B_solved, _, n_S = quark_charges(p.n_u, p.n_d, p.n_s)
+        return (p.P_total, p.e_total / n_B_solved, p.mu_B,
+                n_S / n_B_solved, p.mu_S)
+
+    return locate_zero_pressure(point_at, two_flavour=flags.two_flavour,
+                                n_lo=n_lo, n_hi=n_hi, n_scan=n_scan)

@@ -1174,6 +1174,123 @@ charge; the composition and gap freezes of \texttt{eos\_response}; and the
 dilaton/colour-dielectric graft, which the specification marks as unverified
 for transition order, pairing coexistence and finite temperature.
 
+\section{The self-bound surface and the two-flavour arm}
+\label{sec:zeropressure}
+
+\subsection{The quantity}
+
+A parametrization whose pressure crosses zero at finite density describes
+\emph{self-bound} matter: the phase ends there, with no crust below it. What is
+reported at that endpoint is the energy per baryon,
+%
+\begin{equation}
+  \frac{E}{A} \;=\; \frac{\varepsilon}{n_B}
+  \qquad\text{at}\qquad P(n_B) = 0,\quad T = 0 ,
+\end{equation}
+%
+in MeV. The entry point is \texttt{zero\_pressure\_point(par, species)}, which
+returns $n_B$, $E/A$, $\mu_B$, $Y_S$, $\mu_S$, the residual of
+Eq.~\eqref{eq:gibbsidentity}, the pressure actually reached, the flavour
+content requested, and whether $E/A$ fell below the $930.4\;$MeV of iron.
+
+\subsection{The identity that makes the read self-checking}
+
+At $T = 0$ the Euler relation is $\varepsilon + P = \sum_i \mu_i n_i$, so at
+$P = 0$ the energy per baryon \emph{is} the Gibbs energy per baryon. Expanding
+the species potentials in the conserved-charge basis,
+$\mu_i = B_i\mu_B + C_i\mu_C + S_i\mu_S$, and imposing beta equilibrium
+$\mu_C + \mu_e = 0$ together with total electric neutrality $n_C = n_e$, the
+charge and lepton terms cancel,
+%
+\begin{equation}
+  \sum_i \mu_i n_i
+    = \mu_B n_B + \underbrace{\mu_C n_C + \mu_e n_e}_{=\,0} + \mu_S n_S ,
+\end{equation}
+%
+leaving
+%
+\begin{equation}
+  \boxed{\;\frac{E}{A} \;=\; \mu_B + Y_S\,\mu_S\;} ,
+  \qquad Y_S = \frac{n_S}{n_B} .
+  \label{eq:gibbsidentity}
+\end{equation}
+
+\textbf{The full form is the one to use.} $E/A = \mu_B$ is the special case
+$Y_S\mu_S = 0$. It holds in every beta-equilibrium mode, where strangeness
+self-equilibrates and $\mu_S = 0$, and it fails in a colour-flavour locked
+phase: locking pairs the three flavours at equal densities, and equal densities
+at unequal masses require unequal potentials. On the CFL surface of
+\texttt{eos.alphabag} at $\Delta_0 = 100\;$MeV one finds
+$\mu_S = 40.68\;$MeV, so $\mu_B = 895.87\;$MeV against
+$E/A = 936.55\;$MeV. There are not two conventions, only one identity and the
+cases in which a term of it vanishes. Equation~\eqref{eq:gibbsidentity} is
+checked at every located root: a root that misses it is a root of something
+other than $P$.
+
+\subsection{Locating the root}
+
+\texttt{eos.general.zero\_pressure.locate\_zero\_pressure} samples $P(n_B)$ on
+a grid, takes the \emph{lowest} density at which $P$ rises through zero, and
+refines it with Brent's method. The scan is not a convenience: $P(n_B)$ may
+cross zero more than once, and a crossing at which $P$ \emph{falls} is the top
+of a mechanically unstable region rather than a surface. The locator takes the
+state as a callable, so it holds no model; a density at which the solve does
+not converge thins the scan rather than aborting it, and a parameter set with
+no surface returns a status rather than raising.
+
+\subsection{The Bodmer--Witten window}
+
+The pair of numbers is a two-sided gate on a parameter set: three-flavour
+$E/A < 930.4\;$MeV says strange quark matter is absolutely stable, and
+two-flavour $E/A > 930.4\;$MeV says ordinary nuclei are not already decaying
+into it. A set failing either is excluded. \textbf{Both facts are reported and
+neither is asserted}, since whether a set lies in the window is a property of
+the set; the same \texttt{below\_iron} flag reads in opposite directions on the
+two arms. The content \emph{requested} and the content \emph{found} may differ
+and both are returned: a set whose surface lies below the strange quark's
+threshold returns $Y_S = 0$ from a three-flavour call, so the content is read
+off $Y_S$.
+
+\subsection{The \texttt{two\_flavour} flag}
+
+Two-flavour quark matter is \texttt{beta\_eq\_neutrinoless} with the strange
+sector switched off, which is what it physically is, and not
+\texttt{fixed\_YC\_YS} at $Y_S = 0$. The distinction is not stylistic: with no
+populated species carrying strangeness, $n_S = 0$ holds over a whole range of
+$\mu_S$, so the row $n_S = Y_S n_B$ leaves $\mu_S$ undetermined and its
+Jacobian column null, and the solve then converges on round-off. Switching the
+sector off removes the flavour from the unknown vector instead. This model
+therefore \textbf{raises} on \texttt{fixed\_YC\_YS} with the flag on.
+
+The flag defaults to \texttt{False}, the $u,d,s$ matter this model has always
+solved, so no existing number moves. It is named for the restriction rather
+than for the sector because a sector-voiced \texttt{strange\_quarks} would have
+had to default \texttt{True} to preserve that. With the flag on, $n_s = 0$,
+$Y_S = 0$ and $\mu_S = 0$ identically; $\mu_B = \mu_u + 2\mu_d$ and
+$\mu_C = \mu_u - \mu_d$ are unchanged, neither reading $\mu_s$, so
+Eq.~\eqref{eq:gibbsidentity} collapses to $E/A = \mu_B$ with both strange terms
+vanishing; and $\mu_s$ is reported as the weak-equilibrium value $\mu_d$, the
+relation $s \leftrightarrow d$ still holding with nothing populated at it.
+
+\subsection{What stays when the strange flavour goes}
+
+\textbf{The strange condensate stays; only the strange Fermi sea is emptied.}
+The three strange colour-flavour modes contribute nothing to the medium --- no
+density, no scalar density, no pressure, energy or entropy --- while the
+strange scalar field is still solved from its own field equation and still
+feeds the light-quark masses. That is the physics of two-flavour quark matter:
+the strange Fermi sea is empty, the strange condensate of the QCD vacuum is
+not. Removing the strange field from the equations instead would move the
+light-quark masses and the subtracted vacuum constant, changing the model
+rather than the flavour content asked of it.
+
+A diquark containing an $s$ quark is likewise not a state two-flavour matter
+has, so $\Delta_1$ ($d$--$s$) and $\Delta_2$ ($u$--$s$) have nothing to pair:
+the patterns carrying them leave the default enumeration and an explicitly
+requested one is refused. \texttt{unpaired} and \texttt{2SC}, the $u$--$d$
+condensate, survive.
+
+
 \begin{thebibliography}{9}
 \bibitem{Rehberg1996} P.~Rehberg, S.~P.~Klevansky, J.~H\"ufner,
   Phys.\ Rev.\ C \textbf{53}, 410 (1996), arXiv:hep-ph/9506436.

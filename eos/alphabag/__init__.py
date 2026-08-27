@@ -43,7 +43,7 @@ from eos.alphabag.table import (
     solve_at, TableSettings, compute_table, save_results,
 )
 from eos.alphabag.api import (
-    eos_point, eos_table, eos_response, PointResult, RESPONSE_FREEZES,
+    eos_point, eos_table, eos_response, zero_pressure_point, PointResult, RESPONSE_FREEZES,
 )
 
 __all__ = [
@@ -62,6 +62,7 @@ __all__ = [
     "solve_fixed_yc", "solve_fixed_yc_ys", "solve_cfl", "warm_start",
     "TableSpec", "TableResult", "build_table", "rows_from_result",
     "quark_row", "solve_at", "TableSettings", "compute_table", "save_results",
-    "eos_point", "eos_table", "eos_response", "PointResult",
+    "eos_point", "eos_table", "eos_response",
+    "zero_pressure_point", "PointResult",
     "RESPONSE_FREEZES",
 ]

@@ -64,6 +64,13 @@ class QuarkThermo:
     f: float = 0.0      # free energy density f = e - T s (MeV/fm^3)
 
 
+#: A flavour that is not a degree of freedom of the matter: no population, no
+#: pressure, no energy, no entropy. What `SpeciesFlags.two_flavour` puts in
+#: the strange slot, so the sector is off because the flag says so and not
+#: because its potential happened to sit below a threshold.
+_EMPTY_FLAVOUR = QuarkThermo()
+
+
 @dataclass
 class MatterThermo:
     """The unpaired quark sector at given potentials: bag included, leptons not.
@@ -339,7 +346,8 @@ def gluon_thermo(T: float, alpha: float) -> QuarkThermo:
 # THE UNPAIRED SUMS
 # =============================================================================
 def thermo_from_mu(mu_u: float, mu_d: float, mu_s: float, T: float,
-                   params: Parameters) -> MatterThermo:
+                   params: Parameters,
+                   two_flavour: bool = False) -> MatterThermo:
     """The unpaired quark sector at given flavour potentials.
 
     Sums the three flavours of `kinetic_thermo` and subtracts the bag:
@@ -358,10 +366,19 @@ def thermo_from_mu(mu_u: float, mu_d: float, mu_s: float, T: float,
     n_S = n_s with S = +1 per s quark, and mu_B = mu_u + 2 mu_d,
     mu_C = mu_u - mu_d, mu_S = mu_s - mu_d.
 
+    `two_flavour` is `SpeciesFlags.two_flavour`: the strange flavour is not a
+    degree of freedom of the matter, so it contributes nothing to any of the
+    three sums and n_S is zero. mu_S is set to zero with it -- no species left
+    in the state carries strangeness, so S has no potential conjugate to it --
+    while mu_B = mu_u + 2 mu_d and mu_C = mu_u - mu_d are untouched, neither
+    reading mu_s. The bag is unchanged: it is the cost of the deconfined
+    region, not of a flavour.
+
     Args:
         mu_u, mu_d, mu_s: quark chemical potentials (MeV)
         T: temperature (MeV)
         params: the parameter set
+        two_flavour: u and d only; the s flavour leaves the matter
 
     Returns:
         MatterThermo
@@ -371,7 +388,8 @@ def thermo_from_mu(mu_u: float, mu_d: float, mu_s: float, T: float,
 
     thermo_u = kinetic_thermo(mu_u, T, m_u, alpha)
     thermo_d = kinetic_thermo(mu_d, T, m_d, alpha)
-    thermo_s = kinetic_thermo(mu_s, T, m_s, alpha)
+    thermo_s = (_EMPTY_FLAVOUR if two_flavour
+                else kinetic_thermo(mu_s, T, m_s, alpha))
 
     n_u = thermo_u.n
     n_d = thermo_d.n
@@ -388,6 +406,8 @@ def thermo_from_mu(mu_u: float, mu_d: float, mu_s: float, T: float,
 
     n_B, n_C, n_S = quark_charges(n_u, n_d, n_s)
     mu_B, mu_C, mu_S = charge_potentials_from_quarks(mu_u, mu_d, mu_s)
+    if two_flavour:
+        mu_S = 0.0
 
     return MatterThermo(
         n_u=n_u, n_d=n_d, n_s=n_s, n_B=n_B, n_C=n_C, n_S=n_S,

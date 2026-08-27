@@ -78,11 +78,34 @@ class SpeciesFlags:
         they contribute to eps, P and s only.
     photons
         Blackbody photons; eps, P and s only, no conserved charge.
+    two_flavour
+        The strange QUARK sector, off. With it on the matter is u and d only:
+        the three s modes carry no medium, so n_s = 0, Y_S = 0 and mu_S = 0
+        identically, and the flavour leaves the matter rather than being
+        emptied by a fraction that happens to vanish (CLAUDE.md section 4).
+        This is how two-flavour quark matter is reached -- 
+        `beta_eq_neutrinoless` with the sector off -- and it is the upper half
+        of the Bodmer-Witten window; see `zero_pressure_point`.
+
+        THE s CONDENSATE STAYS. Only the s FERMI SEA is emptied: phi_s is
+        still solved from its own gap equation and still feeds M_u and M_d
+        through the 't Hooft determinant 2 K phi_d phi_s, because the s
+        condensate belongs to the QCD vacuum and not to the matter. Dropping
+        it would move M_u, M_d and the subtracted vacuum constant, changing
+        the model rather than the flavour content asked of it.
+
+        RAISES under any pattern that condenses a diquark containing an s
+        quark -- CFL, uSC, dSC, free -- since with no s quark there is nothing
+        to pair; those patterns leave the default enumeration and an explicit
+        request for one is refused. The flag keeps both its values in the
+        'unpaired' and '2SC' patterns and is a statement about the phase in
+        the rest, exactly as `eos.alphabag.SpeciesFlags.gluons` is.
     """
     csc: bool = False
     muons: bool = False
     thermal_neutrinos: bool = False
     photons: bool = False
+    two_flavour: bool = False
     hyperons: bool = False
     deltas: bool = False
     thermal_mesons: bool = False

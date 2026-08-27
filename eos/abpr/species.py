@@ -13,7 +13,13 @@ rather than unfinished work:
   - the thermal sectors (photons, gluons, thermal neutrinos) are identically
     zero at T = 0, which is the only temperature this model has -- and the
     gluons have a second, temperature-independent reason, below, which is the
-    one `eos.alphabag` refuses them for in its own `cfl` mode.
+    one `eos.alphabag` refuses them for in its own `cfl` mode;
+  - `two_flavour` asks for a flavour content the condensate forbids. Locking
+    fixes Y_S = +1 identically, so there is no strangeness fraction free to
+    switch off. This is the `gluons` case again, one sector further on: a
+    statement about which phase the model describes rather than a choice the
+    caller has, and the whole of what `eos.alphabag` says by refusing the
+    same flag in its own `cfl` mode.
 
 The three flavours u, d, s are always present, the way nucleons always are in
 a hadronic model, and locked to equal densities. Asking for any sector raises
@@ -41,6 +47,14 @@ _WHY_OFF = {
               "reason, so T > 0 is no way around it",
     "thermal_neutrinos": "a thermal sector, identically zero at T = 0, which "
                          "is the only temperature this model has",
+    "two_flavour": "meaningless in a colour-flavour locked phase, which is "
+                   "the only phase this model describes: the condensate locks "
+                   "the three flavours to equal densities, so Y_S = +1 "
+                   "identically and there is no two-flavour arm to ask for. "
+                   "This model therefore has no two-flavour E/A at all -- the "
+                   "number does not exist here rather than being unwired. For "
+                   "two-flavour quark matter use eos.vmit, eos.alphabag, "
+                   "eos.njl or eos.ccdm in 'beta_eq_neutrinoless'",
 }
 
 
@@ -61,6 +75,7 @@ class SpeciesFlags:
     hyperons: bool = False
     deltas: bool = False
     thermal_mesons: bool = False
+    two_flavour: bool = False
 
     def __post_init__(self):
         for flag, why in _WHY_OFF.items():

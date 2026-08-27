@@ -77,6 +77,13 @@ m_nucleon_MeV = 931.494       # MeV (≈ atomic mass unit)
 n0_default = 0.16             # fm⁻³ (saturation density, typical value)
 n0_sfho = 0.1583              # fm⁻³ (commonly used for SFHo)
 
+# Energy per baryon of the most bound nucleus, ⁵⁶Fe: M(⁵⁶Fe)c²/56, from the
+# atomic mass 55.9349375 u. This is the reference the Bodmer-Witten hypothesis
+# is read against -- three-flavour quark matter below it is absolutely stable,
+# two-flavour quark matter above it leaves ordinary nuclei stable -- and it is
+# a property of iron, never of any equation of state.
+E_per_A_iron = 930.4          # MeV
+
 # =============================================================================
 # UNIT CONVERSIONS
 # =============================================================================
