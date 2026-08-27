@@ -1119,7 +1119,8 @@ decision that cannot be made before the tables exist.
   a hybrid table concatenate without renaming anything" — but the mixed side
   uses the totals, so the same column name carries different physics on the
   two sides, differing by 10–20 percent at T = 40 MeV with pions. This is the
-  defect class already fixed once in `sound_speed_frozen_hadronic` (b83d162),
+  defect class already fixed once in the hadronic frozen wing (b83d162, then
+  `sound_speed_frozen_pure`),
   in the sibling that was not checked then, and it contradicts CLAUDE.md §2.
 
   The fix is one line — `Y_C=p.Y_C, Y_S=p.Y_S` — but it CHANGES TABLE COLUMNS
