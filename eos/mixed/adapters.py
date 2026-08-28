@@ -508,9 +508,9 @@ def _dd2_wing_kwargs(spec, flags):
 def _vmit_wing_solve(spec, n_B, T, params):
     """One pure vMIT point at the spec's equilibrium.
 
-    The vmit naming differences are absorbed here and go no further: the
-    engine's Y_Le is vmit's Y_L. Each point cold-starts from vmit's own
-    default guess
+    There is no naming difference left to absorb: vmit names the condition
+    Y_Le, as the engine and CLAUDE.md section 5 do. Each point cold-starts
+    from vmit's own default guess
     — those solves are cheap and robust, and a cold start keeps every wing
     row exactly reproducible by the pure model's own call at the same
     conditions, which is what test/mixed/test_hybrid_modes.py asserts.
