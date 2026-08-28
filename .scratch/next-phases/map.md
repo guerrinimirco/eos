@@ -318,6 +318,28 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 100 — `eos.vmit.EoSPoint.Y_S` is never assigned, and the baseline froze the zero](issues/100-vmit-point-Y_S-never-assigned.md)**
+  (resolved 2026-08-28). **Fixed and regenerated, in that order, and the sweep
+  came first.** Every model's point, every mode, each cached fraction against
+  `eos.general.basis` on that point's own densities: **on `Y_S`, `vmit` alone**
+  — the ticket's claim held — and the fix is four `result.Y_S = q_thermo.Y_S`,
+  routed through the map `table.py` was already using. **`vmit.npz`: exactly 39
+  keys moved, all of them `.Y_S`, all from 0.0**, and the tree reproduced the
+  stored file with 0 keys moving beforehand, so every delta is this fix's.
+  `beta.T0.n0.45.Y_S` now reads 0.8402368306 beside the `Y_s = 0.8402` it used
+  to contradict. **The sweep found a SECOND shape on `Y_L`** — `zl`, `vmit`,
+  `alphabag`, all outside the trapped mode — which is
+  [ticket 108](issues/108-cached-lepton-fraction-three-models.md) and not a
+  wider diff here, because the three that leave it zero DOCUMENT it as the
+  trapped mode's input while `njl`/`ccdm`/`did` measure it: a ruling, not a
+  fix. New cross-model `test/test_cached_fractions.py`, verified red before
+  green (`Obtained: 0.0, Expected: 0.8510384763983517`), 21 passed / 3 skipped
+  on pre-existing non-convergence. **Ticket 99's retracted finding was still
+  live in the source**: `general/zero_pressure.py` named vMIT's set as the one
+  that comes apart — measured now, its surface is Y_S = 0.8379, not
+  two-flavour — corrected there and in `vmit.md`/`.tex`, whose returned-fields
+  table called `Y_S` one of "the fractions the mode fixed".
+
 - **[Ticket 99 — E/A at P = 0 for two- and three-flavour quark matter](issues/99-quark-ea-at-zero-pressure.md)**
   (resolved 2026-08-27). **Both numbers ship, through one name in five models.**
   `zero_pressure_point(par, species)` in `vmit`, `alphabag`, `njl`, `ccdm` and
@@ -2468,7 +2490,11 @@ Two patches graduated on 2026-08-27 out of
 [ticket 100](issues/100-vmit-point-Y_S-never-assigned.md) (a cached conserved
 fraction its solvers never fill, frozen into a baseline) and
 [ticket 101](issues/101-pressure-and-energy-field-names.md) (`P`/`eps` against
-`P_total`/`e_total`, six models against four).
+`P_total`/`e_total`, six models against four). Ticket 100's own sweep then
+graduated a third on 2026-08-28:
+[ticket 108](issues/108-cached-lepton-fraction-three-models.md) — `Y_L` is the
+trapped mode's condition in three models and the measured lepton fraction in
+three others, and the zeros are a defect or correct depending which.
 
 In scope, not yet sharp enough to ticket:
 

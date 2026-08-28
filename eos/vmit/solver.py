@@ -68,7 +68,12 @@ class EoSPoint:
     n_B: float = 0.0       # Baryon density (fm⁻³)
     T: float = 0.0         # Temperature (MeV)
     Y_C: float = 0.0       # Charge fraction
-    Y_S: float = 0.0       # Strangeness fraction
+    # Strangeness fraction n_S/n_B, MEASURED on the solved flavour densities
+    # through eos.general.basis.quark_charges -- what the equilibrium
+    # populated, not what a mode asked for. The two agree in fixed_YC_YS to
+    # the solver's own residual and come apart everywhere else, which is the
+    # whole reason it is reported.
+    Y_S: float = 0.0
     Y_L: float = 0.0       # Lepton fraction
     
     # Chemical potentials (MeV)
@@ -325,6 +330,7 @@ def solve_beta_eq_neutrinoless(
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
     result.n_e = e_thermo.n
     result.Y_C = q_thermo.Y_C
+    result.Y_S = q_thermo.Y_S
     result.Y_u = n_u / n_B 
     result.Y_d = n_d / n_B 
     result.Y_s = n_s / n_B 
@@ -479,7 +485,8 @@ def solve_fixed_yc(
     # Compute quark thermodynamics using helper function
     q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
                                 two_flavour)
-    
+
+    result.Y_S = q_thermo.Y_S
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
     result.s_total = q_thermo.s
@@ -623,7 +630,8 @@ def solve_fixed_yc_ys(
     # Compute quark thermodynamics using helper function
     q_thermo = thermo_from_mu_n(mu_u, mu_d, mu_s, n_u, n_d, n_s, T, par,
                                 two_flavour)
-    
+
+    result.Y_S = q_thermo.Y_S
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
     result.s_total = q_thermo.s
@@ -733,6 +741,7 @@ def solve_beta_eq_neutrino_trapped(
     result.n_e = e_thermo.n
     result.n_nu = nu_thermo.n
     result.Y_C = q_thermo.Y_C
+    result.Y_S = q_thermo.Y_S
     result.Y_u = n_u / n_B
     result.Y_d = n_d / n_B
     result.Y_s = n_s / n_B

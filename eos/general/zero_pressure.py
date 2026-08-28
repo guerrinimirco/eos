@@ -105,9 +105,15 @@ class ZeroPressurePoint:
 
     `two_flavour` and `Y_S` are both here on purpose, because they answer
     different questions: the first is what was asked for, the second is what
-    was found. They come apart -- `eos.vmit`'s default set has the s quark
-    below its threshold at its own surface, so a three-flavour REQUEST returns
-    Y_S = 0 and the two-flavour number. Read the content off Y_S.
+    was found. A three-flavour REQUEST returns whatever strangeness the
+    equilibrium populated, which is zero for a set whose surface sits below
+    the s quark's threshold: read the content off Y_S, not off `two_flavour`.
+    Y_S is measured by the model, through `eos.general.basis` on its own
+    solved flavour densities -- never off a cached field, which is how this
+    paragraph came to carry a worked example that was not true. It named
+    `eos.vmit`'s default set as the case that comes apart, on a Y_S = 0 read
+    from a point field three of that model's four solvers never assigned. Its
+    surface is at Y_S = 0.8379 and is not two-flavour.
 
     `below_iron` is a FACT REPORTED, never an invariant asserted. Whether a
     set sits in the Bodmer-Witten window is a property of the set: a
