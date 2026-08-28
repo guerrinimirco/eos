@@ -1086,9 +1086,10 @@ solve got to. The point carries:
 | masses | `M_star` = `(M*_u, M*_d, M*_s)` | MeV |
 | potentials | `mu_B`, `mu_C`, `mu_S`, `mu_3`, `mu_8`, `mu_e`, `mu_nu` | MeV |
 | densities | `n_u`, `n_d`, `n_s`, `n_e`, `n_mu`, `n_nu` | fm^-3 |
+| colour | `n_3`, `n_8` (zero identically when unpaired), `n_q` | fm^-3 |
 | totals | `P_total`, `e_total`, `f_total` = `eps - T s`; `s_total` | MeV/fm^3; fm^-3 |
 | fractions | `Y_u`, `Y_d`, `Y_s`, `Y_e`, `Y_nu` | — |
-| internals | `state` (the matter block), `x` (the unknown vector, the warm start) | |
+| internals | `_state` (the matter block, INTERNAL, natural units [MeV^n] — the underscore says it is not on the fm-based boundary; reachable for `euler_residual()`), `x` (the unknown vector, the warm start) | |
 
 Five of those are part of the *answer* rather than diagnostics. `branch` and
 `pattern` say which candidate won; `Delta` are the gap magnitudes, zero where
@@ -1096,7 +1097,7 @@ the pattern does not pair; `gapless` says the gapless test fired, so ranking by
 `Omega` across this point is not valid; `beyond_cutoff` says
 `max_j |mu*_j| > mu_ceiling`.
 
-The matter block on `state` carries, in natural units, everything of the
+The matter block on `_state` carries, in natural units [MeV^n], everything of the
 assembly before the leptons: `T`, `Phi`, `phi_bar`, `chi`, `sigma`, `zeta`,
 `omega_0`, `Sigma_V`, `Sigma_R`, `M*_f`, `Delta_eta`, the five
 conserved-charge potentials, the nine `mu_j` and `mu*_j`, `rho_s,f`, the nine

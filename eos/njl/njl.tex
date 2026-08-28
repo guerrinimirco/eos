@@ -970,9 +970,13 @@ $f = \varepsilon - T s$
   & the free-energy density, and the quantity the pattern enumeration ranks
     candidates by \\
 \midrule
-\texttt{state}, \texttt{x}
-  & the matter block in natural units, and the converged unknown vector ---
-    which is what a warm start is \\
+\texttt{\_state}, \texttt{x}
+  & the matter block, and the converged unknown vector --- which is what a
+    warm start is. \texttt{\_state} is INTERNAL and in natural units
+    [MeV$^n$]: the leading underscore says it is not on the fm-based boundary
+    this section opens with. Everything a caller needs is on the point above,
+    in fm; \texttt{\_state.euler\_residual()} is dimensionless and is why the
+    block stays reachable \\
 \bottomrule
 \end{tabular}
 \end{center}

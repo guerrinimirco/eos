@@ -654,12 +654,22 @@ Fm-based throughout: densities in fm^-3, potentials and masses in MeV, `P`,
     mu_e, mu_nu          the lepton potentials
     n_u, n_d, n_s        the three FLAVOUR densities, n_f = sum_a n_(f,a)
     n_e, n_mu, n_nu      the lepton densities
+    n_3, n_8             the COLOUR densities, whose vanishing is what makes
+                         the state colour-neutral (both zero identically in an
+                         unpaired region, where mu_3 = mu_8 = 0 are pinned)
+    n_q                  the total quark density, sum over flavour and colour
     Y_u, Y_d, Y_s,       the same divided by n_B
     Y_e, Y_nu
     P, eps, s            the totals: matter + leptons + thermal gases
     f = eps - T s        the free-energy density, and what the enumeration ranks by
-    state, x             the matter block in natural units, and the converged
-                         unknown vector — which is what a warm start is
+    _state, x            the matter block, and the converged unknown vector —
+                         which is what a warm start is. `_state` is INTERNAL
+                         and in natural units [MeV^n]: the leading underscore
+                         is what says it is not on the fm-based boundary the
+                         first line of this section states. Everything a
+                         caller needs is on the point above, in fm;
+                         `_state.euler_residual()` is dimensionless and is the
+                         reason the block stays reachable at all
 
 **`n_s` is the strange-quark density, not a scalar density.** Every other model
 in this repository returns a field called `n_s` meaning the *scalar* density,
