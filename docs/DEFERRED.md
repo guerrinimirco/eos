@@ -1081,50 +1081,28 @@ decision that cannot be made before the tables exist.
 ## Per model
 
 ### dd2
-- `nmp.invert_nmp(impose_Q_sat=True)` — the Q_sat-imposing isoscalar closure —
-  converges but does not IMPOSE what it names. Ticket 93 removed the half of
-  this entry that was a solver defect; ticket 105 (2026-08-28) measured the
-  cause and named the remedy, and what is deferred is now that remedy alone.
+- `compute_nmp` reports no Z_sat, and this is a choice rather than a gap. The
+  fourth derivative of E/A would need a third derivative of the sigma gap
+  equation, and there is nothing to spend it on: no closure imposes Z_sat and
+  nobody quotes it. Ticket 105 measured what the fourth finite difference it
+  would replace was worth — a span of 4.8e+04 on a value of 4547, and a 5x5
+  closure conditioning at 550340 when Z_sat was added as a row. Add it if a
+  sixth isoscalar datum ever becomes a datum.
 
-  **The cause, measured.** Q_sat is a third finite difference of a solved
-  quantity: it spans 2.48 MeV over h in [5e-5, 5e-4], a relative floor near
-  1.5e-03. The five-row closure that imposes it conditions at 259 at the
-  published DD2 point, so a solve inherits 259 x 1.5e-03 = 0.39 of relative
-  coupling error. No choice of pinned coefficient rescues that — 259 is the
-  best of the four (c_omega 259, b_omega 354, c_sigma 703, b_sigma 4191) — and
-  no reparametrisation does either, since the collinearity is a rank statement
-  rather than a coordinate one: E_sat and m*/m at fixed n_sat are blind to the
-  shape coefficients, so four shape knobs answer to three rows and the shape
-  block has an exact rank deficiency of one.
-
-  **The remedy, and it is the whole of what remains deferred.** Take the
-  derivative analytically instead of by stencil. K_sat, a second difference,
-  spans only 5.2e-04 MeV over the same h range, so the default closure is
-  unaffected and does not wait on this. With the floor gone the amplification
-  is harmless at any of the four pins, and imposing Q_sat becomes legitimate.
-  Forward and inverse must go analytic TOGETHER — the finite-difference bias
-  currently cancels on a round trip only because both difference identically.
-
-  **Retired by ticket 105, no longer part of this entry.** The old text
-  blamed a cross-constraint f_sigma''(1) = f_omega''(1) that the DD2 table
-  obeys only to 2.200718e-03. That constraint is DD's, not DD2's (Typel, PRC
-  71, 064301 (2005) Sec. IV imposes it and counts eight parameters; Typel et
-  al., PRC 81, 015803 (2010) states only f_i(1) = 1 and f_i''(0) = 0 and
-  counts ten), and it has been removed from the inverse map. With it gone the
-  published couplings are a root of the default closure and the round trip
-  recovers them to 1.1e-05.
-
-  **A defect this surfaced and did not fix**, for the ticket that measures it:
-  ISO_GATE = 2e-2 was set wide to clear the cross row's 2.2e-03 and Q_sat's
-  stencil, and neither reason survives in the default closure. On a 105-cell
-  (K_sat, m*/m) grid with restarts on, the 101 passing cells split 95 below
-  1e-5 and 6 in [1e-3, 2e-2] with nothing in between, so six are certified
-  without being roots. Choosing the tighter value moves `ok` for real targets
-  and needs a scan on more than two axes.
-
-  What depends on it today: nothing in the library — every shipped path uses
-  the default closure, and a "Q_sat" key in the target dict no longer selects
-  anything.
+  **Resolved and no longer deferred (ticket 111, 2026-08-28):**
+  `nmp.invert_nmp(impose_Q_sat=True)` converges AND imposes what it names.
+  K_sat, Q_sat, L_sym and K_sym are analytic — the gap equation differentiated
+  implicitly twice and substituted into the closed-form E/A and E_sym — so the
+  1.5e-03 relative floor the third finite difference carried is gone, and the
+  closure's 259x amplification has nothing left to amplify. At DD2's own point
+  it went from max|residual| = 1.4e-02 with Q_sat imposed only to 1.6 MeV, to
+  1.5e-12 with Q_sat imposed to 1e-10 MeV; perturbed targets over dK_sat in
+  [-20, +10] and dQ_sat in [-30, +100] MeV come back at the same order.
+  `ISO_GATE` moved 2e-2 -> 1e-8 on the same measurement (see the `nmp` module
+  docstring for the four-axis scan). Four published numbers moved by the
+  correction, all inside their frozen baseline tolerances: K_sat 242.724055 ->
+  242.724015, Q_sat 168.713524 -> 168.786877, L_sym 55.033672 -> 55.033667,
+  K_sym -93.224031 -> -93.224009.
 - `table.hadronic_row` emits a Y_C and Y_S that are BARYONS ONLY, while the
   `EoSPoint` it flattens carries the totals. It recomputes them itself:
 

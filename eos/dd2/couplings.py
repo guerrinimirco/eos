@@ -34,6 +34,13 @@ def rational_d2f(x, a, b, c, d):
     return 2.0 * a * (b - c) * (1.0 - 3.0 * c * u) / (1.0 + c * u) ** 3
 
 
+def rational_d3f(x, a, b, c, d):
+    """d3f_i/dx3 (exact closed form)."""
+    u = (x + d) ** 2
+    return (-24.0 * a * c * (b - c) * (x + d) * (1.0 - c * u)
+            / (1.0 + c * u) ** 4)
+
+
 def exponential_f(x, a_rho):
     """f_rho(x) for the isovector coupling."""
     return np.exp(-a_rho * (x - 1.0))

@@ -300,10 +300,11 @@ same way.
 Q_sat, E_sym, L_sym (and K_sym). Inverse map imposes
 {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}; the isoscalar sector closes by
 pinning TWO shape coefficients, `b_sigma` and `c_omega`, at their published
-values, and Q_sat / K_sym come back as predictions. Q_sat rides on a third
-finite difference — forward and inverse use the identical stencil so the bias
-cancels on round trips — and the inverter retries from jittered seeds before
-declaring a target unrepresentable.
+values, and Q_sat / K_sym come back as predictions. Every derivative is
+analytic — the sigma gap equation differentiated implicitly twice and
+substituted into the closed-form E/A and E_sym, so nothing here is a finite
+difference of a solved quantity. The inverter retries from jittered seeds
+before declaring a target unrepresentable.
 
 **There is no cross-constraint, and this is a correction.** Earlier versions
 closed the sector with `f_sigma''(1) = f_omega''(1)`. That condition is the DD
@@ -333,12 +334,17 @@ couplings" remain different statements away from DD2's own point. A solve that
 returns its seed unmoved on a nonzero residual is a Powell hybrid giving up on
 its first step, not an answer, and comes back `ok=False`.
 
-Imposing Q_sat instead of one pin is available but is **not a usable closure
-today**: the five-row system conditions at 259 and Q_sat is a third finite
-difference spanning 2.48 MeV over h in [5e-5, 5e-4], so the recovered
-couplings inherit 259 x 1.5e-3 of relative error. K_sat, a second difference,
-spans 5.2e-04 MeV over the same range, which is why the default closure stops
-there. Imposing Q_sat becomes legitimate when the derivative is analytic.
+Imposing Q_sat instead of one pin is available and is now usable. It was not
+while Q_sat was a third finite difference spanning 2.48 MeV over h in
+[5e-5, 5e-4]: the five-row system conditions at 259, so the recovered
+couplings inherited 259 x 1.5e-3 of relative error, and at DD2's own point
+that closure reached only max|residual| = 1.4e-2, imposing Q_sat to 1.6 MeV.
+With the derivative taken by hand the floor is gone and the amplification has
+nothing to amplify — the same closure at the same point reaches 1.5e-12 and
+imposes Q_sat to 1e-10 MeV, and perturbed targets over dK_sat in [-20, +10]
+and dQ_sat in [-30, +100] MeV come back at the same order. The default
+closure still stops at K_sat, because it imposes the nuclear-matter
+parameters that are actually quoted and predicts the rest.
 
 **What `eos_response` returns.** A second derivative is only defined once one
 says what is held fixed, so the conditioning is an explicit argument. Two

@@ -1,8 +1,9 @@
 # The natural-units record leaves the public result, and its accessors take the fm names
 
 Type: task
-Status: open
-Blocked by: [90](90-solver-signature-and-units-sweep.md)
+Status: in progress (claimed 2026-08-29)
+Assignee: session dc4b25ab
+Blocked by: [90](90-solver-signature-and-units-sweep.md) — RESOLVED
 Parent: ../map.md
 
 ## Question

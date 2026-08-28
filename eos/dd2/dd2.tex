@@ -654,6 +654,88 @@ E_{\mathrm{sym}}(\nB) = \frac{k_F^2}{6 E^*_F}
 \label{eq:esym}
 \end{equation}
 
+\paragraph{The derivatives, in closed form.} None of these is a finite
+difference. Symmetric matter at $T = 0$ carries one self-consistent field, so
+writing $S = \Gamma_\sigma(\nB) \sigma$ --- hence $m^* = m_N - S$ --- and
+%
+\begin{equation}
+G(\nB) = \frac{\Gamma_\sigma^2(\nB)}{m_\sigma^2},
+\qquad
+W(\nB) = \frac{\Gamma_\omega^2(\nB)}{m_\omega^2},
+\end{equation}
+%
+the $\sigma$ gap equation $m_\sigma^2 \sigma = \Gamma_\sigma n_s$ and the
+eliminated $\omega_0$ give the closed forms
+%
+\begin{align}
+S &= G(\nB)\, n_s\!\left(m_N - S,\, k_F(\nB)\right),
+\label{eq:gap-S} \\
+\varepsilon &= \varepsilon_{\mathrm{kin}}(m^*, k_F)
+  + \frac{S^2}{2G} + \frac{W \nB^2}{2}, \\
+\mu &= E^*_F + W \nB + \frac{W' \nB^2}{2} - \frac{G' n_s^2}{2},
+\label{eq:mu-snm}
+\end{align}
+%
+the last two terms of Eq.~\eqref{eq:mu-snm} being
+$\Sigma^R = \Gamma_\omega' \omega_0 \nB - \Gamma_\sigma' \sigma n_s$ rewritten
+in these variables, and a prime meaning $\mathrm{d}/\mathrm{d}\nB$. Because
+$P = \mu \nB - \varepsilon$ at $T = 0$ and $E/A = \varepsilon/\nB - m_N$, one
+has $\partial_n(E/A) = P/\nB^2$ and $P' = \nB \mu'$, so at the saturation
+point, where $P = 0$,
+%
+\begin{equation}
+K_{\mathrm{sat}} = 9 \nsat\, \mu'(\nsat),
+\qquad
+Q_{\mathrm{sat}} = 27 \nsat \left[ \nsat\, \mu''(\nsat)
+  - 3 \mu'(\nsat) \right].
+\label{eq:KQ-from-mu}
+\end{equation}
+%
+The third derivative of $E/A$ is therefore only the second derivative of
+$\mu$, and what that needs is $S'$ and $S''$ from Eq.~\eqref{eq:gap-S}
+differentiated implicitly. With $n_{s,m} = \partial n_s/\partial m^*$,
+$n_{s,k} = \partial n_s/\partial k_F$ and so on, and using
+$\mathrm{d}m^*/\mathrm{d}\nB = -S'$,
+%
+\begin{align}
+\frac{\mathrm{d} n_s}{\mathrm{d}\nB}
+  &= -n_{s,m} S' + n_{s,k} k_F' , \\
+S' \left(1 + G\, n_{s,m}\right)
+  &= G' n_s + G\, n_{s,k} k_F' , \\
+S'' \left(1 + G\, n_{s,m}\right)
+  &= G'' n_s + 2 G' \frac{\mathrm{d} n_s}{\mathrm{d}\nB}
+   + G \Big( n_{s,mm} S'^2 - 2 n_{s,mk} S' k_F'
+   + n_{s,kk} k_F'^2 + n_{s,k} k_F'' \Big) ,
+\end{align}
+%
+with $k_F = (3\pi^2 \nB/2)^{1/3}$, so $k_F' = k_F/3\nB$ and
+$k_F'' = -2k_F/9\nB^2$. The partials of the scalar density
+$n_s = (g/4\pi^2)\, m^* [k_F E_F - m^{*2} L]$, $L = \operatorname{arcsinh}
+(k_F/m^*)$, $g = 4$, are elementary: those in $k_F$ are the integrand at the
+surface, and those in $m^*$ are the moments
+%
+\begin{equation}
+\frac{\partial n_s}{\partial m^*}
+  = \frac{g}{2\pi^2} \int_0^{k_F} \frac{k^4}{E_k^3}\, \mathrm{d}k ,
+\qquad
+\frac{\partial^2 n_s}{\partial m^{*2}}
+  = -\frac{3 m^* g}{2\pi^2} \int_0^{k_F} \frac{k^4}{E_k^5}\, \mathrm{d}k ,
+\end{equation}
+%
+which $k = m^* \sinh t$ turns into
+$m^{*2}\!\int (\cosh^2 t - 2 + \operatorname{sech}^2 t)\,\mathrm{d}t$ and
+$\int \tanh^4 t\, \mathrm{d}t$. $L_{\mathrm{sym}}$ and $K_{\mathrm{sym}}$
+follow from Eq.~\eqref{eq:esym} with the same $E^*_F$ derivatives and no
+further machinery, since $\Gamma_\rho^2/m_\rho^2$ is a pure exponential.
+$Z_{\mathrm{sat}}$, the fourth derivative, is deliberately not reported: it
+would require a third derivative of Eq.~\eqref{eq:gap-S}, no closure imposes
+it, and the fourth finite difference it would replace spanned
+$4.8\times 10^{4}$ on a value of $4547$.
+
+These forms treat the two nucleons as one $g = 4$ gas at the average Dirac
+mass, i.e.\ \texttt{nucleon\_mass\_mode="average"}, the convention the
+published DD2 nuclear-matter parameters are stated in.
+
 The inverse map imposes $\{\nsat, E_{\mathrm{sat}}, m^*/m, K_{\mathrm{sat}},
 E_{\mathrm{sym}}, L_{\mathrm{sym}}\}$. The isovector sector closes in two
 steps: $\Gamma_\rho(\nsat)$ analytically from Eq.~\eqref{eq:esym}, then
@@ -670,8 +752,8 @@ and $354$ for the $\omega$ shape), since what should remain free is the least
 collinear surviving pair. Higher derivatives not imposed ---
 $Q_{\mathrm{sat}}$ and $K_{\mathrm{sym}}$ --- are then \emph{predictions} of
 the inversion and are reported as such; imposing $Q_{\mathrm{sat}}$ in place
-of one pin remains available as an option, though the third finite difference
-behind it makes that closure unusable in practice (below).
+of one pin remains available as an option, and is usable now that the
+$Q_{\mathrm{sat}}$ row is analytic (below).
 
 \paragraph{No cross-constraint, and why.} Earlier versions of this inverse
 map closed the isoscalar sector with $f''_\sigma(1) = f''_\omega(1)$. That
@@ -691,10 +773,9 @@ it is now absent from the inverse map as well.
 
 Two numerical caveats are part of the specification. First,
 $Q_{\mathrm{sat}}$ and $K_{\mathrm{sym}}$, the two quantities the inversion
-predicts rather than imposes, are finite differences of a solved quantity;
-the forward and inverse maps use the identical $h = 10^{-4}$ stencil so the
-bias cancels exactly on a round trip, and any change to $h$ must be made in
-both places together. Second, the isoscalar residual surface has spurious basins;
+predicts rather than imposes, come from the same closed forms as the imposed
+rows, so what the closure imposes is exactly what the forward map reports and
+a round trip returns its own inputs to $\sim 10^{-11}$. Second, the isoscalar residual surface has spurious basins;
 whether a target inverts can depend on the seed, so the solver retries from
 jittered seeds (deterministically) before declaring a target unrepresentable,
 and no feasibility boundary may be inferred from a scan run without restarts.
@@ -711,14 +792,19 @@ for bit, and such a solve is reported as not converged. The residual alone
 cannot make that call, since a stall reports whatever residual its seed
 carries.
 
-Fourth, $Q_{\mathrm{sat}}$ cannot be imposed while it is a third difference.
-That closure conditions at $259$ and the $Q_{\mathrm{sat}}$ row carries a
-relative floor near $1.5\times 10^{-3}$ --- the value spans $2.48$~MeV over
+Fourth, $Q_{\mathrm{sat}}$ could not be imposed while it was a third
+difference, and now can be. That closure conditions at $259$, and the
+$Q_{\mathrm{sat}}$ row used to carry a relative floor near
+$1.5\times 10^{-3}$ --- the value spanned $2.48$~MeV over
 $h \in [5\times 10^{-5}, 5\times 10^{-4}]$, against $5.2\times 10^{-4}$~MeV
-for $K_{\mathrm{sat}}$ --- so a solve inherits $O(0.4)$ of relative coupling
-error. No choice of pin rescues it: $259$ is the best of the four. This is why
-the shipped closure stops at $K_{\mathrm{sat}}$, and why imposing
-$Q_{\mathrm{sat}}$ waits on an analytic third derivative.
+for $K_{\mathrm{sat}}$ --- so a solve inherited $O(0.4)$ of relative coupling
+error, and no choice of pin rescued it, $259$ being the best of the four. The
+closed forms above remove the floor rather than the amplification: at DD2's
+own point that closure went from $\max|\mathrm{residual}| = 1.4\times 10^{-2}$
+with $Q_{\mathrm{sat}}$ imposed only to $1.6$~MeV, to $1.5\times 10^{-12}$
+with $Q_{\mathrm{sat}}$ imposed to $10^{-10}$~MeV. The default closure
+nonetheless still stops at $K_{\mathrm{sat}}$, because it imposes the
+nuclear-matter parameters that are quoted and predicts the rest.
 
 \section{Numerical implementation}
 \label{sec:numerics}

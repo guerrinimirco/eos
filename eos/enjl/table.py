@@ -163,16 +163,16 @@ def beta_row(point):
     volume fraction plays in a two-engine mixed phase, so a reader of both
     finds it under the same name.
     """
-    state = point.point
+    state = point._point
     n = point.densities
     return dict(n_B=point.n_B, T=point.T,
                 P=point.P, eps=point.eps, s=point.s,
                 S_per_B=point.s / point.n_B if point.n_B > 0 else 0.0,
-                chi=state.n_bQ / state.n_b if state.n_b > 0 else 0.0,
+                chi=state.n_bQ / state.n_b_nat if state.n_b_nat > 0 else 0.0,
                 mu_B=point.mu_b, mu_C=point.mu_C, mu_S=point.mu_S,
                 mu_e=point.mu_e,
-                Y_C=state.n_C / state.n_b if state.n_b > 0 else 0.0,
-                Y_S=state.n_S / state.n_b if state.n_b > 0 else 0.0,
+                Y_C=state.n_C / state.n_b_nat if state.n_b_nat > 0 else 0.0,
+                Y_S=state.n_S / state.n_b_nat if state.n_b_nat > 0 else 0.0,
                 n_p=n["p"], n_n=n["n"], n_Lambda=n["Lambda"],
                 n_u=n["u"], n_d=n["d"], n_s=n["s"],
                 n_e=n["e"], n_mu=n["mu"],

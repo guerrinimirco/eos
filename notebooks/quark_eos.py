@@ -1368,7 +1368,7 @@ show("parameters (arguments, never module state)", [
 status, result = csc_point(name, csc=False)
 if status == "ok":
     point = result.point
-    state = point.state
+    state = point._state
     show("the gap equations  M_f = m_f - 4 G_S phi_f + 2 K phi_g phi_h", [
         ("phi_u", float(state.phi[0]), "MeV^3", "condensate <u-bar u>"),
         ("phi_d", float(state.phi[1]), "MeV^3", "condensate <d-bar d>"),
@@ -1382,7 +1382,7 @@ if status == "ok":
     show("the grand potential and the thermodynamics", [
         ("Omega", state.Omega / hc3, "MeV/fm^3",
          "= -P of the matter, vacuum-subtracted"),
-        ("P (matter)", state.P_fm, "MeV/fm^3", "quarks only, no leptons"),
+        ("P (matter)", state.P, "MeV/fm^3", "quarks only, no leptons"),
         ("P", point.P_total, "MeV/fm^3", "matter + leptons + thermal sectors"),
         ("eps", point.e_total, "MeV/fm^3", "energy density"),
         ("s", point.s_total, "fm^-3", "entropy density"),
@@ -1452,7 +1452,7 @@ show("derived from the vacuum, not input", [
 status, result = csc_point(name, csc=False)
 if status == "ok":
     point = result.point
-    state = point.state
+    state = point._state
     show("the field equations R_1..R_4 (dilaton, sigma, zeta, omega_0)", [
         ("branch", point.branch, "", "the chiral/dielectric root that won"),
         ("Phi", state.Phi, "-", "dilaton solve variable, = phi-bar^4"),
@@ -1472,7 +1472,7 @@ if status == "ok":
         ("U", state.U / hc3, "MeV/fm^3", "glue potential"),
         ("V", state.V / hc3, "MeV/fm^3", "chiral potential"),
         ("Omega", state.Omega / hc3, "MeV/fm^3", "= -P of the matter"),
-        ("P (matter)", state.P_fm, "MeV/fm^3", "quarks and fields, no leptons"),
+        ("P (matter)", state.P, "MeV/fm^3", "quarks and fields, no leptons"),
         ("P", point.P_total, "MeV/fm^3", "matter + leptons + thermal sectors"),
         ("eps", point.e_total, "MeV/fm^3", ""),
         ("s", point.s_total, "fm^-3", ""),
@@ -1531,7 +1531,7 @@ for name in CSC_MODELS:
         if status != "ok":
             continue
         point = result.point
-        state = point.state
+        state = point._state
         show(f"pattern = {pattern!r}", [
             ("Delta_1", float(point.Delta[0]), "MeV", "pairs d with s"),
             ("Delta_2", float(point.Delta[1]), "MeV", "pairs u with s"),
@@ -1544,7 +1544,7 @@ for name in CSC_MODELS:
              "the pairing correction alone; exactly 0 when Delta = 0"),
             ("pair cost", state.pair_cost / hc3, "MeV/fm^3",
              "sum_eta Delta_eta^2/(4 G_D)"),
-            ("Omega", -state.P_fm, "MeV/fm^3", "= -P of the matter"),
+            ("Omega", -state.P, "MeV/fm^3", "= -P of the matter"),
             ("P", point.P_total, "MeV/fm^3", ""),
             ("eps", point.e_total, "MeV/fm^3", ""),
             ("s", point.s_total, "fm^-3", ""),
@@ -1657,7 +1657,7 @@ def neutral_phase(name, par, mu_B, T, pattern):
     """
     def charge_excess(mu_C):
         state, _ = phase_block(name, par, mu_B, float(mu_C), T, pattern)
-        return state.n_C_fm - electron_thermo(-float(mu_C), T).n
+        return state.n_C - electron_thermo(-float(mu_C), T).n
 
     try:
         if abs(charge_excess(0.0)) < 1.0e-8:
@@ -1671,9 +1671,9 @@ def neutral_phase(name, par, mu_B, T, pattern):
     state, ok = phase_block(name, par, mu_B, mu_C, T, pattern)
     electrons = electron_thermo(-mu_C, T)
     return dict(ok=ok, pattern=pattern, mu_C=mu_C, state=state,
-                Omega=-(state.P_fm + electrons.P),
+                Omega=-(state.P + electrons.P),
                 Delta=tuple(abs(float(g)) for g in state.Delta),
-                gapless=bool(state.gapless), n_B=state.n_B_fm,
+                gapless=bool(state.gapless), n_B=state.n_B,
                 n_e=electrons.n, reason="converged")
 
 
@@ -1773,7 +1773,7 @@ for pattern, expected in DOC_TABLE.items():
     state = entry["state"]
     got = (float(state.M[0]), float(state.M[1]), float(state.M[2]),
            entry["mu_C"], state.mu_8, float(state.Delta[2]),
-           state.n_B_fm, state.P_fm)
+           state.n_B, state.P)
     for field, doc_value, code_value in zip(DOC_FIELDS, expected, got):
         print(f"  {pattern:9s} {field:9s} {doc_value:10.4f} "
               f"{code_value:10.4f} {code_value - doc_value:12.4f}")

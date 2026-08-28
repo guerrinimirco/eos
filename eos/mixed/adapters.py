@@ -341,7 +341,7 @@ def enjl_branch_of(point):
     light = min(point.M_q["u"], point.M_q["d"])
     if light > _CHIRAL_SPLIT:
         return "broken"
-    n_b = point.n_b
+    n_b = point.n_b_nat
     baryons = point.n["p"] + point.n["n"] + point.n["Lambda"]
     if n_b > 0.0 and baryons <= _DECONFINED_BARYON_FRACTION * n_b:
         return "deconfined"
@@ -473,8 +473,8 @@ def enjl_phase_thermo(point, mu_B, mu_C, mu_S):
         fields={"gomega_omega": point.gomega_omega,
                 "grho_rho": point.grho_rho,
                 "SigmaR_b": point.SigmaR_b, "SigmaR_q": point.SigmaR_q},
-        n_B=point.n_b / hc3, n_C=point.n_C / hc3, n_S=point.n_S / hc3,
-        P=point.P / hc3, eps=point.eps / hc3, s=point.s / hc3,
+        n_B=point.n_b_nat / hc3, n_C=point.n_C / hc3, n_S=point.n_S / hc3,
+        P=point.P_nat / hc3, eps=point.eps_nat / hc3, s=point.s / hc3,
         mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
         mu_i=mu_i, mu_eff_i=mu_eff, m_eff_i=m_eff,
         mu_dot_n=sum(mu_i[sp] * n[sp] for sp in n),
@@ -1146,8 +1146,8 @@ def njl_phase(par, flags=None, patterns=None):
             mu_eff_i={"u": mu_u - st.Sigma_V, "d": mu_d - st.Sigma_V,
                       "s": mu_s - st.Sigma_V},
             m_eff_i={"u": st.M[0], "d": st.M[1], "s": st.M[2]},
-            n_B=st.n_B_fm, n_C=st.n_C_fm, n_S=st.n_S_fm,
-            P=st.P_fm, eps=st.eps_fm, s=st.s_fm,
+            n_B=st.n_B, n_C=st.n_C, n_S=st.n_S,
+            P=st.P, eps=st.eps, s=st.s,
             mu_dot_n=st.mu_dot_n / hc3)
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
@@ -1306,8 +1306,8 @@ def ccdm_phase(par, flags=None, branches=None, patterns=None):
                       "s": mu_s - st.Sigma_V},
             m_eff_i={"u": st.M_star[0], "d": st.M_star[1],
                      "s": st.M_star[2]},
-            n_B=st.n_B_fm, n_C=st.n_C_fm, n_S=st.n_S_fm,
-            P=st.P_fm, eps=st.eps_fm, s=st.s_fm,
+            n_B=st.n_B, n_C=st.n_C, n_S=st.n_S,
+            P=st.P, eps=st.eps, s=st.s,
             mu_dot_n=st.mu_dot_n / hc3)
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,

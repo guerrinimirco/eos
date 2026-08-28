@@ -433,7 +433,7 @@ def check_beta_equilibrium():
                 continue
             from eos.enjl.solver import warm_start
             x0 = warm_start(pt)
-            state = pt.point
+            state = pt._point
             for sp in SPECIES:
                 if pt.densities[sp] <= 1e-4 * n_B:
                     continue
@@ -485,7 +485,7 @@ def check_thermo_from_mu():
             x0 = None
             continue
         x0 = list(pt.x)
-        state = pt.point
+        state = pt._point
         try:
             back = thermo_from_mu(par, pt.mu_b, pt.mu_C, pt.mu_S)
         except RuntimeError as err:                        # noqa: BLE001
@@ -594,7 +594,7 @@ def check_fixed_fractions():
                     pt = solve_fixed_yc(par, n_B, Y_C, leptons=leptons)
                 except RuntimeError:
                     continue
-                got = pt.point.n_C / pt.point.n_b
+                got = pt._point.n_C / pt._point.n_b_nat
                 err = abs(got - Y_C)
                 if err > worst:
                     worst, detail = err, f"n_B={n_B} Y_C={Y_C} leptons={leptons}"
@@ -603,8 +603,8 @@ def check_fixed_fractions():
                 pt = solve_fixed_yc_ys(par, n_B, 0.3, Y_S, leptons=False)
             except RuntimeError:
                 continue
-            for got, want, name in ((pt.point.n_C / pt.point.n_b, 0.3, "Y_C"),
-                                    (pt.point.n_S / pt.point.n_b, Y_S, "Y_S")):
+            for got, want, name in ((pt._point.n_C / pt._point.n_b_nat, 0.3, "Y_C"),
+                                    (pt._point.n_S / pt._point.n_b_nat, Y_S, "Y_S")):
                 err = abs(got - want)
                 if err > worst:
                     worst, detail = err, f"n_B={n_B} Y_S={Y_S} ({name})"
@@ -698,7 +698,7 @@ def check_trapped_lepton_number():
             _, _, mu_C, _, mu_nue, _ = _unpack(pt.x, pt.spec)
             n_nue = _massless_density(mu_nue, 1.0) / hc3
             err_Y = abs((pt.densities["e"] + n_nue) / n_B - Y_Le)
-            err_b = abs(mu_C + pt.point.mu["e"] - mu_nue)
+            err_b = abs(mu_C + pt._point.mu["e"] - mu_nue)
             if err_Y > worst_Y:
                 worst_Y, detail = err_Y, f"Y_Le={Y_Le} n_B={n_B}"
             worst_beta = max(worst_beta, err_b)

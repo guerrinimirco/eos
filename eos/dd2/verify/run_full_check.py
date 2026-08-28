@@ -256,16 +256,19 @@ def _check_restarts_extend_the_basin(par):
     the single seed fails outright.
 
     A count over a grid, deliberately, rather than a verdict at one cell: a
-    single cell's verdict in the Q_sat-imposing closure is decided in its
-    target's last bits (ticket 67 measured eight targets at three
-    perturbations each, none holding across its own three), while the count is
-    stable. Measured on python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0: 0/9 at
-    zero restarts, 4/9 at 32, unchanged by the retirement of the cross row.
+    single cell's verdict is decided in its target's last bits (ticket 67
+    measured eight targets at three perturbations each, none holding across
+    its own three), while the count is stable. Measured on python.org 3.14.2 /
+    numpy 2.3.5 / scipy 1.17.0: 22/30 at zero restarts, 27/30 at 32.
 
-    The Q_sat-imposing closure rather than the shipped default, because it is
-    the harder residual surface and so the one where the restarts have
-    something to find; the default shows the same property more mildly (14 of
-    18 misses recovered on the 105-cell grid in the `nmp` module docstring).
+    The DEFAULT closure, over (K_sat, m*/m). It used to be the Q_sat-imposing
+    one over (K_sat, Q_sat), because a Q_sat row carrying a third finite
+    difference made that the harder residual surface -- 0/9 at zero restarts
+    against 4/9 at 32. Analytic derivatives removed the difficulty rather than
+    the check: that closure now reaches 30/30 at zero restarts over a grid
+    three times wider (K_sat 150-350, Q_sat -400 to 800), so there is nothing
+    left there for restarts to find. The basin structure the restarts exist
+    for is real and survives, and it is the default closure that shows it.
 
     Here rather than in `test/dd2/` because it is a property of the inverse
     map's basin structure measured over a grid, the same class as the forward
@@ -276,20 +279,91 @@ def _check_restarts_extend_the_basin(par):
     ref = compute_nmp(par)
     six = {k: ref[k] for k in ("n_sat", "E_sat", "m_eff_ratio", "K_sat",
                                "E_sym", "L_sym")}
-    cells = [(K, Q) for K in (200.0, 240.0, 280.0)
-             for Q in (0.0, 200.0, 400.0)]
+    cells = [(K, M) for K in (160.0, 200.0, 240.0, 280.0, 320.0)
+             for M in (0.40, 0.50, 0.60, 0.70, 0.80, 0.90)]
     reached = {}
     for n_restarts in (0, 32):
         n_ok = 0
-        for K_sat, Q_sat in cells:
-            _, status = invert_nmp(dict(six, K_sat=K_sat, Q_sat=Q_sat),
-                                   impose_Q_sat=True, n_restarts=n_restarts)
+        for K_sat, m_ratio in cells:
+            try:
+                _, status = invert_nmp(dict(six, K_sat=K_sat,
+                                            m_eff_ratio=m_ratio),
+                                       n_restarts=n_restarts)
+            except ValueError:      # m*/m outside the physical window
+                continue
             n_ok += bool(status.ok)
         reached[n_restarts] = n_ok
     gained = reached[32] - reached[0]
     return CheckResult("restarts extend the basin", gained > 0, float(gained),
                        f"{reached[0]}/{len(cells)} cells at 0 restarts, "
                        f"{reached[32]}/{len(cells)} at 32")
+
+
+def _check_analytic_derivatives(par):
+    """The analytic K_sat, Q_sat, L_sym and K_sym are the stencil's limit.
+
+    `nmp.snm_derivatives` differentiates the closed forms of symmetric matter
+    by hand rather than differencing the solver, so nothing inside it is
+    checked by the solver agreeing with itself. What ties the two together is
+    that the finite differences it replaced must CONVERGE TO IT: each is a
+    central difference of order h^2, so Richardson-extrapolating the pair
+    (h, h/2) removes the leading error, and the analytic value must sit
+    within the pair's own scatter of that extrapolation.
+
+    Self-calibrating on purpose -- the scatter |d(h) - d(h/2)| is what the
+    stencil itself says its accuracy is, so there is no tolerance to tune and
+    none to loosen.
+
+    h = 1.5e-3 rather than the plateau's left edge, and that IS a measured
+    choice. The estimator is only honest where truncation dominates the pair;
+    at small h the scatter it divides by is roundoff, and for Q_sat -- a third
+    difference, so roundoff grows as h^-3 -- the ratio then jitters with the
+    interpreter. Measured on the published set, worst of the four:
+
+        h        4e-4    6e-4    8e-4    1e-3    1.5e-3   2e-3
+        py3.9    0.509   0.040   0.033   0.016   0.003    0.001
+        py3.14   0.403   0.633   0.038   0.022   0.003    0.000
+
+    (anaconda 3.9.7 / numpy 1.26.4 / scipy 1.13.1 against python.org 3.14.2 /
+    numpy 2.3.5 / scipy 1.17.0; the worst column is Q_sat in every case, the
+    other three sit below 1e-3 everywhere.) At 1.5e-3 the two stacks agree and
+    the check passes with 300x of margin; at 6e-4 it would pass with 1.6x on
+    one of them, which is a check waiting to fail for a reason that is not
+    physics.
+    """
+    from scipy.optimize import brentq
+    from eos.dd2.nmp import snm_derivatives, energy_per_baryon, esym
+    from eos.dd2.solver import solve_snm_t0
+
+    n_sat = brentq(lambda n: solve_snm_t0(par, n).P, 0.12, 0.18, xtol=1e-12)
+    analytic = snm_derivatives(par, n_sat)
+
+    def stencils(h):
+        EA = lambda n: energy_per_baryon(par, n)
+        ES = lambda n: esym(par, n)
+        return {
+            "K_sat": 9 * n_sat ** 2 * (EA(n_sat + h) - 2 * EA(n_sat)
+                                       + EA(n_sat - h)) / h ** 2,
+            "Q_sat": 27 * n_sat ** 3 * (EA(n_sat + 2 * h) - 2 * EA(n_sat + h)
+                                        + 2 * EA(n_sat - h)
+                                        - EA(n_sat - 2 * h)) / (2 * h ** 3),
+            "L_sym": 3 * n_sat * (ES(n_sat + h) - ES(n_sat - h)) / (2 * h),
+            "K_sym": 9 * n_sat ** 2 * (ES(n_sat + h) - 2 * ES(n_sat)
+                                       + ES(n_sat - h)) / h ** 2,
+        }
+
+    h = 1.5e-3                    # truncation-dominated: see the docstring
+    coarse, fine = stencils(h), stencils(h / 2)
+    worst, worst_key = 0.0, ""
+    for key, value in analytic.items():
+        richardson = (4.0 * fine[key] - coarse[key]) / 3.0
+        scatter = abs(fine[key] - coarse[key])
+        ratio = abs(value - richardson) / scatter
+        if ratio > worst:
+            worst, worst_key = ratio, key
+    return CheckResult("analytic NMP derivatives", worst < 1.0, worst,
+                       f"vs Richardson(h={h:.1e}, h/2), worst {worst_key} at "
+                       f"{worst:.3f} of the stencil's own scatter")
 
 
 def _check_compose(par):
@@ -325,6 +399,7 @@ def run_full_check(par=None, flags=None, grid=None):
     report.results.append(_check_coeff_cross(par, flags, grid))
     report.results.append(_check_backend_parity(par, flags, grid))
     report.results.append(_check_delivered_table(par, flags))
+    report.results.append(_check_analytic_derivatives(par))
     report.results.append(_check_restarts_extend_the_basin(par))
     report.results.append(_check_compose(par))
     return report

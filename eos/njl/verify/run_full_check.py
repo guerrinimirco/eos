@@ -293,7 +293,7 @@ def check_euler(par, states, tol=1.0e-8):
     """eps + P = T s + sum_j mu_j n_j, on the matter block of every state."""
     worst, where = 0.0, ""
     for label, _flags, _T, point in states:
-        error = abs(point.state.euler_residual())
+        error = abs(point._state.euler_residual())
         if error > worst:
             worst, where = error, label
     return CheckResult("Euler", worst < tol, worst, f"worst in {where}")
@@ -303,9 +303,9 @@ def check_free_energy(par, states, tol=1.0e-8):
     """f = eps - T s, and f = -P + sum_j mu_j n_j, on the matter block."""
     worst, where = 0.0, ""
     for label, _flags, _T, point in states:
-        st = point.state
-        f_direct = st.eps - st.T * st.s
-        f_legendre = -st.P + st.mu_dot_n
+        st = point._state
+        f_direct = st.eps_nat - st.T * st.s_nat
+        f_legendre = -st.P_nat + st.mu_dot_n
         scale = max(abs(f_direct), 1.0)
         error = abs(f_direct - f_legendre) / scale
         if error > worst:
@@ -399,8 +399,8 @@ def check_colour_neutrality(par, tol=1.0e-10):
 
     paired = solve(par, "beta_eq_neutrinoless", 1.4887, 0.0,
                    SpeciesFlags(csc=True), patterns=("2SC",))
-    solved = max(abs(paired.state.n_3), abs(paired.state.n_8)) / max(
-        abs(paired.state.n_q), 1.0)
+    solved = max(abs(paired._state.n_3), abs(paired._state.n_8)) / max(
+        abs(paired._state.n_q), 1.0)
     worst = max(unpaired, solved)
     return CheckResult("colour neutrality", worst < tol, worst,
                        f"unpaired {unpaired:.1e}, solved {solved:.1e}")
@@ -493,10 +493,10 @@ def check_charge_basis(par, states, tol=1.0e-10):
             error = abs(got - mine) / scale
             if error > worst:
                 worst, where = error, f"{label}.{name}"
-        n_3, n_8 = colour_densities(point.state.n_modes)
-        for got, mine, name in ((n_3, point.state.n_3, "n_3"),
-                                (n_8, point.state.n_8, "n_8")):
-            error = abs(got - mine) / max(abs(point.state.n_q), 1.0)
+        n_3, n_8 = colour_densities(point._state.n_modes)
+        for got, mine, name in ((n_3, point._state.n_3, "n_3"),
+                                (n_8, point._state.n_8, "n_8")):
+            error = abs(got - mine) / max(abs(point._state.n_q), 1.0)
             if error > worst:
                 worst, where = error, f"{label}.{name}"
     return CheckResult("charge basis", worst < tol, worst, f"worst {where}")

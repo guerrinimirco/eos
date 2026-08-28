@@ -548,6 +548,109 @@ Published sets are *named defaults*: `Parameters.default()`, and
 mutable state anywhere — same inputs, same outputs, and model objects are
 picklable so multiprocessing and MPI work.
 
+### The nuclear-matter-parameter closures
+
+A model with a nuclear sector exposes the map between its couplings and the
+nuclear-matter parameters in both directions (`compute_nmp` / `invert_nmp`,
+§3.3). Which parameters the inverse direction may *take* is not the same
+question in every model, and it has an arithmetic answer before it has a
+numerical one: a closure imposes exactly as many independent conditions as it
+frees couplings. Two words carry the whole distinction:
+
+- **input** — fed IN to determine couplings; a row of the closure.
+- **computed** — obtained FROM the couplings, and reported in
+  `InversionStatus.predictions` by every model that has an inverse map. Never
+  fitted, so never a constraint.
+- **absent** — the model has no such quantity at all.
+
+Definitions follow the CompOSE manual (Typel et al., arXiv:2203.03209 §6.1):
+`E_sym(n_b) = ½ ∂²E/∂α²|_{α=0}` with `α = (n_n − n_p)/n_b` (Eq. 6.4), so
+`E_sym` is the **β² expansion coefficient** in every model — not the full
+symmetric-to-neutron-matter difference, which is a different number wherever
+`E` is not quadratic in `α` and which DID reports separately as `S`. Likewise
+`J = E_sym(n_sat)` (6.10), `L = 3n_b dE_sym/dn_b` (6.11),
+`K = 9n_b² ∂²E/∂n_b²` (6.7), `Q = 27n_b³ ∂³E/∂n_b³` (6.9),
+`K_sym = 9n_b² d²E_sym/dn_b²` (6.12).
+
+Four models, **six closures** — dd2 and zl each offer a choice, and the choice
+changes what is an input:
+
+| closure | inputs | free couplings | pinned couplings | computed |
+|---|---|---|---|---|
+| `dd2` default | n_sat, E_sat, m\*/m, K_sat ‖ E_sym, L_sym | Γ_σ, c_σ, Γ_ω, b_ω ‖ Γ_ρ(n_sat), a_ρ | b_σ, c_ω | Q_sat, K_sym |
+| `dd2` `impose_Q_sat=True` | + **Q_sat** | + b_σ | c_ω | K_sym |
+| `sfho` | n_sat, E_sat, m\*/m, K_sat ‖ E_sym, L_sym | g_σN, g_ωN, b, c ‖ g_ρN, b₁ | c3 ‖ a₁…a₆, b₂, b₃ | Q_sat, K_sym |
+| `zl` with `gamma1=` | n_sat, E_sat, K_sat ‖ E_sym, L_sym, **γ₁ named by the caller** | a₀, b₀, γ ‖ a₁, b₁ | — | Q_sat, K_sym; m\*/m **absent** |
+| `zl` with `K_sym` in the targets | + **K_sym**, γ₁ not named | + γ₁ | — | Q_sat; m\*/m **absent** |
+| `did` | *no inverse map* | — | — | every one of n_sat, B, K, Q, S₂, S, L, L₂, K_sym, m\*/m, X_p |
+
+Three cells mean more than the arithmetic says:
+
+- **zl's Q_sat is computed and can never become an input.** In the interaction
+  part `Q_sat = 3(γ − 2) K_sat` exactly — one power-law term `b₀ u^γ` supplies
+  both — so {n_sat, E_sat, K_sat} already determine it, and a prior over
+  (K_sat, Q_sat) in ZL lives on a curve rather than in a plane. Nor can it
+  stand in for γ₁: γ₁ closes the isovector sector and Q_sat is isoscalar.
+- **sfho's `c4` is reachable by no closure at all.** Its column in the
+  isovector Jacobian is exactly zero — the ρ field vanishes in symmetric
+  matter and the closed form for `E_sym` contains no `c4` — so of sfho's
+  sixteen nucleonic couplings six are free, nine are pinned, and one is
+  invisible to every nuclear-matter parameter.
+- **Q_sat is a legal input in dd2 alone**, and only because dd2's derivatives
+  are analytic: a third finite difference of a solved quantity carries a
+  relative floor near 1.5e-3, which no conditioning survives. sfho's only
+  candidate fifth isoscalar knob is `c3`, whose Jacobian column is 550× weaker
+  than `g_sigma`'s; adding it costs a factor 8 in the reach measured below, so
+  the obstacle there is structural — saturation does not constrain a
+  high-density ω⁴ term — and analytic derivatives would not remove it.
+
+**Why those couplings are the pinned ones.** Where a sector has more couplings
+than conditions, the subset held fixed is chosen by one stated procedure
+rather than by history: build the Jacobian ∂(NMP)/∂(ln coupling) at the
+published point, and pin whichever subset leaves the largest **smallest
+singular value** σ_min of the freed block, then confirm by a basin scan over a
+grid of targets, which may veto a locally-best choice. σ_min and not the
+condition number, because `cond` is σ_max/σ_min and so divides out the very
+thing that decides whether a knob is usable — its absolute strength. The two
+agree when the columns are comparable in size (dd2, where they span a factor
+2.7) and disagree when they are not (sfho's isovector columns span four orders
+of magnitude: `cond` prefers `(a₁, a₂)`, two knobs whose reach in L_sym is a
+tenth of `(g_ρN, b₁)`'s). The same measurement says `Γ_σ` and `Γ_ω` can never
+be pinned in dd2 — doing so collapses σ_min to ~1e-10.
+
+What each closure is worth, measured at each model's published point:
+
+| closure | σ_min | cond | published couplings recovered | basin |
+|---|---|---|---|---|
+| `dd2` default | 0.466 | 135 | **1.6e-4** from the published NMP quote | 27/30 with restarts |
+| `dd2` +Q_sat | 0.237 | 1589 | 9.1e-5; Q_sat to 1.1e-10 MeV | 30/30 at zero restarts |
+| `sfho` | 0.051 isoscalar, 0.483 isovector | 647, 2.7 | **2.8e-2** from the quote; **1.3e-3** with an exact m\*/m; **0** at full precision | — |
+| `zl` (either) | closed form — no root find, no seed, no basin | — | 7.2e-3, and it does not improve with precision | n/a |
+| `did` | — | — | Table VI reproduced at 0.84× its tolerance | n/a |
+
+The last column is a property of the **published fit**, not of the closure.
+SFHo's 2.8e-2 is one two-digit quote: the paper prints m\*/m = 0.76 where the
+value is 0.761564, and handing the closure the exact figure with everything
+else still rounded improves the recovery twenty-two-fold. ZL's 7.2e-3 does not
+move with precision at all, because the published ZL couplings saturate 0.3%
+below their own `n0` and so are not a root of any closure — which is why a
+round trip is a *reported property* of each model rather than a gate any of
+them must pass.
+
+**The hyperon and Δ sectors are a separate closure and no nuclear-matter
+parameter reaches them.** They are fixed by single-particle potentials —
+U_Λ, U_Σ, U_Ξ at saturation in symmetric matter, and U_Δ — with only the
+SCALAR coupling ratios inverted from those depths; the vector ratios are taken
+from SU(6). SU(6) is an assumption rather than a measurement, and the published
+sets differ precisely there: SFHoY scales the ω and φ ratios by 1.5 for Λ and
+Σ and by 1.875 for Ξ, where SFHoY\* leaves them at SU(6).
+
+**Non-convergence is a return value at the boundary a sampler uses.**
+`invert_nmp` returns `(Parameters, InversionStatus)` in every model that has
+one, and `status.ok` is judged by putting the recovered couplings back through
+`compute_nmp`. `from_nmp` is the convenience face for a caller that has
+declared it will not score failures, and raises.
+
 ---
 
 ## 7. The reference/fast contract, and why `backends/` is deletable

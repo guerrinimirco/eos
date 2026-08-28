@@ -5,10 +5,10 @@ produce, in both directions.
 from a `Parameters`; `invert_nmp` and `from_nmp` recover the couplings from a
 subset of them, and `build_parametrization` composes that inverse with the
 hyperon and Delta sector constructors, so one sample dict of nuclear-matter
-parameters and single-particle potentials becomes one `Parameters`. The two share this module because they share the stencils: the
-finite-difference bias cancels on a round trip only while both sides difference
-the same way, so a change to `h` made in one and not the other stops the
-inversion reproducing its own inputs.
+parameters and single-particle potentials becomes one `Parameters`. The two
+share this module because they share the derivatives: both take K_sat, Q_sat,
+L_sym and K_sym from `snm_derivatives` below, so what the closure imposes is
+exactly what the forward map reports and a round trip returns its own inputs.
 
 Both directions sit ABOVE `solver.py` in the layer order, because every
 quantity here is a property of solved symmetric nuclear matter at saturation.
@@ -39,11 +39,11 @@ The imposed set is {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}:
 Imposing Q_sat instead of one pin is available (impose_Q_sat=True): the
 isoscalar system is then the 5x5 {P, E_sat, m*/m, K_sat, Q_sat} over
 {Gamma_sigma, b_sigma, c_sigma, Gamma_omega, b_omega}, with c_omega alone
-pinned. It is NOT the default and it is not currently a usable closure --
-see "Q_sat cannot be imposed while it is a third difference" below. The
-selector is the argument only: the presence of "Q_sat" in the target dict
-decides nothing, because a whole compute_nmp() dict carries Q_sat and would
-otherwise route the natural round trip into the worse closure.
+pinned. It is not the default, but it IS usable now that Q_sat is analytic --
+see "Q_sat is imposable now that it is analytic" below. The selector is the
+argument only: the presence of "Q_sat" in the target dict decides nothing,
+because a whole compute_nmp() dict carries Q_sat and would otherwise route the
+natural round trip into a closure the caller never asked for.
 
 There is no cross-constraint. It belongs to DD, not to DD2
 ----------------------------------------------------------
@@ -87,18 +87,23 @@ against b_omega at |cos| = 0.974 is the least collinear pair in the matrix.
 The same measurement over the five-row closure ranks its single pin
 c_omega 259, b_omega 354, c_sigma 703, b_sigma 4191.
 
-Q_sat cannot be imposed while it is a third difference
-------------------------------------------------------
-The five-row closure conditions at 259, and Q_sat is a third finite
-difference of a solved quantity carrying a relative floor near 1.5e-3, so a
-solve inherits 259 x 1.5e-3 = 0.39 of relative coupling error. No choice of
-pin rescues it: 259 is the best of the four and the arithmetic still closes
-on a nonsense answer. The default closure escapes this entirely -- P, E_sat,
-m*/m and K_sat are all h-exact to the stencil optimum (K_sat moves 5.2e-04
-MeV over h in [5e-5, 5e-4], against 2.48 MeV for Q_sat) -- which is why it,
-and not the wider system, is what ships. Imposing Q_sat becomes legitimate
-when the derivative is taken analytically rather than by stencil, and not
-before.
+Q_sat is imposable now that it is analytic
+------------------------------------------
+It was not, while it was a third finite difference. The five-row closure
+conditions at 259 and the stencil carried a relative floor near 1.5e-3, so a
+solve inherited 259 x 1.5e-3 = 0.39 of relative coupling error; no choice of
+pin rescued it (259 is the best of the four) because the collinearity behind
+the 259 is a rank statement, not a coordinate one. At DD2's own point that
+closure reached max|residual| = 1.4e-2 and imposed Q_sat only to 1.6 MeV,
+saturating -- 64 and 128 restarts found nothing better.
+
+With the derivatives taken by hand (`snm_derivatives`) the floor is gone and
+the amplification has nothing left to amplify. The same closure at the same
+point now reaches 1.5e-12 and imposes Q_sat to 1e-10 MeV, and perturbed
+targets over dK_sat in [-20, +10] and dQ_sat in [-30, +100] MeV come back at
+the same order. The default closure remains the default -- it imposes the
+four nuclear-matter parameters anyone quotes and predicts the rest -- but
+`impose_Q_sat=True` is now a usable branch rather than a documented trap.
 
 What "converged" means here, and why the residual alone cannot say. A Powell
 hybrid can give up on its first step and return its starting point bit for
@@ -106,8 +111,20 @@ bit, reporting the seed's own residual as though it were an answer, and
 whether it does so at any given target is decided in that target's last bits
 rather than by the SciPy version. That is a property of the solver, not of
 the closure, and it survived the closure change: on a 105-cell
-(K_sat 180-320) x (m*/m 0.45-0.75) grid at zero restarts, 18 targets miss and
-12 of those misses are stalls.
+(K_sat 180-320) x (m*/m 0.45-0.75) grid at zero restarts, 18 targets missed
+and 12 of those misses were stalls.
+
+ANALYTIC DERIVATIVES APPEAR TO HAVE ENDED IT, and the mechanism is plain: the
+residual hybr differences its own Jacobian from used to carry the stencil's
+noise, so "not making good progress" was often a true report about the
+surface rather than about the target. Re-measured after the change, neither
+scan produces one -- 0 stalls in 7 misses over the 240-cell four-axis grid
+quoted at ISO_GATE below, and 0 in 8 over the 30-cell (K_sat, m*/m) grid the
+verify suite uses, at 0 and at 32 restarts alike. Two scans are not a proof of
+absence and the guard is cheap, so `_stalled` and `STALL_RES` stay: what they
+defend against is a solver handing back its input as an answer, which
+section 6 forbids reporting silently whether or not it is currently
+reachable.
 
 What separates a stall from an answer is that the stall has not moved.
 `InversionStatus` carries `coupling_shift`, the max relative distance from
@@ -132,8 +149,14 @@ near DD2's own values, and the set it reaches traces a band through that seed
 point. That band is a picture of one basin of attraction, NOT of the feasible
 set, and reading it as physics is the mistake this module exists to prevent.
 Restarts are what separate "these NMPs have no DD-RMF realisation" from "this
-seed could not find it"; on the grid above they recover 14 of the 18 misses.
-Do NOT infer a feasibility boundary from a scan run at low `n_restarts`.
+seed could not find it"; on the 30-cell (K_sat 160-320) x (m*/m 0.40-0.90)
+grid the verify suite uses they take 22/30 to 27/30. Do NOT infer a
+feasibility boundary from a scan run at low `n_restarts`.
+
+Where they no longer buy anything is the Q_sat-imposing closure, which used
+to be the harder surface of the two: it now reaches 30/30 at zero restarts
+over K_sat 150-350 x Q_sat -400 to 800, three times the width of the grid
+that gave 0/9 while the Q_sat row was a third difference.
 
 (The 187-cell (K_sat, Q_sat) scan this section used to quote -- 7/187 at zero
 restarts against 115/187 at sixty-four -- was measured with the retired
@@ -141,18 +164,21 @@ closure that imposed the cross-constraint and Q_sat together. Those numbers
 do not carry over and are not restated here; the conclusion they supported
 does, and is re-measured above.)
 
-The remaining numerical limit is the stencil
---------------------------------------------
-Q_sat is a third finite difference of E/A, which is itself the output of a
-nonlinear solve, and the h = 1e-4 step used here and in the forward map is
-just past the truncation/roundoff optimum (~3e-4 to 1e-3): Q_sat spans 2.48
-MeV over h in [5e-5, 5e-4] and diverges outright by h = 1e-6. K_sat, a second
-difference, spans 5.2e-04 MeV over the same range, which is the whole reason
-the default closure stops at K_sat.
-The forward map (nmp.compute_nmp) uses the IDENTICAL stencil on purpose, so
-the finite-difference bias cancels exactly on a round trip; any change to h
-must be made in both places together or the round trip stops reproducing its
-own inputs. The same applies to the predicted Q_sat this module reports.
+There is no stencil left
+------------------------
+K_sat, Q_sat, L_sym and K_sym were finite differences of quantities that are
+themselves the output of a nonlinear solve, and every one of them carried
+that floor: over h in [5e-5, 5e-4] Q_sat, a third difference, spanned 2.48
+MeV and diverged outright by h = 1e-6, while K_sat spanned 5.2e-04 MeV. They
+are differentiated by hand now -- see "THE DENSITY DERIVATIVES OF SATURATED
+MATTER, IN CLOSED FORM" below -- and agree with the h-plateau of the stencil
+they replaced rather than with any single h. Four published numbers moved by
+that correction, all within their frozen tolerances:
+
+    K_sat   242.724055 -> 242.724015      L_sym    55.033672 ->  55.033667
+    Q_sat   168.713524 -> 168.786877      K_sym   -93.224031 -> -93.224009
+
+n_sat, E_sat, m*/m and E_sym need no derivative and did not move at all.
 """
 from dataclasses import dataclass, field, replace
 
@@ -163,6 +189,7 @@ from eos.general.physics_constants import hc3
 from eos.dd2.couplings import (
     SU6_HYPERON, DD2Y_HYPERON, _POTENTIAL_KEY,
     scalar_ratio_from_potential,
+    rational_f, rational_df, rational_d2f, rational_d3f,
 )
 from eos.dd2.parameters import Parameters
 from eos.dd2.thermodynamics import kF_from_n
@@ -202,7 +229,187 @@ def esym(par, n_B):
     return kF ** 2 / (6.0 * EFs) + Gr ** 2 * (n_B * hc3) / (2.0 * par.m_rho ** 2)
 
 
-def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
+# =============================================================================
+# THE DENSITY DERIVATIVES OF SATURATED MATTER, IN CLOSED FORM
+# =============================================================================
+# K_sat, Q_sat, L_sym and K_sym used to be finite differences of quantities
+# that are themselves the output of a nonlinear solve, which put a floor under
+# each of them -- 1.5e-3 relative on Q_sat, a THIRD difference. They are
+# written out here instead. Everything in this section is in natural units
+# (n in MeV^3, kF and masses in MeV) and ' means d/dn.
+#
+# Symmetric matter at T = 0 carries one self-consistent field. Write
+# S = Gamma_sigma(n) sigma, so that m* = m_N - S, and abbreviate
+#
+#     G(n) = Gamma_sigma(n)^2 / m_sigma^2,   W(n) = Gamma_omega(n)^2 / m_omega^2
+#
+# The sigma gap equation m_sigma^2 sigma = Gamma_sigma n_s is then
+#
+#     S = G(n) n_s(m_N - S, kF(n))                                       (gap)
+#
+# and, with omega_0 eliminated by its own field equation (m_omega^2 omega_0 =
+# Gamma_omega n, so Gamma_omega omega_0 = W n),
+#
+#     eps = eps_kin(m*, kF) + S^2 / (2 G) + W n^2 / 2
+#     mu  = E_F* + W n + W' n^2 / 2 - G' n_s^2 / 2
+#
+# the last two terms being Sigma^R = Gamma_omega' omega_0 n
+# - Gamma_sigma' sigma n_s in these variables. Since P = mu n - eps at T = 0
+# and E/A = eps/n - m_N,
+#
+#     (E/A)' = P / n^2,        P' = n mu'
+#     K_sat  = 9 n^2 (E/A)''   = 9 n mu'                    } at P = 0,
+#     Q_sat  = 27 n^3 (E/A)''' = 27 n (n mu'' - 3 mu')      } i.e. at n_sat
+#
+# so the third derivative of E/A costs only the SECOND derivative of mu. What
+# that needs is S' and S'', from (gap) differentiated implicitly. Writing
+# ns_m = dn_s/dm*, ns_k = dn_s/dkF and so on, and using dm*/dn = -S',
+#
+#     dn_s/dn = -ns_m S' + ns_k kF'                                      (dns)
+#     S'  (1 + G ns_m) = G' n_s + G ns_k kF'
+#     S'' (1 + G ns_m) = G'' n_s + 2 G' dn_s/dn
+#                        + G (ns_mm S'^2 - 2 ns_mk S' kF'
+#                             + ns_kk kF'^2 + ns_k kF'')
+#
+# The symmetry energy is already closed-form (`esym` above), so L_sym and
+# K_sym follow from the same E_F* derivatives with no further machinery.
+#
+# Z_sat, the fourth derivative, is deliberately NOT reported. It would need a
+# third derivative of the gap, and there is nothing to spend it on: no closure
+# imposes Z_sat and nobody quotes it. The fourth finite difference it would
+# replace spanned 4.8e+04 on a value of 4547 -- noise with a name.
+#
+# CONVENTION. These forms treat the two nucleons as one g = 4 gas at the
+# average Dirac mass, which is `nucleon_mass_mode="average"` -- the convention
+# the published DD2 nuclear-matter parameters are stated in, and the one
+# `esym` above has always used. Under "physical" the kernel masses differ by
+# 1.29 MeV and the derivatives are that convention's, not the parametrization's.
+
+#: Nucleon degeneracy of symmetric matter treated as one gas: 2 spins x 2
+#: isospins, at the common Dirac mass m* = m_N - Gamma_sigma sigma.
+_G_SNM = 4.0
+
+
+def _ns_partials(m, kF):
+    """n_s [MeV^3] of the g = 4 nucleon gas and its partials in (m*, kF).
+
+    With E_F = sqrt(kF^2 + m*^2) and L = asinh(kF/m*),
+
+        n_s = (g / 4 pi^2) m* [kF E_F - m*^2 L]
+
+    The kF partials are the integrand at the surface; the m* partials are the
+    moments
+
+        dn_s/dm*    =  (g / 2 pi^2) int_0^kF k^4 / E_k^3 dk
+        d2n_s/dm*^2 = -(g / 2 pi^2) 3 m* int_0^kF k^4 / E_k^5 dk
+
+    which k = m* sinh t turns into m*^2 int (cosh^2 t - 2 + sech^2 t) dt and
+    int tanh^4 t dt, both elementary. Returns
+    (n_s, ns_m, ns_k, ns_mm, ns_mk, ns_kk).
+    """
+    E = np.sqrt(kF ** 2 + m ** 2)
+    L = np.arcsinh(kF / m)
+    p = _G_SNM / (2.0 * np.pi ** 2)
+    return (0.5 * p * m * (kF * E - m ** 2 * L),
+            p * (0.5 * kF * E - 1.5 * m ** 2 * L + m ** 2 * kF / E),
+            p * kF ** 2 * m / E,
+            -3.0 * m * p * (L - kF / E - (kF / E) ** 3 / 3.0),
+            p * kF ** 4 / E ** 3,
+            p * m * kF * (2.0 * E ** 2 - kF ** 2) / E ** 3)
+
+
+def _coupling_squares(par, n_nat):
+    """(G, G', G'', G''') and (W, W', W'', W'''), d/dn in natural units.
+
+    G = Gamma_sigma^2/m_sigma^2 and W = Gamma_omega^2/m_omega^2 are the
+    combinations the closed forms above are written in; each is
+    (Gamma_i(n_sat)/m_i)^2 f_i(x)^2 with x = n/n_sat, so the chain rule on
+    f_i and its three x-derivatives is the whole content.
+    """
+    nsat_nat = par.n_sat * hc3
+    x = n_nat / nsat_nat
+    out = []
+    for gamma, a, b, c, d, mass in (
+            (par.gamma_sigma, par.a_sigma, par.b_sigma, par.c_sigma,
+             par.d_sigma, par.m_sigma),
+            (par.gamma_omega, par.a_omega, par.b_omega, par.c_omega,
+             par.d_omega, par.m_omega)):
+        f = rational_f(x, a, b, c, d)
+        f1 = rational_df(x, a, b, c, d)
+        f2 = rational_d2f(x, a, b, c, d)
+        f3 = rational_d3f(x, a, b, c, d)
+        K = (gamma / mass) ** 2
+        out.append((K * f * f,
+                    K * 2.0 * f * f1 / nsat_nat,
+                    K * 2.0 * (f1 * f1 + f * f2) / nsat_nat ** 2,
+                    K * 2.0 * (3.0 * f1 * f2 + f * f3) / nsat_nat ** 3))
+    return out[0], out[1]
+
+
+def snm_derivatives(par, n_B):
+    """{K_sat, Q_sat, L_sym, K_sym} of symmetric matter at n_B [fm^-3].
+
+    The nuclear-matter combinations 9 n^2 (E/A)'', 27 n^3 (E/A)''',
+    3 n E_sym' and 9 n^2 E_sym'', analytically. K_sat and Q_sat are the
+    saturation parameters only where P(n_B) = 0, which is where both callers
+    evaluate them; the derivation is in the section header above.
+
+    Solves symmetric matter ONCE, at n_B, and differentiates the closed forms
+    around that solved point -- so it is also seven solves cheaper than the
+    third-difference stencil it replaced.
+    """
+    point = solve_snm_t0(par, n_B)
+    n = n_B * hc3
+    m = _dirac_mass(point)                     # m* = m_N - Gamma_sigma sigma
+    S = par.m_nucleon - m
+    kF = kF_from_n(n, _G_SNM)
+    kF1, kF2 = kF / (3.0 * n), -2.0 * kF / (9.0 * n ** 2)
+
+    ns, ns_m, ns_k, ns_mm, ns_mk, ns_kk = _ns_partials(m, kF)
+    (G, G1, G2, G3), (W, W1, W2, W3) = _coupling_squares(par, n)
+
+    # --- the gap equation, differentiated implicitly ------------------------
+    den = 1.0 + G * ns_m
+    S1 = (G1 * ns + G * ns_k * kF1) / den
+    dns = -ns_m * S1 + ns_k * kF1
+    S2 = (G2 * ns + 2.0 * G1 * dns
+          + G * (ns_mm * S1 ** 2 - 2.0 * ns_mk * S1 * kF1
+                 + ns_kk * kF1 ** 2 + ns_k * kF2)) / den
+    d2ns = (ns_mm * S1 ** 2 - 2.0 * ns_mk * S1 * kF1 + ns_kk * kF1 ** 2
+            + ns_k * kF2 - ns_m * S2)
+
+    # --- the Fermi energy at the moving mass and momentum -------------------
+    E = np.sqrt(kF ** 2 + m ** 2)
+    E1 = (kF * kF1 - m * S1) / E
+    E2 = ((kF1 ** 2 + kF * kF2 + S1 ** 2 - m * S2) / E - E1 ** 2 / E)
+
+    # --- isoscalar: mu, mu', mu'' -> K_sat, Q_sat ---------------------------
+    mu1 = (E1 + W + 2.0 * W1 * n + 0.5 * W2 * n ** 2
+           - 0.5 * G2 * ns ** 2 - G1 * ns * dns)
+    mu2 = (E2 + 3.0 * W1 + 3.0 * W2 * n + 0.5 * W3 * n ** 2
+           - 0.5 * G3 * ns ** 2 - 2.0 * G2 * ns * dns
+           - G1 * (dns ** 2 + ns * d2ns))
+
+    # --- isovector: E_sym = kF^2/(6 E_F*) + Gamma_rho^2 n / (2 m_rho^2) -----
+    # R = Gamma_rho^2/m_rho^2 is a pure exponential, R' = -2 a_rho R / n_sat.
+    k_rho = 2.0 * par.a_rho / (par.n_sat * hc3)
+    R = (par.gamma_rho / par.m_rho) ** 2 * np.exp(-k_rho * (n - par.n_sat * hc3))
+    R1, R2 = -k_rho * R, k_rho ** 2 * R
+    u = kF ** 2
+    u1, u2 = 2.0 * u / (3.0 * n), -2.0 * u / (9.0 * n ** 2)
+    Es1 = u1 / (6.0 * E) - u * E1 / (6.0 * E ** 2)
+    Es2 = (u2 / E - 2.0 * u1 * E1 / E ** 2 - u * E2 / E ** 2
+           + 2.0 * u * E1 ** 2 / E ** 3) / 6.0
+
+    return {
+        "K_sat": 9.0 * n * mu1,
+        "Q_sat": 27.0 * n * (n * mu2 - 3.0 * mu1),
+        "L_sym": 3.0 * n * (Es1 + 0.5 * (R1 * n + R)),
+        "K_sym": 9.0 * n ** 2 * (Es2 + 0.5 * (R2 * n + 2.0 * R1)),
+    }
+
+
+def compute_nmp(par, n_lo=0.12, n_hi=0.18):
     """
     Nuclear-matter parameters at saturation.
 
@@ -210,29 +417,23 @@ def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
     K_sym [MeV], m_eff_ratio, and P_sat [MeV/fm^3] (diagnostic, ~0 by
     construction). K_sym = 9 n^2 E_sym''(n) is reported because the NMP
     inversion treats it, like Q_sat, as a prediction of the closure rather
-    than an input.
+    than an input. Z_sat is not reported at all -- see the derivative section
+    above for why.
+
+    Every entry is exact: n_sat, E_sat, m*/m and E_sym need no derivative,
+    and the four that do take theirs analytically (`snm_derivatives`) rather
+    than by stencil.
     """
     n_sat = brentq(lambda n: solve_snm_t0(par, n).P, n_lo, n_hi, xtol=1e-12)
     at_sat = solve_snm_t0(par, n_sat)
 
-    EA = lambda n: energy_per_baryon(par, n)
-    d2 = (EA(n_sat + h) - 2.0 * EA(n_sat) + EA(n_sat - h)) / h ** 2
-    d3 = (EA(n_sat + 2 * h) - 2.0 * EA(n_sat + h)
-          + 2.0 * EA(n_sat - h) - EA(n_sat - 2 * h)) / (2.0 * h ** 3)
-    dEs = (esym(par, n_sat + h) - esym(par, n_sat - h)) / (2.0 * h)
-    d2Es = (esym(par, n_sat + h) - 2.0 * esym(par, n_sat)
-            + esym(par, n_sat - h)) / h ** 2
-
     return {
         "n_sat": n_sat,
-        "E_sat": EA(n_sat),
+        "E_sat": energy_per_baryon(par, n_sat),
         "m_eff_ratio": _dirac_mass(at_sat) / par.m_nucleon,
-        "K_sat": 9.0 * n_sat ** 2 * d2,
-        "Q_sat": 27.0 * n_sat ** 3 * d3,
         "E_sym": esym(par, n_sat),
-        "L_sym": 3.0 * n_sat * dEs,
-        "K_sym": 9.0 * n_sat ** 2 * d2Es,
         "P_sat": at_sat.P,
+        **snm_derivatives(par, n_sat),
     }
 
 
@@ -241,18 +442,21 @@ def compute_nmp(par, h=1e-4, n_lo=0.12, n_hi=0.18):
 # =============================================================================
 #: Gate on the isoscalar residual.
 #:
-#: 2e-2 was set to clear two scales, and RETIRING THE CROSS ROW REMOVED BOTH
-#: of the reasons it had to be this wide: the published table's own 2.2e-3
-#: violation of that constraint, and the third-difference noise behind Q_sat
-#: in a closure that no longer imposes it by default. Measured on the
-#: (K_sat, m*/m) grid in the module docstring with restarts on, the 101 cells
-#: that pass split 95 below 1e-5 and 6 in [1e-3, 2e-2] with NOTHING in
-#: between, so the six sitting under this gate are certified without being
-#: roots. A tighter gate is therefore now both possible and wanted -- it was
-#: not, while the cross row made accurate solves land at 1.9e-3 -- but
-#: choosing the value moves `ok` for real targets and belongs to the ticket
-#: that measures it on more than two axes, not here.
-ISO_GATE = 2e-2
+#: It was 2e-2, set wide to clear two scales that are both gone: the published
+#: table's own 2.2e-3 violation of the cross-constraint, retired with that row,
+#: and the third-difference noise behind Q_sat, retired with the stencil. What
+#: is left is a residual whose rows are all exact, and the passing cells
+#: separate by nine orders of magnitude. Measured over the four axes the
+#: isoscalar residual actually has -- 240 random targets in
+#: n_sat [0.140, 0.170] x E_sat [-17, -15] x m*/m [0.45, 0.75] x
+#: K_sat [180, 320] -- 233 solves land at or below 4.6e-12, three sit in
+#: [2.8e-3, 1.7e-2] and four are above 2e-2, with NOTHING in between. The old
+#: gate certified those three without their being roots. 1e-8 sits three and a
+#: half orders above the worst genuine root and five and a half below the
+#: lowest non-root, so it is not a tuned number: anywhere in the gap does the
+#: same job. The split is identical at 0 and 32 restarts, which says the three
+#: are not seeds that could have been rescued.
+ISO_GATE = 1e-8
 
 #: Perturbed restarts attempted when the first isoscalar solve misses the
 #: gate. They run ONLY on a miss, so an NMP set that inverts from the DD2 seed
@@ -330,23 +534,18 @@ def _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma, Grho=3.0, a_rho=0.5):
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
 
 
-def _isoscalar_quantities(par, n_sat, h=1e-4, want_Q=True):
-    """{P, E/A, m*/m, K_sat, (Q_sat)} of SNM at n_sat (no P=0 search).
+def _isoscalar_quantities(par, n_sat):
+    """{P, E/A, m*/m, K_sat, Q_sat} of SNM at n_sat (no P=0 search).
 
-    want_Q=False skips the third-difference stencil and its four extra
-    solves — the default closure does not impose Q_sat, so its residual
-    never needs it.
+    The forward map's own quantities, so that the closure imposes exactly
+    what `compute_nmp` reports. Q_sat costs nothing to carry now that it is
+    analytic -- it used to be four extra solves, which is why the default
+    closure once had to ask for it to be skipped.
     """
-    EA = lambda n: solve_snm(par, n).eps / n - par.m_nucleon
     at = solve_snm(par, n_sat)
-    d2 = (EA(n_sat + h) - 2 * EA(n_sat) + EA(n_sat - h)) / h ** 2
-    out = dict(P=at.P, E_sat=EA(n_sat), m_ratio=_dirac_mass(at) / par.m_nucleon,
-               K_sat=9 * n_sat ** 2 * d2)
-    if want_Q:
-        d3 = (EA(n_sat + 2 * h) - 2 * EA(n_sat + h)
-              + 2 * EA(n_sat - h) - EA(n_sat - 2 * h)) / (2 * h ** 3)
-        out["Q_sat"] = 27 * n_sat ** 3 * d3
-    return out
+    return dict(P=at.P, E_sat=at.eps / n_sat - par.m_nucleon,
+                m_ratio=_dirac_mass(at) / par.m_nucleon,
+                **snm_derivatives(par, n_sat))
 
 
 def _restart_loop(iso_residual, seed, first, n_restarts, gate=ISO_GATE):
@@ -486,7 +685,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
                 return [1e3] * 4
             try:
                 par = _trial_par(n_sat, Gs, bS, cS, Gw, bW, cW, m_sigma)
-                q = _isoscalar_quantities(par, n_sat, want_Q=False)
+                q = _isoscalar_quantities(par, n_sat)
             except (ValueError, RuntimeError):
                 return [1e3] * 4
             return [q["P"] - tgt[0], q["E_sat"] - tgt[1],
@@ -556,8 +755,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
             n_sat=n_sat, gamma_sigma=Gs, b_sigma=bS, c_sigma=cS,
             gamma_omega=Gw, b_omega=bW, c_omega=cW,
             gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
-        dEs = (esym(p, n_sat + 1e-4) - esym(p, n_sat - 1e-4)) / 2e-4
-        return 3.0 * n_sat * dEs
+        return snm_derivatives(p, n_sat)["L_sym"]
 
     a_rho = brentq(lambda a: Lsym_of_arho(a) - nmp["L_sym"], -2.0, 5.0,
                    xtol=1e-10)
@@ -569,12 +767,8 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
 
     # --- report what the closure predicts, with the forward map's stencils --
-    q_final = _isoscalar_quantities(par, n_sat, want_Q=True)
-    h = 1e-4
-    d2Es = (esym(par, n_sat + h) - 2 * esym(par, n_sat)
-            + esym(par, n_sat - h)) / h ** 2
-    predictions = {"Q_sat": q_final["Q_sat"],
-                   "K_sym": 9.0 * n_sat ** 2 * d2Es}
+    final = snm_derivatives(par, n_sat)
+    predictions = {"Q_sat": final["Q_sat"], "K_sym": final["K_sym"]}
 
     status = InversionStatus(
         ok=(isov_res < 1e-3),                # isoscalar gate already passed

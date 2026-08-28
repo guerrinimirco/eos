@@ -512,33 +512,42 @@ class EoSPoint:
     SigmaR_b: float                           # baryon rearrangement [MeV]
     SigmaR_q: float                           # quark rearrangement [MeV]
     mu: dict                                  # chemical potentials [MeV]
-    eps: float                                # energy density [MeV^4]
-    P: float                                  # pressure [MeV^4]
+    eps_nat: float                            # energy density [MeV^4]
+    P_nat: float                              # pressure [MeV^4]
     s: float                                  # entropy density [MeV^3]
-    n_b: float                                # total baryon density [MeV^3]
+    n_b_nat: float                            # total baryon density [MeV^3]
     n_bQ: float                               # quark baryon density [MeV^3]
     n_C: float                                # non-leptonic charge density [MeV^3]
     n_S: float                                # strangeness density [MeV^3]
 
-    @property
-    def n_b_fm(self):
-        return self.n_b / hc3
+    # --- the fm-based boundary ---------------------------------------------
+    # CLAUDE.md section 2's convention: a quantity that crosses the fm-based
+    # boundary of section 5 carries the BARE name and is fm-based; its
+    # natural-units twin carries `_nat`. The suffix marks a TWIN, so the
+    # natural-units fields with no fm partner here -- `s`, `n_C`, `n_S`,
+    # `n_bQ`, `n`, `n_s`, the sources and the fields -- keep their bare names
+    # and their unit comments. This record is INTERNAL (`BetaPoint` holds it
+    # as `_point`); `BetaPoint` itself is the fm-based public surface.
 
     @property
-    def eps_fm(self):
-        return self.eps / hc3
+    def n_b(self):
+        return self.n_b_nat / hc3
 
     @property
-    def P_fm(self):
-        return self.P / hc3
+    def eps(self):
+        return self.eps_nat / hc3
+
+    @property
+    def P(self):
+        return self.P_nat / hc3
 
     @property
     def EperB(self):
         """Energy per baryon minus the nucleon rest mass [MeV], the paper's
         Fig. 2 ordinate."""
-        if self.n_b <= 0:
+        if self.n_b_nat <= 0:
             return 0.0
-        return (self.eps / self.n_b) - 938.9
+        return (self.eps_nat / self.n_b_nat) - 938.9
 
 
 def thermo_from_n(n, par=None, T=0.0, x0=None, photons=False,
@@ -695,8 +704,8 @@ def thermo_from_n(n, par=None, T=0.0, x0=None, photons=False,
         J_omega=fields.J_omega, J_rho=fields.J_rho,
         gomega_omega=fields.gomega_omega, grho_rho=fields.grho_rho,
         SigmaR_b=fields.SigmaR_b, SigmaR_q=fields.SigmaR_q,
-        mu=mu, eps=eps, P=P, s=s,
-        n_b=n_b, n_bQ=n_bQ, n_C=n_C, n_S=n_S,
+        mu=mu, eps_nat=eps, P_nat=P, s=s,
+        n_b_nat=n_b, n_bQ=n_bQ, n_C=n_C, n_S=n_S,
     )
 
 

@@ -299,17 +299,17 @@ def _charge_rows(x, par, flags, spec, pattern, st, T):
     _, _, _, _, _, _, mu_C, _, mu_nue = _unpack(x, par, spec, pattern)
     rows = []
     if spec.is_fixed("C"):
-        rows.append(st.n_C_fm - spec.targets["Y_C"] * st.n_B_fm)
+        rows.append(st.n_C - spec.targets["Y_C"] * st.n_B)
     else:
         _, n_charged, _ = lepton_block(
             electron_potential(mu_C, mu_nue), mu_nue, T, flags)
-        rows.append(st.n_C_fm - n_charged)
+        rows.append(st.n_C - n_charged)
     if spec.is_fixed("S"):
-        rows.append(st.n_S_fm - spec.targets["Y_S"] * st.n_B_fm)
+        rows.append(st.n_S - spec.targets["Y_S"] * st.n_B)
     if spec.is_fixed("L_e"):
         _, _, n_Le = lepton_block(
             electron_potential(mu_C, mu_nue), mu_nue, T, flags)
-        rows.append(n_Le - spec.targets["Y_Le"] * st.n_B_fm)
+        rows.append(n_Le - spec.targets["Y_Le"] * st.n_B)
     return rows
 
 
@@ -333,7 +333,7 @@ def residual(x, par, flags, spec, pattern, n_B, T, vac):
     if has_vector(par):
         rows.append(st.vector_residual)
 
-    rows.append(st.n_B_fm - n_B)
+    rows.append(st.n_B - n_B)
     rows += _charge_rows(x, par, flags, spec, pattern, st, T)
     return rows
 
@@ -424,6 +424,14 @@ class EoSPoint:
     n_mu: float = 0.0
     n_nu: float = 0.0
 
+    #: Colour and quark densities, fm^-3, lifted off the matter block so no
+    #: caller has to reach into it. n_3 and n_8 are the colour densities whose
+    #: vanishing is what makes a state colour-neutral; n_q is the total quark
+    #: density (3 n_B, up to the pairing sector's own bookkeeping).
+    n_3: float = 0.0                # fm^-3
+    n_8: float = 0.0
+    n_q: float = 0.0
+
     P_total: float = 0.0            # MeV/fm^3
     e_total: float = 0.0
     s_total: float = 0.0            # fm^-3
@@ -435,9 +443,13 @@ class EoSPoint:
     Y_e: float = 0.0
     Y_nu: float = 0.0
 
-    #: The matter block and the unknown vector that produced it: the state,
-    #: and the warm start for the next point.
-    state: object = None
+    #: The matter block and the unknown vector that produced it. `_state` is
+    #: INTERNAL and carries natural units [MeV^n]: it is the model's own
+    #: working record, not part of the fm-based public boundary (CLAUDE.md
+    #: section 5), and the leading underscore is what says so. Everything a
+    #: caller needs is lifted onto this point in fm; `euler_residual()` is
+    #: dimensionless and stays reachable through it.
+    _state: object = None
     x: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
 
@@ -454,7 +466,7 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
     if spec.is_fixed("C"):
         if spec.leptons:
             mu_e, electrons, muons = neutralizing_leptons(
-                st.n_C_fm, T, include_muons=flags.muons)
+                st.n_C, T, include_muons=flags.muons)
             neutrinos = _EMPTY
         else:
             mu_e = 0.0
@@ -465,18 +477,18 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
             mu_e, mu_nue, T, flags)
 
     P_th, e_th, s_th = thermal_sectors(T, flags, trapped=mu_nue != 0.0)
-    P = st.P_fm + electrons.P + muons.P + neutrinos.P + P_th
-    e = st.eps_fm + electrons.e + muons.e + neutrinos.e + e_th
-    s = st.s_fm + electrons.s + muons.s + neutrinos.s + s_th
+    P = st.P + electrons.P + muons.P + neutrinos.P + P_th
+    e = st.eps + electrons.e + muons.e + neutrinos.e + e_th
+    s = st.s + electrons.s + muons.s + neutrinos.s + s_th
 
-    n_B = st.n_B_fm
+    n_B = st.n_B
     per_B = (lambda n: n / n_B if n_B else 0.0)
     n_u, n_d, n_s = st.n_flavour / hc3
     n_Le, _ = lepton_charges(n_e=electrons.n, n_nue=neutrinos.n)
     return EoSPoint(
         converged=converged, error=error, mode=mode, n_B=n_B, T=T,
-        Y_C=st.n_C_fm / n_B if n_B else 0.0,
-        Y_S=st.n_S_fm / n_B if n_B else 0.0,
+        Y_C=st.n_C / n_B if n_B else 0.0,
+        Y_S=st.n_S / n_B if n_B else 0.0,
         Y_Le=per_B(n_Le),
         pattern=st.pattern, gapless=st.gapless,
         Delta=tuple(float(d) for d in st.Delta),
@@ -488,7 +500,8 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
         P_total=P, e_total=e, s_total=s, f_total=e - T * s,
         Y_u=per_B(n_u), Y_d=per_B(n_d), Y_s=per_B(n_s),
         Y_e=per_B(electrons.n), Y_nu=per_B(neutrinos.n),
-        state=st, x=np.asarray(x, dtype=float))
+        n_3=st.n_3 / hc3, n_8=st.n_8 / hc3, n_q=st.n_q / hc3,
+        _state=st, x=np.asarray(x, dtype=float))
 
 
 # =============================================================================

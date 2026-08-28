@@ -252,11 +252,11 @@ def check_confinement_pinning(par, tol=0.0):
     st = state_at(par, PHI_CEIL, d.sigma_0, d.zeta_0, 0.0, np.zeros(3),
                   1600.0, 0.0, 0.0, 0.0, 0.0, 0.0, branch="confined")
     worst = max([abs(v) for v in on_shell]
-                + [abs(st.n_B), abs(st.P), abs(st.U), abs(st.V)])
+                + [abs(st.n_B_nat), abs(st.P_nat), abs(st.U), abs(st.V)])
     return CheckResult(
         "confinement pinning", worst <= tol, worst,
         f"a mode at M* = 450 > mu* = 400 MeV returns exactly zero, and the "
-        f"confined branch has n_B = {st.n_B:g}, P = {st.P:g} at "
+        f"confined branch has n_B = {st.n_B_nat:g}, P = {st.P_nat:g} at "
         f"mu_B = 1600 MeV")
 
 
@@ -287,9 +287,9 @@ def check_rearrangement_placement(par, tol=1.0e-12):
     S_eps = sum(m.eps for m in modes)
     W = 0.5 * par.m_omega ** 2 * st.omega_0 ** 2
 
-    in_P = abs((st.P - (S_P - st.U - st.V + W)) - st.Sigma_R * st.n_q)
-    not_in_eps = abs(st.eps - (S_eps + st.U + st.V + W))
-    scale = abs(st.eps)
+    in_P = abs((st.P_nat - (S_P - st.U - st.V + W)) - st.Sigma_R * st.n_q)
+    not_in_eps = abs(st.eps_nat - (S_eps + st.U + st.V + W))
+    scale = abs(st.eps_nat)
     errors = [in_P / scale, not_in_eps / scale]
     size = abs(st.Sigma_R * st.n_q) / scale
     worst = max(errors)
@@ -304,7 +304,7 @@ def _reference_state(par):
     than a mode."""
     point = solve_beta_eq_neutrinoless(par, N_CHECK, 0.0,
                                        flags=SpeciesFlags())
-    return point.state
+    return point._state
 
 
 # =============================================================================
@@ -318,7 +318,7 @@ def check_euler(par, states, tol=1.0e-8):
     and the missing rearrangement term in Omega. Either alone leaves this
     failing by percents while every other quantity still looks reasonable.
     """
-    errors = {k: abs(p.state.euler_residual()) for k, p in states.items()}
+    errors = {k: abs(p._state.euler_residual()) for k, p in states.items()}
     worst = max(errors.values()) if errors else 0.0
     return CheckResult("Euler", worst < tol, worst,
                        f"over {len(errors)} solved states")
@@ -328,9 +328,9 @@ def check_free_energy(par, states, tol=1.0e-8):
     """f = eps - T s, and f = -P + sum_j mu_j n_j."""
     errors = []
     for p in states.values():
-        st = p.state
-        f_a = st.eps - st.T * st.s
-        f_b = -st.P + st.mu_dot_n
+        st = p._state
+        f_a = st.eps_nat - st.T * st.s_nat
+        f_b = -st.P_nat + st.mu_dot_n
         errors.append(abs(f_a - f_b) / max(abs(f_a), 1.0))
     worst = max(errors) if errors else 0.0
     return CheckResult("free energy", worst < tol, worst,
@@ -357,17 +357,17 @@ def check_density_derivative(par, tol=1.0e-4):
     for mu in (mu_B - h, mu_B, mu_B + h):
         st, ok, _ = thermo_from_mu(par, mu, -30.0, 0.0, 0.0,
                                    branch="restored")
-        if not ok or st.n_B <= 0.0:
+        if not ok or st.n_B_nat <= 0.0:
             return CheckResult(
                 "n = dP/dmu", False, float("inf"),
                 f"the deconfined solve at mu_B = {mu} MeV did not land on a "
                 f"state with quarks in it")
         out.append(st)
-    dP_dmu = (out[2].P - out[0].P) / (2.0 * h)
-    err = abs(dP_dmu - out[1].n_B) / abs(out[1].n_B)
+    dP_dmu = (out[2].P_nat - out[0].P_nat) / (2.0 * h)
+    err = abs(dP_dmu - out[1].n_B_nat) / abs(out[1].n_B_nat)
     return CheckResult("n = dP/dmu", err < tol, err,
                        f"dP/dmu_B = {dP_dmu:.6f} against n_B = "
-                       f"{out[1].n_B:.6f} MeV^3")
+                       f"{out[1].n_B_nat:.6f} MeV^3")
 
 
 # =============================================================================
@@ -400,7 +400,7 @@ def check_reduction_chain(par, tol=0.0):
                         0.0, 20.0, pattern="CFL")
     mode_by_mode = float(np.max(np.abs(zero_gap.n_modes - unpaired.n_modes)))
     l3 = max(mode_by_mode, abs(zero_gap.delta_omega), abs(zero_gap.pair_cost),
-             abs(zero_gap.P - unpaired.P))
+             abs(zero_gap.P - unpaired.P_nat))
 
     worst = max(l0, l3)
     return CheckResult(
@@ -432,7 +432,7 @@ def check_colour_neutrality(par, tol=1.0e-10):
         return CheckResult("colour neutrality", False, float("inf"),
                            "the paired reference solve did not converge")
     scale = max((point.mu_B / 3.0) ** 3 / math.pi ** 2, 1.0)
-    paired = max(abs(point.state.n_3), abs(point.state.n_8)) / scale
+    paired = max(abs(point._state.n_3), abs(point._state.n_8)) / scale
     worst = max(unpaired, paired)
     return CheckResult(
         "colour neutrality", worst < tol, worst,

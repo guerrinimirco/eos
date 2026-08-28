@@ -269,8 +269,14 @@ NEITHER, and is an explicit named argument, never smuggled through
 `**conditions` — it is orthogonal to the mode (§3) and routing it through the
 condition bag has only ever produced mode names §3 does not define.
 Every public boundary is fm-based:
-n in fm^-3, T and mu in MeV, eps and P in MeV/fm^3. Natural units stay inside
-the physics modules and never leak across a module boundary.
+n in fm^-3, T and mu in MeV, eps and P in MeV/fm^3, and the entropy density s
+and scalar density n_s in fm^-3 — the two the shorter list used to omit, which
+is exactly where natural units survived longest. Natural units stay inside the
+physics modules and never leak across a module boundary. A model that keeps its
+own natural-units working record holds it under a **leading underscore**
+(`_state`, `_point`): the underscore is what says the record is not on the
+boundary, and it is the same line the baseline flattener and the units-band
+check both draw.
 
 What `eos_table()` returns is directly consumable by `eos/astro/tov` and by
 the plotting code with no per-model adapter. Along the stiff axis (density)

@@ -484,8 +484,10 @@ class BetaPoint:
     Named for the mode this model was written around; it is what every mode
     returns. `densities` are in fm^-3 and `eps`/`P` in MeV/fm^3, the fm-based
     public units; masses and chemical potentials are in MeV in both systems.
-    `point` is the underlying `EoSPoint` in natural units, carrying everything
-    `thermo_from_n` returns, and `x` is the converged unknown vector, which is
+    `_point` is the underlying `EoSPoint`, INTERNAL and in natural units
+    [MeV^n]: it carries everything `thermo_from_n` returns, is not part of the
+    fm-based public boundary (CLAUDE.md section 5), and the leading underscore
+    is what says so. `x` is the converged unknown vector, which is
     what warm-starts the next density. `s` is the entropy density [fm^-3] and
     `T` the temperature [MeV] it was solved at.
 
@@ -511,13 +513,13 @@ class BetaPoint:
     mu_e: float
     mu_C: float
     mu_S: float
-    point: EoSPoint
+    _point: EoSPoint
     x: tuple
     seed: str = "warm"
 
     @property
     def EperB(self):
-        return self.point.EperB
+        return self._point.EperB
 
 
 def solve(par, mode, n_B, x0=None, cold_start=True, leptons=None,
@@ -647,9 +649,11 @@ def solve(par, mode, n_B, x0=None, cold_start=True, leptons=None,
         n_B=n_B, T=T, spec=spec,
         densities={k: v / hc3 for k, v in n.items()},
         M_q=point.M_q, M_b=point.M_b,
-        eps=point.eps / hc3, P=point.P / hc3, s=point.s / hc3,
+        # `s` has no fm accessor on the record -- it is the one of the
+        # three with no boundary twin, so it converts here.
+        eps=point.eps, P=point.P, s=point.s / hc3,
         mu_b=mu_B, mu_e=mu_e, mu_C=mu_C, mu_S=mu_S,
-        point=point, x=tuple(solved), seed=from_seed,
+        _point=point, x=tuple(solved), seed=from_seed,
     )
 
 

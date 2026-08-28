@@ -28,6 +28,7 @@ from eos.dd2.table import (
 )
 from eos.general.table_io import save_table, load_table, export_csv
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
+from eos.dd2.nmp import snm_derivatives
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
 from eos.dd2.nmp import from_hyperon_potentials, from_delta_potential
 from eos.dd2.nmp import build_parametrization, SECTOR_KEYS
@@ -62,7 +63,7 @@ __all__ = [
     "TableSpec", "TableResult", "build_table", "solve_at_entropy",
     "MODES", "MODE_FRACTIONS", "hadronic_row", "rows_from_result",
     "save_table", "load_table", "export_csv",
-    "compute_nmp", "energy_per_baryon", "esym",
+    "compute_nmp", "energy_per_baryon", "esym", "snm_derivatives",
     "sound_speed_eq", "sound_speed_isothermal_frozen",
     "sound_speed_adiabatic_frozen", "adiabatic_index",
     "thermal_index", "heat_capacity_V", "snm_sound_speed",

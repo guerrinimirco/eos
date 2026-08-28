@@ -283,15 +283,15 @@ class NJLState:
     n_modes: np.ndarray                 # [MeV^3]
     n_flavour: np.ndarray               # [MeV^3]
     n_q: float
-    n_B: float
-    n_C: float
-    n_S: float
+    n_B_nat: float
+    n_C_nat: float
+    n_S_nat: float
     n_3: float
     n_8: float
     Omega: float                        # vacuum-subtracted [MeV^4]
-    P: float                            # = -Omega [MeV^4]
-    eps: float                          # vacuum-subtracted [MeV^4]
-    s: float                            # [MeV^3]
+    P_nat: float                        # = -Omega [MeV^4]
+    eps_nat: float                      # vacuum-subtracted [MeV^4]
+    s_nat: float                        # [MeV^3]
     mu_dot_n: float                     # sum_j mu_j n_j [MeV^4]
     mass_residual: np.ndarray
     gap_residual: np.ndarray
@@ -301,36 +301,46 @@ class NJLState:
     delta_omega: float                  # the pairing correction alone [MeV^4]
     pair_cost: float                    # sum_eta Delta^2/(4 G_D) [MeV^4]
 
-    # --- the fm-based boundary --------------------------------------------
+    # --- the fm-based boundary ---------------------------------------------
+    # The convention, and it is CLAUDE.md section 2's: a quantity that crosses
+    # the fm-based boundary of section 5 carries the BARE name and is fm-based
+    # (fm^-3, MeV/fm^3); its natural-units twin carries `_nat` (MeV^n). The
+    # `_nat` suffix marks a TWIN, so a natural-units field with no fm partner
+    # -- `n_q`, `n_3`, `n_8`, `Omega`, `mu_dot_n`, the mode and flavour arrays
+    # -- keeps its bare name and its unit comment. That is not an exception:
+    # this whole record is INTERNAL (the point holds it as `_state`), so what
+    # is being named here is which quantities a caller reading through the
+    # boundary would get, not a promise about every field.
     @property
-    def n_B_fm(self):
-        return self.n_B / hc3
+    def n_B(self):
+        return self.n_B_nat / hc3
 
     @property
-    def P_fm(self):
-        return self.P / hc3
+    def P(self):
+        return self.P_nat / hc3
 
     @property
-    def eps_fm(self):
-        return self.eps / hc3
+    def eps(self):
+        return self.eps_nat / hc3
 
     @property
-    def s_fm(self):
-        return self.s / hc3
+    def s(self):
+        return self.s_nat / hc3
 
     @property
-    def n_C_fm(self):
-        return self.n_C / hc3
+    def n_C(self):
+        return self.n_C_nat / hc3
 
     @property
-    def n_S_fm(self):
-        return self.n_S / hc3
+    def n_S(self):
+        return self.n_S_nat / hc3
 
     def euler_residual(self):
         """(eps + P - T s - sum_j mu_j n_j)/eps, the identity of section 8."""
-        if self.eps == 0.0:
+        if self.eps_nat == 0.0:
             return 0.0
-        return (self.eps + self.P - self.T * self.s - self.mu_dot_n) / self.eps
+        return ((self.eps_nat + self.P_nat - self.T * self.s_nat
+                 - self.mu_dot_n) / self.eps_nat)
 
 
 def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
@@ -440,10 +450,10 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
         T=T, M=M, Delta=Delta, Sigma_V=Sigma_V,
         mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, mu_3=mu_3, mu_8=mu_8,
         mu_modes=mu_modes, mu_star=mu_star, phi=phi,
-        n_modes=n_modes, n_flavour=n_flavour, n_q=n_q, n_B=n_q / 3.0,
-        n_C=float(np.dot(CHARGE, n_flavour)),
-        n_S=float(np.dot(STRANGENESS, n_flavour)), n_3=n_3, n_8=n_8,
-        Omega=Omega, P=-Omega, eps=eps, s=s,
+        n_modes=n_modes, n_flavour=n_flavour, n_q=n_q, n_B_nat=n_q / 3.0,
+        n_C_nat=float(np.dot(CHARGE, n_flavour)),
+        n_S_nat=float(np.dot(STRANGENESS, n_flavour)), n_3=n_3, n_8=n_8,
+        Omega=Omega, P_nat=-Omega, eps_nat=eps, s_nat=s,
         mu_dot_n=float(np.dot(mu_modes, n_modes)),
         mass_residual=M - masses_from_condensates(par, phi),
         gap_residual=Delta / (2.0 * par.G_D) - block.gap_kernel,

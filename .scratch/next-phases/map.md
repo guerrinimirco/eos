@@ -2888,6 +2888,138 @@ against this file, not against the earlier `pytest_before*.txt`.
   HS(DD2) 2.83e-05 unmoved, `test/dd2` 211 passed; no published number moved
   (every forward path is untouched — what moved is what the INVERSE returns).
 
+- [The DD2 nuclear-matter derivatives are analytic, and Q_sat is imposable](issues/111-dd2-analytic-nmp-derivatives.md)
+  (2026-08-28): **the stencil is gone from `dd2/nmp.py` and the Q_sat-imposing
+  closure went from unusable to exact.** Execution of the user's Q4 ruling on
+  105. The gap equation `S = G(n) n_s(m_N − S, kF(n))` differentiated
+  implicitly twice, substituted into the closed-form isoscalar `E/A` and
+  `E_sym`. **The shortcut that made it tractable**: `P = μn − ε` at T = 0 gives
+  `K_sat = 9n μ'` and `Q_sat = 27n(n μ'' − 3μ')`, so a THIRD derivative of E/A
+  is only a SECOND derivative of μ — the gap needed differentiating twice, not
+  three times, and the two non-elementary `n_s` moments (`∫k⁴/E³`, `∫k⁴/E⁵`)
+  close under `k = m* sinh t`. `snm_derivatives` is the one home and both
+  directions call it, so forward and inverse went analytic together as 111
+  required.
+  **What it bought, measured**: at DD2's own point the 5×5 went from
+  max|residual| **1.4e-02 with Q_sat imposed to 1.6 MeV** → **1.5e-12 with
+  Q_sat imposed to 1.1e-10 MeV**, and perturbed targets (dK_sat +10/−20,
+  dQ_sat +20/−30/+100) return Q_sat to <6e-10 MeV — the ticket asked for
+  0.01 MeV. 105's 259 × 1.5e-3 = 0.39 arithmetic has nothing left to amplify.
+  Round trip returns the six imposed values to **2.7e-11**.
+  **Four published numbers corrected**: K_sat 242.7240553 → 242.7240147,
+  **Q_sat 168.7135236 → 168.7868767**, L_sym 55.0336716 → 55.0336666, K_sym
+  −93.2240313 → −93.2240089. `n_sat`, `E_sat`, `m*/m`, `E_sym` and `P_sat` are
+  **bit-identical** to HEAD; `test/baseline/dd2.npz` is untouched and passes.
+  **ISO_GATE 2e-2 → 1e-8**, the half 105 handed over, re-measured on the four
+  axes the isoscalar residual actually has (240 targets over n_sat × E_sat ×
+  m*/m × K_sat): **233 solves ≤ 4.6e-12, three in [2.8e-3, 1.7e-2], four above
+  2e-2, nothing in between** — a nine-order gap, so 1e-8 is not a tuned number.
+  **Two things nobody predicted**: the stalls are gone (hybr differences its
+  own Jacobian from the residual, so the stencil's noise was making "not making
+  good progress" a true report about the SURFACE — 105 measured 12 of 18 misses
+  as stalls, now **0 of 7** and **0 of 8** on two grids; `_stalled` stays, two
+  scans are not a proof of absence), and the verify suite's `restarts extend
+  the basin` check lost its grid — the Q_sat closure it ran on now reaches
+  **30/30 at zero restarts** over a grid three times wider, so the check was
+  re-measured onto the DEFAULT closure where the basin structure still shows
+  (**22/30 → 27/30**). New verify entry `analytic NMP derivatives`: each of the
+  four must sit inside the (h, h/2) stencil pair's own scatter of their
+  Richardson extrapolation — self-calibrating, no tolerance to loosen.
+  `docs/DEFERRED.md`'s dd2 Q_sat entry is retired; what replaces it is Z_sat,
+  and as a CHOICE rather than a gap. Gate: dd2 `run_full_check` PASS, golden
+  SNM(0.16) **1.40e-05** and CompOSE HS(DD2) **2.83e-05** unmoved, `test/dd2`
+  **211 passed** on BOTH interpreters, all thirteen baselines green on
+  python.org 3.14.2. **Every number above was taken on both stacks**, which is
+  itself the strongest evidence the floor is dead: `test/baseline` documents a
+  **0.351 MeV** Q_sat shift between anaconda 3.9 and python.org 3.14, all of it
+  stencil roundoff, and the analytic values now agree across those same two
+  stacks to **7.5e-13** on Q_sat — ten orders. The ISO_GATE split and the basin
+  count are identical on both. (On the 3.9 stack four baselines — ccdm, enjl,
+  njl, zlvmit — miss on lepton-pressure keys at ~1e-9; the `.npz` files were
+  regenerated on 3.14 by [ticket 62](issues/62-regenerate-baselines-py314.md),
+  so that is a cross-stack comparison, not a regression, and none of the four
+  imports `eos.dd2`.)
+
+- [`Y_L` on a point is two different quantities wearing one name](issues/108-cached-lepton-fraction-three-models.md)
+  (2026-08-28): **it is `Y_Le`, it is MEASURED, and it is defined in every
+  mode.** §2 already decided it — "Y_X = n_X/n_B for every charge: Y_C, Y_S,
+  Y_Le, Y_Lmu", and L_e is a charge of that section's reduced basis — so the
+  lepton fraction is a property of the solved state exactly as Y_C is, and
+  `beta_eq_neutrino_trapped` holds it the way `fixed_YC` holds Y_C. **Both
+  camps in the ticket were misspelled**: `Y_L` appears nowhere in CLAUDE.md,
+  the two already-conformant models were the ones it listed in neither camp
+  (`did`, `dd2`), and `eos/mixed` had ruled the same way already — its
+  `test_the_lepton_fraction_has_exactly_one_name` asserts `Y_Le` and refuses
+  `Y_L`. So `zl`/`vmit`/`alphabag` rename AND start assigning from their own
+  lepton densities (alphabag's `point.Y_L = Y_Le` echo deleted), `njl`/`ccdm`
+  rename only, and `vmit`'s trapped condition kwarg joins §5's vocabulary.
+  `eos.general.basis` gains `lepton_charges` as the single home. **Y_C settled
+  alongside with no code change**: an echo is legitimate only where exact by
+  construction, which the existing 1e-8 comparison already polices.
+  Gate: `test_cached_fractions` no longer skips the field (21 passed), the
+  ticket's own six rows agree (`zl` beta at **0.11398814** both sides), 932
+  passed / 3 skipped / 3 xfailed across the affected suites, `test/baseline`
+  20 passed. **Baselines: 316 keys renamed `.Y_L` -> `.Y_Le`, 91 changed
+  value, ZERO other keys moved** — 39 zl, 29 vmit, 23 alphabag, and 0 in
+  njl/ccdm because those two were always right. Every one of the 91 is a
+  never-written field shipping its dataclass default. The ticket's own blast
+  radius was understated (it missed alphabag and the 181 name-only moves) and
+  its "nothing reads a Y_L off these points" was true of the package but false
+  of the suite. Its `0.30000000` column predates
+  [ticket 91](issues/91-leptons-default-and-drift-checks.md) defaulting
+  `leptons` off, which is why only half the frozen `yc` zeros moved.
+
+- [One NMP vocabulary across dd2, sfho, did and zl](issues/103-nmp-closures-four-models.md)
+  (2026-08-29): **the deliverable is one table of SIX closures for four models**,
+  in `docs/STRUCTURE.md` §6 — dd2 and zl each offer a choice, and the choice
+  changes what is an input, so a row per model could not say it. The user's
+  vocabulary is two words, `input` and `computed`, with `absent` for a quantity
+  the model lacks; "rigid" and "blocked" were both refused. **Two of the
+  ticket's four counting rows were wrong**: dd2 has six isoscalar couplings and
+  NO structural condition (105 removed the cross-constraint), and sfho's
+  isovector sector is **ten** knobs, not two — six free, nine pinned, and
+  **`c4` invisible to every nuclear-matter parameter**, an exactly-zero Jacobian
+  column because the rho field vanishes in symmetric matter.
+  **105's mechanical rule was run on SFHo for the first time and it picks the
+  wrong pair**: `cond` ranks `(a1, a2)` 2.413 above the shipped `(g_rho, b1)`
+  2.665, but `(a1, a2)` freezes `g_rho_N` and its columns are ten times weaker.
+  The cause is that **`cond` is sigma_max/sigma_min and so divides out the
+  weakest knob's absolute strength** — the number that decides whether it can
+  reach a prior. Adopted instead: **pin whichever subset maximises `sigma_min`,
+  then confirm by a basin scan that may veto**, which is where the user's "how
+  fast, and are the solutions findable" enters. It reproduces both shipped
+  choices (`(g_rho, b1)` at sigma_min 0.483 against 0.069; dd2's six pins in the
+  identical order) and immediately overturns one —
+  [115](issues/115-dd2-qsat-pin-recheck.md).
+  **`Q_sat` is a legal input in dd2 alone**, and only since
+  [111](issues/111-dd2-analytic-nmp-derivatives.md) landed mid-ticket; sfho's
+  only candidate fifth knob `c3` has a column **550x weaker** than
+  `g_sigma`'s and drops sigma_min 0.051 -> 0.0063, which is structural and no
+  analytic work removes. zl's `Q_sat` is computed and can never be an input
+  (`Q_sat = 3(gamma-2) K_sat`), nor substitute for gamma1, which is isovector.
+  **`E_sym` means the CompOSE definition, read at the source**: manual v3.01
+  (arXiv:2203.03209) Eq. (6.4), the beta^2 coefficient — DID's `S_2`, not its
+  `S`. Eq. (6.5)'s symmetric +-1 difference is declined as CompOSE's own
+  approximation for the quadratic case, which DID is not.
+  **Q6 measured on all three and the test turns out to measure the paper's
+  rounding**: dd2 recovers its couplings to 1.6e-4 from its literature quote,
+  sfho to 2.8e-2 — of which the whole factor of 22 is one two-digit entry,
+  `m*/m = 0.76` against 0.761564 — and zl to 7.2e-3 that does not improve with
+  precision, because its published couplings are a root of no closure. Reported
+  property, never a gate. `InversionStatus.predictions` was **already** the
+  contract in all three models with an inversion; nothing is built, it is
+  recorded. Hyperons: `x_sigma_H` from the depth, vectors SU(6) x a free factor,
+  **nine of them** (SFHoY needs 1.5 on omega and phi for Lambda/Sigma and 1.875
+  for Xi, which neither a per-meson nor a per-multiplet factor can express), and
+  the **Delta sector takes no factors** — `x_Delta_{sigma,omega,rho}` free.
+  DID's prerequisite is already met (Table VI at 0.84x tolerance). Five tickets
+  raised: [112](issues/112-su6-vector-ratios-as-parameters.md) (unblocks
+  [106](issues/106-su6-breaking-rescaling.md)),
+  [113](issues/113-did-parameter-provenance.md),
+  [114](issues/114-nmp-api-conformance.md),
+  [115](issues/115-dd2-qsat-pin-recheck.md),
+  [116](issues/116-sfho-analytic-nmp-derivatives.md). No code changed.
+
 ## Not yet specified
 
 Two patches graduated on 2026-08-27 out of
@@ -2895,13 +3027,24 @@ Two patches graduated on 2026-08-27 out of
 [ticket 100](issues/100-vmit-point-Y_S-never-assigned.md) (a cached conserved
 fraction its solvers never fill, frozen into a baseline) and
 [ticket 101](issues/101-pressure-and-energy-field-names.md) (`P`/`eps` against
-`P_total`/`e_total`, six models against four). Ticket 100's own sweep then
-graduated a third on 2026-08-28:
-[ticket 108](issues/108-cached-lepton-fraction-three-models.md) — `Y_L` is the
-trapped mode's condition in three models and the measured lepton fraction in
-three others, and the zeros are a defect or correct depending which.
+`P_total`/`e_total`, six models against four). Ticket 100's own sweep
+graduated a third on 2026-08-28,
+[ticket 108](issues/108-cached-lepton-fraction-three-models.md), which is
+resolved above.
 
 In scope, not yet sharp enough to ticket:
+
+- **A written table's column headers are a format nobody has ruled on.**
+  Left standing by [ticket 108](issues/108-cached-lepton-fraction-three-models.md),
+  which renamed the FIELD `Y_L` -> `Y_Le` in five models but not the `'Y_L'`
+  column header that `eos/zl/table.py:320` and
+  `eos/vmit/compute_tables.py:146` write into their trapped tables. Those take
+  their value from the grid key rather than from the point, so nothing broke —
+  but the header now names a field that no longer exists, and `nucleation`
+  carries its own unrelated `GRIDS['Y_L']`. Whether a written table's columns
+  owe §13's vocabulary the same conformance the dataclass fields do, and who
+  is allowed to break that format, is the question. Note also that **no model
+  caches `Y_Lmu`** at all, which the same rename exposed.
 
 - **`test/baseline_py39/` is a snapshot nothing selects and nothing reproduces.**
   Found while gating [ticket 107](issues/107-fermi-gl-threshold.md).
@@ -3140,6 +3283,18 @@ In scope, not yet sharp enough to ticket:
   turned into a wrong number rather than a skip. §10 promises the constraints
   module fails with a fetch message; whether it does, and whether anything else
   does not, is unmeasured.
+- **Whether the user's Q4 ruling reaches `did`.** "All the relations that can
+  be written analytically should be" was ruled on
+  [ticket 105](issues/105-dd2-isoscalar-conditioning.md), executed for `dd2` by
+  [ticket 111](issues/111-dd2-analytic-nmp-derivatives.md) and graduated for
+  `sfho` into [ticket 116](issues/116-sfho-analytic-nmp-derivatives.md) once
+  [103](issues/103-nmp-closures-four-models.md) settled that sfho's closure is
+  not going to change. `zl` is already closed form
+  ([104](issues/104-zl-analytic-inversion.md)). What is left is `did`, and it is
+  the one where the question is not yet sharp: `did` has no inverse map at all
+  and [113](issues/113-did-parameter-provenance.md) has to say what fixed each
+  of its parameters before "which derivatives must be exact" is even a
+  question. Revisit when 113 lands.
 
 ## Out of scope
 
