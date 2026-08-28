@@ -2006,18 +2006,36 @@ against this file, not against the earlier `pytest_before*.txt`.
   them. The window the leptonless mode needs was MEASURED and not built —
   [ticket 88](issues/88-fixed-composition-coexistence.md).
 - [A coexistence locator for a phase held at fixed (Y_C, Y_S)](issues/88-fixed-composition-coexistence.md):
-  OPEN, non-gating, split out of 83 with its target already measured:
-  [0.34945, 0.47500] fm^-3 at P = 22.9282 MeV/fm^3 and g = 1006.4074 MeV, the
-  eps crossing at 0.41774 inside it. Two findings it opens with rather than
-  discovers. **`locate_maxwell` will not take a second closure**: it bisects
-  gap(mu_B) in one variable only because beta equilibrium with neutrality
-  determines mu_C from mu_B and so reduces the Gibbs energy per baryon
-  g = mu_B + Y_C mu_C + Y_S mu_S to mu_B; at a held (Y_C, Y_S) coexistence
-  needs equal P AND equal g, a 2-D root find in the two branches' own mu_B.
-  And **`Coexistence` encodes the beta closure in its field list** — one `mu_B`
-  field documented as equal across both phases, written onto every plateau row —
-  which is the same defect 83 fixed in `build_constructed_table`'s promise, so
-  the one carrier is generalized rather than a second one added.
+  **RESOLVED** (`9bf61ec`, 2026-08-28), non-gating. Built, and it reproduces
+  83's spline measurement to every digit that ticket reported:
+  **[0.34945, 0.47500] fm^-3 at P = 22.9282 MeV/fm^3 and g = 1006.4074 MeV**,
+  the eps crossing at 0.41774 inside it, `build_constructed_table` on the
+  leptonless held-(Y_C, Y_S) mode now `deliverable = True` with a 13-row
+  plateau flat to ptp(P) = 0. Both findings it opened with held.
+  `composition_phase` + `locate_maxwell_composition` +
+  `enjl_composition_coexistences` sit beside their beta twins; the carrier was
+  GENERALIZED, not duplicated — `MaxwellPoint` and `Coexistence` now carry
+  **P and g**, the pair coexistence equates in either closure and the only two
+  single-valued fields, with `mu_B_lo`/`mu_B_hi` beside them, and `plateau_row`
+  writes mu_B and mu_S only where the two edges agree (a bitwise identity under
+  the beta closure, since there mu_B is one number handed to both phases).
+  **The 2-D solve separates, which the ticket did not know**: Gibbs-Duhem at
+  fixed composition gives n_B dg = dP, so g is monotone along a branch, and
+  reading each branch's mu_B and P at a common g turns the SEED into the same
+  one-dimensional sign change `locate_maxwell` bisects — 7 s on a 5-point
+  grid, with the same window on 5, 6 and 60 points. Two traps recorded: the
+  composition residual is exactly zero at mu_C = 0 by u-d symmetry, so `hybr`
+  returns "not making good progress" on an exact answer and the gate must be
+  the residual norm (section 6), not the success flag; and mu_S is dropped
+  where a held Y_S = 0 at T = 0 leaves its row reading 0 = 0, which is ticket
+  72's rank deficiency restated at the adapter boundary. eta = 1 only, as for
+  the beta path — eta = 0 at held composition is a DIFFERENT delivered object
+  (different Y_C, Y_S per phase, all three potentials equated, a window not
+  flat in P), recorded on the two `docs/DEFERRED.md` entries the beta
+  construction already owns rather than as a third. §11 text in `enjl.md` and
+  `.tex` (compiles, 16 pages). ENJL verify PASS, **20 checks** (was 18), the
+  section 8 gate demonstrated in both directions as 83's was; test/enjl +
+  test/mixed 391 passed, 0 failed.
 - [The six non-baseline failures on 3.14](issues/74-py314-non-baseline-failures.md):
   OPEN. The rest of ticket 57's cost list, none of it a `.npz` — Q_sat's
   `abs=0.2` re-derived from a noise floor measured on 3.14, `test_dd2_m8`'s
