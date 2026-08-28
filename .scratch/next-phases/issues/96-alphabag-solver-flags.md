@@ -128,3 +128,26 @@ a default; `test_the_gluon_flag_is_still_a_default_in_the_unpaired_modes` pins
 it. The drift check `test_every_species_flag_defaults_off_or_raises` iterates
 DEFAULTS and needs no exemption. The §4 sentence is owed to
 [ticket 85](85-claudemd-sentences-owed.md) item 5.
+
+---
+
+## Note from [ticket 94](94-zl-solver-flags.md) (2026-08-28)
+
+This model's `eos/mixed` adapter takes **no flags object** — it is
+`(params=None)` — so its `wing_sweep` cannot carry the caller's own `photons`
+the way `eos/mixed/species.py` says a wing must. Ticket 94 hit the same thing
+in `zl_phase` and gave it `photons=False` rather than invent an API three
+times. **Do the same here and do NOT add a `flags=` parameter**: that is
+[ticket 109](109-flagless-mixed-adapters.md), which is blocked by this ticket
+and is one ruling covering all three adapters.
+
+Two more findings from 94 that apply directly:
+
+- **The signature is sfho's and did's**, `(par, n_B, [fraction], flags, T)`,
+  not the literal "after `par`" these tickets were written with — that would
+  be a fourth argument order against §13. Do not rename `initial_guess` to
+  `x0` or give `T` a default; ticket 90 left both alone everywhere.
+- **`leptons` keeps whatever default it has.**
+  [Ticket 91](91-leptons-default-and-drift-checks.md) owns the flip to False,
+  and moving it here moves rows the measure-then-regenerate gate does not
+  allow for.

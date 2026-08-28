@@ -397,12 +397,14 @@ against this file, not against the earlier `pytest_before*.txt`.
   the flip. **Two call sites the work list did not have**:
   `eos/zlvmit/mixed_phase_eos.py:2386-2390` has been DEAD since ticket 90
   (pre-90 argument order inside a bare `except: pass`) and is left alone
-  because repairing it can move `zlvmit.npz`; and **`zl_phase`,
+  because repairing it can move `zlvmit.npz` — now
+  [ticket 110](issues/110-zlvmit-dead-warm-start-calls.md); and **`zl_phase`,
   `vmit_phase` and `alphabag_phase` take no flags object at all**, so none can
   obey `eos/mixed/species.py`'s "a wing carries the caller's own `photons`".
   zl's now carries `photons=False`, which agrees with the mixture at its
   default. **Whether those three adapters grow a `flags=` parameter is ONE
-  ruling for after 95 and 96, not three.** Ticket 81's named coverage gap is
+  ruling, not three** —
+  [ticket 109](issues/109-flagless-mixed-adapters.md), blocked by 95 and 96. Ticket 81's named coverage gap is
   closed for zl by both a flags-passing baseline case and
   `test_the_photon_flag_reaches_the_solver`.
 
