@@ -19,7 +19,8 @@ full. The NJL parameter set is Rehberg, Klevansky and Huefner, Phys. Rev. C
 
 Units are natural inside this module: densities in MeV^3, masses and
 potentials in MeV, eps and P in MeV^4. The fm-based public boundary is
-`eos.enjl.api`; the `_fm` properties of `EoSPoint` are the conversion.
+`eos.enjl.api`; the bare-named properties of `EoSPoint` -- `n_b`, `eps`,
+`P` -- are the conversion, the natural-units fields behind them carrying `_nat`.
 """
 from dataclasses import dataclass
 import math
@@ -482,7 +483,8 @@ class EoSPoint:
     """One solved state of uniform ENJL matter, in natural units.
 
     Densities in MeV^3, masses and potentials in MeV, eps and P in MeV^4;
-    the `_fm` properties convert to the fm-based public boundary. `enjl.tex`
+    the bare-named properties `n_b`, `eps` and `P` convert to the fm-based
+    public boundary. `enjl.tex`
     Sec. "What a solved point returns" lists every field against the equation
     it comes from.
 
