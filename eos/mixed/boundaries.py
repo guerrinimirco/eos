@@ -485,18 +485,39 @@ MU_C_SCAN = (-320.0, -2.0, 15)
 class MaxwellPoint:
     """One first-order transition located at eta = 1.
 
-    mu_B     : the coexistence baryon potential [MeV]
     P        : the coexistence pressure, matter + leptons [MeV/fm^3]
+    g        : the coexistence Gibbs free energy per baryon [MeV],
+               g = (eps + P) / n_B
+    mu_B_lo, mu_B_hi : each branch's OWN baryon potential [MeV]
     n_B_lo   : baryon density of the low-density branch [fm^-3]
     n_B_hi   : baryon density of the high-density branch [fm^-3]
-    mu_e_lo, mu_e_hi : each branch's own neutralizing electron potential [MeV]
+    mu_e_lo, mu_e_hi : each branch's own neutralizing electron potential
+               [MeV], nan where the phases carry no leptons
     branches : the two branch labels, low then high
 
     `n_B_lo` and `n_B_hi` are the window edges: between them no single phase is
     stable and the delivered EoS is the constant-pressure plateau.
+
+    **P and g are the pair that coexistence equates, in EVERY closure**, and
+    they are the two fields here that carry one value rather than two. The
+    baryon potential is not that pair: at fixed composition Euler gives
+
+        g = mu_B + Y_C mu_C + Y_S mu_S
+
+    and each phase solves its own (mu_C, mu_S) for the held fractions, so the
+    two branches meet at one g with two different mu_B. What collapses the
+    pair to a single number is the BETA closure specifically: there neutrality
+    determines mu_C from mu_B and mu_S = 0, the Y_C mu_C term cancels against
+    the lepton contribution to eps + P, and g = mu_B on both sides. So
+    `locate_maxwell` returns `mu_B_lo == mu_B_hi` and `g` equal to both, while
+    `locate_maxwell_composition` returns three different numbers. A single
+    `mu_B` field would state the beta closure as though it were the
+    construction.
     """
-    mu_B: float
     P: float
+    g: float
+    mu_B_lo: float
+    mu_B_hi: float
     n_B_lo: float
     n_B_hi: float
     mu_e_lo: float
@@ -505,7 +526,7 @@ class MaxwellPoint:
 
     @property
     def exists(self):
-        return np.isfinite(self.mu_B) and self.n_B_hi > self.n_B_lo
+        return np.isfinite(self.g) and self.n_B_hi > self.n_B_lo
 
 
 
@@ -619,8 +640,7 @@ def locate_maxwell(phase_lo, phase_hi, mu_B_grid, T=0.0, muons=True,
         b = total_pressure(phase_hi, mu_B, T=T, muons=muons)
         return None if (a is None or b is None) else a[0] - b[0]
 
-    none = MaxwellPoint(np.nan, np.nan, np.nan, np.nan, np.nan, np.nan,
-                        tuple(labels))
+    none = no_coexistence(labels)
     scanned = [(float(m), gap(m)) for m in np.asarray(mu_B_grid, dtype=float)]
     scanned = [(m, g) for m, g in scanned if g is not None]
     bracket = next((((m0, g0), (m1, g1))
@@ -635,9 +655,209 @@ def locate_maxwell(phase_lo, phase_hi, mu_B_grid, T=0.0, muons=True,
     hi = total_pressure(phase_hi, mu_B, T=T, muons=muons)
     if lo is None or hi is None:
         return none
-    return MaxwellPoint(mu_B=mu_B, P=0.5 * (lo[0] + hi[0]),
+    # g = mu_B here, and not by assertion: on a neutral phase at T = 0 the
+    # Euler relation reads eps + P = mu_B n_B + mu_C n_C + sum_l mu_l n_l with
+    # mu_C = -mu_e and n_C = n_e + n_mu, so the charge and lepton terms cancel
+    # and (eps + P)/n_B is the one potential both phases were evaluated at.
+    return MaxwellPoint(P=0.5 * (lo[0] + hi[0]), g=mu_B,
+                        mu_B_lo=mu_B, mu_B_hi=mu_B,
                         n_B_lo=lo[1], n_B_hi=hi[1],
                         mu_e_lo=-lo[2], mu_e_hi=-hi[2], branches=tuple(labels))
+
+
+# --------------------------------------------------------------------------
+# The same construction under the COMPOSITION closure
+# --------------------------------------------------------------------------
+#
+# `neutral_phase` above closes a phase by making it neutralize its own
+# leptons, which is what a beta-equilibrium branch pair needs. A mixed-phase
+# construction consumes the other thing (CLAUDE.md section 3): each pure phase
+# at a held, non-leptonic (Y_C, Y_S), electrically charged, with global
+# neutrality imposed later. That closure needs its own phase solve and its own
+# locator, because the collapse that makes `locate_maxwell` a one-variable
+# bisection is a property of beta equilibrium and not of the construction.
+
+#: Starting (mu_C, mu_S) for the composition solve, tried in order until one
+#: meets `COMPOSITION_TOL`. mu_C is near zero in symmetric matter and tens of
+#: MeV negative in neutron-rich matter; mu_S is positive where strangeness is
+#: demanded, since every carrier in this repository has S = +1 (CLAUDE.md
+#: section 2) and a positive mu_S is what populates them.
+COMPOSITION_SEEDS = ((0.0, 0.0), (-60.0, 100.0), (-150.0, 0.0), (0.0, 200.0))
+
+#: Relative tolerance the held fractions must be met to, as |n_X - Y_X n_B|
+#: against n_B. The solve is accepted on this residual rather than on the root
+#: finder's own success flag: where the composition is symmetric the residual
+#: starts AT round-off, and `hybr` then reports "not making good progress"
+#: while sitting on an exact answer. CLAUDE.md section 6 judges convergence on
+#: a residual norm, which is the test that reads that situation correctly.
+COMPOSITION_TOL = 1.0e-10
+
+
+def composition_phase(phase, mu_B, Y_C, Y_S, T=0.0):
+    """The phase at `mu_B`, with (mu_C, mu_S) solved so it carries (Y_C, Y_S).
+
+    `phase` is a callable (mu_B, mu_C, mu_S) -> PhaseThermo -- one argument
+    more than `neutral_phase` takes, because here mu_S is not pinned by an
+    equilibrium relation. Returns `(PhaseThermo, mu_C, mu_S)`, or None where
+    the branch does not exist at `mu_B` or no seed meets `COMPOSITION_TOL`.
+
+    Y_C and Y_S are the NON-leptonic fractions of CLAUDE.md section 2: the
+    phase carries no leptons and is electrically charged, which is what a
+    mixed-phase construction consumes for each pure phase before imposing
+    global neutrality.
+
+    **At T = 0 a demanded Y_S = 0 leaves mu_S undetermined**, and it is
+    dropped from the unknowns rather than carried as a null column. Every
+    strangeness carrier in this repository has S = +1 and at T = 0 there are
+    no antiparticles, so every term of n_S = sum_i S_i n_i is non-negative and
+    n_S = 0 forces each of them to vanish term by term: the row reads 0 = 0
+    for every mu_S. That is the same statement, and the same remedy, as
+    `eos.enjl.solver.strangeness_row_is_empty` -- and it is a T = 0 statement
+    only, since at T > 0 the Fermi tails populate the carriers and their
+    antiparticles and the row acquires a gradient.
+    """
+    if T != 0.0:
+        raise NotImplementedError(
+            f"the eta = 1 construction is written at T = 0; got T = {T} MeV")
+
+    empty_S = (Y_S == 0.0)
+
+    def residual(x):
+        mu_C = float(x[0])
+        mu_S = 0.0 if empty_S else float(x[1])
+        th = phase(mu_B, mu_C, mu_S)
+        rows = [th.n_C - Y_C * th.n_B]
+        if not empty_S:
+            rows.append(th.n_S - Y_S * th.n_B)
+        return rows
+
+    for mu_C0, mu_S0 in COMPOSITION_SEEDS:
+        start = [mu_C0] if empty_S else [mu_C0, mu_S0]
+        try:
+            sol = root(residual, start, method="hybr")
+            mu_C = float(sol.x[0])
+            mu_S = 0.0 if empty_S else float(sol.x[1])
+            th = phase(mu_B, mu_C, mu_S)
+        except RuntimeError:          # this branch does not exist here
+            continue
+        worst = float(np.max(np.abs(np.atleast_1d(sol.fun))))
+        if worst <= COMPOSITION_TOL * th.n_B:
+            return th, mu_C, mu_S
+    return None
+
+
+def composition_state(phase, mu_B, Y_C, Y_S, T=0.0):
+    """(P, g, n_B, mu_C, mu_S) for the phase held at (Y_C, Y_S), or None.
+
+    The composition-closure twin of `total_pressure`, and it reports g as well
+    because P alone no longer closes the construction. There are no leptons in
+    the balance here, which is the point of the closure: each pure phase is
+    charged, and the charge is reconciled between the phases rather than
+    inside each of them.
+
+    g is the Gibbs free energy per baryon (eps + P)/n_B. At fixed composition
+    the Euler relation makes that g = mu_B + Y_C mu_C + Y_S mu_S, so it is not
+    mu_B unless both fraction terms vanish.
+    """
+    found = composition_phase(phase, mu_B, Y_C, Y_S, T=T)
+    if found is None:
+        return None
+    th, mu_C, mu_S = found
+    return th.P, (th.eps + th.P) / th.n_B, th.n_B, mu_C, mu_S
+
+
+def no_coexistence(labels):
+    """The MaxwellPoint that says "no transition here"; `.exists` is False."""
+    nan = float("nan")
+    return MaxwellPoint(P=nan, g=nan, mu_B_lo=nan, mu_B_hi=nan,
+                        n_B_lo=nan, n_B_hi=nan, mu_e_lo=nan, mu_e_hi=nan,
+                        branches=tuple(labels))
+
+
+def locate_maxwell_composition(phase_lo, phase_hi, mu_B_grid, Y_C, Y_S,
+                               T=0.0, labels=("lo", "hi"), ftol=1.0e-8):
+    """Where two branches held at (Y_C, Y_S) coexist: a 2-D root find.
+
+    `phase_lo` and `phase_hi` are callables (mu_B, mu_C, mu_S) -> PhaseThermo.
+    Returns a `MaxwellPoint`, whose `.exists` is False when the two branches
+    never both exist on `mu_B_grid` or their (P, g) curves do not cross on it
+    -- a physics outcome for these parameters, so a value and not an
+    exception (CLAUDE.md section 6).
+
+    **Why this is not `locate_maxwell` with a different phase closure.** That
+    one bisects `P_lo(mu_B) - P_hi(mu_B)` in ONE variable, and may, because
+    beta equilibrium with neutrality determines mu_C from mu_B and forces
+    g = mu_B: the two branches meeting at one mu_B already have equal g, and
+    equal P is all that is left to impose. Here each branch solves its own
+    (mu_C, mu_S) for the held fractions, g = mu_B + Y_C mu_C + Y_S mu_S
+    differs from mu_B by a different amount on each side, and coexistence is
+    two conditions --
+
+        P_lo  = P_hi        mechanical equilibrium
+        g_lo  = g_hi        chemical equilibrium at fixed composition
+
+    -- in two unknowns, the branches' own mu_B. Nothing in a one-variable
+    bisection can express that.
+
+    The two-dimensional solve is SEEDED from the grid rather than started
+    anywhere: g is monotone along a branch (Gibbs-Duhem at fixed composition
+    and T = 0 gives n_B dg = dP, and n_B > 0), so tabulating (mu_B, g, P) on
+    the grid and reading each branch's mu_B and P at a common g turns the
+    seed into a one-dimensional sign change in P_lo - P_hi. That interpolated
+    crossing is a grid-resolution answer -- the accuracy this module exists to
+    avoid -- so it is the starting point and not the result.
+    """
+    if T != 0.0:
+        raise NotImplementedError(
+            f"the eta = 1 construction is written at T = 0; got T = {T} MeV")
+
+    none = no_coexistence(labels)
+    tables = []
+    for phase in (phase_lo, phase_hi):
+        rows = []
+        for mu_B in np.asarray(mu_B_grid, dtype=float):
+            state = composition_state(phase, float(mu_B), Y_C, Y_S, T=T)
+            if state is not None:
+                rows.append((float(mu_B), state[1], state[0]))   # mu_B, g, P
+        if len(rows) < 2:
+            return none
+        table = np.array(rows)
+        tables.append(table[np.argsort(table[:, 1])])            # by g
+
+    g_lo, g_hi = tables[0][:, 1], tables[1][:, 1]
+    span_lo = max(g_lo[0], g_hi[0])
+    span_hi = min(g_lo[-1], g_hi[-1])
+    if not span_hi > span_lo:
+        return none
+    probe = np.linspace(span_lo, span_hi, 8 * len(mu_B_grid))
+    gap = (np.interp(probe, g_lo, tables[0][:, 2])
+           - np.interp(probe, g_hi, tables[1][:, 2]))
+    crossing = np.flatnonzero(gap[:-1] * gap[1:] <= 0.0)
+    if crossing.size == 0:
+        return none
+    g_seed = float(probe[crossing[0]])
+    seed = [float(np.interp(g_seed, g_lo, tables[0][:, 0])),
+            float(np.interp(g_seed, g_hi, tables[1][:, 0]))]
+
+    def conditions(x):
+        a = composition_state(phase_lo, float(x[0]), Y_C, Y_S, T=T)
+        b = composition_state(phase_hi, float(x[1]), Y_C, Y_S, T=T)
+        if a is None or b is None:      # walked off a branch's domain
+            return [np.nan, np.nan]
+        return [a[0] - b[0], a[1] - b[1]]
+
+    sol = root(conditions, seed, method="hybr")
+    lo = composition_state(phase_lo, float(sol.x[0]), Y_C, Y_S, T=T)
+    hi = composition_state(phase_hi, float(sol.x[1]), Y_C, Y_S, T=T)
+    if lo is None or hi is None:
+        return none
+    if not np.all(np.abs(np.atleast_1d(sol.fun)) <= ftol):
+        return none
+    return MaxwellPoint(P=0.5 * (lo[0] + hi[0]), g=0.5 * (lo[1] + hi[1]),
+                        mu_B_lo=float(sol.x[0]), mu_B_hi=float(sol.x[1]),
+                        n_B_lo=lo[2], n_B_hi=hi[2],
+                        mu_e_lo=float("nan"), mu_e_hi=float("nan"),
+                        branches=tuple(labels))
 
 
 def locate_windows(phases, n_B_grid, eta, spec, T=0.0,

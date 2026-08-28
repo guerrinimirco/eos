@@ -832,13 +832,15 @@ def _coexistences(name):
 
 
 def check_maxwell_crossing():
-    """P and mu_B are equal across the two phases at a located crossing.
+    """P and g are equal across the two phases at a located crossing.
 
     The defining conditions of the eta = 1 construction: mechanical
-    equilibrium P_lo = P_hi and chemical equilibrium mu_B,lo = mu_B,hi, with
-    each phase separately neutral and carrying its OWN electron potential.
-    Recomputed from the phases at the located potential rather than read back
-    off the record that asserted them.
+    equilibrium P_lo = P_hi and chemical equilibrium g_lo = g_hi, with each
+    phase separately neutral and carrying its OWN electron potential. In beta
+    equilibrium with neutrality g = mu_B, which is why one potential closes
+    both conditions here; `check_composition_crossing` below is the same pair
+    of conditions where it does not. Recomputed from the phases at the located
+    potential rather than read back off the record that asserted them.
     """
     from eos.mixed.adapters import enjl_branch_pair
     from eos.mixed.boundaries import total_pressure
@@ -852,24 +854,156 @@ def check_maxwell_crossing():
     for co in found:
         lo_phase, hi_phase = enjl_branch_pair(par, co.branches)
         pressures = []
-        for phase in (lo_phase, hi_phase):
+        for phase, mu_B in ((lo_phase, co.mu_B_lo), (hi_phase, co.mu_B_hi)):
             got = total_pressure(lambda m, c: phase.thermo(m, c, 0.0, 0.0),
-                                 co.mu_B, muons=True)
+                                 mu_B, muons=True)
             if got is None:
                 return CheckResult("maxwell_crossing", False, float("inf"),
                                    f"{phase.name} does not exist at the "
-                                   f"located mu_B = {co.mu_B:.4f} MeV")
+                                   f"located mu_B = {mu_B:.4f} MeV")
             pressures.append(got[0])
         dP = abs(pressures[0] - pressures[1]) / abs(co.P)
-        # mu_B is one number handed to both phases, so its equality is exact
-        # by construction; what is checked is that each edge row reports it.
-        dmu = max(abs(co.row_lo["mu_B"] - co.mu_B),
-                  abs(co.row_hi["mu_B"] - co.mu_B)) / abs(co.mu_B)
+        # Under this closure g = mu_B and it is one number handed to both
+        # phases, so its equality is exact by construction; what is checked is
+        # that each edge row reports it.
+        dmu = max(abs(co.row_lo["mu_B"] - co.g),
+                  abs(co.row_hi["mu_B"] - co.g)) / abs(co.g)
         worst = max(worst, dP, dmu)
         detail.append(f"{'+'.join(co.branches)} dP/P={dP:.1e} "
                       f"dmu_B/mu_B={dmu:.1e}")
     return CheckResult("maxwell_crossing", worst < 1.0e-6, worst,
                        "; ".join(detail))
+
+
+#: The held (Y_C, Y_S) the composition construction is checked at, and the
+#: mu_B range its crossing sits in for `Parameters.default()`. Y_C = 0.5,
+#: Y_S = 0 is symmetric nuclear matter (CLAUDE.md section 3), which is the
+#: mode heavy-ion comparisons are made in and the one a mixed-phase
+#: construction consumes for each pure phase.
+COMPOSITION_FRACTIONS = (0.5, 0.0)
+COMPOSITION_MU_B = (960.0, 1061.0, 20.0)
+COMPOSITION_NB = (0.24, 0.56, 0.01)
+
+
+def check_composition_crossing():
+    """P and g are equal across two branches held at (Y_C, Y_S), and only g is.
+
+    The composition closure of the same eta = 1 construction: each phase
+    carries the held non-leptonic fractions, no leptons at all, and is
+    electrically charged. What coexistence equates is the pressure and the
+    Gibbs free energy per baryon g = (eps + P)/n_B; the baryon potential is
+    g - Y_C mu_C - Y_S mu_S and is a different number on each side unless both
+    fraction terms vanish.
+
+    Both conditions are recomputed from the phases at the located potentials
+    rather than read back off the record that asserted them, and the Euler
+    identity g = mu_B + Y_C mu_C + Y_S mu_S is checked at both edges -- which
+    is what says the located g is the thermodynamic one and not an assembly of
+    the same numbers twice.
+    """
+    from eos.mixed.adapters import enjl_branch_pair
+    from eos.mixed.boundaries import composition_state
+    from eos.mixed.construction import enjl_composition_coexistences
+
+    Y_C, Y_S = COMPOSITION_FRACTIONS
+    par = Parameters.default()
+    lo, hi, step = COMPOSITION_MU_B
+    found = enjl_composition_coexistences(par, np.arange(lo, hi, step),
+                                          Y_C, Y_S,
+                                          pairs=(("broken", "restored"),))
+    if not found:
+        return CheckResult("composition_crossing", False, float("inf"),
+                           f"no transition located at Y_C={Y_C}, Y_S={Y_S} "
+                           f"on mu_B in {COMPOSITION_MU_B}")
+    worst, detail = 0.0, []
+    for co in found:
+        lo_phase, hi_phase = enjl_branch_pair(par, co.branches)
+        states = []
+        for phase, mu_B in ((lo_phase, co.mu_B_lo), (hi_phase, co.mu_B_hi)):
+            got = composition_state(
+                lambda m, c, s: phase.thermo(m, c, s, 0.0), mu_B, Y_C, Y_S)
+            if got is None:
+                return CheckResult("composition_crossing", False, float("inf"),
+                                   f"{phase.name} does not carry "
+                                   f"(Y_C, Y_S) = ({Y_C}, {Y_S}) at the "
+                                   f"located mu_B = {mu_B:.4f} MeV")
+            states.append(got)
+        (P_a, g_a, _, mu_C_a, mu_S_a), (P_b, g_b, _, mu_C_b, mu_S_b) = states
+        dP = abs(P_a - P_b) / abs(co.P)
+        dg = abs(g_a - g_b) / abs(co.g)
+        # g = mu_B + Y_C mu_C + Y_S mu_S at fixed composition (Euler), on each
+        # side with that side's own potentials.
+        dEuler = max(
+            abs(g_a - (co.mu_B_lo + Y_C * mu_C_a + Y_S * mu_S_a)),
+            abs(g_b - (co.mu_B_hi + Y_C * mu_C_b + Y_S * mu_S_b))) / abs(co.g)
+        worst = max(worst, dP, dg, dEuler)
+        detail.append(f"{'+'.join(co.branches)} dP/P={dP:.1e} dg/g={dg:.1e} "
+                      f"dEuler/g={dEuler:.1e} "
+                      f"n=[{co.n_B_lo:.5f}, {co.n_B_hi:.5f}]")
+    return CheckResult("composition_crossing", worst < 1.0e-6, worst,
+                       "; ".join(detail))
+
+
+def check_composition_delivered_table():
+    """The held-(Y_C, Y_S) table is deliverable once its window is located.
+
+    The same gate as `check_delivered_table`, on the closure a mixed-phase
+    construction consumes: leptonless, electrically charged pure phases at a
+    held Y_C and Y_S (CLAUDE.md section 3). Demonstrated in both directions
+    for the same reason -- without the empty-list row, "the construction
+    delivers a table" and "any table is delivered" are the same observation.
+
+    The failing row is not a weakness of the assembly. Outside a window
+    min-eps keeps the stable PURE phase, and where the two branches cross the
+    minimum of two convex eps(n_B) curves is concave: the kept slope drops and
+    P falls with it. Passing the located window replaces that segment with the
+    constant-pressure plateau and the drop is gone.
+    """
+    from eos.enjl.table import TableSpec, build_constructed_table
+    from eos.mixed.construction import enjl_composition_coexistences
+
+    Y_C, Y_S = COMPOSITION_FRACTIONS
+    par = Parameters.default()
+    lo, hi, step = COMPOSITION_MU_B
+    found = enjl_composition_coexistences(par, np.arange(lo, hi, step),
+                                          Y_C, Y_S,
+                                          pairs=(("broken", "restored"),))
+    lo, hi, step = COMPOSITION_NB
+    spec = TableSpec(nB=np.arange(lo, hi, step), par=par, mode="fixed_YC_YS",
+                     leptons=False, fractions={"Y_C": Y_C, "Y_S": Y_S})
+
+    detail, passed = [], True
+    for name, windows, want in (("windows", found, True), ("none", [], False)):
+        table = build_constructed_table(spec, windows)
+        if len(table.rows) < 3:
+            return CheckResult("composition_delivered_table", False,
+                               float("inf"),
+                               f"{name}: only {len(table.rows)} rows")
+        passed = passed and table.deliverable is want
+        cs2 = table.cs2
+        detail.append(
+            f"{name}: deliverable={table.deliverable} (want {want}), "
+            f"min dP={np.diff(table.P).min():+.2e} MeV/fm^3, "
+            f"c_s^2 in [{cs2.min():+.3e}, {cs2.max():.4f}]"
+            + (f", {table.defect}" if table.defect else ""))
+    # The plateau is flat in P and linear in eps, which is what makes it
+    # deliverable rather than merely present.
+    table = build_constructed_table(spec, found)
+    inside = [r for r in table.rows if np.isfinite(r["phase_fraction"])]
+    if len(inside) < 3:
+        return CheckResult("composition_delivered_table", False, float("inf"),
+                           f"only {len(inside)} plateau rows; "
+                           f"{'; '.join(detail)}")
+    flat = float(np.ptp([r["P"] for r in inside]))
+    n_in = np.array([r["n_B"] for r in inside])
+    e_in = np.array([r["eps"] for r in inside])
+    linear = float(np.max(np.abs(
+        e_in - np.polyval(np.polyfit(n_in, e_in, 1), n_in))))
+    passed = passed and flat < 1.0e-9 and linear < 1.0e-9
+    detail.append(f"plateau {len(inside)} rows, ptp(P)={flat:.1e}, "
+                  f"eps residual to a line {linear:.1e}")
+    return CheckResult("composition_delivered_table", passed,
+                       0.0 if passed else 1.0, "; ".join(detail))
 
 
 #: The parameter set whose branches do NOT cross on `CONSTRUCTION_NB`, so an
@@ -984,6 +1118,7 @@ CHECKS = (check_euler, check_free_energy, check_entropy_limit,
           check_trapped_lepton_number, check_thermo_from_mu,
           check_causality, check_vacuum,
           check_maxwell_crossing, check_delivered_table,
+          check_composition_crossing, check_composition_delivered_table,
           check_refusals, check_non_convergence_is_returned,
           check_residual_margin)
 

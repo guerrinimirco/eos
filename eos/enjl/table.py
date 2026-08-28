@@ -222,16 +222,36 @@ def plateau_row(co, n_B):
 
     The lever rule. `phase_fraction` is the volume fraction of the
     high-density phase, fixed by n_B = (1 - f) n_lo + f n_hi, and every
-    density averages with the same weights. P and mu_B are the coexistence
-    values, uniform across the window -- that is what makes the segment flat.
+    density averages with the same weights. P is the coexistence value,
+    uniform across the window -- that is what makes the segment flat.
+
+    **mu_B and mu_S are written only where the two edges agree on them.** The
+    quantity coexistence equates is the Gibbs free energy per baryon,
+    g = mu_B + Y_C mu_C + Y_S mu_S, and mu_B is that only where the two
+    fraction terms drop out -- in beta equilibrium with neutrality, where
+    mu_S = 0 and the mu_C term cancels against the leptons. Under the
+    composition closure each phase carries its own (mu_C, mu_S) and its own
+    mu_B, so neither is a property of the mixture, and both join the potentials
+    already reported as nan below. Averaging them would invent a state that is
+    nowhere in the mixture.
+
+    Equality is tested exactly, and that is not fragile: under the beta closure
+    mu_B is ONE number handed to both phases, so it is a bitwise identity;
+    under the composition closure the two are independent unknowns, and where
+    they do coincide -- a symmetric composition puts mu_C = mu_S = 0 on both
+    sides, which is g = mu_B again -- the value written is true. Both outcomes
+    of the test are true statements about the mixture.
 
     `co` is anything carrying the fields of
     `eos.mixed.construction.Coexistence`; this module does not import it.
     """
     frac = (n_B - co.n_B_lo) / (co.n_B_hi - co.n_B_lo)
     lo, hi = co.row_lo, co.row_hi
-    row = {"n_B": float(n_B), "T": lo["T"], "P": co.P, "mu_B": co.mu_B,
-           "mu_S": 0.0, "phase_fraction": float(frac),
+    shared = lambda a, b: a if a == b else float("nan")
+    row = {"n_B": float(n_B), "T": lo["T"], "P": co.P,
+           "mu_B": shared(co.mu_B_lo, co.mu_B_hi),
+           "mu_S": shared(lo["mu_S"], hi["mu_S"]),
+           "phase_fraction": float(frac),
            "branch": f"{co.branches[0]}+{co.branches[1]}"}
     for key in _LEVER_KEYS:
         row[key] = (1.0 - frac) * lo[key] + frac * hi[key]

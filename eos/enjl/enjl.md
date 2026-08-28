@@ -930,6 +930,77 @@ three pairings and the driver sweeps the declared list of them, merging what it
 finds; which pairings are realised is a property of the parameters, not of the
 engine.
 
+**A second closure: a phase held at fixed `(Y_C, Y_S)`.** (coexmu)-(coexneutral)
+close each phase by neutrality, which is what a *beta-equilibrium* branch pair
+needs. A mixed-phase construction consumes the other object: each pure phase
+carrying a *held, non-leptonic* charge and strangeness fraction, no leptons at
+all and therefore electrically charged, with global neutrality imposed later.
+`Y_C = 0.5`, `Y_S = 0` is symmetric nuclear matter, the mode heavy-ion
+comparisons are made in.
+
+There (coexneutral) is replaced, per phase, by
+
+    n_C^gamma = Y_C n_B^gamma,   n_S^gamma = Y_S n_B^gamma,
+                                     gamma in {alpha, beta}   (coexcomp)
+
+two equations in the two unknowns `(mu_C^gamma, mu_S^gamma)`, and — the
+substantive difference — (coexmu) is no longer available. What coexistence
+equates is the Gibbs free energy per baryon, which Euler at fixed composition
+gives as
+
+    g = (eps + P)/n_B = mu_B + Y_C mu_C + Y_S mu_S               (gibbs)
+
+Under the neutral closure the `Y_C mu_C` term cancels against the lepton
+contribution to `eps + P` — that is (eulerneutral) — and `mu_S = 0`, so
+`g = mu_B` identically and (coexmu) *is* the chemical condition. At a held
+`(Y_C, Y_S)` neither cancellation happens, each phase carries its own
+`(mu_C, mu_S)`, and the two shifts differ. The conditions are
+
+    P^alpha = P^beta = P^co                                    (coexPcomp)
+    g^alpha = g^beta = g^co                                     (coexgcomp)
+
+with no lepton pressures in (coexPcomp) — the phases carry none — and they are
+two equations in the two unknowns `mu_B^alpha` and `mu_B^beta`, which are not
+equal. The residual assembled, with `x = (mu_B^alpha, mu_B^beta)` and each
+phase's own `(mu_C, mu_S)` eliminated by (coexcomp) at every evaluation, is
+
+    r_1(x) = P^alpha(x_1) - P^beta(x_2)
+    r_2(x) = g^alpha(x_1) - g^beta(x_2)                      (coexrescomp)
+
+a two-dimensional root find where the neutral closure needed a bisection in
+one. It is seeded by tabulating `(mu_B, g, P)` on a `mu_B` grid for each branch
+and reading each branch's `mu_B` and `P` at a common `g`: `g` is monotone along
+a branch, since Gibbs-Duhem at fixed composition and `T = 0` gives
+`n_B dg = dP` with `n_B > 0`, so a sign change of `P^alpha - P^beta` in `g` is
+a one-dimensional bracket. That interpolated crossing is a grid-resolution
+answer and is the starting point, not the result.
+
+`mu_S` is dropped from (coexcomp) where a held `Y_S = 0` at `T = 0` leaves its
+row reading `0 = 0`. Both strangeness carriers of this model have `S = +1` (the
+`Lambda` and the `s` quark) and at `T = 0` there are no antiparticles, so every
+term of `n_S = sum_i S_i n_i` is non-negative and `n_S = 0` forces each to
+vanish separately, for any `mu_S` — the same statement, and the same remedy, as
+the empty strangeness row of the mode table above.
+
+The plateau (lever)-(plateau) is unchanged, except that `mu_B` joins `mu_C`,
+`mu_e` and the effective masses among the quantities returned as `nan`: under
+this closure it is a property of one phase and not of the mixture. What is
+uniform across the window is `g^co`, and (epsneutral) reads
+
+    eps = g^co n_B - P^co                                       (epscomp)
+
+which is (gibbs) rearranged and is again exactly linear in `n_B`, so the
+plateau needs no further solve here either.
+
+The locator is `eos.mixed.construction.enjl_composition_coexistences` over
+`eos.mixed.boundaries.locate_maxwell_composition`, beside the neutral pair and
+for the same layering reason, and the located windows are delivered through the
+same `build_constructed_table`. Measured for the shipped parameters at
+`Y_C = 0.5`, `Y_S = 0`: `n_lo = 0.34945` and `n_hi = 0.47500 fm^-3` at
+`P^co = 22.9282 MeV/fm^3` and `g^co = 1006.4074 MeV`, with the energy-density
+crossing of the two branches at `0.41774 fm^-3` inside the window, as it must
+be.
+
 Only `eta = 1` is delivered. At `0 < eta < 1` both a local and a global lepton
 population exist, with weights `eta` and `1 - eta`, and the plateau of
 (plateau) is replaced by a solved mixed system at every density; `f(eta)` is

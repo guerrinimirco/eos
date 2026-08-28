@@ -1564,12 +1564,23 @@ decision that cannot be made before the tables exist.
   T = 0.** All four modes solve at any T >= 0, entropy per baryon is accepted
   wherever a temperature is, and photons and thermal_neutrinos are selectable
   mu = 0 sectors. `build_constructed_table` and `eos.mixed.construction`
-  (`enjl_coexistences`, `enjl_phase`, `locate_maxwell`, `neutral_phase`) still
-  raise for T != 0, and closing that is its own session:
+  (`enjl_coexistences`, `enjl_composition_coexistences`, `enjl_phase`,
+  `locate_maxwell`, `locate_maxwell_composition`, `neutral_phase`,
+  `composition_phase`) still raise for T != 0, and closing that is its own
+  session:
 
     - locating a coexistence at T > 0 equates the GIBBS FREE ENERGIES of the
       two branches, not P and mu_B alone, so the entropy enters the
-      coexistence bookkeeping;
+      coexistence bookkeeping. The composition closure already equates g
+      rather than mu_B at T = 0 -- it has to, since g = mu_B is a beta-closure
+      identity -- so what T > 0 adds there is the s term in g, not the change
+      of variable;
+    - `composition_phase` drops mu_S from its unknowns where a held Y_S = 0
+      leaves the strangeness row reading 0 = 0, which is a T = 0 statement
+      (every carrier has S = +1 and there are no antiparticles at T = 0). At
+      T > 0 the Fermi tails populate the carriers and their antiparticles, the
+      row acquires a gradient, and mu_S must be solved for -- the same
+      correction `eos.enjl.solver.strangeness_row_is_empty` owes;
     - the plateau's lever rule then averages s across the window as well —
       `table.plateau_row` already levers `s` and derives `S_per_B` from the
       averaged value, so that half is in place;
@@ -1750,8 +1761,16 @@ decision that cannot be made before the tables exist.
   existed, `neutral_phase` could not neutralize it without a wider scan. The
   three constructible windows all sit at mu_C in [-213, -169] and are
   unaffected, which is why the constant is left alone.
-- The construction delivers eta = 1 only.
-  `eos.enjl.table.build_constructed_table` raises for any other eta. An
+- The construction delivers eta = 1 only, **under either closure**.
+  `eos.enjl.table.build_constructed_table` raises for any other eta. That
+  bound is the same for the beta-equilibrium branch pair
+  (`eos.mixed.construction.enjl_coexistences`) and for a phase held at a
+  non-leptonic (Y_C, Y_S) (`enjl_composition_coexistences`), and the eta = 0 /
+  Gibbs alternative differs more at held composition than it does in beta
+  equilibrium: there the two phases may carry DIFFERENT Y_C and Y_S subject
+  to the global values, all three potentials are equated rather than P and g
+  alone, and the resulting window is not flat in pressure -- so it is a
+  different delivered object, not a refinement of this one. An
   eta < 1 delivered table needs the mixed system solved at every density
   inside the window rather than a lever rule across it, seeded from the
   eta = 1 point; the solve itself works (measured at fq0.7_B1: chi = 0.4814 at

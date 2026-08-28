@@ -167,14 +167,22 @@ def eos_table(par, mode, species=None, axes=None,
     a structure solver.
 
     `coexistences` is what performs that resolution. Given the located
-    transitions -- from `eos.mixed.construction.enjl_coexistences`, which is a
-    composite engine and so cannot be reached from inside this model
-    (CLAUDE.md section 1) -- this returns the DELIVERED table instead: both
+    transitions -- from `eos.mixed.construction`, which is a composite engine
+    and so cannot be reached from inside this model (CLAUDE.md section 1) --
+    this returns the DELIVERED table instead: both
     branches swept, the stable one kept at each density, and each window
     replaced by its constant-pressure segment. `direction` is then unused,
     because a construction needs both. Without it the raw continuation is
     returned exactly as before, which is what `test/baseline` freezes.
     `eta` selects the construction and only eta = 1 (Maxwell) is implemented.
+
+    **Which locator depends on the mode**, because a phase must be closed
+    before two of them can be equated: `enjl_coexistences` closes each phase
+    by neutrality and serves the beta-equilibrium modes, while
+    `enjl_composition_coexistences` closes it at a held, leptonless (Y_C, Y_S)
+    and serves `fixed_YC_YS` with `leptons=False`. Passing a window located
+    under the wrong closure delivers a plateau at the wrong densities; the
+    windows and the table have to be built for the same mode.
 
     An EMPTY list is legal and asserts that this grid holds no transition.
     Where that is false the table keeps the lower-eps branch across the

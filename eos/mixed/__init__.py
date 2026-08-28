@@ -92,6 +92,7 @@ from eos.mixed.adapters import (
 # --- where a multi-branch model's transitions are, as data ------------------
 from eos.mixed.construction import (
     CONSTRUCTION_PAIRS, Coexistence, enjl_coexistences,
+    enjl_composition_coexistences,
 )
 
 # --- solving one point, and sweeping density -------------------------------
@@ -102,7 +103,8 @@ from eos.mixed.solver import (
 )
 from eos.mixed.boundaries import (
     Window, locate_window, locate_windows, refine_window,
-    solve_fixed_chi,
+    solve_fixed_chi, MaxwellPoint, locate_maxwell,
+    locate_maxwell_composition, composition_phase, neutral_phase,
 )
 
 # --- generating, stitching and storing tables ------------------------------
@@ -142,12 +144,15 @@ __all__ = [
     "dd2_phase", "vmit_phase", "default_pair",
     "sfho_phase", "zl_phase", "alphabag_phase", "enjl_branch_pair",
     "CONSTRUCTION_PAIRS", "Coexistence", "enjl_coexistences",
+    "enjl_composition_coexistences",
     "ccdm_phase", "did_phase", "did_seed", "njl_phase",
     # solving
     "solve", "Result",
     "solve_beta_eq_neutrinoless", "solve_beta_eq_neutrino_trapped",
     "solve_fixed_yc", "solve_fixed_yc_ys",
     "sweep", "locate_window", "locate_windows",
+    "MaxwellPoint", "locate_maxwell", "locate_maxwell_composition",
+    "composition_phase", "neutral_phase",
     "Window",
     "solve_fixed_chi", "refine_window",
     "seed_across_eta",
