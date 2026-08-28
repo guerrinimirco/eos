@@ -315,6 +315,103 @@ Leptons carry no strong charge C. The neutrino degeneracy is 1 because only one
 helicity state exists; antineutrinos come from the antiparticle branch of the
 integral.
 
+### Provenance: what fixed each number
+
+Not every number above is the same kind of statement, and a Bayesian run needs
+to know which is which before it decides what to move. Six kinds appear:
+
+- **theoretical identity** — forced by a quantum number, no freedom at all;
+- **theoretical symmetry** — an SU(3)/SU(6) choice, legal to vary but not
+  varied by the published fit;
+- **modelling choice** — fixed a priori for shape, stability or phenomenology,
+  with a stated reason and no datum behind it;
+- **Bayesian posterior** — one of the fifteen sampled with MultiNest over the
+  eighteen observables below;
+- **astrophysical observation** — set by a neutron-star measurement;
+- **derived** — computed from the others, never stored as an input.
+
+    parameter                                what fixed it                                                  kind                       may an inference vary it?
+    g^{S,N(0)}_sigmaN, a_sigma               max-likelihood over the 18 observables; priors [6,11],[6,11],[0,1]   Bayesian posterior     yes
+    g^{S(0)}_sigmaLambda/Sigma/Xi            the same posterior; these carry U_Y in ISM; priors [5,11],[3,9],[1,7] Bayesian posterior     yes
+    g^{N(0)}_sigmaY, g^{N(0)}_rhoY           the branch tying, by the nucleon ratio of the same meson       modelling choice           no -- derived, not a dial
+    c_sigma = infinity  (b_sigma, d_sigma)   no high-density flattening; flattening drives c_s^2 < 0        modelling choice           no, not within this family
+    g~^{S,N(0)}_omegaN, a_omega              max-likelihood; priors [7,14],[7,14],[0,1]                     Bayesian posterior         yes
+    z = g_1/g_8                              max-likelihood; prior [0, 2/sqrt6]                             Bayesian posterior         yes
+    alpha = F/(D+F) = 1                      the SU(6) ideal value, held fixed to simplify the analysis     theoretical symmetry       legal in [0,1]; this fit did not
+    tan(theta) = 1/sqrt2                     ideal omega-phi mixing, pinned by the measured meson masses    theoretical symmetry       no
+    b_omega = 0.80                           best of five separate fits, by the GW170817 tidal deformability astrophysical observation  only by redoing the five fits
+    c_omega, c_rho = 3.5;  d_omega, d_rho=1.8 DBHF coupling shape and a smooth c_s^2; exempt from the fit   modelling choice           held fixed
+    g^{S,N(0)}_rhoN, a_rho                   max-likelihood; priors [0,6],[0,6],[0,4]                       Bayesian posterior         yes
+    b_rho = 0.40                             a priori: low b_rho delays hyperon onset (M_max and cooling)   modelling choice           held fixed
+    g^{S(0)}_rhoSigma, g^{S(0)}_rhoXi        max-likelihood; carry the Sigma, Xi splitting of U_Y in NM     Bayesian posterior         yes
+    g_rhoLambda = 0                          I_Lambda = 0                                                   theoretical identity       never
+    e = 1/3                                  tanh(x/e) keeps g isospin-free at n_B -> 0, so Sigma^t is finite modelling choice          held fixed
+    n_0                                      P(n_0) = 0 in ISM without leptons at T = 0, per point          derived                    recomputed, never set
+    m_sigma, m_omega, m_phi, m_rho           Table I, the DD2Y values                                       inherited parameterisation held fixed
+    baryon and lepton masses                 PDG, Table I; held in `eos.general.particles`                  measured particle property no
+    x_sigmaDelta, x_omegaDelta, x_rhoDelta   not in arXiv:2511.15646; 1 = universal coupling                this implementation        yes -- nothing published to keep
+
+`n_0` is the row to read twice. It is not a free number and it is not a
+constant: the paper recalibrates it from P(n_0) = 0 at every parameter point,
+and it then reappears inside x = n_B/n_0 in every coupling. The shipped
+0.15880045 fm^-3 is its value at the maximum-likelihood point. The meson masses
+are the second: they cancel out of a DD-RMF as g/m^2 everywhere EXCEPT the
+SU(3) inversion, where the ratio m_omega/m_phi sets g_8 from g~_omegaN, so
+changing them changes every vector vertex.
+
+**The eighteen observables.** arXiv:2511.15646 Section IV C lists them, and
+Tables III and IV give the values. Nine are hyperon single-particle potentials
+U_Y at |k| = 0 from a Brueckner-Hartree-Fock calculation on HAL QCD
+baryon-baryon interactions -- three iso-multiplet averages in ISM
+(Lambda -28.15 +/- 2.02, Sigma +14.62 +/- 1.82, Xi -3.60 +/- 2.14 MeV) and six
+individual species in NM (Lambda -25.42 +/- 1.78, Sigma+ +8.24 +/- 3.68,
+Sigma0 +15.73 +/- 1.70, Sigma- +24.86 +/- 1.39, Xi0 -12.19 +/- 1.46,
+Xi- +5.79 +/- 2.59 MeV). The other nine are
+
+    n_0            = 0.150 +/- 0.010 fm^-3       laboratory: PREX, 208Pb radius
+    B              = -15.6 +/- 0.6 MeV           laboratory: saturation
+    K              = 240 +/- 20 MeV              laboratory: GMR of 208Pb, 90Zr
+    S_2            = 32.0 +/- 1.1 MeV            laboratory: various nuclear data
+    M(0.11 fm^-3)  = 1100 +/- 70 MeV             laboratory: finite-nucleus crossover
+    P_NM(0.08)     = 0.472 +/- 0.036 MeV/fm^3    theory: chiral EFT, N3LO + 3N
+    P_NM(0.16)     = 2.898 +/- 0.404 MeV/fm^3    theory: chiral EFT, N3LO + 3N
+    P_ISM(0.32)    = 19.0 +/- 14.3 MeV/fm^3      laboratory: heavy-ion collisions
+    P_ISM(0.56)    = 106.8 +/- 22.0 MeV/fm^3     laboratory: heavy-ion collisions
+
+so the evidence is eleven theoretical values (nine of them lattice-QCD-based)
+and seven laboratory ones. **No astrophysical observation is in the
+likelihood.** NICER and GW170817 enter twice, both times outside it: as the
+discrete selection of `b_omega` from {0.60, 0.65, 0.70, 0.75, 0.80}, and as a
+check on the finished model. That is why `b_omega` is the one row of the table
+above whose kind is an observation of a star.
+
+Two exclusion heuristics accompany the likelihood and a sampler should carry
+them too: a point is rejected if P(n_0) = 0 has no solution or gives
+n_0 < 0.01 or n_0 > 0.30 fm^-3, and if c_s^2 leaves (0, 1) in ISM or NM at
+n_B = c_omega n_0, where the transition zone puts a peak in the sound speed.
+
+**What a non-symmetric U_Y can and cannot buy.** A hyperon potential measured
+in symmetric matter constrains the S branch alone, so it is worth being exact
+about what the six NEUTRON-matter potentials constrained. They are observables
+-- six of the eighteen -- but they were fitted through the sectors still free in
+neutron matter: the nucleon N branches `g^{N(0)}_sigmaN`, `g~^{N(0)}_omegaN`,
+`g^{N(0)}_rhoN`, the SU(3) number z, and the two isovector hyperon vertices.
+The hyperon scalar N branches were NOT among them: the tying rule was imposed
+before the fit, to keep the hyperon sigma sector at three parameters rather than
+six, and the paper states it as an assumption in the same breath as the count.
+So a sampler may feed DID a non-symmetric U_Y as data, but it may not answer
+with `g^{N(0)}_sigmaY`, which is derived; freeing that vertex changes the model,
+not its parameters, and the scalar sector has no SU(3) relation to fall back on.
+
+**Which symmetry energy the fit saw.** `S_2`, the quadratic coefficient, and
+only that: Section IV C names "the quadratic symmetry energy at saturation
+S_2 = 32.0 +/- 1.1 MeV", Table III carries the row as S_2, and the conclusions
+repeat it. The full ISM-to-PNM difference S was not evidence; it appears only in
+Table VI as the derived row S - S_2 = -2.72 MeV against 1.2 +/- 1.5 MeV, a
+comparison rather than a constraint. The same holds for L, L_2, Q, K_sym and
+K_sym2 -- all of Table VI is prediction. L in particular is constrained only
+indirectly, through the two neutron-matter pressure points.
+
 **Three routes to a parameter set.** CLAUDE.md section 6 makes model
 parameters arguments, so all three have to exist -- and one of the three is
 refused here rather than written. *By name:* `Parameters.default()` is the

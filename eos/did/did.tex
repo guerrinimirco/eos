@@ -379,7 +379,9 @@ blend & $e$ & $1/3$ & fixed, Eq.~\eqref{eq:blend} \\
 \caption{The complete stored parameter content. Fifteen numbers are the fit
 (marked ``fitted''); the vector transition zones $c_M = 3.5$, $d_M = 1.8$ in
 units of $\nzero$, the plateaus $b_\omega = 0.80$ and $b_\rho = 0.40$, and
-$c_\sigma = \infty$ were fixed a priori rather than sampled.}
+$c_\sigma = \infty$ were fixed a priori rather than sampled.
+Sec.~\ref{sec:provenance} gives the provenance of every row.}
+\label{tab:params}
 \end{table}
 
 The $\omega$ and $\phi$ couplings are \emph{not} stored: they are derived from
@@ -456,6 +458,184 @@ coming from the antiparticle branch of Eq.~\eqref{eq:n}. The octet is always
 available; $\Delta$'s enter under \texttt{SpeciesFlags(deltas=True)} and are an
 extension of this implementation.}
 \end{table}
+
+\subsection{Provenance: what fixed each number}
+\label{sec:provenance}
+
+Not every number in Table~\ref{tab:params} is the same kind of statement, and a
+Bayesian run needs to know which is which before it decides what to move. Six
+kinds appear: a \emph{theoretical identity}, forced by a quantum number and with
+no freedom at all; a \emph{theoretical symmetry}, an SU(3)/SU(6) choice that is
+legal to vary but was not varied by the published fit; a \emph{modelling
+choice}, fixed a priori for shape, stability or phenomenology, with a stated
+reason and no datum behind it; a \emph{Bayesian posterior}, one of the fifteen
+sampled with MultiNest over the eighteen observables of
+Table~\ref{tab:evidence}; an \emph{astrophysical observation}; and a
+\emph{derived} quantity, computed from the others and never stored as an input.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{0.20\textwidth}p{0.33\textwidth}p{0.19\textwidth}p{0.21\textwidth}@{}}
+\toprule
+parameter & what fixed it & kind & may an inference vary it? \\
+\midrule
+$g^{S,N(0)}_{\sigma N}$, $a_\sigma$
+  & maximum likelihood over the 18 observables; priors $[6,11]$, $[6,11]$, $[0,1]$
+  & Bayesian posterior & yes \\
+$g^{S(0)}_{\sigma\Lambda}$, $g^{S(0)}_{\sigma\Sigma}$, $g^{S(0)}_{\sigma\Xi}$
+  & the same posterior; these carry $U_Y$ in ISM; priors $[5,11]$, $[3,9]$, $[1,7]$
+  & Bayesian posterior & yes \\
+$g^{N(0)}_{\sigma Y}$, $g^{N(0)}_{\rho Y}$
+  & the branch tying of Eq.~\eqref{eq:branchtie}, by the nucleon ratio of the same meson
+  & modelling choice & no --- derived, not a dial \\
+$c_\sigma = \infty$ (hence $b_\sigma$, $d_\sigma$)
+  & no high-density flattening: flattening the scalar drives $c_s^2 < 0$
+  & modelling choice & no, not within this family \\
+$\tilde{g}^{S,N(0)}_{\omega N}$, $a_\omega$
+  & maximum likelihood; priors $[7,14]$, $[7,14]$, $[0,1]$
+  & Bayesian posterior & yes \\
+$z = g_1/g_8$
+  & maximum likelihood; prior $[0, 2/\sqrt{6}]$
+  & Bayesian posterior & yes \\
+$\alpha = F/(D+F) = 1$
+  & the SU(6) ideal value, held fixed to simplify the analysis
+  & theoretical symmetry & legal in $[0,1]$; this fit did not \\
+$\tan\theta = 1/\sqrt{2}$
+  & ideal $\omega$--$\phi$ mixing, pinned by the measured meson masses
+  & theoretical symmetry & no \\
+$b_\omega = 0.80$
+  & best of five separate fits, chosen by the GW170817 tidal deformability
+  & astrophysical observation & only by redoing the five fits \\
+$c_\omega = c_\rho = 3.5$, $d_\omega = d_\rho = 1.8$
+  & a DBHF coupling shape and a smooth $c_s^2$; exempt from the fit
+  & modelling choice & held fixed \\
+$g^{S,N(0)}_{\rho N}$, $a_\rho$
+  & maximum likelihood; priors $[0,6]$, $[0,6]$, $[0,4]$
+  & Bayesian posterior & yes \\
+$b_\rho = 0.40$
+  & a priori: low $b_\rho$ delays hyperon onset ($M_{\rm max}$ and cooling)
+  & modelling choice & held fixed \\
+$g^{S(0)}_{\rho\Sigma}$, $g^{S(0)}_{\rho\Xi}$
+  & maximum likelihood; carry the $\Sigma$, $\Xi$ splitting of $U_Y$ in NM
+  & Bayesian posterior & yes \\
+$g_{\rho\Lambda} = 0$
+  & $I_\Lambda = 0$
+  & theoretical identity & never \\
+$e = 1/3$
+  & $\tanh(x/e)$ keeps $g$ isospin-free as $\nB \to 0$, so $\Sigmat$ stays finite
+  & modelling choice & held fixed \\
+$\nzero$
+  & $P(\nzero) = 0$ in ISM without leptons at $T = 0$, at every parameter point
+  & derived & recomputed, never set \\
+$m_\sigma$, $m_\omega$, $m_\phi$, $m_\rho$
+  & Table~I of Ref.~\cite{Frohaug2025}, the DD2Y values
+  & inherited parameterisation & held fixed \\
+baryon and lepton masses
+  & PDG, their Table~I; held in \texttt{eos.general.particles}
+  & measured particle property & no \\
+$x_{\sigma\Delta}$, $x_{\omega\Delta}$, $x_{\rho\Delta}$
+  & not in Ref.~\cite{Frohaug2025}; $1$ is universal coupling
+  & this implementation & yes --- nothing published to keep \\
+\bottomrule
+\end{tabular}
+\caption{Provenance of every stored number, and of the two that are not stored.
+Sources are Sec.~IV~A (the fifteen sampled parameters, the priors, and each
+a-priori choice with its stated reason), Sec.~IV~B ($\nzero$ and the exclusion
+heuristics), Sec.~II~B ($\alpha$, $\tan\theta$, the meson masses) and Table~II
+of Ref.~\cite{Frohaug2025}.}
+\label{tab:provenance}
+\end{table}
+
+$\nzero$ is the row to read twice. It is neither a free number nor a constant:
+Ref.~\cite{Frohaug2025} recalibrates it from $P(\nzero) = 0$ at every parameter
+point, and it then reappears inside $x = \nB/\nzero$ in every coupling, so the
+shipped $0.15880045$~fm$^{-3}$ is its value at the maximum-likelihood point and
+nowhere else. The meson masses are the second such row: they cancel out of a
+density-dependent RMF as $g_{Mi}/m_M^2$ everywhere \emph{except} the SU(3)
+inversion Eq.~\eqref{eq:g8}, where the ratio $m_\omega/m_\phi$ sets $g_8$ from
+$\tilde{g}_{\omega N}$, so changing them changes every vector vertex.
+
+\paragraph{The eighteen observables.} Nine of them are hyperon single-particle
+potentials $U_Y$ at three-momentum $|k| = 0$, computed in the
+Br\"uckner--Hartree--Fock approach from HAL~QCD baryon--baryon interactions at
+near-physical quark masses~\cite{Kohno2024}: three iso-multiplet averages in
+ISM and six individual species in NM, each with a statistical uncertainty of
+about $2$~MeV. The other nine are saturation and pressure data.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+observable & value & medium & kind \\
+\midrule
+$U_\Lambda$   & $-28.15 \pm 2.02$ MeV & ISM & theory: lattice QCD + BHF \\
+$U_\Sigma$    & $+14.62 \pm 1.82$ MeV & ISM & theory: lattice QCD + BHF \\
+$U_\Xi$       & $-3.60 \pm 2.14$ MeV  & ISM & theory: lattice QCD + BHF \\
+$U_\Lambda$   & $-25.42 \pm 1.78$ MeV & NM  & theory: lattice QCD + BHF \\
+$U_{\Sigma^+}$& $+8.24 \pm 3.68$ MeV  & NM  & theory: lattice QCD + BHF \\
+$U_{\Sigma^0}$& $+15.73 \pm 1.70$ MeV & NM  & theory: lattice QCD + BHF \\
+$U_{\Sigma^-}$& $+24.86 \pm 1.39$ MeV & NM  & theory: lattice QCD + BHF \\
+$U_{\Xi^0}$   & $-12.19 \pm 1.46$ MeV & NM  & theory: lattice QCD + BHF \\
+$U_{\Xi^-}$   & $+5.79 \pm 2.59$ MeV  & NM  & theory: lattice QCD + BHF \\
+\midrule
+$\nzero$            & $0.150 \pm 0.010$ fm$^{-3}$ & ISM & laboratory: PREX, $^{208}$Pb radius \\
+$B$                 & $-15.6 \pm 0.6$ MeV & ISM & laboratory: saturation \\
+$K$                 & $240 \pm 20$ MeV & ISM & laboratory: GMR of $^{208}$Pb and $^{90}$Zr \\
+$S_2$               & $32.0 \pm 1.1$ MeV & --- & laboratory: various nuclear data \\
+$M(0.11$ fm$^{-3})$ & $1100 \pm 70$ MeV & ISM & laboratory: finite-nucleus crossover \\
+$P(0.08$ fm$^{-3})$ & $0.472 \pm 0.036$ MeV\,fm$^{-3}$ & NM & theory: $\chi$EFT, N$^3$LO + 3N \\
+$P(0.16$ fm$^{-3})$ & $2.898 \pm 0.404$ MeV\,fm$^{-3}$ & NM & theory: $\chi$EFT, N$^3$LO + 3N \\
+$P(0.32$ fm$^{-3})$ & $19.0 \pm 14.3$ MeV\,fm$^{-3}$ & ISM & laboratory: heavy-ion collisions \\
+$P(0.56$ fm$^{-3})$ & $106.8 \pm 22.0$ MeV\,fm$^{-3}$ & ISM & laboratory: heavy-ion collisions \\
+\bottomrule
+\end{tabular}
+\caption{The eighteen observables the posterior was taken against, from
+Sec.~IV~C and Tables~III and~IV of Ref.~\cite{Frohaug2025}. Eleven are
+theoretical values, nine of those lattice-QCD-based; seven are laboratory data.
+\emph{None is an astrophysical observation.}}
+\label{tab:evidence}
+\end{table}
+
+NICER and GW170817 enter Ref.~\cite{Frohaug2025} twice, both times outside the
+likelihood: as the discrete selection of $b_\omega$ from
+$\{0.60, 0.65, 0.70, 0.75, 0.80\}$ by the tidal deformability, and as a check on
+the finished model. That is why $b_\omega$ is the one row of
+Table~\ref{tab:provenance} whose kind is an observation of a star. Two exclusion
+heuristics accompany the likelihood and a sampler should carry them too: a point
+is rejected if $P(\nzero) = 0$ has no solution or gives $\nzero < 0.01$ or
+$\nzero > 0.30$~fm$^{-3}$, and if $c_s^2$ leaves $(0,1)$ in ISM or NM at
+$\nB = c_\omega \nzero$, where the transition zone puts a peak in the sound
+speed.
+
+\paragraph{What a non-symmetric $U_Y$ can and cannot buy.} A hyperon potential
+measured in symmetric matter constrains the $S$ branch alone, so it is worth
+being exact about what the six \emph{neutron}-matter potentials constrained.
+They are observables --- six of the eighteen --- but they were fitted through
+the sectors still free in neutron matter: the nucleon $N$ branches
+$g^{N(0)}_{\sigma N}$, $\tilde{g}^{N(0)}_{\omega N}$, $g^{N(0)}_{\rho N}$, the
+SU(3) number $z$, and the two isovector hyperon vertices. Ref.~\cite{Frohaug2025}
+says so in its conclusions: for the isovector mesons the hyperon couplings are
+treated as fit parameters in order to fit the splitting between the
+$\Sigma^{\pm,0}$ and $\Xi^{-,0}$ potentials in neutron matter. The hyperon
+\emph{scalar} $N$ branches were not among them. Eq.~\eqref{eq:branchtie} was
+imposed before the fit, to keep the hyperon $\sigma$ sector at three parameters
+rather than six, and Sec.~IV~A states it as an assumption in the same breath as
+the parameter count. So a sampler may feed DID a non-symmetric $U_Y$ as data,
+but it may not answer with $g^{N(0)}_{\sigma Y}$, which is derived; freeing that
+vertex changes the model rather than its parameters, and the scalar sector has
+no SU(3) relation to fall back on.
+
+\paragraph{Which symmetry energy the fit saw.} $S_2$, the quadratic
+coefficient, and only that. Sec.~IV~C names ``the quadratic symmetry energy at
+saturation $S_2 = 32.0 \pm 1.1$~MeV'', Table~III carries the row as $S_2$, and
+the conclusions repeat it. The full ISM-to-PNM difference $S$ was not evidence:
+it appears only in Table~VI as the derived row $S - S_2 = -2.72$~MeV against
+$1.2 \pm 1.5$~MeV, which is a comparison and not a constraint. The same holds
+for $L$, $L_2$, $Q$, $K_{\rm sym}$ and $K_{\rm sym,2}$ --- all of Table~VI is
+prediction, which is Sec.~\ref{sec:nmp} of this note. $L$ in particular is
+constrained only indirectly, through the two neutron-matter pressure points.
 
 \paragraph{Three routes to a parameter set.} Model parameters are always
 arguments, so all three have to exist --- and one of the three is refused here

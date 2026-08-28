@@ -11,16 +11,19 @@ Checks:
      eps + P = T s + sum_i mu_i n_i;
   2. nuclear-matter parameters — E_sat, E_sym and L against the published
      SFHo values;
-  3. the symmetry energy two ways — the delta^2 curvature of E/A against the
+  3. the analytic nuclear-matter derivatives against the stencils they
+     replaced — K_sat, Q_sat, L_sym and K_sym must be the h -> 0 limit of the
+     finite differences `nmp.compute_nmp` used to take;
+  4. the symmetry energy two ways — the delta^2 curvature of E/A against the
      analytic formula of the model's source paper;
-  4. causality and monotonicity — 0 <= c_s^2 <= 1 and P non-decreasing along
+  5. causality and monotonicity — 0 <= c_s^2 <= 1 and P non-decreasing along
      a cold beta-equilibrium sweep;
-  5. CompOSE HS(SFHo) comparison, when the table is present;
-  6. backend parity — the analytic Jacobian of `backends/` against a central
+  6. CompOSE HS(SFHo) comparison, when the table is present;
+  7. backend parity — the analytic Jacobian of `backends/` against a central
      difference of the residual, CLAUDE.md §9's gate on the fast flavour;
-  7. the susceptibility matrix against the inverse map dmu_a/dn_b, which the
+  8. the susceptibility matrix against the inverse map dmu_a/dn_b, which the
      fixed-Y_C-Y_S mode supplies without touching the Jacobian;
-  8. the NMP forward and inverse maps against each other, at targets away
+  9. the NMP forward and inverse maps against each other, at targets away
      from the published set so the seed is not the answer.
 
 Why check 1 earns its place: SFHo shipped for a long time with an energy
@@ -195,6 +198,81 @@ def _check_nmp(par):
     return CheckResult(
         "published NMPs", worst < 2e-2, worst,
         f"E_sat={E_sat:.2f} E_sym={E_sym:.2f} L={L:.2f}")
+
+
+def _check_analytic_derivatives(par):
+    """The analytic K_sat, Q_sat, L_sym and K_sym are the stencil's limit.
+
+    `nmp.snm_derivatives` differentiates the closed forms of symmetric matter
+    by hand rather than differencing the solver, so nothing inside it is
+    checked by the solver agreeing with itself. What ties the two together is
+    that the finite differences it replaced must CONVERGE TO IT: each is a
+    central difference of order h^2, so Richardson-extrapolating the pair
+    (h, h/2) removes the leading error, and the analytic value must sit
+    within the pair's own scatter of that extrapolation.
+
+    Self-calibrating on purpose -- the scatter |d(h) - d(h/2)| is what the
+    stencil itself says its accuracy is, so there is no tolerance to tune and
+    none to loosen.
+
+    h = 8e-3, and that IS a measured choice, made for the opposite reason to
+    dd2's. There the small-h end failed on roundoff, which jittered with the
+    interpreter. Here the two stacks agree to four digits at every h, because
+    what stops the stencil converging is not roundoff but `hybr`'s own xtol:
+    the solver returns a state whose density is up to 5e-11 relative away from
+    the one it was asked for, and dividing by the requested density leaves a
+    SMOOTH ~5e-08 MeV wobble on E/A. Differentiated, that is a fixed offset
+    from the analytic value -- 1.9e-06 relative on K_sat and 2.8e-04 on Q_sat,
+    the same at h = 1e-3 and at h = 5e-3 -- so the estimator is honest only
+    once the scatter has grown past it. Worst of the four, Q_sat every time:
+
+        h        1.5e-3   2e-3    4e-3    6e-3    8e-3    1.2e-2
+        py3.9     4.674   3.152   0.800   0.356   0.279   0.089
+        py3.14    4.674   3.244   0.800   0.356   0.279   0.089
+
+    (anaconda 3.9.7 / numpy 1.26.4 / scipy 1.13.1 against python.org 3.14.2 /
+    numpy 2.3.5 / scipy 1.17.0.) At 8e-3 both stacks pass with 3.6x of margin
+    and the ratio is still falling, so anywhere above ~5e-3 does the same job.
+
+    That the floor is the SOLVER's and not the derivation's is measurable
+    twice over: the analytic values reproduce across those two stacks to
+    5.9e-14 (K_sat), 2.2e-13 (Q_sat), 7.0e-15 (L_sym) and 6.8e-16 (K_sym),
+    and stencilling a hand-solved gap equation instead of the solver moves the
+    K_sat agreement from 1.9e-06 to 1.4e-06 while the offset vanishes.
+    """
+    from scipy.optimize import brentq
+    from eos.sfho.nmp import (snm_derivatives, energy_per_baryon, esym,
+                              pressure)
+
+    n_sat = brentq(lambda n: pressure(par, n), 0.12, 0.20, xtol=1e-13)
+    analytic = snm_derivatives(par, n_sat)
+
+    def stencils(h):
+        EA = lambda n: energy_per_baryon(par, n)
+        ES = lambda n: esym(par, n)
+        return {
+            "K_sat": 9 * n_sat ** 2 * (EA(n_sat + h) - 2 * EA(n_sat)
+                                       + EA(n_sat - h)) / h ** 2,
+            "Q_sat": 27 * n_sat ** 3 * (EA(n_sat + 2 * h) - 2 * EA(n_sat + h)
+                                        + 2 * EA(n_sat - h)
+                                        - EA(n_sat - 2 * h)) / (2 * h ** 3),
+            "L_sym": 3 * n_sat * (ES(n_sat + h) - ES(n_sat - h)) / (2 * h),
+            "K_sym": 9 * n_sat ** 2 * (ES(n_sat + h) - 2 * ES(n_sat)
+                                       + ES(n_sat - h)) / h ** 2,
+        }
+
+    h = 8e-3                      # past the solver's floor: see the docstring
+    coarse, fine = stencils(h), stencils(h / 2)
+    worst, worst_key = 0.0, ""
+    for key, value in analytic.items():
+        richardson = (4.0 * fine[key] - coarse[key]) / 3.0
+        scatter = abs(fine[key] - coarse[key])
+        ratio = abs(value - richardson) / scatter
+        if ratio > worst:
+            worst, worst_key = ratio, key
+    return CheckResult("analytic NMP derivatives", worst < 1.0, worst,
+                       f"vs Richardson(h={h:.1e}, h/2), worst {worst_key} at "
+                       f"{worst:.3f} of the stencil's own scatter")
 
 
 def _check_esym_two_ways(par):
@@ -432,6 +510,7 @@ def run_full_check(par=None, hyp=None, grid=None):
     report = FullCheckReport()
     report.results.append(_check_euler(par, hyp, grid))
     report.results.append(_check_nmp(par))
+    report.results.append(_check_analytic_derivatives(par))
     report.results.append(_check_esym_two_ways(par))
     report.results.append(_check_causality(par, np.linspace(0.1, 1.0, 25)))
     report.results.append(_check_compose(par))

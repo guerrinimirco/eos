@@ -219,6 +219,26 @@ class Parameters:
         for j in range(1, len(self.b_coeffs)):
             df += 2*j * self.b_coeffs[j] * omega**(2*j - 1)
         return self.g_rho_N**2 * df
+
+    def compute_d2A_dsigma2(self, sigma: float) -> float:
+        """Compute ∂²A/∂σ² = g_ρN² × ∂²f/∂σ².
+
+        Needed by `nmp.snm_derivatives`, which differentiates E_sym twice
+        along the density axis and so meets A through σ(n) and ω(n). There
+        is no ∂²A/∂σ∂ω: f = Σᵢ aᵢσⁱ + Σⱼ bⱼω^(2j) is separable, and that is
+        a property of the SFHo form rather than a truncation.
+        """
+        d2f = 0.0
+        for i in range(2, len(self.a_coeffs)):
+            d2f += i * (i - 1) * self.a_coeffs[i] * sigma**(i - 2)
+        return self.g_rho_N**2 * d2f
+
+    def compute_d2A_domega2(self, omega: float) -> float:
+        """Compute ∂²A/∂ω² = g_ρN² × ∂²f/∂ω²; see `compute_d2A_dsigma2`."""
+        d2f = 0.0
+        for j in range(1, len(self.b_coeffs)):
+            d2f += 2*j * (2*j - 1) * self.b_coeffs[j] * omega**(2*j - 2)
+        return self.g_rho_N**2 * d2f
     
     def get_baryon_mass(self, particle_name: str) -> float:
         """

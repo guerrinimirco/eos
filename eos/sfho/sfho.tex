@@ -618,6 +618,194 @@ $E/A$ in the isospin asymmetry, and requires the two to agree: the closed form
 is a $\rho$-field response and the curvature is a property of $\varepsilon$,
 so an error in the energy density moves one and not the other.
 
+\subsection{The density derivatives in closed form}
+\label{sec:snmderiv}
+
+Every derivative above is taken analytically rather than by finite
+difference. Everything in this subsection is at $T = 0$ and in natural units,
+with $n$ the baryon density in MeV$^3$ and a prime meaning $d/dn$.
+
+Symmetric matter at $Y_C = 1/2$ carries $n_p = n_n = n/2$ exactly, so
+$\rho = \phi = 0$ identically and the two nucleons are two $g = 2$ gases
+sharing one Fermi momentum $k_F = (3\pi^2 n/2)^{1/3}$ but not one Dirac mass:
+$m^*_p = m_p - g_{\sigma N}\sigma$ and $m^*_n = m_n - g_{\sigma N}\sigma$
+differ by $m_n - m_p$. Abbreviating the two field polynomials of
+Sec.~\ref{sec:fields} at $\rho = 0$,
+%
+\begin{equation}
+\Phi(\sigma) = m_\sigma^2 \sigma + g_2 \sigma^2 + g_3 \sigma^3 ,
+\qquad
+\Psi(\omega) = m_\omega^2 \omega + c_3 \omega^3 ,
+\end{equation}
+%
+the field equations are
+%
+\begin{equation}
+\Phi(\sigma) = g_{\sigma N}\, n_s(\sigma, n),
+\qquad n_s = n_s^p + n_s^n ,
+\qquad\qquad
+\Psi(\omega) = g_{\omega N}\, n ,
+\label{eq:snmfields}
+\end{equation}
+%
+and the $\omega$ equation contains no scalar density at all, so $\omega$ is a
+function of $n$ alone, exactly and independently of the scalar sector:
+%
+\begin{equation}
+\omega' = \frac{g_{\omega N}}{\Psi'(\omega)} ,
+\qquad
+\omega'' = -\,\frac{\Psi''(\omega)\, \omega'^2}{\Psi'(\omega)} ,
+\qquad
+\Psi'(\omega) = m_\omega^2 + 3 c_3 \omega^2 ,
+\quad
+\Psi''(\omega) = 6 c_3 \omega .
+\end{equation}
+%
+The energy density and the mean chemical potential are
+%
+\begin{equation}
+\varepsilon = \varepsilon_{\mathrm{kin}}(m^*_p, k_F)
+            + \varepsilon_{\mathrm{kin}}(m^*_n, k_F)
+            + V(\sigma) + \tfrac12 m_\omega^2 \omega^2
+            + \tfrac34 c_3 \omega^4 ,
+\qquad
+\bar\mu = \tfrac12 \big( E^{*}_{F,p} + E^{*}_{F,n} \big)
+        + g_{\omega N} \omega ,
+\end{equation}
+%
+with $V(\sigma) = \tfrac12 m_\sigma^2\sigma^2 + \tfrac13 g_2 \sigma^3
++ \tfrac14 g_3 \sigma^4$ and $E^*_{F,i} = \sqrt{k_F^2 + m^{*2}_i}$. The mean
+$\bar\mu$ of $\mu_p$ and $\mu_n$ is the right potential here because the sweep
+holds $Y_C = 1/2$: then $d\varepsilon = \mu_p\, dn_p + \mu_n\, dn_n = \bar\mu\, dn$, so $\varepsilon' = \bar\mu$ even though
+$\mu_p \neq \mu_n$. With $P = \bar\mu n - \varepsilon$ and
+$E/A = \varepsilon/n - m_N$ this gives
+%
+\begin{equation}
+(E/A)' = \frac{P}{n^2} ,
+\qquad
+P' = n \bar\mu' ,
+\qquad
+K_{\mathrm{sat}} = 9 n \bar\mu' ,
+\qquad
+Q_{\mathrm{sat}} = 27 n \big( n \bar\mu'' - 3 \bar\mu' \big) ,
+\label{eq:KQfrommu}
+\end{equation}
+%
+the last two at $P = 0$, i.e.\ at $\nsat$. A \emph{third} derivative of $E/A$
+is therefore only a \emph{second} derivative of $\bar\mu$, and the gap
+equation needs differentiating twice rather than three times.
+
+What that costs is $\sigma'$ and $\sigma''$ from
+Eq.~\eqref{eq:snmfields} differentiated implicitly. Writing
+$n_{s,m} = \partial n_s/\partial m^*$, $n_{s,k} = \partial n_s/\partial k_F$
+and so on --- each summed over the two gases --- and using
+$dm^*_i/dn = -g_{\sigma N}\sigma'$ and
+$k_F' = k_F/3n$, $k_F'' = -2k_F/9n^2$,
+%
+\begin{align}
+D &\equiv \Phi'(\sigma) + g_{\sigma N}^2\, n_{s,m} , \\
+D\, \sigma' &= g_{\sigma N}\, n_{s,k}\, k_F' , \\
+D\, \sigma'' &= -\Phi''(\sigma)\, \sigma'^2
+  + g_{\sigma N}\Big( g_{\sigma N}^2 n_{s,mm}\, \sigma'^2
+  - 2 g_{\sigma N} n_{s,mk}\, \sigma' k_F'
+  + n_{s,kk}\, k_F'^2 + n_{s,k}\, k_F'' \Big) ,
+\end{align}
+%
+with $\Phi'(\sigma) = m_\sigma^2 + 2 g_2\sigma + 3 g_3\sigma^2$ and
+$\Phi''(\sigma) = 2 g_2 + 6 g_3 \sigma$. The scalar-density partials of one
+$g = 2$ gas are elementary. With $E_k = \sqrt{k^2 + m^{*2}}$,
+$E_F = \sqrt{k_F^2 + m^{*2}}$ and $\Lambda = \operatorname{arcsinh}(k_F/m^*)$,
+%
+\begin{equation}
+n_s = \frac{g}{4\pi^2} m^* \big( k_F E_F - m^{*2}\Lambda \big) ,
+\qquad
+\frac{\partial n_s}{\partial m^*} = \frac{g}{2\pi^2}\!\int_0^{k_F}\!\!
+   \frac{k^4}{E_k^3}\, dk ,
+\qquad
+\frac{\partial^2 n_s}{\partial m^{*2}} = -\frac{3 g\, m^*}{2\pi^2}\!
+   \int_0^{k_F}\!\! \frac{k^4}{E_k^5}\, dk ,
+\end{equation}
+%
+and the substitution $k = m^*\sinh t$ turns the two integrals into
+$m^{*2}\!\int(\cosh^2 t - 2 + \operatorname{sech}^2 t)\, dt$ and
+$\int \tanh^4 t\, dt$, so that
+%
+\begin{align}
+\frac{\partial n_s}{\partial m^*} &= \frac{g}{2\pi^2}
+   \left( \tfrac12 k_F E_F - \tfrac32 m^{*2}\Lambda
+          + \frac{m^{*2} k_F}{E_F} \right) ,
+&
+\frac{\partial^2 n_s}{\partial m^{*2}} &= -\frac{3 g\, m^*}{2\pi^2}
+   \left( \Lambda - \frac{k_F}{E_F}
+          - \frac13 \frac{k_F^3}{E_F^3} \right) , \\
+\frac{\partial n_s}{\partial k_F} &= \frac{g}{2\pi^2}\frac{k_F^2 m^*}{E_F} ,
+&
+\frac{\partial^2 n_s}{\partial m^* \partial k_F} &= \frac{g}{2\pi^2}
+   \frac{k_F^4}{E_F^3} ,
+\end{align}
+%
+and $\partial^2 n_s/\partial k_F^2 = (g/2\pi^2)\, m^* k_F (2E_F^2 - k_F^2)
+/ E_F^3$. The Fermi energies then follow with
+$dm^*_i/dn = -g_{\sigma N}\sigma'$ and
+$d^2 m^*_i/dn^2 = -g_{\sigma N}\sigma''$,
+%
+\begin{equation}
+E^{*\prime}_{F,i} = \frac{k_F k_F' - m^*_i g_{\sigma N}\sigma'}{E^*_{F,i}} ,
+\qquad
+E^{*\prime\prime}_{F,i} =
+  \frac{k_F'^2 + k_F k_F'' + (g_{\sigma N}\sigma')^2
+        - m^*_i g_{\sigma N}\sigma''}{E^*_{F,i}}
+  - \frac{\big(E^{*\prime}_{F,i}\big)^2}{E^*_{F,i}} ,
+\end{equation}
+%
+which close $\bar\mu' = \tfrac12(E^{*\prime}_{F,p} + E^{*\prime}_{F,n})
++ g_{\omega N}\omega'$ and
+$\bar\mu'' = \tfrac12(E^{*\prime\prime}_{F,p} + E^{*\prime\prime}_{F,n})
++ g_{\omega N}\omega''$, and with them Eq.~\eqref{eq:KQfrommu}.
+
+The isovector pair costs nothing further. Writing $u = k_F^2$ (so
+$u' = 2u/3n$, $u'' = -2u/9n^2$) and $R = g_{\rho N}^2/Q$ with
+$Q = m_\rho^2 + 2A$, Eq.~\eqref{eq:esym} differentiates to
+%
+\begin{align}
+E_{\mathrm{sym}}' &= \frac{u'}{6 E^*_{F,n}}
+   - \frac{u\, E^{*\prime}_{F,n}}{6 E^{*2}_{F,n}}
+   + \frac{R + n R'}{8} , \\
+E_{\mathrm{sym}}'' &= \frac16 \left(
+     \frac{u''}{E^*_{F,n}}
+   - \frac{2 u' E^{*\prime}_{F,n}}{E^{*2}_{F,n}}
+   - \frac{u\, E^{*\prime\prime}_{F,n}}{E^{*2}_{F,n}}
+   + \frac{2 u\, \big(E^{*\prime}_{F,n}\big)^2}{E^{*3}_{F,n}} \right)
+   + \frac{2 R' + n R''}{8} ,
+\end{align}
+%
+with
+$R' = -2 g_{\rho N}^2 A' / Q^2$ and
+$R'' = -2 g_{\rho N}^2 A''/Q^2 + 8 g_{\rho N}^2 A'^2 / Q^3$, and
+%
+\begin{equation}
+A' = A_\sigma \sigma' + A_\omega \omega' ,
+\qquad
+A'' = A_{\sigma\sigma}\sigma'^2 + A_{\omega\omega}\omega'^2
+    + A_\sigma \sigma'' + A_\omega \omega'' .
+\end{equation}
+%
+There is no $A_{\sigma\omega}$: $f$ of Eq.~\eqref{eq:Afunction} is a sum of a
+$\sigma$ series and an $\omega$ series and is therefore separable, which is a
+property of the SFHo form rather than a truncation. $E^*_{F,n}$ carries the
+neutron Dirac mass here because Eq.~\eqref{eq:esym} does.
+
+$Z_{\mathrm{sat}}$, the fourth derivative of $E/A$, is deliberately not
+reported: it would need a third derivative of the gap equation, no closure
+imposes it, and nobody quotes it.
+
+Why analytic and not a stencil: the finite differences these expressions
+replaced were taken on a quantity that is itself the output of a nonlinear
+solve, so their accuracy was bounded by the solver rather than by $h$. The
+verification suite ties the two together by requiring each analytic value to
+be the $h \to 0$ limit the stencil converges to, within the stencil's own
+scatter.
+
 The inverse map is triangular, and that is a property of the model rather than
 a solver tactic: in symmetric matter $\rho$ and $A(\sigma,\omega)\rho^2$ drop
 out of every equation of Sec.~\ref{sec:fields}, so the isoscalar sector does

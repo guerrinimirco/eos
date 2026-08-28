@@ -19,6 +19,41 @@ parameter dataclass, which is at the bottom of the same order.
 Definitions follow the CompOSE manual (Typel et al., arXiv:2203.03209 sec.
 6) and Steiner, Prakash, Lattimer & Ellis, Phys. Rept. 411 (2005).
 
+Every nuclear-matter parameter here is exact: four need no derivative, and the
+four that do (`snm_derivatives`) take theirs analytically. They used to be
+finite differences of quantities that are themselves the output of a nonlinear
+solve, so their accuracy was bounded by the solver rather than by the step,
+and the published values moved when they were replaced. On python.org 3.14.2 /
+numpy 2.3.5 / scipy 1.17.0, old (stencil at the shipped h = 1e-3, symmetric
+matter solved at T = 0.01 MeV) -> new (analytic, T = 0 exactly):
+
+    n_sat        0.1582409773  ->   0.1582415032    (rel 3.3e-06)
+    E_sat      -16.1723618256  -> -16.1724036674    (rel 2.6e-06)
+    m*/m         0.7615642360  ->   0.7615635772    (rel 8.7e-07)
+    E_sym       31.5456784436  ->  31.5457311218    (rel 1.7e-06)
+    K_sat      245.2210817033  -> 245.2196926301    (rel 5.7e-06)
+    Q_sat     -467.4237080394  -> -467.5470984057   (rel 2.6e-04)
+    L_sym       47.0775696160  ->  47.0765975489    (rel 2.1e-05)
+    K_sym     -205.3787719172  -> -205.3781863893   (rel 2.9e-06)
+
+The first four moved only because the T -> 0 limit became T = 0 (see
+`T_COLD`). Against the h-plateau MEAN of the old stencil -- h in [2e-4, 2e-3],
+which is the fairer comparison, since the shipped h was one point on it --
+three of the four derivative values land inside the plateau's own spread and
+Q_sat lands 1.3 spreads outside it:
+
+                plateau mean    spread     analytic      analytic - mean
+    K_sat        245.221306    3.26e-03   245.219693       -1.6e-03
+    Q_sat       -467.417901    9.80e-02  -467.547098       -1.3e-01
+    L_sym         47.077861    3.58e-03    47.076598       -1.3e-03
+    K_sym       -205.378953    2.23e-03  -205.378186       +7.7e-04
+
+The reproducibility argument that motivated the change is measured the same
+way: the OLD Q_sat at the shipped h differs by 9.7e-05 MeV between that stack
+and anaconda 3.9.7 / numpy 1.26.4 / scipy 1.13.1, and their h-plateau means by
+1.4e-02 MeV, while the four analytic values agree across the same two stacks
+to 5.9e-14 (K_sat), 2.2e-13 (Q_sat), 7.0e-15 (L_sym) and 6.8e-16 (K_sym).
+
 Units:
 - Energies/masses/potentials: MeV
 - Densities: fm^-3
@@ -124,11 +159,22 @@ def compute_hyperon_potentials(params: Parameters,
 #: them.
 SNM_FLAGS = SpeciesFlags(photons=False)
 
-#: The temperature the T -> 0 limit is taken at. SFHo's Fermi integrals accept
-#: T = 0, but the whole NMP path is finite differences of eps, and a strictly
-#: cold solve puts a threshold kink exactly where the differences straddle.
-#: 0.01 MeV is far below any nuclear scale and keeps the sweep smooth.
-T_COLD = 0.01
+#: The nuclear-matter parameters are T = 0 quantities and are computed at
+#: T = 0 exactly.
+#:
+#: This used to be 0.01 MeV, on the argument that a strictly cold solve puts
+#: a threshold kink where the finite differences straddle. Two things retire
+#: it. The differences are gone -- every derivative below is analytic. And the
+#: kink was never in this path anyway: symmetric matter here is nucleons only
+#: (`SNM_FLAGS`), and a nucleon has no threshold to cross. What the 0.01 MeV
+#: did buy was JEL's approximation error, because SFHo evaluates the Fermi
+#: integrals in closed form on its T = 0 branch and through JEL on the finite-T
+#: one: at n_B = 0.158 the sigma field came back 1.5e-07 relative away from the
+#: exact gap-equation root and eps 4.5e-08 away. That is the branch and not the
+#: temperature -- T = 1e-4 and T = 0.01 MeV give the same displaced answer --
+#: and it is two orders larger than the scatter the analytic derivatives
+#: themselves carry across interpreters.
+T_COLD = 0.0
 
 
 def _snm(par, n_B, Y_C=0.5):
@@ -179,25 +225,210 @@ def esym(par, n_B):
     return kinetic + potential
 
 
-def compute_nmp(par, h=1e-3, n_lo=0.12, n_hi=0.20):
+# =============================================================================
+# THE DENSITY DERIVATIVES OF SATURATED MATTER, IN CLOSED FORM
+# =============================================================================
+# K_sat, Q_sat, L_sym and K_sym used to be finite differences of quantities
+# that are themselves the output of a nonlinear solve. They are written out
+# here instead. Everything in this section is in natural units (n in MeV^3,
+# kF, fields and masses in MeV) and ' means d/dn.
+#
+# SFHo's couplings are CONSTANTS, so unlike a density-dependent RMF there is
+# no rearrangement self-energy and no coupling to differentiate; what is left
+# is the two self-interacting fields. Symmetric matter at T = 0 with Y_C = 0.5
+# carries n_p = n_n = n/2 exactly, so rho and phi vanish identically and the
+# two nucleons are two g = 2 gases sharing one Fermi momentum but NOT one
+# Dirac mass: m*_p = m_p - g_sigma sigma and m*_n = m_n - g_sigma sigma differ
+# by m_n - m_p = 1.293 MeV. Abbreviating the two field polynomials
+#
+#     Phi(sigma) = m_sigma^2 sigma + g2 sigma^2 + g3 sigma^3
+#     Psi(omega) = m_omega^2 omega + c3 omega^3
+#
+# the field equations at rho = 0 are
+#
+#     Phi(sigma) = g_sigma n_s(sigma, n),   n_s = n_s^p + n_s^n            (gap)
+#     Psi(omega) = g_omega n                                            (omega)
+#
+# and (omega) contains no n_s at all, so omega is a function of n alone -- an
+# exact one, independent of the state of the scalar sector:
+#
+#     omega'  = g_omega / Psi'(omega)
+#     omega'' = -Psi''(omega) omega'^2 / Psi'(omega)
+#
+# The energy density and the mean chemical potential are
+#
+#     eps    = eps_kin(m*_p, kF) + eps_kin(m*_n, kF) + V(sigma)
+#              + m_omega^2 omega^2/2 + 3 c3 omega^4/4
+#     mu_bar = (E_F*_p + E_F*_n)/2 + g_omega omega
+#
+# with V(sigma) = m_sigma^2 sigma^2/2 + g2 sigma^3/3 + g3 sigma^4/4. mu_bar is
+# the mean of mu_p and mu_n, and it is the right potential here because the
+# mode holds Y_C = 0.5: deps = mu_p dn_p + mu_n dn_n = mu_bar dn along the
+# sweep, so deps/dn = mu_bar even though mu_p != mu_n. Then, exactly as in a
+# one-gas model, P = mu_bar n - eps and E/A = eps/n - m_N give
+#
+#     (E/A)'   = P / n^2,        P' = n mu_bar'
+#     K_sat    = 9 n^2 (E/A)''  = 9 n mu_bar'                   } at P = 0,
+#     Q_sat    = 27 n^3 (E/A)'''= 27 n (n mu_bar'' - 3 mu_bar') } i.e. at n_sat
+#
+# so the third derivative of E/A costs only the SECOND derivative of mu_bar,
+# and the gap equation needs differentiating twice rather than three times.
+# Writing ns_m = dn_s/dm*, ns_k = dn_s/dkF and so on, summed over the two
+# gases, and using dm*_i/dn = -g_sigma sigma',
+#
+#     dn_s/dn = -ns_m g_sigma sigma' + ns_k kF'                          (dns)
+#     D = Phi'(sigma) + g_sigma^2 ns_m
+#     D sigma'  = g_sigma ns_k kF'
+#     D sigma'' = -Phi''(sigma) sigma'^2
+#                 + g_sigma ( g_sigma^2 ns_mm sigma'^2
+#                             - 2 g_sigma ns_mk sigma' kF'
+#                             + ns_kk kF'^2 + ns_k kF'' )
+#
+# The symmetry energy is already closed-form (`esym` above), so L_sym and
+# K_sym follow from the same E_F* derivatives plus the two field derivatives
+# reaching A(sigma, omega); f is separable in sigma and omega, so there is no
+# mixed second partial.
+#
+# Z_sat, the fourth derivative, is deliberately NOT reported, for the same
+# reason it is not reported in `eos.dd2`: it would need a third derivative of
+# the gap, no closure imposes it and nobody quotes it.
+
+#: One nucleon species: 2 spin states. Symmetric matter is two of these, at
+#: the same kF and at Dirac masses that differ by m_n - m_p.
+_G_NUCLEON = 2.0
+
+
+def _ns_partials(m, kF):
+    """n_s [MeV^3] of one g = 2 nucleon gas and its partials in (m*, kF).
+
+    With E_F = sqrt(kF^2 + m*^2) and L = asinh(kF/m*),
+
+        n_s = (g / 4 pi^2) m* [kF E_F - m*^2 L]
+
+    The kF partials are the integrand at the surface; the m* partials are the
+    moments
+
+        dn_s/dm*    =  (g / 2 pi^2) int_0^kF k^4 / E_k^3 dk
+        d2n_s/dm*^2 = -(g / 2 pi^2) 3 m* int_0^kF k^4 / E_k^5 dk
+
+    which k = m* sinh t turns into m*^2 int (cosh^2 t - 2 + sech^2 t) dt and
+    int tanh^4 t dt, both elementary. Returns
+    (n_s, ns_m, ns_k, ns_mm, ns_mk, ns_kk).
+    """
+    E = np.sqrt(kF ** 2 + m ** 2)
+    L = np.arcsinh(kF / m)
+    p = _G_NUCLEON / (2.0 * np.pi ** 2)
+    return (0.5 * p * m * (kF * E - m ** 2 * L),
+            p * (0.5 * kF * E - 1.5 * m ** 2 * L + m ** 2 * kF / E),
+            p * kF ** 2 * m / E,
+            -3.0 * m * p * (L - kF / E - (kF / E) ** 3 / 3.0),
+            p * kF ** 4 / E ** 3,
+            p * m * kF * (2.0 * E ** 2 - kF ** 2) / E ** 3)
+
+
+def snm_derivatives(par, n_B):
+    """{K_sat, Q_sat, L_sym, K_sym} of symmetric matter at n_B [fm^-3].
+
+    The nuclear-matter combinations 9 n^2 (E/A)'', 27 n^3 (E/A)''',
+    3 n E_sym' and 9 n^2 E_sym'', analytically. K_sat and Q_sat are the
+    saturation parameters only where P(n_B) = 0, which is where every caller
+    evaluates them; the derivation is in the section header above.
+
+    Solves symmetric matter ONCE, at n_B, and differentiates the closed forms
+    around that solved point -- so it is also seven solves cheaper than the
+    third-difference stencil it replaced.
+    """
+    point = _snm(par, n_B)
+    sigma = point.matter.fields["sigma"]
+    omega = point.matter.fields["omega"]
+    m_star = point.matter.m_eff_i           # m*_i = m_i - g_sigma sigma
+    g_sigma, g_omega, g_rho = par.g_sigma_N, par.g_omega_N, par.g_rho_N
+
+    n = n_B * hc3
+    kF = (3.0 * np.pi ** 2 * n / 2.0) ** (1.0 / 3.0)
+    kF1, kF2 = kF / (3.0 * n), -2.0 * kF / (9.0 * n ** 2)
+
+    # --- the two nucleon gases, summed --------------------------------------
+    ns = ns_m = ns_k = ns_mm = ns_mk = ns_kk = 0.0
+    for name in ("p", "n"):
+        a, b, c, d, e, f = _ns_partials(m_star[name], kF)
+        ns += a
+        ns_m += b
+        ns_k += c
+        ns_mm += d
+        ns_mk += e
+        ns_kk += f
+
+    # --- the scalar gap, differentiated implicitly --------------------------
+    Phi1 = par.m_sigma ** 2 + 2.0 * par.g2 * sigma + 3.0 * par.g3 * sigma ** 2
+    Phi2 = 2.0 * par.g2 + 6.0 * par.g3 * sigma
+    D = Phi1 + g_sigma ** 2 * ns_m
+    s1 = g_sigma * ns_k * kF1 / D
+    s2 = (-Phi2 * s1 ** 2
+          + g_sigma * (g_sigma ** 2 * ns_mm * s1 ** 2
+                       - 2.0 * g_sigma * ns_mk * s1 * kF1
+                       + ns_kk * kF1 ** 2 + ns_k * kF2)) / D
+
+    # --- the vector field, which sees only n --------------------------------
+    Psi1 = par.m_omega ** 2 + 3.0 * par.c3 * omega ** 2
+    Psi2 = 6.0 * par.c3 * omega
+    w1 = g_omega / Psi1
+    w2 = -Psi2 * w1 ** 2 / Psi1
+
+    # --- the Fermi energies at the moving masses and momentum ---------------
+    E, E1, E2 = {}, {}, {}
+    for name in ("p", "n"):
+        m = m_star[name]
+        E[name] = np.sqrt(kF ** 2 + m ** 2)
+        E1[name] = (kF * kF1 - m * g_sigma * s1) / E[name]
+        E2[name] = ((kF1 ** 2 + kF * kF2 + (g_sigma * s1) ** 2
+                     - m * g_sigma * s2) / E[name] - E1[name] ** 2 / E[name])
+
+    # --- isoscalar: mu_bar', mu_bar'' -> K_sat, Q_sat -----------------------
+    mu1 = 0.5 * (E1["p"] + E1["n"]) + g_omega * w1
+    mu2 = 0.5 * (E2["p"] + E2["n"]) + g_omega * w2
+
+    # --- isovector: E_sym = kF^2/(6 E_F*_n) + n g_rho^2 / [8 (m_rho^2 + 2A)]
+    u = kF ** 2
+    u1, u2 = 2.0 * u / (3.0 * n), -2.0 * u / (9.0 * n ** 2)
+    En, En1, En2 = E["n"], E1["n"], E2["n"]
+    Es1 = u1 / (6.0 * En) - u * En1 / (6.0 * En ** 2)
+    Es2 = (u2 / En - 2.0 * u1 * En1 / En ** 2 - u * En2 / En ** 2
+           + 2.0 * u * En1 ** 2 / En ** 3) / 6.0
+
+    A = par.compute_A(sigma, omega)
+    A_s, A_w = par.compute_dA_dsigma(sigma), par.compute_dA_domega(omega)
+    A_ss, A_ww = par.compute_d2A_dsigma2(sigma), par.compute_d2A_domega2(omega)
+    A1 = A_s * s1 + A_w * w1
+    A2 = A_ss * s1 ** 2 + A_ww * w1 ** 2 + A_s * s2 + A_w * w2
+    Q = par.m_rho ** 2 + 2.0 * A
+    R = g_rho ** 2 / Q
+    R1 = -2.0 * g_rho ** 2 * A1 / Q ** 2
+    R2 = -2.0 * g_rho ** 2 * A2 / Q ** 2 + 8.0 * g_rho ** 2 * A1 ** 2 / Q ** 3
+    Es1 += (R + n * R1) / 8.0
+    Es2 += (2.0 * R1 + n * R2) / 8.0
+
+    return {
+        "K_sat": 9.0 * n * mu1,
+        "Q_sat": 27.0 * n * (n * mu2 - 3.0 * mu1),
+        "L_sym": 3.0 * n * Es1,
+        "K_sym": 9.0 * n ** 2 * Es2,
+    }
+
+
+def compute_nmp(par, n_lo=0.12, n_hi=0.20):
     """
     Nuclear-matter parameters at saturation.
 
     Returns dict with n_sat [fm^-3], E_sat, K_sat, Q_sat, E_sym, L_sym,
     K_sym [MeV], m_eff_ratio, and P_sat [MeV/fm^3] (diagnostic, ~0 by
     construction). The same keys `eos.dd2.compute_nmp` returns, so one caller
-    reads either model.
+    reads either model. Z_sat is not reported -- see the derivative section
+    above for why.
 
-    The derivatives are central differences AT saturation, not derivatives of
-    a spline fitted over a density range: a fit spreads the third derivative
-    over the whole range it was fitted on, and `bc_type='natural'` additionally
-    pins the curvature to zero at the endpoints.
-
-    On `h`. The step has to sit above the solver's own noise and below where
-    truncation bites. Measured for SFHo_Nucleonic, K_sat and Q_sat are flat
-    from h = 1e-4 to 2e-3 (245.221 +- 0.001 and -467.4 +- 0.1) and start
-    drifting at 4e-3, reaching 245.43 / -470.4 by 1.6e-2. The default sits in
-    the middle of that plateau.
+    Every entry is exact: n_sat, E_sat, m*/m and E_sym need no derivative,
+    and the four that do take theirs analytically (`snm_derivatives`) rather
+    than by stencil.
 
     Q_sat and K_sym are PREDICTIONS of the parametrization, not quantities any
     fit imposes; they are reported for exactly that reason.
@@ -205,25 +436,14 @@ def compute_nmp(par, h=1e-3, n_lo=0.12, n_hi=0.20):
     n_sat = brentq(lambda n: pressure(par, n), n_lo, n_hi, xtol=1e-13)
     at_sat = _snm(par, n_sat)
 
-    EA = lambda n: energy_per_baryon(par, n)
-    d2 = (EA(n_sat + h) - 2.0 * EA(n_sat) + EA(n_sat - h)) / h**2
-    d3 = (EA(n_sat + 2 * h) - 2.0 * EA(n_sat + h)
-          + 2.0 * EA(n_sat - h) - EA(n_sat - 2 * h)) / (2.0 * h**3)
-    dEs = (esym(par, n_sat + h) - esym(par, n_sat - h)) / (2.0 * h)
-    d2Es = (esym(par, n_sat + h) - 2.0 * esym(par, n_sat)
-            + esym(par, n_sat - h)) / h**2
-
     m_N = 0.5 * (par.m_n + par.m_p)
     return {
         "n_sat": n_sat,
-        "E_sat": EA(n_sat),
+        "E_sat": at_sat.eps / n_sat - m_N,
         "m_eff_ratio": at_sat.matter.m_eff_i["n"] / m_N,
-        "K_sat": 9.0 * n_sat**2 * d2,
-        "Q_sat": 27.0 * n_sat**3 * d3,
         "E_sym": esym(par, n_sat),
-        "L_sym": 3.0 * n_sat * dEs,
-        "K_sym": 9.0 * n_sat**2 * d2Es,
         "P_sat": at_sat.P,
+        **snm_derivatives(par, n_sat),
     }
 
 
@@ -458,7 +678,7 @@ class InversionStatus:
     isoscalar_residual: float
     isovector_residual: float
     #: Higher derivatives the closure does not impose, computed FORWARD from
-    #: the recovered couplings with `compute_nmp`'s own stencils:
+    #: the recovered couplings with `compute_nmp`'s own closed forms:
     #: {"Q_sat": MeV, "K_sym": MeV}.
     predictions: dict = dataclass_field(default_factory=dict)
 
@@ -490,19 +710,23 @@ def _reduced_self_couplings(par):
             par.g3 / par.g_sigma_N ** 4)
 
 
-def _isoscalar_quantities(par, n_sat, h=1e-3):
+def _isoscalar_quantities(par, n_sat):
     """{P, E_sat, m_ratio, K_sat} of symmetric matter AT n_sat.
 
     No P = 0 search: the inversion imposes P(n_sat) = 0 as one of its
     conditions instead, so the target saturation density is where these are
     evaluated rather than something to be found first.
+
+    K_sat comes from `snm_derivatives`, the same closed form `compute_nmp`
+    reads. Forward and inverse have to differentiate identically -- while both
+    were stencils the truncation bias cancelled on a round trip, and moving
+    one alone would stop the inversion reproducing its own inputs.
     """
     at = _snm(par, n_sat)
-    EA = lambda n: energy_per_baryon(par, n)
-    d2 = (EA(n_sat + h) - 2.0 * EA(n_sat) + EA(n_sat - h)) / h ** 2
     m_N = 0.5 * (par.m_n + par.m_p)
     return dict(P=at.P, E_sat=at.eps / n_sat - m_N,
-                m_ratio=at.matter.m_eff_i["n"] / m_N, K_sat=9.0 * n_sat ** 2 * d2)
+                m_ratio=at.matter.m_eff_i["n"] / m_N,
+                K_sat=snm_derivatives(par, n_sat)["K_sat"])
 
 
 def _restart_loop(residual, seed, first, n_restarts, gate):
@@ -637,8 +861,6 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
             f"the kinetic symmetry energy {kinetic:.2f} MeV of the converged "
             f"isoscalar point (no real g_rho_N)")
 
-    h = 1e-3
-
     def isov_residual(x):
         g_rho, b1 = x
         if g_rho <= 0.0:
@@ -646,7 +868,7 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
         try:
             p = _trial_par(base, g_sigma, g_omega, b, c, g_rho=g_rho, b1=b1)
             E = esym(p, n_sat)
-            L = 3.0 * n_sat * (esym(p, n_sat + h) - esym(p, n_sat - h)) / (2 * h)
+            L = snm_derivatives(p, n_sat)["L_sym"]
         except (ValueError, RuntimeError):
             return [1e3] * 2
         return [E - nmp["E_sym"], (L - nmp["L_sym"]) * 1e-1]
@@ -687,7 +909,7 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
                     f"reproduced, but not by a physical rho sector",
             isoscalar_residual=iso_res, isovector_residual=isov_res)
 
-    # Report what the closure did NOT impose, with the forward map's stencils.
+    # Report what the closure did NOT impose, with the forward map itself.
     # The forward map brackets saturation in [n_lo, n_hi] and raises if the
     # recovered couplings saturate outside it -- which a target n_sat near the
     # edge of that bracket can produce. The couplings are still the answer, so

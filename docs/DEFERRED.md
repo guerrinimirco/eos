@@ -1268,11 +1268,19 @@ decision that cannot be made before the tables exist.
   open is smaller and is recorded here rather than in the module, which states
   the closure it uses and why.
 
-  Q_sat and K_sym are PREDICTIONS, as in dd2. Unlike dd2 there is no option to
-  impose Q_sat instead: doing so would need a fifth isoscalar knob, and the
-  natural candidate is c3, which is currently held at its published value
-  because it is a high-density vector parameter that saturation says little
-  about. Worth adding if a target set ever carries Q_sat.
+  Q_sat and K_sym are PREDICTIONS, as in dd2, and both are now ANALYTIC:
+  `nmp.snm_derivatives` differentiates the gap equation implicitly rather than
+  differencing the solver, so K_sat, Q_sat, L_sym and K_sym reproduce across
+  interpreters to 5.9e-14 .. 6.8e-16 where the stencils they replaced moved
+  Q_sat's h-plateau mean by 1.4e-02 MeV between two stacks.
+
+  Unlike dd2 there is still no option to impose Q_sat, and the derivative
+  accuracy was never what stood in the way. Doing so needs a fifth isoscalar
+  knob, and sfho's only candidate is c3 — a high-density vector parameter that
+  saturation says little about. Measured: its Jacobian column is 550x weaker
+  than g_sigma_N's, and admitting it drops the closure's smallest singular
+  value from 0.051 to 0.0063. That is a statement about what saturation
+  constrains, not about numerics, so no derivative work reopens it.
 
   The hyperon and Delta sectors are NOT refitted by the inversion. Their
   couplings are stored as absolute values derived from ratios against the

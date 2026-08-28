@@ -273,6 +273,35 @@ uses the closed form `k_F^2/(6 E_F*) + n_B g_rho^2 / [8 (m_rho^2 + 2A)]`, and
 the verify suite compares it against the delta^2 curvature of E/A, which is an
 independent route through eps.
 
+**Every one of those derivatives is analytic**, in `nmp.snm_derivatives`.
+Symmetric matter at Y_C = 0.5 has n_p = n_n = n_B/2 exactly, so rho and phi
+vanish and what is left is two g = 2 nucleon gases at one k_F and two Dirac
+masses, plus two self-interacting fields. SFHo's couplings are constants, so
+there is no rearrangement term and nothing density-dependent to differentiate;
+`omega` obeys `m_omega^2 omega + c3 omega^3 = g_omega n` and so is an exact
+function of n alone, and only the sigma gap needs differentiating implicitly.
+Because P = mu_bar n - eps at T = 0 with mu_bar = (mu_p + mu_n)/2 — the mean
+is the right potential when the sweep holds Y_C = 0.5 — the third derivative
+of E/A is only the SECOND derivative of mu_bar:
+
+    K_sat = 9 n mu_bar',   Q_sat = 27 n (n mu_bar'' - 3 mu_bar'),  at P = 0
+
+so the gap is differentiated twice, not three times. L_sym and K_sym come from
+the same E_F* derivatives plus A(sigma, omega), which is separable and so has
+no mixed second partial. Z_sat is not reported — a third derivative of the gap
+spent on a quantity no closure imposes. Forward and inverse both call
+`snm_derivatives`, which is what keeps the round trip exact: while both sides
+were stencils the truncation bias cancelled, and moving one alone would break
+it. The full derivation is Sec. "The density derivatives in closed form" of
+`sfho.tex`.
+
+The whole NMP path solves at T = 0 exactly. It used to solve at 0.01 MeV, to
+keep the finite differences off a threshold kink; there is no kink in this path
+(nucleons only, nothing to cross) and there are no differences left, and the
+0.01 MeV was buying JEL's approximation error, since SFHo evaluates the Fermi
+integrals in closed form at T = 0 and through JEL above it. That moved every
+published value slightly — see the module docstring for the list.
+
 Inverse map: `invert_nmp` / `from_nmp`. The inversion is TRIANGULAR, because in
 symmetric matter the rho field and A rho^2 drop out of every equation and the
 isoscalar sector never sees the isovector couplings. Isoscalar half is the

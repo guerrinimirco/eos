@@ -3015,8 +3015,9 @@ against this file, not against the earlier `pytest_before*.txt`.
   then confirm by a basin scan that may veto**, which is where the user's "how
   fast, and are the solutions findable" enters. It reproduces both shipped
   choices (`(g_rho, b1)` at sigma_min 0.483 against 0.069; dd2's six pins in the
-  identical order) and immediately overturns one —
-  [115](issues/115-dd2-qsat-pin-recheck.md).
+  identical order) and appeared to overturn one —
+  [115](issues/115-dd2-qsat-pin-recheck.md), where the scan half then VETOED
+  the local half's preference and the shipped pin stood.
   **`Q_sat` is a legal input in dd2 alone**, and only since
   [111](issues/111-dd2-analytic-nmp-derivatives.md) landed mid-ticket; sfho's
   only candidate fifth knob `c3` has a column **550x weaker** than
@@ -3046,6 +3047,136 @@ against this file, not against the earlier `pytest_before*.txt`.
   [115](issues/115-dd2-qsat-pin-recheck.md),
   [116](issues/116-sfho-analytic-nmp-derivatives.md). No code changed.
 
+- [The natural-units record leaves the public result, and its accessors take the fm names](issues/97-natural-record-leaves-the-result.md)
+  (2026-08-29): **all five work items landed; the §12 full-suite line is
+  OUTSTANDING and deliberately not claimed.** `njl`/`ccdm` hold their matter
+  record as `_state`, `enjl` as `_point`, the six/three natural-units fields
+  take `_nat` and the accessors take the bare fm names, and `n_3`/`n_8`/`n_q`
+  are lifted onto the njl/ccdm point in fm. **The finding: `_` was not one line
+  but two.** Work item 1 rests on `_`-prefixing making a record internal and
+  cites the baseline flattener, which skips `_` — but ticket 91's units-band
+  walker did NOT, so `_state` alone left the strict xfail still satisfied by a
+  defect that was fixed. `_float_fields` now draws the same line, and all ten
+  models pass the band check with **no exemptions**. **The two-phase order
+  earned itself**: renaming fields before accessors caught eleven stale sites,
+  every one an AttributeError, the last being the ENJL author-table golden
+  (`pt.eps / hc3`) which a one-phase rename would have left comparing an
+  already-fm number against the author's column. **Deviation, deliberate**: most
+  colour-density readers stayed on `_state` rather than moving to the lifted fm
+  fields, because they scale by unit-dependent quantities — a `max(abs(n_q),
+  1.0)` floor that never binds in MeV^3 and always binds in fm^-3, a MeV^3
+  `(mu_B/3)^3/pi^2` scale, an absolute 1e-6 bound — so converting them would
+  silently rescale what they assert. Baselines: **3255 / 3040 / 14976 keys
+  removed, exactly the nested blocks and exactly the counts the ticket
+  predicted; 315 / 228 / 0 added, all the lifted densities; ZERO surviving keys
+  changed by a single bit**, compared with `array_equal` against a pre-image and
+  **independently reproduced by a concurrent session from separate code**. It
+  also landed ticket 85's deferred **CLAUDE.md §5 sentence naming s and n_s**,
+  plus the underscore convention. Documents followed (§11). The work is in
+  **`3fb1c8b`**, a commit titled for ticket 111 — third instance of the
+  shared-tree staging trap — with `4f6f453` the enjl docstring fix.
+
+- **[How each DID parameter is fixed: theory, fit, or astrophysical data](issues/113-did-parameter-provenance.md)**:
+  ruled 2026-08-29, from arXiv:2511.15646 itself. Deliverable is a 19-row
+  provenance table in `eos/did/did.md` and `did.tex`, plus the paper's own
+  evidence table; no code changed. **The eighteen observables are real, the
+  paper's own (Sec. IV C, Tables III and IV), and NOT ONE OF THEM IS
+  ASTROPHYSICAL** -- 7 laboratory, 11 theoretical. Nine are hyperon potentials
+  `U_Y` at |k| = 0 from BHF on HAL QCD interactions (Kohno et al., PRC 110,
+  054001), three in ISM and six in NM; the other nine are `n_0`, `B`, `K`,
+  `S_2`, the crossover M(0.11 fm^-3), two chiral-EFT NM pressures and two
+  heavy-ion ISM pressures. The abstract's NICER and GW170817 enter twice and
+  neither time through the likelihood: as the post-hoc pick of `b_omega` from
+  {0.60 ... 0.80} by tidal deformability, and as a check on the finished model.
+  So **`b_omega` is the one parameter astrophysics set**, by choosing between
+  five separate fits.
+  **The hyperon N-branches are a MODELLING CHOICE**, quoted from Sec. IV A
+  inside the parameter count -- it is what holds the hyperon sigma sector at
+  three parameters instead of six, and it appears in no table and no posterior.
+  The six NM potentials WERE fitted, but through the sectors still free in
+  neutron matter (the nucleon N branches, `z`, the two isovector hyperon
+  vertices). So a non-symmetric `U_Y` is legitimate **data** a sampler may feed
+  DID, while `g^{N(0)}_{sigma Y}` is **not a dial**: freeing it changes the
+  model, not its parameters.
+  **The observables constrained `S_2`, not `S`** -- Sec. IV C names the
+  quadratic coefficient, Table III's row is `S_2`, and `S` appears only in
+  Table VI as the derived comparison S - S_2 = -2.72 against 1.2 +/- 1.5.
+  Confirms [103](issues/103-nmp-closures-four-models.md) at the source. **`L`
+  was not an observable either**: all of Table VI is prediction, and `L` is
+  constrained only indirectly through the two NM pressure points.
+  **All twelve of the repository's established claims verified; nothing was
+  corrected.** `did.md`'s "Eq. 52" only looks wrong -- the repository counts
+  equations globally and Sec. IV's two are 52 and 53, consecutive. The paper
+  itself carries two wrinkles: Sec. VII says "17-parameter" where Sec. IV A
+  says fifteen free (17 is the Table II row count, so the documents are right),
+  and `K` is 240 +/- 20 in the likelihood but 230 +/- 40 in Table VI. What the
+  paper never says: any fit or datum behind the VALUE `e = 1/3`, and what
+  varying `alpha` would cost -- it was pinned at 1 "to simplify the Bayesian
+  analysis", so it stays legal in [0, 1].
+
+- [The basin scan vetoes the pin sigma_min prefers, and c_omega stands](issues/115-dd2-qsat-pin-recheck.md)
+  (2026-08-29): **the first time 103's second half has fired, and it overrules
+  the first half.** The local statistic does prefer `c_sigma` for dd2's Q_sat
+  closure — reproduced exactly (2.9692e-01 against `c_omega`'s 2.3706e-01,
+  `cond` in the identical order, neither vertex coupling pinnable at all) once
+  the measurement convention was recovered: **Jacobian rows divided by each
+  NMP's own published magnitude, `P` by 1 MeV/fm^3, columns by the coupling.**
+  That convention was nowhere written down and is now in `nmp.py`. **The basin
+  scan overrules it on both grids at both restart counts** — `c_omega` reaches
+  59/72 against 42/72 and 156/200 against 102/200 at zero restarts, 64/72 and
+  172/200 against 59/72 and 134/200 at 32, in half the wall clock. Among
+  targets BOTH reach the two are indistinguishable (worst 2.6e-11 against
+  2.7e-11), so the 25% margin describes accuracy INSIDE the basin while what
+  differs is the basin's size. **All eight counts are identical on both
+  stacks**, so the veto is the residual surface and not a solver version.
+  `PINNED_WITH_Q_SAT` untouched; the diff is one docstring section, which now
+  states both verdicts and retires the pre-111 `cond` figures (259/354/703/4191)
+  as the stencil's. Two defects noticed and left for the Stage 7 report:
+  `PINNED_WITH_Q_SAT` does not actually drive the closure (the residual
+  hardcodes `held["c_omega"]`, so the scan needed a temporary patch, reverted),
+  and `invert_nmp`'s docstring still describes the pre-111 world.
+
+- [SFHo's nuclear-matter derivatives are analytic, and the stencil's floor was never h](issues/116-sfho-analytic-nmp-derivatives.md)
+  (2026-08-29): **111's program, executed for sfho, with the ticket's own
+  premise refuted along the way.** Every derivative in `sfho/nmp.py` is
+  analytic — the sigma gap differentiated implicitly, `omega` an exact function
+  of n alone because its field equation carries no scalar density, and
+  `mu_bar = (mu_p + mu_n)/2` the right potential because the sweep holds
+  Y_C = 0.5, so 111's shortcut (a third derivative of E/A is a SECOND of mu)
+  transfers even though sfho keeps m_p != m_n and is two g = 2 gases where dd2
+  is one g = 4. Forward and inverse went analytic together; the round trip went
+  **3.5e-06 -> 2.7e-11** and the isoscalar residual **3.7e-09 -> 1.0e-12**.
+  **The reproducibility claim holds by nine orders**: the four values agree
+  across anaconda 3.9.7 and python.org 3.14.2 to **5.9e-14 .. 6.8e-16**, where
+  the old plateau means differed by 1.4e-02 MeV on Q_sat. Reported as asked,
+  against the **h-plateau mean** rather than the shipped h: K_sat, L_sym and
+  K_sym land inside the plateau's own spread and **Q_sat lands 1.3 spreads
+  outside it, moving 0.129 MeV** (-467.4237 -> -467.5471).
+  **What the ticket did not predict, and it is the finding**: for sfho the
+  stencil's floor was never h. `T_COLD = 0.01 MeV` — a stencil crutch whose
+  stated reason (a threshold kink) never applied to a nucleons-only path — was
+  buying **JEL's approximation error**, because sfho evaluates the Fermi
+  integrals in closed form at T = 0 and through JEL above it, displacing sigma
+  by 1.5e-07 relative; T = 1e-4 and T = 0.01 give the SAME displaced answer, so
+  it is the branch and not the temperature. Under that, `hybr`'s own xtol
+  leaves a smooth 5e-08 MeV wobble on E/A whose curvature is a FIXED offset
+  (1.9e-06 on K_sat, 2.8e-04 on Q_sat, the same at h = 1e-3 and 5e-3 on both
+  stacks), so **no choice of h could ever have reached the right answer**.
+  **One gate line is therefore refuted rather than met**: the h-exact keys are
+  NOT bit-identical — n_sat, E_sat, m*/m and E_sym move by 3.3e-06, 2.6e-06,
+  8.7e-07 and 1.7e-06 — because that line was copied from 111, whose
+  `solve_snm_t0` was already exactly T = 0 and sfho's was not. Nothing pins
+  them (no golden, no baseline key, `published NMPs` unmoved at 2.01e-03), and
+  holding them would have meant analytic derivatives on a state that does not
+  satisfy its own gap equation. New `verify/` entry `analytic NMP derivatives`,
+  dd2's estimator at **h = 8e-3 chosen for the opposite reason** (past the
+  solver floor, not away from roundoff; both stacks identical to four digits,
+  3.6x margin, and ablation puts the smallest real dropped-term signature at
+  3.2e-03). `DEFERRED.md` sharpened: Q_sat is still not imposable in sfho and
+  derivative accuracy was never the obstacle (c3's Jacobian column 550x weaker,
+  sigma_min 0.051 -> 0.0063).
+
+
 ## Not yet specified
 
 Two patches graduated on 2026-08-27 out of
@@ -3059,6 +3190,16 @@ graduated a third on 2026-08-28,
 resolved above.
 
 In scope, not yet sharp enough to ticket:
+
+- *(This patch graduated on 2026-08-29 into
+  [ticket 117](issues/117-suite-gate-needs-a-landing-point.md) — a "full suite
+  green" gate assumes a tree that holds still, and a waiter measured the real
+  window at TWENTY-NINE SECONDS. It blocks
+  [ticket 97](issues/97-natural-record-leaves-the-result.md)'s §12 line, and it
+  carries with it the two questions that were fog beside it: where
+  `test/run_clean_suite.sh` can live when `test/` is untracked, and what checks
+  the certifier — it had three defects in its first twenty minutes, two failing
+  open.)*
 
 - **A written table's column headers are a format nobody has ruled on.**
   Left standing by [ticket 108](issues/108-cached-lepton-fraction-three-models.md),
@@ -3312,15 +3453,24 @@ In scope, not yet sharp enough to ticket:
 - **Whether the user's Q4 ruling reaches `did`.** "All the relations that can
   be written analytically should be" was ruled on
   [ticket 105](issues/105-dd2-isoscalar-conditioning.md), executed for `dd2` by
-  [ticket 111](issues/111-dd2-analytic-nmp-derivatives.md) and graduated for
-  `sfho` into [ticket 116](issues/116-sfho-analytic-nmp-derivatives.md) once
+  [ticket 111](issues/111-dd2-analytic-nmp-derivatives.md), and
+  **executed for `sfho` by [ticket 116](issues/116-sfho-analytic-nmp-derivatives.md)
+  (resolved 2026-08-29)** once
   [103](issues/103-nmp-closures-four-models.md) settled that sfho's closure is
   not going to change. `zl` is already closed form
   ([104](issues/104-zl-analytic-inversion.md)). What is left is `did`, and it is
-  the one where the question is not yet sharp: `did` has no inverse map at all
-  and [113](issues/113-did-parameter-provenance.md) has to say what fixed each
-  of its parameters before "which derivatives must be exact" is even a
-  question. Revisit when 113 lands.
+  the one where the question is not yet sharp.
+  **[113](issues/113-did-parameter-provenance.md) landed on 2026-08-29 and made
+  it sharper without making it sharp.** What it settled is that `did` has no NMP
+  closure to invert and never had one: its fifteen free numbers are a posterior
+  over eighteen observables of which only four are nuclear-matter parameters
+  (`n_0`, `B`, `K`, `S_2`) and the rest are hyperon potentials and pressures.
+  So the Q4 question cannot take the form it took in `dd2` and `sfho` --
+  "which derivatives does the inverse map need" -- because `did` has no inverse
+  map and the provenance says nothing is owed one. What is left is whether the
+  FORWARD `compute_nmp` owes analytic derivatives anyway, for a sampler that
+  wants NMPs as reported predictions at millions of parameter points, and that
+  is a cost question nobody has measured.
 
 ## Out of scope
 
