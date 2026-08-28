@@ -95,11 +95,6 @@ from dataclasses import dataclass
 # ZL (hadronic) modules
 from eos.zl.parameters import Parameters as ZLParams
 from eos.zl.thermodynamics import thermo_from_mu_n as zl_thermo_from_mu_n
-from eos.zl.solver import (
-    solve_beta_eq_neutrinoless as solve_pure_H_beta,
-    solve_fixed_yc as solve_pure_H_fixed_yc,
-    solve_beta_eq_neutrino_trapped as solve_pure_H_trapped,
-)
 
 # vMIT (quark) modules
 from eos.vmit.parameters import Parameters as VMITParams
@@ -107,9 +102,6 @@ from eos.vmit.thermodynamics import thermo_from_mu_n as vmit_thermo_from_mu_n
 from eos.vmit.solver import (
     default_guess as vmit_default_guess,
     warm_start as vmit_warm_start,
-    solve_beta_eq_neutrinoless as solve_pure_Q_beta,
-    solve_fixed_yc as solve_pure_Q_fixed_yc,
-    solve_beta_eq_neutrino_trapped as solve_pure_Q_trapped
 )
 
 # General physics modules
@@ -2332,10 +2324,11 @@ def get_default_guess(chi: float, eta: float, n_B_est: float, T: float,
                       fixed_chi: bool = False) -> np.ndarray:
     """
     Get initial guess for any eta and chi.
-    
-    For χ=0 (onset): Use pure H solution to get μ's
-    For χ=1 (offset): Use pure Q solution to get μ's
-    
+
+    The guess is a table of hardcoded estimates scaled by the bag constant B4,
+    with a separate branch for fixed_yc at small Y_C. `chi` and `Y_L` are part
+    of the signature its callers use but no longer select anything.
+
     Args:
         eq_mode: "beta", "fixed_yc", or "trapped"
         Y_C: Charge fraction (for fixed_yc mode)
@@ -2377,151 +2370,14 @@ def get_default_guess(chi: float, eta: float, n_B_est: float, T: float,
                             mu_e_est, 10.0 * mu_e_scale, mu_e_est,
                             n_p_guess, n_n_guess, 0.5, 1.0, 0.8, n_p_guess, n_p_guess, n_B_est])
     
-    # Try to get better guesses from pure phase solutions
-    try:
-        if chi < 0.5:
-            # χ≈0: mostly hadronic phase
-            # Select appropriate pure phase solver based on equilibrium mode
-            if eq_mode == "trapped":
-                H = solve_pure_H_trapped(n_B_est, T, Y_L, zl_params)
-            elif eq_mode == "fixed_yc":
-                H = solve_pure_H_fixed_yc(n_B_est, T, Y_C, zl_params)
-            else:  # beta
-                H = solve_pure_H_beta(n_B_est, T, zl_params)
-            if not H.converged:
-                raise ValueError("Pure H failed")
-                
-            # Estimate quark μ's from hadronic values
-            mu_u_est = (H.mu_p_H - H.mu_eG) / 3.0
-            mu_d_est = mu_u_est + H.mu_eG
-            mu_s_est = mu_d_est
-            
-            # Estimate quark densities from n_B (based on Mathematica patterns)
-            # At onset, quark densities are: n_u ~ 0.09, n_d ~ 0.9, n_s ~ 0.73 for n_B ~ 0.47
-            n_u_est = 0.1 * n_B_est / 0.47
-            n_d_est = 0.9 * n_B_est / 0.47
-            n_s_est = 0.73 * n_B_est / 0.47
-            
-            if abs(eta) < 1e-10:
-                # η=0: 12 unknowns (same for all eq_modes)
-                return np.array([
-                    H.mu_p_H, H.mu_n_H, mu_u_est, mu_d_est, mu_s_est, H.mu_eG,
-                    H.n_p_H, H.n_n_H, n_u_est, n_d_est, n_s_est, n_B_est
-                ])
-            elif abs(eta - 1.0) < 1e-10:
-                # η=1: 15 unknowns for both beta and fixed_yc
-                n_C_Q_est = 0.01
-                return np.array([
-                    H.mu_p_H, H.mu_n_H, mu_u_est, mu_d_est, mu_s_est,
-                    H.mu_eG, 10.0,  # μ_eH, μ_eQ
-                    H.n_p_H, H.n_n_H, 0.5, 1.0, 0.5,  # densities
-                    H.n_p_H, n_C_Q_est, n_B_est  # n_eH, n_eQ, n_B
-                ])
-            else:
-                # 0 < η < 1: different sizes for beta (17) vs fixed_yc (16)
-                n_C_Q_est = 0.01
-                if eq_mode == "fixed_yc":
-                    if fixed_chi:
-                        # Fixed-χ solver: 14 unknowns [μp, μn, μu, μd, μs, μeH, μeQ, μeG, np, nn, nu, nd, ns, nB]
-                        return np.array([
-                            H.mu_p_H, H.mu_n_H, mu_u_est, mu_d_est, mu_s_est,
-                            H.mu_eG, 10.0, H.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            H.n_p_H, H.n_n_H, 0.5, 1.0, 0.5, n_B_est  # np, nn, nu, nd, ns, n_B
-                        ])
-                    else:
-                        # Regular solver: 16 unknowns [μp, μn, μu, μd, μs, μeH, μeQ, μeG, np, nn, nu, nd, ns, neH, neG, nB]
-                        return np.array([
-                            H.mu_p_H, H.mu_n_H, mu_u_est, mu_d_est, mu_s_est,
-                            H.mu_eG, 10.0, H.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            H.n_p_H, H.n_n_H, 0.5, 1.0, 0.5,  # np, nn, nu, nd, ns
-                            H.n_p_H, H.n_p_H, n_B_est  # n_eH, n_eG, n_B
-                        ])
-                else:
-                    # Beta equilibrium 0 < η < 1
-                    if fixed_chi:
-                        # Fixed-χ solver: 14 unknowns [μp, μn, μu, μd, μs, μeH, μeQ, μeG, np, nn, nu, nd, ns, nB]
-                        return np.array([
-                            H.mu_p_H, H.mu_n_H, mu_u_est, mu_d_est, mu_s_est,
-                            H.mu_eG, 10.0, H.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            H.n_p_H, H.n_n_H, 0.5, 1.0, 0.5, n_B_est  # np, nn, nu, nd, ns, n_B
-                        ])
-                    else:
-                        # Regular solver: 17 unknowns (includes n_eH, n_eQ, n_eG)
-                        return np.array([
-                            H.mu_p_H, H.mu_n_H, mu_u_est, mu_d_est, mu_s_est,
-                            H.mu_eG, 10.0, H.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            H.n_p_H, H.n_n_H, 0.5, 1.0, 0.5,  # densities
-                            H.n_p_H, n_C_Q_est, H.n_p_H, n_B_est  # n_eH, n_eQ, n_eG, n_B
-                        ])
-        else:
-            # χ≈1: mostly quark phase
-            # Select appropriate pure phase solver based on equilibrium mode
-            if eq_mode == "trapped":
-                Q = solve_pure_Q_trapped(n_B_est, T, Y_L, vmit_params)
-            elif eq_mode == "fixed_yc":
-                Q = solve_pure_Q_fixed_yc(n_B_est, T, Y_C, vmit_params)
-            else:  # beta
-                Q = solve_pure_Q_beta(n_B_est, T, vmit_params)
-            if not Q.converged:
-                raise ValueError("Pure Q failed")
-            
-            mu_p_est = 2 * Q.mu_u_Q + Q.mu_d_Q
-            mu_n_est = Q.mu_u_Q + 2 * Q.mu_d_Q
-            n_C_Q = (2*Q.n_u_Q - Q.n_d_Q - Q.n_s_Q) / 3.0
-            
-            if abs(eta) < 1e-10:
-                # η=0: 12 unknowns (same for all eq_modes)
-                return np.array([
-                    mu_p_est, mu_n_est, Q.mu_u_Q, Q.mu_d_Q, Q.mu_s_Q, Q.mu_eG,
-                    0.01, 0.3, Q.n_u_Q, Q.n_d_Q, Q.n_s_Q, n_B_est
-                ])
-            elif abs(eta - 1.0) < 1e-10:
-                # η=1: 15 unknowns for both beta and fixed_yc
-                return np.array([
-                    mu_p_est, mu_n_est, Q.mu_u_Q, Q.mu_d_Q, Q.mu_s_Q,
-                    200.0, Q.mu_eG,  # μ_eH, μ_eQ
-                    0.01, 0.3, Q.n_u_Q, Q.n_d_Q, Q.n_s_Q,  # densities
-                    0.01, max(n_C_Q, 1e-6), n_B_est  # n_eH, n_eQ, n_B
-                ])
-            else:
-                # 0 < η < 1: different sizes for beta (17) vs fixed_yc (16)
-                if eq_mode == "fixed_yc":
-                    if fixed_chi:
-                        # Fixed-χ solver: 14 unknowns [μp, μn, μu, μd, μs, μeH, μeQ, μeG, np, nn, nu, nd, ns, nB]
-                        return np.array([
-                            mu_p_est, mu_n_est, Q.mu_u_Q, Q.mu_d_Q, Q.mu_s_Q,
-                            200.0, Q.mu_eG, Q.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            0.01, 0.3, Q.n_u_Q, Q.n_d_Q, Q.n_s_Q, n_B_est
-                        ])
-                    else:
-                        # Regular solver: 16 unknowns
-                        return np.array([
-                            mu_p_est, mu_n_est, Q.mu_u_Q, Q.mu_d_Q, Q.mu_s_Q,
-                            200.0, Q.mu_eG, Q.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            0.01, 0.3, Q.n_u_Q, Q.n_d_Q, Q.n_s_Q,  # densities
-                            0.01, max(n_C_Q, 1e-6), n_B_est  # n_eH, n_eG, n_B
-                        ])
-                else:
-                    # Beta equilibrium
-                    if fixed_chi:
-                        # Fixed-χ solver: 14 unknowns [μp, μn, μu, μd, μs, μeH, μeQ, μeG, np, nn, nu, nd, ns, nB]
-                        return np.array([
-                            mu_p_est, mu_n_est, Q.mu_u_Q, Q.mu_d_Q, Q.mu_s_Q,
-                            200.0, Q.mu_eG, Q.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            0.01, 0.3, Q.n_u_Q, Q.n_d_Q, Q.n_s_Q, n_B_est
-                        ])
-                    else:
-                        # Regular solver: 17 unknowns (includes n_eH, n_eQ, n_eG)
-                        return np.array([
-                            mu_p_est, mu_n_est, Q.mu_u_Q, Q.mu_d_Q, Q.mu_s_Q,
-                            200.0, Q.mu_eG, Q.mu_eG,  # μ_eH, μ_eQ, μ_eG
-                            0.01, 0.3, Q.n_u_Q, Q.n_d_Q, Q.n_s_Q,  # densities
-                            0.01, max(n_C_Q, 1e-6), max(n_C_Q, 1e-6), n_B_est  # n_eH, n_eQ, n_eG, n_B
-                        ])
-    except:
-        pass
+    # The hardcoded estimates below are the guess. An earlier version first
+    # solved each pure phase and seeded from it; that block was removed because
+    # it had not run since the solver signatures changed -- every one of its six
+    # calls was short a required argument, so it raised TypeError at the call
+    # site and a bare `except: pass` took these values instead. It also read
+    # fields (mu_p_H, n_p_H, mu_eG) that no pure-phase result has ever carried.
     
-    # Fallback to hardcoded values - scaled by B4
+    # Hardcoded values - scaled by B4
     # Lower B4 → lower chemical potentials at transition
     B4_scale = vmit_params.B4 / 180.0  # 0.917 for B4=165, 1.0 for B4=180
     

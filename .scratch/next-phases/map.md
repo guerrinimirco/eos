@@ -380,6 +380,32 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 110 — `zlvmit`'s pure-phase warm start is deleted, not repaired](issues/110-zlvmit-dead-warm-start-calls.md)**
+  (resolved 2026-08-29). The failure is **arity, not `par.m_p`**: all six calls
+  are short exactly one required positional argument, so `TypeError` fires at
+  the call site for every input and the block's first line never runs. Repair
+  was never a reorder — `mu_p_H`, `n_p_H`, `mu_u_Q` exist nowhere in the
+  package, and `mu_eG` is `eos/mixed`'s GLOBAL electron potential, which a
+  pure-phase solve has never carried, so that accessor was wrong before
+  ticket 90 touched anything; `eos/zlvmit` also builds no `SpeciesFlags`.
+  §1 keeps the module for its published results and **the published results
+  were produced by the hardcoded estimates**, so the 143-line block, its bare
+  `except: pass` and the six now-orphaned aliases are gone; the docstring that
+  described only the deleted block is corrected. **The gate was measured
+  bitwise, not asserted**: `case_zlvmit()` regenerated with and without the
+  edit on ONE interpreter is **540/540 keys identical, zero bit differences**,
+  which is interpreter-free proof where the `.npz` comparison is not —
+  `zlvmit.npz` (a py3.14 artifact) passes on py3.14 and fails on anaconda
+  3.9.7 **identically with the edit stashed**, the control run first.
+  `test_imports` + full baseline on py3.14: 235 passed. **The wider question
+  is answered by enumeration**: `eos/zlvmit` has four bare `except:` clauses
+  and exactly ONE hid a ticket-90 breakage — the deleted one. The other three
+  (`mixed_phase_eos.py:2939`, `plot_results.py:407,437`) are point-skip guards
+  round interpolator lookups, hide no broken call, and are reported rather
+  than narrowed under the map's only-what-the-ticket-asks rule. Same for
+  `vmit_default_guess`/`vmit_warm_start`, dead imports this ticket did not
+  create.
+
 - **[Ticket 91 — `leptons=False` by default, and the checks that hold the line](issues/91-leptons-default-and-drift-checks.md)**
   (resolved 2026-08-28). Last of the flags lane, run after
   [94](issues/94-zl-solver-flags.md), [95](issues/95-vmit-solver-flags.md) and
