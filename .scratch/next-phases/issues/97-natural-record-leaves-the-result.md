@@ -265,7 +265,12 @@ prose mentions carry no dot.
   bounds, the before/after fingerprint, the CLEAN or DISCARD verdict, the HEAD
   SHA and the interpreter with its numpy/scipy versions. **The full-suite pass
   goes through it, and this line is not satisfied until a CLEAN certificate
-  exists** — a path to cite rather than a session's word for it. The
+  exists** — and WHEN that can happen is now
+  [ticket 117](117-suite-gate-needs-a-landing-point.md), because a waiter
+  measured the real window at twenty-nine seconds and the condition, not the
+  implementation, is what is wrong. The guard reduces the chance of WASTING a
+  run; the certificate removes the chance of BELIEVING one; only the second is
+  a guarantee — a path to cite rather than a session's word for it. The
   interpreter field is not decoration: this machine has two stacks that
   disagree, six of thirteen models cross the rtol = 1e-10 gate between them,
   and a bare "N passed" naming no stack has already cost this map a session.
