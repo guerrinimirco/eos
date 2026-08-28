@@ -2,7 +2,7 @@
 # coordinates are why
 
 Type: grilling
-Status: open
+Status: resolved (2026-08-28)
 Blocked by: -   (93 is a sibling: this is the closure, 93 is the solver's verdict)
 Parent: ../map.md
 
@@ -144,3 +144,146 @@ closure alone, and it is now measured at DD2's own point rather than inferred.
   tests were 6x6 tests that read as 5x5 ones for exactly this reason. If the
   reparametrisation lands, decide whether the presence of a key should still
   choose a closure.
+
+
+## Resolution (2026-08-28)
+
+**Ruled by the user: DD2's inverse map drops the cross-constraint entirely.**
+Six isoscalar couplings free, the isovector pair fixed by E_sym and L_sym. Both
+of the ticket's analytic proposals were REFUTED by measurement before the
+ruling, and the ruling then made the first one moot.
+
+### The literature check changed the question
+
+The ticket asked for the constraint's stated motivation. It has one, and it is
+not DD2's:
+
+> Typel, *Phys. Rev. C* **71**, 064301 (2005), §IV: "In order to reduce the
+> number of free parameters it is required that the functions f_sigma and
+> f_omega obey the conditions f_sigma(1) = f_omega(1) = 1,
+> f'_sigma(0) = f'_omega(0) = 0, and **f''_sigma(1) = f''_omega(1)**."
+
+Parameter economy, stated. No physics gloss — so "sigma and omega run
+together" was not merely unsourced, it invented a motivation for a counting
+device. (`f'(0)` there is a typo for `f''(0)`; the DD table's own
+d_i = 1/sqrt(3 c_i) to 7 digits.) That paper counts **eight** independent
+parameters for DD. Typel et al., *Phys. Rev. C* **81**, 015803 (2010) — the
+DD2 paper — states only the first two conditions and counts **ten**. The
+difference of one is exactly this constraint, and the tables agree:
+
+    DD  (Typel 2005)   f''_sigma(1) - f''_omega(1) = -6.0e-08   imposed
+    DD2 (Typel 2010)   f''_sigma(1) - f''_omega(1) =  2.201e-03   not imposed
+
+**The 2.200718e-3 was never a fit imperfection. It is the constraint's
+absence.** `invert_nmp` had been closing DD2 with DD's condition.
+
+### Proposal 1 (reparametrise) — REFUTED, then moot
+
+The map (b_i, c_i) -> (f'_i(1), f''_i(1)) is **block-diagonal**, one 2x2 per
+meson, and principal angles between the sigma-shape and omega-shape planes in
+NMP space are invariant under exactly that class of map. Measured: **0.000 deg
+and 12.62 deg**. The zero is forced, and the reason is a rank statement the
+ticket did not have:
+
+    row sensitivities to the four shape columns (dQ/dlog p):
+      P       -1.729e+01   1.711e+01   1.482e+01  -1.508e+01
+      E_sat    0.000e+00  -1.137e-08   0.000e+00   0.000e+00
+      m*/m     0.000e+00  -5.551e-12   0.000e+00   0.000e+00
+      K_sat   -1.669e+02  -7.400e+01   5.820e+02  -3.692e+02
+      Q_sat    8.134e+03  -4.067e+03  -5.846e+03   5.084e+03
+
+**E_sat and m*/m are shape-blind** — at fixed n_sat they need only f_i(1) = 1.
+Four shape knobs answer to THREE rows; the shape block's singular values are
+[77.0, 7.16, 1.94, 1.8e-10], an exact rank deficiency of one. Two 2-planes in
+a 3-space always intersect. So the diagnosis is not "four columns are one
+direction" but **four knobs in a three-dimensional response**, and it is
+coordinate-invariant. Running the reparametrisation confirms it: cond
+2623 -> **3082 (worse)**, f'_s/f''_s at 0.995 against b_s/c_s 0.962, shape
+block still rank 3. With the cross row then removed by the ruling, the
+proposal's one surviving payoff — eliminating that row by substitution —
+had nothing left to eliminate.
+
+### Proposal 2 — the only remedy that works, and it is deferred
+
+    6x6 all six                          2623
+    5x5 drop Q_sat, pin c_omega (was)    1473
+    5x5 substituted (proposal 1)          698
+    4x4 no cross, pin b_om and c_om       354
+    5x5 pin c_omega, DROP CROSS, keep Q   259   <- best available
+
+259 x 1.5e-3 = **0.39 relative coupling error**. No conditioning on offer
+rescues an imposed Q_sat; proposal 1 buys 3.8x where ~1e9 is needed. Kill the
+floor and even the 6x6 at 2623 is fine. **The two proposals were never a
+package: 2 alone suffices, 1 cannot substitute for it in any amount.**
+Carried to [ticket 111](111-dd2-analytic-nmp-derivatives.md) under the user's
+Q4 ruling, "all the relations that can be written analytically should."
+
+### The closure that ships
+
+Q1's four bullets, answered by measurement:
+
+- **Option C (a sixth NMP) is refused.** Z_sat is the only isoscalar datum
+  left (m*/m is spent; the tower is E_sat, K_sat, Q_sat, Z_sat) and nobody
+  quotes it — imposing it converts one free coupling into one free NMP, the
+  same freedom behind an extra nonlinear map, which is worse for §6 inference.
+  Measured: cond **550340**, and the fourth difference spans **4.8e+04 on a
+  value of 4547**. Not a datum; noise with a name.
+- **Option A (5 rows, one pin): pin `c_omega`** — 259, against b_omega 354,
+  c_sigma 703, b_sigma 4191. Exposed, and documented as not trustworthy until
+  108 lands.
+- **Option B (4 rows, two pins): pin `b_sigma` and `c_omega`** — **128**, the
+  best number in the exercise, and every row h-exact (K_sat spans 5.2e-04 MeV
+  over h in [5e-5, 5e-4] against Q_sat's 2.48 MeV). **This is the new
+  default.**
+- **This refutes the ticket's own fallback ordering**, which said pin the whole
+  omega shape and let the sigma shape carry K_sat. Measured, (b_om, c_om) is
+  354 and (b_sig, c_sig) is 305 — both beaten by one pin per meson. What should
+  be left free is the least collinear surviving pair, and c_sigma against
+  b_omega at |cos| 0.974 is the least collinear pair in the matrix. (The
+  ticket's cosine table is otherwise reproduced to three digits; its c_om row
+  carried a transcription slip, b_om/c_om is 0.998 there too.)
+
+### What the change bought, beyond the ruling
+
+**The published DD2 couplings are now a root of their own inverse map.** All
+four default rows vanish at the published table, so `from_nmp(compute_nmp(par))`
+returns it to **1.1e-05** where the old closure reached a root 3.9% away. The
+predicted Q_sat goes from **117.5 to 168.5** against a forward-map 168.9.
+`test_roundtrip_recovers_couplings` — asserted, then withdrawn by ticket 93
+because the premise was false — is true again, and now for a reason.
+
+Q5 answered: **presence of a "Q_sat" key selects nothing.** `impose_Q_sat`
+defaults to a plain `False`; the None-routing sent the natural round trip into
+the noisier closure on the accident of a key being present.
+
+### Reported, not fixed
+
+`ISO_GATE = 2e-2` was set wide to clear the cross row's 2.2e-3 and Q_sat's
+stencil, and this ticket retired both reasons. On a 105-cell (K_sat, m*/m)
+grid with restarts on, the 101 passing cells split **95 below 1e-5 and 6 in
+[1e-3, 2e-2], with nothing in between** — six certified without being roots.
+Ticket 93 ruled the gate could not be tightened, and that ruling rested on the
+cross row making accurate solves land at 1.9e-3, a premise this ticket
+removed. Retuning moves `ok` for real targets, so it is 108's, not a
+side effect here. Stalls themselves survive the change and `_stalled` stays
+load-bearing: 12 of 18 misses on that grid at zero restarts are stalls.
+
+### Gate
+
+dd2 `run_full_check` **PASS**, golden SNM(0.16) `1.40e-05` and CompOSE
+HS(DD2) `2.83e-05` both UNMOVED; `test/dd2` 211 passed. No published number
+moved: `compute_nmp`, the DD2 table and `test/baseline/dd2.npz` are all
+forward-path and untouched — what moved is what the INVERSE map returns, which
+is the point. The ticket's own gate line ("same closure, different
+coordinates") no longer describes the outcome; the closure is what changed.
+
+Landed: `eos/dd2/nmp.py` (cross row removed from both closures, `PINNED_COEFF`
+-> `PINNED_DEFAULT`/`PINNED_WITH_Q_SAT`, `_f2_at1` deleted, `impose_Q_sat`
+default False), `eos/dd2/dd2.md`, `eos/dd2/dd2.tex`, `docs/eos.bib` (new
+`Typel2005`), `eos/dd2/verify/run_full_check.py`, `test/dd2/test_api.py`,
+`test/dd2/test_dd2_m8.py`, `docs/DEFERRED.md`, and **`CLAUDE.md` §5**, which
+stated the cross-constraint as specification and gained the general sentence:
+a closure condition belongs to the parametrization that imposed it, and is
+checked against the paper that fitted THAT set.
+
+Status: resolved (2026-08-28).

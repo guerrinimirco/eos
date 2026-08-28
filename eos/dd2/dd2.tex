@@ -659,37 +659,66 @@ E_{\mathrm{sym}}, L_{\mathrm{sym}}\}$. The isovector sector closes in two
 steps: $\Gamma_\rho(\nsat)$ analytically from Eq.~\eqref{eq:esym}, then
 $a_\rho$ from $L_{\mathrm{sym}}$ by a 1-D root. The isoscalar sector has six
 couplings $\{\Gamma_\sigma, b_\sigma, c_\sigma, \Gamma_\omega, b_\omega,
-c_\omega\}$ against four imposed values, and is closed by two structural
-conditions: the cross-constraint $f''_\sigma(1) = f''_\omega(1)$ (which the
-published table obeys to $2\times 10^{-3}$), and one shape coefficient pinned
-at its published value. Higher derivatives not imposed --- $Q_{\mathrm{sat}}$
-and $K_{\mathrm{sym}}$ --- are then \emph{predictions} of the inversion and
-are reported as such; imposing $Q_{\mathrm{sat}}$ instead of the pin remains
-available as an option (the closure used before this convention).
+c_\omega\}$ against four imposed values, and is closed by pinning two shape
+coefficients, $b_\sigma$ and $c_\omega$, at their published values. Two are
+needed rather than one because $E_{\mathrm{sat}}$ and $m^*/m$ at fixed
+$\nsat$ are blind to the shape coefficients --- they require only $f_i(1) = 1$
+--- so only $P$ and $K_{\mathrm{sat}}$ carry shape information and four
+coefficients answer to two rows. These two are the best of the six pairs by
+condition number ($128$, against $305$ for holding the $\sigma$ shape whole
+and $354$ for the $\omega$ shape), since what should remain free is the least
+collinear surviving pair. Higher derivatives not imposed ---
+$Q_{\mathrm{sat}}$ and $K_{\mathrm{sym}}$ --- are then \emph{predictions} of
+the inversion and are reported as such; imposing $Q_{\mathrm{sat}}$ in place
+of one pin remains available as an option, though the third finite difference
+behind it makes that closure unusable in practice (below).
+
+\paragraph{No cross-constraint, and why.} Earlier versions of this inverse
+map closed the isoscalar sector with $f''_\sigma(1) = f''_\omega(1)$. That
+condition belongs to the DD parametrization, not to DD2. Typel
+\cite{Typel2005} imposes $f_\sigma(1) = f_\omega(1) = 1$,
+$f''_\sigma(0) = f''_\omega(0) = 0$ and $f''_\sigma(1) = f''_\omega(1)$ on
+the rational functions, for the stated purpose of reducing the number of free
+parameters, and counts \emph{eight} independent parameters for DD; Typel
+\emph{et al.} \cite{Typel2010}, the DD2 paper, states only the first two
+conditions and counts \emph{ten}. The difference of one is exactly this
+constraint, and the published tables say the same:
+$f''_\sigma(1) - f''_\omega(1)$ is $-6.0\times 10^{-8}$ for DD and
+$2.200718\times 10^{-3}$ for DD2. It bound the inverse map only ---
+\texttt{Parameters.\_\_post\_init\_\_} validates $f_i(1) = 1$ and
+$d_i = 1/\sqrt{3 c_i}$ and never checked it, so no forward path saw it --- and
+it is now absent from the inverse map as well.
 
 Two numerical caveats are part of the specification. First,
-$Q_{\mathrm{sat}}$ is a third finite difference of a solved quantity; the
-$h = 10^{-4}$ stencil carries $\sim 0.1$~MeV of noise, the forward and
-inverse maps use the identical stencil so the bias cancels on a round trip,
-and the acceptance gate on the isoscalar residual is set by that noise, not
-by physics. Second, the isoscalar residual surface has spurious basins;
+$Q_{\mathrm{sat}}$ and $K_{\mathrm{sym}}$, the two quantities the inversion
+predicts rather than imposes, are finite differences of a solved quantity;
+the forward and inverse maps use the identical $h = 10^{-4}$ stencil so the
+bias cancels exactly on a round trip, and any change to $h$ must be made in
+both places together. Second, the isoscalar residual surface has spurious basins;
 whether a target inverts can depend on the seed, so the solver retries from
 jittered seeds (deterministically) before declaring a target unrepresentable,
 and no feasibility boundary may be inferred from a scan run without restarts.
 
-Third, the published couplings are not a root of this closure. The fitted
-table obeys the cross-constraint only to $2.200718\times 10^{-3}$, so it is a
-stationary point of the residual norm rather than a zero of it and no seed
-recovers it; the $5\times 5$ closure reaches a root $3.9\%$ away that
-reproduces the same six imposed values. \texttt{InversionStatus} therefore
-reports \texttt{coupling\_shift}, the maximum relative distance from the
-seed, because \emph{converged} and \emph{recovered the published couplings}
-are different statements. It also decides the verdict: a Powell hybrid can
-give up on its first step and return its starting point bit for bit, and such
-a solve is reported as not converged. The residual alone cannot make that
-call --- a stalled solve was measured at $2.201\times 10^{-3}$ and a moved,
-accurate one at $1.944\times 10^{-3}$, so the two overlap and no threshold on
-the residual separates them.
+Third, the published couplings \emph{are} a root of this closure, which
+they were not while the cross-constraint was imposed: all four rows vanish at
+the published table, and a round trip through the forward map returns it to
+$1.1\times 10^{-5}$. \texttt{InversionStatus} nonetheless reports
+\texttt{coupling\_shift}, the maximum relative distance from the seed,
+because \emph{converged} and \emph{recovered the published couplings} remain
+different statements away from DD2's own point. It also decides the verdict: a
+Powell hybrid can give up on its first step and return its starting point bit
+for bit, and such a solve is reported as not converged. The residual alone
+cannot make that call, since a stall reports whatever residual its seed
+carries.
+
+Fourth, $Q_{\mathrm{sat}}$ cannot be imposed while it is a third difference.
+That closure conditions at $259$ and the $Q_{\mathrm{sat}}$ row carries a
+relative floor near $1.5\times 10^{-3}$ --- the value spans $2.48$~MeV over
+$h \in [5\times 10^{-5}, 5\times 10^{-4}]$, against $5.2\times 10^{-4}$~MeV
+for $K_{\mathrm{sat}}$ --- so a solve inherits $O(0.4)$ of relative coupling
+error. No choice of pin rescues it: $259$ is the best of the four. This is why
+the shipped closure stops at $K_{\mathrm{sat}}$, and why imposing
+$Q_{\mathrm{sat}}$ waits on an analytic third derivative.
 
 \section{Numerical implementation}
 \label{sec:numerics}

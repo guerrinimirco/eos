@@ -443,10 +443,20 @@ are two directions of one map and share the NMP list, its ordering and the
 residual. The inversion imposes
 {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}: E_sym and L_sym close the
 isovector sector; the isoscalar sector is closed by the model's structural
-conditions (for DD2, the cross-constraint f''_sigma(1) = f''_omega(1) plus
-one shape coefficient pinned at its published value). Higher derivatives not
-imposed (Q_sat, K_sym) are *reported as predictions*, with imposing Q_sat
-available as an option.
+conditions (for DD2, two shape coefficients — b_sigma and c_omega — pinned at
+their published values, because E_sat and m*/m at fixed n_sat are blind to
+the shape and only P and K_sat constrain it, so four shape coefficients
+answer to two rows). Higher derivatives not imposed (Q_sat, K_sym) are
+*reported as predictions*, with imposing Q_sat available as an option.
+
+**A closure condition belongs to the parametrization that imposed it.** DD2's
+inverse map used to carry the cross-constraint f''_sigma(1) = f''_omega(1);
+that condition is the DD parametrization's, and DD2's own fit dropped it —
+Typel, PRC 71, 064301 (2005) §IV imposes it and counts eight independent
+parameters, while Typel et al., PRC 81, 015803 (2010) states only
+f_i(1) = 1 and f_i''(0) = 0 and counts ten. Before a structural
+condition is written into an inverse map, it is checked against the paper
+that fitted THAT parameter set, not against the model family.
 
 ## 6. What the library is for
 

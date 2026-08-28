@@ -298,25 +298,47 @@ same way.
 
 **NMPs.** Forward map at the model's own saturation: E_sat, m*/m, K_sat,
 Q_sat, E_sym, L_sym (and K_sym). Inverse map imposes
-{n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}; the isoscalar sector closes with
-the cross-constraint `f_sigma''(1) = f_omega''(1)` plus one shape coefficient
-pinned at its published value, and Q_sat / K_sym come back as predictions
-(imposing Q_sat instead remains an option). Q_sat rides on a third finite
-difference — forward and inverse use the identical stencil so the bias
+{n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}; the isoscalar sector closes by
+pinning TWO shape coefficients, `b_sigma` and `c_omega`, at their published
+values, and Q_sat / K_sym come back as predictions. Q_sat rides on a third
+finite difference — forward and inverse use the identical stencil so the bias
 cancels on round trips — and the inverter retries from jittered seeds before
 declaring a target unrepresentable.
 
-The published couplings are NOT a root of that closure: the fitted table obeys
-the cross-constraint to 2.200718e-3 rather than exactly, so it is a stationary
-point of the residual norm and no seed recovers it. The 5x5 reaches a root
-3.9% away that reproduces the same six imposed nuclear-matter parameters, and
-`InversionStatus` reports `coupling_shift` — the max relative distance from the
-seed — because "converged" and "recovered the published couplings" are
-different statements. A solve that returns its seed unmoved on a nonzero
-residual is a Powell hybrid giving up on its first step, not an answer, and
-comes back `ok=False`; the residual alone cannot make that call, since a
-stalled solve and a moved, accurate one were measured at 2.201e-3 and 1.944e-3
-respectively.
+**There is no cross-constraint, and this is a correction.** Earlier versions
+closed the sector with `f_sigma''(1) = f_omega''(1)`. That condition is the DD
+parametrization's, not DD2's: Typel, *Phys. Rev. C* **71**, 064301 (2005),
+Sec. IV imposes it alongside `f_i(1) = 1` and `f_i''(0) = 0` and counts eight
+independent parameters, while Typel *et al.*, *Phys. Rev. C* **81**, 015803
+(2010) — the DD2 paper — states only the latter two and counts ten. The
+difference of one is exactly this constraint, and the published tables agree:
+`f_sigma''(1) - f_omega''(1)` is -6.0e-08 for DD and 2.200718e-03 for DD2. The
+constraint bound the INVERSE MAP ONLY — `Parameters.__post_init__` validates
+`f_i(1) = 1` and `d_i = 1/sqrt(3 c_i)` and never checked it, so no forward
+path ever saw it — and it is now gone from the inverse map too.
+
+Two coefficients are pinned rather than one because E_sat and m*/m at fixed
+n_sat are blind to the shape: only P and K_sat carry shape information among
+the four rows, so four shape coefficients answer to two rows. `b_sigma` and
+`c_omega` is the best of the six pairs by condition number (128, against 305
+for holding the sigma shape whole and 354 for the omega shape), because what
+should be left free is the least collinear surviving pair.
+
+With the constraint removed the published couplings ARE a root of the closure:
+all four rows vanish at the published table and a round trip through
+`compute_nmp` returns it to 1.1e-05, where the old closure reached a root 3.9%
+away. `InversionStatus` still reports `coupling_shift` — the max relative
+distance from the seed — because "converged" and "recovered the published
+couplings" remain different statements away from DD2's own point. A solve that
+returns its seed unmoved on a nonzero residual is a Powell hybrid giving up on
+its first step, not an answer, and comes back `ok=False`.
+
+Imposing Q_sat instead of one pin is available but is **not a usable closure
+today**: the five-row system conditions at 259 and Q_sat is a third finite
+difference spanning 2.48 MeV over h in [5e-5, 5e-4], so the recovered
+couplings inherit 259 x 1.5e-3 of relative error. K_sat, a second difference,
+spans 5.2e-04 MeV over the same range, which is why the default closure stops
+there. Imposing Q_sat becomes legitimate when the derivative is analytic.
 
 **What `eos_response` returns.** A second derivative is only defined once one
 says what is held fixed, so the conditioning is an explicit argument. Two

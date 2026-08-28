@@ -1081,42 +1081,50 @@ decision that cannot be made before the tables exist.
 ## Per model
 
 ### dd2
-- `nmp.invert_nmp(impose_Q_sat=True)` — the 6x6 isoscalar closure — converges
-  but does not IMPOSE what it names. Ticket 93 removed the half of this entry
-  that was a solver defect; what remains is the closure itself, and it is
-  ticket 105's.
+- `nmp.invert_nmp(impose_Q_sat=True)` — the Q_sat-imposing isoscalar closure —
+  converges but does not IMPOSE what it names. Ticket 93 removed the half of
+  this entry that was a solver defect; ticket 105 (2026-08-28) measured the
+  cause and named the remedy, and what is deferred is now that remedy alone.
 
-  Fixed by ticket 93 (2026-08-28), so no longer deferred: `root(method="hybr")`
-  could return its seed bit for bit and be certified, because the stall carries
-  the published couplings' own 2.201e-03 cross-row violation and ISO_GATE = 2e-2
-  admits it. That reached the 5x5 default closure, where it was the more serious
-  half. The gate could not be tightened to catch it — a moved and ACCURATE 5x5
-  solve was measured at 1.944e-03, K_sat recovered to 0.01 MeV, so stalled and
-  converged residuals overlap and no threshold on the residual alone separates
-  them. `InversionStatus.coupling_shift` separates them instead, and the same
-  condition now drives the restart loop, which the stall used to suppress by
-  keeping the residual under the gate. The 5x5 at DD2's own nuclear-matter
-  parameters no longer depends on the target's last bits: seven perturbations
-  over eps in [0, 1e-8] all converge to 2e-10 .. 9e-08, all at coupling_shift
-  3.9%, all recovering K_sat to 1e-4 MeV.
+  **The cause, measured.** Q_sat is a third finite difference of a solved
+  quantity: it spans 2.48 MeV over h in [5e-5, 5e-4], a relative floor near
+  1.5e-03. The five-row closure that imposes it conditions at 259 at the
+  published DD2 point, so a solve inherits 259 x 1.5e-03 = 0.39 of relative
+  coupling error. No choice of pinned coefficient rescues that — 259 is the
+  best of the four (c_omega 259, b_omega 354, c_sigma 703, b_sigma 4191) — and
+  no reparametrisation does either, since the collinearity is a rank statement
+  rather than a coordinate one: E_sat and m*/m at fixed n_sat are blind to the
+  shape coefficients, so four shape knobs answer to three rows and the shape
+  block has an exact rank deficiency of one.
 
-  What is still deferred, and is the closure rather than the solver: the 6x6 at
-  DD2's own NMPs now reaches max|residual| = 1.408e-02 — under ISO_GATE by a
-  factor 1.4, so `ok=True` — while imposing Q_sat only to 1.585 MeV and K_sat
-  to 1.9e-03. It saturates there: 64 and 128 restarts find nothing better. So
-  the 6x6's `ok` is a statement about the residual and not about Q_sat, and
-  ISO_GATE = 2e-2 is the wrong instrument for a closure whose Q_sat row carries
-  the stencil floor. The cause is measured in ticket 105: the four shape
-  coefficients are collinear at |cos| >= 0.96 and Q_sat's 1.5e-03 stencil floor
-  is amplified 515x into the couplings. What is NOT available as a workaround is
-  dropping Q_sat: the 5x5 keeps the system square by PINNING c_omega, so it has
-  less freedom than the 6x6, not more, and at a hard target (K_sat = 220 with
-  L_sym = 30) it fails where the 6x6 succeeds.
+  **The remedy, and it is the whole of what remains deferred.** Take the
+  derivative analytically instead of by stencil. K_sat, a second difference,
+  spans only 5.2e-04 MeV over the same h range, so the default closure is
+  unaffected and does not wait on this. With the floor gone the amplification
+  is harmless at any of the four pins, and imposing Q_sat becomes legitimate.
+  Forward and inverse must go analytic TOGETHER — the finite-difference bias
+  currently cancels on a round trip only because both difference identically.
 
-  What depends on it today: nothing in the library — every shipped path uses the
-  5x5 default at targets near DD2's own. Two tests route to the 6x6 by passing a
-  whole `compute_nmp` dict, whose Q_sat key selects that closure; ticket 93 moved
-  both onto the six imposed keys, where the 5x5 is idempotent to 3.8e-08.
+  **Retired by ticket 105, no longer part of this entry.** The old text
+  blamed a cross-constraint f_sigma''(1) = f_omega''(1) that the DD2 table
+  obeys only to 2.200718e-03. That constraint is DD's, not DD2's (Typel, PRC
+  71, 064301 (2005) Sec. IV imposes it and counts eight parameters; Typel et
+  al., PRC 81, 015803 (2010) states only f_i(1) = 1 and f_i''(0) = 0 and
+  counts ten), and it has been removed from the inverse map. With it gone the
+  published couplings are a root of the default closure and the round trip
+  recovers them to 1.1e-05.
+
+  **A defect this surfaced and did not fix**, for the ticket that measures it:
+  ISO_GATE = 2e-2 was set wide to clear the cross row's 2.2e-03 and Q_sat's
+  stencil, and neither reason survives in the default closure. On a 105-cell
+  (K_sat, m*/m) grid with restarts on, the 101 passing cells split 95 below
+  1e-5 and 6 in [1e-3, 2e-2] with nothing in between, so six are certified
+  without being roots. Choosing the tighter value moves `ok` for real targets
+  and needs a scan on more than two axes.
+
+  What depends on it today: nothing in the library — every shipped path uses
+  the default closure, and a "Q_sat" key in the target dict no longer selects
+  anything.
 - `table.hadronic_row` emits a Y_C and Y_S that are BARYONS ONLY, while the
   `EoSPoint` it flattens carries the totals. It recomputes them itself:
 

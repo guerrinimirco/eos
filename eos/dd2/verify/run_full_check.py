@@ -256,13 +256,16 @@ def _check_restarts_extend_the_basin(par):
     the single seed fails outright.
 
     A count over a grid, deliberately, rather than a verdict at one cell: a
-    single 6x6 cell's verdict is decided in its target's last bits (ticket 67
-    measured eight targets at three perturbations each, none holding across its
-    own three), while the count is stable. Measured on python.org 3.14.2 /
-    numpy 2.3.5 / scipy 1.17.0: 0/9 at zero restarts, 4/9 at 32. The module
-    docstring records the same property on a 187-cell grid (7/68/115 at
-    0/32/64), which is where the number to quote lives; nine cells is what is
-    affordable to re-run.
+    single cell's verdict in the Q_sat-imposing closure is decided in its
+    target's last bits (ticket 67 measured eight targets at three
+    perturbations each, none holding across its own three), while the count is
+    stable. Measured on python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0: 0/9 at
+    zero restarts, 4/9 at 32, unchanged by the retirement of the cross row.
+
+    The Q_sat-imposing closure rather than the shipped default, because it is
+    the harder residual surface and so the one where the restarts have
+    something to find; the default shows the same property more mildly (14 of
+    18 misses recovered on the 105-cell grid in the `nmp` module docstring).
 
     Here rather than in `test/dd2/` because it is a property of the inverse
     map's basin structure measured over a grid, the same class as the forward

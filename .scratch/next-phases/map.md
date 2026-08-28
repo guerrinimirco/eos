@@ -2742,6 +2742,58 @@ against this file, not against the earlier `pytest_before*.txt`.
   `vmit.npz` — an exit code on a truncated pytest log is not a pass, only the
   summary line is.
 
+- [DD2's isoscalar closure carried DD's constraint, not DD2's](issues/105-dd2-isoscalar-conditioning.md)
+  (2026-08-28): **the ticket's two analytic proposals were both refuted by
+  measurement, and the literature check moved the ground under the question.**
+  Typel, PRC 71, 064301 (2005) §IV imposes f''_sigma(1) = f''_omega(1) on the
+  rational couplings *"in order to reduce the number of free parameters"* —
+  parameter economy, stated, so the "sigma and omega run together" gloss
+  invented a motivation — and counts **eight** parameters for DD; Typel et al.,
+  PRC 81, 015803 (2010) states only f_i(1) = 1 and f_i''(0) = 0 and counts
+  **ten**. The difference of one IS the constraint, and the tables agree:
+  f''_sigma(1) − f''_omega(1) is **−6.0e-08 for DD and 2.201e-03 for DD2**. The
+  2.200718e-3 this map has quoted for months was never a fit imperfection, it
+  was the constraint's absence, and `invert_nmp` had been closing DD2 with DD's
+  condition. **The user ruled it out entirely** (2026-08-28): six isoscalar
+  couplings free, isovector fixed by E_sym and L_sym.
+  **Proposal 1 is refuted and the refutation is invariant**: the
+  reparametrisation is block-diagonal, and principal angles between the
+  sigma-shape and omega-shape planes (0.000° and 12.62°) cannot be changed by
+  that class of map. The zero is forced because **E_sat and m*/m are
+  shape-BLIND** at fixed n_sat — four shape knobs answer to three rows, shape
+  singular values [77.0, 7.16, 1.94, **1.8e-10**], an exact rank deficiency of
+  one. So the diagnosis is four knobs in a three-dimensional response, not
+  "four columns are one direction"; running the reparametrisation moves cond
+  2623 → **3082, worse**. **Proposal 2 is the only remedy and it is deferred**:
+  the best closure that imposes Q_sat conditions at 259 and 259 × 1.5e-3 = 0.39
+  relative coupling error, so no conditioning rescues a stencil Q_sat and
+  proposal 1 buys 3.8× where 1e9 is needed →
+  [ticket 111](issues/111-dd2-analytic-nmp-derivatives.md), on the user's Q4
+  ruling that all relations writable analytically should be.
+  **The shipped closure is now four rows with `b_sigma` and `c_omega` pinned**
+  (cond **128**), which **refutes this ticket's own fallback ordering**: one pin
+  per meson beats holding the omega shape whole (354) or the sigma shape whole
+  (305), because what should stay free is the least collinear surviving pair.
+  A sixth NMP is refused — Z_sat is the only candidate, nobody quotes it, its
+  fourth difference spans **4.8e+04 on a value of 4547**, and the closure
+  conditions at **550340**. The payoff beyond the ruling: **the published DD2
+  couplings are a root of their own inverse map again** — the round trip
+  returns them to **1.1e-05** where the old closure landed 3.9% away, and the
+  predicted Q_sat goes **117.5 → 168.5** against a forward 168.9, so ticket 93's
+  withdrawn `test_roundtrip_recovers_couplings` is true again and for a reason.
+  A `Q_sat` key now selects nothing (`impose_Q_sat` defaults to a plain False).
+  **Reported not fixed, and handed to 111**: ISO_GATE = 2e-2 was widened for
+  the cross row and for Q_sat's stencil and both reasons are retired — on a
+  105-cell (K_sat, m*/m) grid the 101 passing cells split 95 below 1e-5 and 6
+  in [1e-3, 2e-2] with nothing between, so six are certified without being
+  roots; 93's "cannot be tightened" rested on the premise this ticket removed.
+  **`CLAUDE.md` §5 stated the cross-constraint as specification** and was
+  corrected, gaining the general sentence: a closure condition belongs to the
+  parametrization that imposed it, checked against the paper that fitted THAT
+  set. Gate: dd2 `run_full_check` PASS, golden SNM(0.16) 1.40e-05 and CompOSE
+  HS(DD2) 2.83e-05 unmoved, `test/dd2` 211 passed; no published number moved
+  (every forward path is untouched — what moved is what the INVERSE returns).
+
 ## Not yet specified
 
 Two patches graduated on 2026-08-27 out of
