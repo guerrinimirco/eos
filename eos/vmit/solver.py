@@ -360,7 +360,7 @@ def solve_beta_eq_neutrinoless(
 # =============================================================================
 def solve_fixed_yc(
     par: Parameters, n_B: float, Y_C: float, T: float, flags: SpeciesFlags,
-    leptons: bool = True,
+    leptons: bool = False,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
@@ -519,7 +519,7 @@ def solve_fixed_yc(
 def solve_fixed_yc_ys(
     par: Parameters, n_B: float, Y_C: float, Y_S: float, T: float,
     flags: SpeciesFlags,
-    leptons: bool = True,
+    leptons: bool = False,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """

@@ -59,7 +59,7 @@ class TableSpec:
     T: float = 0.0
     SnB: float = None
     x0: list = None
-    leptons: bool = True
+    leptons: bool = None
     species: SpeciesFlags = None
     fractions: dict = field(default_factory=dict)
 

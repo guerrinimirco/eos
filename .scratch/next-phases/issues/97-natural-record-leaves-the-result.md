@@ -98,3 +98,30 @@ calls `test/baseline/` ground truth. It is the price of the §5 fix and the
 ticket takes it deliberately — but whether the internal records deserve a
 baseline of their own, frozen through the internal path, is a question this
 ticket raises and does not answer.
+
+---
+
+## Note from [ticket 91](91-leptons-default-and-drift-checks.md) (2026-08-28)
+
+**This defect is now pinned by a test, and the pin is `strict`.** Ticket 91's
+third check — the fm-based units band, parametrised over all ten models —
+walks every float on `eos_point`'s result and asserts the energy and density
+families sit in their fm bands. It finds exactly this ticket's three, and
+exactly on the records this ticket removes:
+
+    eos.njl.state.n_q        2.305052e+07     (fm^-3 band is |x| <= 1e3)
+    eos.ccdm.state.n_q       2.305052e+07
+    eos.enjl.point.n_s.s    -1.590857e+07
+
+so the check reproduces ticket 81's finding from the outside, without knowing
+which field to look at. The three are carried as
+`pytest.mark.xfail(strict=True)` with this ticket's number as the reason.
+
+**`strict=True` is the part that matters here.** A strict xfail FAILS when it
+starts passing, so the day work item 1 lands — `.state` -> `_state`,
+`BetaPoint.point` -> `_point` — `test/test_imports.py` goes red until the
+three entries are deleted from `NATURAL_UNIT_RECORD`. The exemption cannot
+outlive the defect, which is what an ordinary skip would have allowed.
+
+Ticket 91's own gate did not include fixing this; the check was written to
+detect and it does.

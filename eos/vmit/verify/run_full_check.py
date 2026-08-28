@@ -99,10 +99,12 @@ def _states(par, grid, T):
     out = []
     for n_B in grid:
         out.append(("beta", solve_beta_eq_neutrinoless(par, n_B, T, GAMMA)))
-        out.append(("yc", solve_fixed_yc(par, n_B, 0.3, T, GAMMA)))
+        out.append(("yc", solve_fixed_yc(par, n_B, 0.3, T, GAMMA,
+                                         leptons=True)))
         out.append(("yc_nolep", solve_fixed_yc(par, n_B, 0.3, T, GAMMA,
                                                leptons=False)))
-        out.append(("ycys", solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T, GAMMA)))
+        out.append(("ycys", solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T, GAMMA,
+                                              leptons=True)))
         out.append(("trapped", solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T,
                                                               GAMMA)))
     return out
@@ -173,13 +175,13 @@ def _check_mode_closures(par, grid, T):
                     abs(mu_S) / mu_scale,              # strangeness equilibrium
                     abs(n_C - r.n_e) / n_B)            # electric neutrality
 
-        r = solve_fixed_yc(par, n_B, 0.3, T, GAMMA)
+        r = solve_fixed_yc(par, n_B, 0.3, T, GAMMA, leptons=True)
         _, n_C, _ = quark_charges(r.n_u, r.n_d, r.n_s)
         _, _, mu_S = charge_potentials_from_quarks(r.mu_u, r.mu_d, r.mu_s)
         worst = max(worst, abs(n_C - 0.3 * n_B) / n_B,
                     abs(mu_S) / abs(r.mu_B), abs(n_C - r.n_e) / n_B)
 
-        r = solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T, GAMMA)
+        r = solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T, GAMMA, leptons=True)
         _, n_C, n_S = quark_charges(r.n_u, r.n_d, r.n_s)
         worst = max(worst, abs(n_C - 0.0) / n_B, abs(n_S - 1.0 * n_B) / n_B)
 

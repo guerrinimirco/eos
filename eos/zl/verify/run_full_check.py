@@ -98,7 +98,8 @@ def _states(par, grid, T):
     out = []
     for n_B in grid:
         out.append(("beta", solve_beta_eq_neutrinoless(par, n_B, GAMMA, T)))
-        out.append(("yc", solve_fixed_yc(par, n_B, 0.3, GAMMA, T)))
+        out.append(("yc", solve_fixed_yc(par, n_B, 0.3, GAMMA, T,
+                                         leptons=True)))
         out.append(("yc_nolep", solve_fixed_yc(par, n_B, 0.3, GAMMA, T,
                                                leptons=False)))
         out.append(("trapped",
@@ -176,7 +177,7 @@ def _check_mode_closures(par, grid, T):
                     abs(r.n_p - r.n_e) / n_B,          # electric neutrality
                     abs(r.n_p + r.n_n - n_B) / n_B)    # baryon number
 
-        r = solve_fixed_yc(par, n_B, 0.3, GAMMA, T)
+        r = solve_fixed_yc(par, n_B, 0.3, GAMMA, T, leptons=True)
         worst = max(worst, abs(r.n_p - 0.3 * n_B) / n_B,
                     abs(r.n_p - r.n_e) / n_B)
 

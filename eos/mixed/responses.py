@@ -90,7 +90,7 @@ def _lepton_block(n_C, muons, T):
     return e_blk.P + mu_blk.P, e_blk.e + mu_blk.e
 
 
-def _frozen_mixture(pair, result, scale, muons, leptons=True):
+def _frozen_mixture(pair, result, scale, muons, leptons=False):
     """(P, eps) of the mixture compressed by `scale` at frozen composition.
 
     Both phases are rescaled by the same factor at fixed chi; see the module
@@ -123,7 +123,7 @@ def _frozen_mixture(pair, result, scale, muons, leptons=True):
     return P_tot, eps_tot
 
 
-def sound_speed_frozen(phases, result, rel_dn=1e-3, leptons=True,
+def sound_speed_frozen(phases, result, rel_dn=1e-3, leptons=False,
                        species=None):
     """Frozen-composition c_ad^2 = dP/deps at the state `result`.
 
@@ -170,7 +170,7 @@ def _clipped(result, chi):
     return replace(result, chi=chi)
 
 
-def sound_speed_frozen_pure(phase, th, T=0.0, rel_dn=1e-3, leptons=True,
+def sound_speed_frozen_pure(phase, th, T=0.0, rel_dn=1e-3, leptons=False,
                             muons=True, mu_slot=None):
     """Frozen c_ad^2 of ONE phase on its own, at the block `th`.
 
@@ -217,7 +217,7 @@ def sound_speed_frozen_pure(phase, th, T=0.0, rel_dn=1e-3, leptons=True,
     return (P_hi - P_lo) / (e_hi - e_lo)
 
 
-def frozen_along(phases, results, rel_dn=1e-3, leptons=True,
+def frozen_along(phases, results, rel_dn=1e-3, leptons=False,
                  species=None):
     """`sound_speed_frozen` at every state in a sequence, as an array.
 

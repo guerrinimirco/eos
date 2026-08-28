@@ -58,14 +58,14 @@ MODE_FRACTIONS = {
 }
 
 
-def make_charge_spec(mode, fracs, leptons=True):
+def make_charge_spec(mode, fracs, leptons=None):
     """`ChargeSpec` for a named mode and its fraction values.
 
     What `leptons` means on a beta-equilibrium mode is
     `eos.general.modes.resolve_leptons`'s: constitutive, so True is redundant
     and ignored and False raises.
     """
-    leptons = resolve_leptons(mode, leptons, default=True)
+    leptons = resolve_leptons(mode, leptons, default=False)
     if mode == "beta_eq_neutrinoless":
         return beta_eq_neutrinoless()
     if mode == "beta_eq_neutrino_trapped":
@@ -211,7 +211,7 @@ class TableSpec:
     axes: dict
     eta: float = 0.0
     fixed: dict = field(default_factory=dict)
-    leptons: bool = True
+    leptons: bool = None
     window_only: bool = True
     analytic_jac: bool = False
     refine: str = "exact"

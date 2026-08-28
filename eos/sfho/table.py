@@ -426,8 +426,10 @@ class TableSettings:
     Y_L_values: Union[float, List[float], None] = None
 
     # Options
+    # The sector switches FOLLOW the flags object (`SpeciesFlags`), which
+    # defaults every one of them off (CLAUDE.md section 4).
     include_muons: bool = False
-    include_photons: bool = True
+    include_photons: bool = False
     include_electrons: bool = False      # For fixed_yc modes: add electrons for charge neutrality
     include_thermal_neutrinos: bool = False  # Add thermal neutrinos with μ_ν=0
     include_pseudoscalar_mesons: bool = False

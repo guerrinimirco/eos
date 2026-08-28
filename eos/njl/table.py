@@ -46,7 +46,7 @@ from eos.njl.species import SpeciesFlags
 MAX_BISECT = 6
 
 
-def solve_at(par, mode, n_B, conditions, flags, leptons=True, x0=None):
+def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None):
     """One point of a table: the mode's solve at this density and line.
 
     `conditions` carries the line's temperature (`T`) or entropy per baryon
@@ -116,7 +116,7 @@ class TableSpec:
     axes: dict = field(default_factory=dict)
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)
-    leptons: bool = True
+    leptons: bool = None
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -132,7 +132,7 @@ class TableSpec:
             if key not in supplied:
                 raise ValueError(f"mode {self.mode!r} needs {key!r}, as an "
                                  f"axis or in fixed")
-        self.leptons = resolve_leptons(self.mode, self.leptons, default=True)
+        self.leptons = resolve_leptons(self.mode, self.leptons, default=False)
 
 
 @dataclass

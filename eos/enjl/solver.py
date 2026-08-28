@@ -48,7 +48,8 @@ from eos.enjl.thermodynamics import (
 )
 from eos.general.modes import (
     ModeSpec, beta_eq_neutrino_trapped, beta_eq_neutrinoless, electron_potential,
-    fixed_YC, fixed_YC_YS, has_leptons, muon_potential, strangeness_potential,
+    fixed_YC, fixed_YC_YS, has_leptons, muon_potential, resolve_leptons,
+    strangeness_potential,
 )
 from eos.general.physics_constants import hc3
 from eos.general.solve import RESIDUAL_TOL, scaled_residual_max
@@ -97,7 +98,7 @@ def check_temperature(T):
             f"temperature must be non-negative; got T = {T} MeV")
 
 
-def mode_spec(mode, leptons=True, **fractions):
+def mode_spec(mode, leptons=None, **fractions):
     """The `ModeSpec` for a named mode and its fractions.
 
     The names and the fractions are CLAUDE.md section 3's, and the factories
@@ -110,13 +111,12 @@ def mode_spec(mode, leptons=True, **fractions):
     if given != expected:
         raise ValueError(f"mode {mode!r} takes fractions {sorted(expected)}; "
                          f"got {sorted(given)}")
+    # What the flag means on a beta-equilibrium mode -- True redundant and
+    # ignored, False refused, None the model's own default -- is
+    # `eos.general.modes.resolve_leptons`'s, declared once and read here
+    # rather than re-implemented (CLAUDE.md section 7).
+    leptons = resolve_leptons(mode, leptons, default=False)
     if mode.startswith("beta_eq"):
-        if not leptons:
-            raise ValueError(
-                "leptons=False has no meaning in beta equilibrium, which is "
-                "defined by the leptons; it applies to fixed_YC and "
-                "fixed_YC_YS, where it is the charged pure phase a "
-                "mixed-phase construction needs")
         return MODE_FACTORIES[mode](**fractions)
     return MODE_FACTORIES[mode](leptons=leptons, **fractions)
 
@@ -520,7 +520,7 @@ class BetaPoint:
         return self.point.EperB
 
 
-def solve(par, mode, n_B, x0=None, cold_start=True, leptons=True,
+def solve(par, mode, n_B, x0=None, cold_start=True, leptons=None,
           T=0.0, species=None, **fractions):
     """One equilibrium solve at n_B [fm^-3], for any of the four modes.
 
@@ -717,7 +717,7 @@ def solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, x0=None,
 
 
 def solve_fixed_yc(par, n_B, Y_C, x0=None, cold_start=True,
-                   leptons=True):
+                   leptons=False):
     """Fixed non-leptonic charge fraction, n_C = Y_C n_B. Strangeness still
     self-equilibrates, mu_S = 0."""
     return solve(par, "fixed_YC", n_B, x0=x0, cold_start=cold_start,
@@ -725,7 +725,7 @@ def solve_fixed_yc(par, n_B, Y_C, x0=None, cold_start=True,
 
 
 def solve_fixed_yc_ys(par, n_B, Y_C, Y_S, x0=None, cold_start=True,
-                      leptons=True):
+                      leptons=False):
     """Fixed charge and strangeness. Y_C = 0.5, Y_S = 0 is symmetric nuclear
     matter; mu_S becomes an unknown, determined by the strangeness demanded."""
     return solve(par, "fixed_YC_YS", n_B, x0=x0, cold_start=cold_start,

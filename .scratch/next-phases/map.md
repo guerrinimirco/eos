@@ -380,6 +380,44 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 91 — `leptons=False` by default, and the checks that hold the line](issues/91-leptons-default-and-drift-checks.md)**
+  (resolved 2026-08-28). Last of the flags lane, run after
+  [94](issues/94-zl-solver-flags.md), [95](issues/95-vmit-solver-flags.md) and
+  [96](issues/96-alphabag-solver-flags.md) so its three checks assert what
+  those built. **The flip is spelled `None`, not `False`, on every
+  mode-generic surface**: `resolve_leptons` RAISES on an explicit
+  `leptons=False` in a beta mode (§3), so `False` as a signature default
+  breaks every beta call — which is why the five models that defaulted it on
+  had spelled it `True`. `None` ("the caller did not name it") on the entry
+  points, `TableSpec` fields, `mode_spec` and the `solve_at` dispatchers;
+  `False` on `solve_fixed_yc`/`solve_fixed_yc_ys` and
+  `general.modes.fixed_YC`/`fixed_YC_YS`; every
+  `resolve_leptons(..., default=True)` becomes `default=False`. **`ModeSpec.leptons`
+  stays True and is not an exception**: it is the spec's own statement, and
+  `__post_init__` already refuses False wherever C is not FIXED, so flipping
+  the field made the plain beta-equilibrium `ModeSpec()` raise on
+  construction. Item 2's legacy `TableSettings` layer turned out to be in
+  FOUR models, not the two the ticket named — `vmit/compute_tables.py` and
+  `sfho/table.py` carry it too. Three checks in `test/test_imports.py`: the
+  leptons default (behavioural, because the number that matters is
+  `resolve_leptons`'s `default=` argument, which no signature carries), the
+  parallel-`include_*`-beside-a-flags-object check (static, ten models), and
+  the fm-based units band (all ten models, magnitude bands with five decades
+  of margin so it needs no tolerance and can never become a second baseline).
+  **The band check finds njl, ccdm and enjl exactly where
+  [97](issues/97-natural-record-leaves-the-result.md) says they are** —
+  `state.n_q` and `point.n_s` at ~2.3e7 fm^-3 — and carries them as
+  `xfail(strict=True)`, so the exemption dies the day 97 lands. All three were
+  proved able to FAIL on a deliberately broken input.
+  **The gate found a seventeenth `leptons` site in `generate_baseline.py`** the
+  ticket's count of sixteen did not have — `case_vmit`'s `fixed_YC_YS` names no
+  flag — so three `ycys.*` rows moved by one electron gas. Fixed by NAMING the
+  flag at its old value, not by regenerating: all fourteen `.npz` are
+  BYTE-identical before and after. Five more sites relied on the flipped
+  default the same way (zl/vmit/njl `verify/`, two tests), which is the flip
+  working as intended. Full suite **1826 passed, 0 failed**, the +13 against
+  ticket 94's 1816 accounted for line by line.
+
 - **[Ticket 96 — `alphabag.solver` takes `flags`, and all three `include_*` sectors go](issues/96-alphabag-solver-flags.md)**
   (resolved 2026-08-28). Third and largest of the three serial solver-flag
   tickets. Seven entry points — four mode solvers, `solve_cfl` and the two

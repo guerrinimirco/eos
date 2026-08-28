@@ -150,7 +150,8 @@ def _states(par, include_csc=True):
     out.append(("trapped", plain, 25.0,
                 solve_beta_eq_neutrino_trapped(par, 1.0, 0.2, 25.0, plain)))
     out.append(("yc_ys", plain, 25.0,
-                solve_fixed_yc_ys(par, 1.0, 0.0, 0.3, 25.0, plain)))
+                solve_fixed_yc_ys(par, 1.0, 0.0, 0.3, 25.0, plain,
+                                  leptons=True)))
     if include_csc:
         paired = SpeciesFlags(csc=True)
         out.append(("beta_2SC", paired, 0.0,

@@ -92,7 +92,7 @@ MODE_FACTORIES = {
 _EMPTY = ThermoResult(n=0.0, P=0.0, e=0.0, s=0.0)
 
 
-def mode_spec(mode, leptons=True, **fractions):
+def mode_spec(mode, leptons=None, **fractions):
     """The `ModeSpec` for a named mode and its fractions.
 
     The names and the fractions are the repository's and the factories are
@@ -111,7 +111,7 @@ def mode_spec(mode, leptons=True, **fractions):
     if given != expected:
         raise ValueError(f"mode {mode!r} takes fractions {sorted(expected)}; "
                          f"got {sorted(given)}")
-    leptons = resolve_leptons(mode, leptons, default=True)
+    leptons = resolve_leptons(mode, leptons, default=False)
     if mode.startswith("beta_eq"):
         return MODE_FACTORIES[mode](**fractions)
     return MODE_FACTORIES[mode](leptons=leptons, **fractions)
@@ -665,14 +665,14 @@ def solve_beta_eq_neutrino_trapped(par, n_B, Y_Le, T=0.0, flags=None,
 
 
 def solve_fixed_yc(par, n_B, Y_C, T=0.0, flags=None, x0=None,
-                   leptons=True, **kwargs):
+                   leptons=False, **kwargs):
     """Fixed non-leptonic charge fraction. Variables (n_B, Y_C, T)."""
     return solve(par, "fixed_YC", n_B, T, flags, x0, Y_C=Y_C,
                  leptons=leptons, **kwargs)
 
 
 def solve_fixed_yc_ys(par, n_B, Y_C, Y_S, T=0.0, flags=None, x0=None,
-                      leptons=True, **kwargs):
+                      leptons=False, **kwargs):
     """Fixed charge and strangeness. Variables (n_B, Y_C, Y_S, T)."""
     return solve(par, "fixed_YC_YS", n_B, T, flags, x0, Y_C=Y_C, Y_S=Y_S,
                  leptons=leptons, **kwargs)

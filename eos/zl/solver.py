@@ -287,7 +287,7 @@ def solve_beta_eq_neutrinoless(
 # =============================================================================
 def solve_fixed_yc(
     par: Parameters, n_B: float, Y_C: float, flags: SpeciesFlags, T: float,
-    leptons: bool = True,
+    leptons: bool = False,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Fixed non-leptonic charge fraction, Y_C = n_p/n_B.

@@ -111,7 +111,7 @@ class TableSpec:
     axes: dict = field(default_factory=dict)
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)
-    leptons: bool = True
+    leptons: bool = None
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -132,7 +132,7 @@ class TableSpec:
             if key not in supplied:
                 raise ValueError(f"mode {self.mode!r} needs {key!r}, as an "
                                  f"axis or in fixed")
-        self.leptons = resolve_leptons(self.mode, self.leptons, default=True)
+        self.leptons = resolve_leptons(self.mode, self.leptons, default=False)
 
 
 @dataclass

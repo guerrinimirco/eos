@@ -58,9 +58,12 @@ class VMITTableSettings:
     Y_S_values: List[float] = field(default_factory=lambda: [0.0])  # For fixed_yc_ys
     Y_L_values: List[float] = field(default_factory=lambda: [0.4])  # For trapped_neutrinos
 
-    # Options
-    include_photons: bool = True
-    include_leptons: bool = True  # Only for fixed_yc/fixed_yc_ys: include electrons
+    # Options. These FOLLOW the flags object (`SpeciesFlags`) and the
+    # `leptons` default, both of which are off: a legacy settings layer
+    # must not be a second place the same switch is thrown, with the
+    # opposite answer (CLAUDE.md section 4).
+    include_photons: bool = False
+    include_leptons: bool = False  # Only for fixed_yc/fixed_yc_ys: include electrons
 
     # Output control
     print_results: bool = True

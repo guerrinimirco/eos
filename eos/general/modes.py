@@ -76,6 +76,11 @@ class ModeSpec:
     L_e: Conservation = Conservation.EQUILIBRATED
     L_mu: Conservation = Conservation.EQUILIBRATED
     targets: Mapping[str, float] = field(default_factory=dict)
+    #: True, and NOT the off-unless-asked default of the factories below:
+    #: this field is the spec's own statement about the state it names,
+    #: not a value a caller inherits, and `__post_init__` refuses False
+    #: wherever C is not FIXED. `fixed_YC` and `fixed_YC_YS` are where a
+    #: caller meets the flag, and those default it False (ticket 91).
     leptons: bool = True
 
     def __post_init__(self):
@@ -182,7 +187,7 @@ def beta_eq_neutrino_trapped(Y_Le, Y_Lmu=None):
     return ModeSpec(L_e=Conservation.FIXED, L_mu=L_mu, targets=targets)
 
 
-def fixed_YC(Y_C, leptons=True):
+def fixed_YC(Y_C, leptons=False):
     """Fixed non-leptonic charge fraction. Variables (n_B, Y_C, T).
 
     The simulation-table mode. Strangeness still self-equilibrates.
@@ -191,7 +196,7 @@ def fixed_YC(Y_C, leptons=True):
                     leptons=leptons)
 
 
-def fixed_YC_YS(Y_C, Y_S, leptons=True):
+def fixed_YC_YS(Y_C, Y_S, leptons=False):
     """Fixed charge and strangeness. Variables (n_B, Y_C, Y_S, T).
 
     Y_C = 0.5, Y_S = 0 is symmetric nuclear matter, for heavy-ion comparisons.
@@ -222,10 +227,18 @@ def resolve_leptons(mode, leptons, default):
 
     On every other mode the flag is honoured as given.
 
-    `default` is the model's own fixed-fraction default, and it differs
-    between models on purpose: a model whose usual job is the charged pure
-    phase of a mixed-phase construction defaults it off, one whose usual job
-    is neutral matter defaults it on.
+    `default` is what a caller who did not name the flag gets, and it is
+    **False in every model**. It used to differ between them -- off in dd2,
+    sfho, did and alphabag, on in enjl, njl, ccdm, zl and vmit -- on the
+    argument that a model's usual job should pick it. That made the same call,
+    written the same way, add a neutralizing electron gas in five models and
+    leave the phase charged in four. Off unless asked for is the same rule
+    section 4 gives the species flags, and for the same reason: `leptons=True`
+    populates electrons (and muons, where the flags enable them), which move
+    P, eps and s, and a default must never ADD physics to a call that did not
+    request it. The parameter survives so the ONE exception can be read where
+    it is used rather than assumed -- a caller may still pass True.
+    `test/test_imports.py` pins the uniformity.
     """
     if mode.startswith("beta_eq"):
         if leptons is False:

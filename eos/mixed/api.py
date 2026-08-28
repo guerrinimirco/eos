@@ -101,7 +101,7 @@ def _engine_fractions(mode, conditions):
 
 
 def eos_point(phases, mode, species=None, n_B=None, T=None, SnB=None,
-              eta=0.0, leptons=True, x0=None, analytic_jac=False,
+              eta=0.0, leptons=None, x0=None, analytic_jac=False,
               check_consistency=True, **conditions):
     """One solved mixed-phase state; non-convergence is a return value.
 
@@ -169,7 +169,7 @@ def eos_point(phases, mode, species=None, n_B=None, T=None, SnB=None,
 
 
 def eos_table(phases, mode, species=None, axes=None, eta=0.0, fixed=None,
-              leptons=True, window_only=True,
+              leptons=None, window_only=True,
               analytic_jac=False, refine="exact",
               progress=None, verbose=False):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes], with the phase
@@ -225,7 +225,7 @@ class HybridResult:
 
 
 def hybrid_table(phases, mode, species=None, n_B_grid=None, eta=0.0, T=0.0,
-                 leptons=True, window=None,
+                 leptons=None, window=None,
                  analytic_jac=False, **conditions):
     """The stitched hadronic + mixed + quark core EoS at ONE equilibrium.
 
@@ -282,7 +282,7 @@ RESPONSE_FREEZES = ("equilibrium", "chi")
 
 
 def eos_response(phases, mode, species=None, frozen="equilibrium", n_B=None,
-                 T=0.0, eta=0.0, leptons=True, rel_dn=1e-3, **conditions):
+                 T=0.0, eta=0.0, leptons=None, rel_dn=1e-3, **conditions):
     """Second-derivative quantities at one mixed-phase state.
 
     frozen='equilibrium' -- everything re-equilibrates under the perturbation.

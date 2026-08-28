@@ -53,7 +53,7 @@ class PointResult:
     point: object = None
 
 
-def _check_call(mode, species, T, SnB, conditions, leptons=True):
+def _check_call(mode, species, T, SnB, conditions, leptons=None):
     """(T, SnB, species) of a request, or a raise if it is not one to make.
 
     `mode_spec` validates the fractions against the mode, so a missing or
@@ -76,7 +76,7 @@ def _check_call(mode, species, T, SnB, conditions, leptons=True):
 
 
 def eos_point(par, mode, species=None, n_B=None,
-              T=0.0, SnB=None, x0=None, leptons=True, **conditions):
+              T=0.0, SnB=None, x0=None, leptons=None, **conditions):
     """One solved state; non-convergence is a return value.
 
     Parameters
@@ -143,7 +143,7 @@ def eos_point(par, mode, species=None, n_B=None,
 
 
 def eos_table(par, mode, species=None, axes=None,
-              direction="up", x0=None, leptons=True, rows=False,
+              direction="up", x0=None, leptons=None, rows=False,
               progress=None, verbose=False, coexistences=None,
               eta=1.0):
     """A solved grid along the density axis, following one branch.

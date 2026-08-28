@@ -697,7 +697,7 @@ def solve_beta_eq_neutrino_trapped(phases, n_B, Y_Le, eta, T=0.0, **kw):
     return solve(phases, n_B, eta, beta_eq_neutrino_trapped(Y_Le), T=T, **kw)
 
 
-def solve_fixed_yc(phases, n_B, Y_C, eta, T=0.0, leptons=True, **kw):
+def solve_fixed_yc(phases, n_B, Y_C, eta, T=0.0, leptons=False, **kw):
     """Fixed non-leptonic charge fraction: (n_B, Y_C, T).
 
     leptons=True adds electrons (and muons if enabled) enforcing total
@@ -706,7 +706,7 @@ def solve_fixed_yc(phases, n_B, Y_C, eta, T=0.0, leptons=True, **kw):
     return solve(phases, n_B, eta, fixed_YC(Y_C, leptons=leptons), T=T, **kw)
 
 
-def solve_fixed_yc_ys(phases, n_B, Y_C, Y_S, eta, T=0.0, leptons=True, **kw):
+def solve_fixed_yc_ys(phases, n_B, Y_C, Y_S, eta, T=0.0, leptons=False, **kw):
     """Fixed charge and strangeness fractions: (n_B, Y_C, Y_S, T)."""
     return solve(phases, n_B, eta, fixed_YC_YS(Y_C, Y_S, leptons=leptons),
                        T=T, **kw)

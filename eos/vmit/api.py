@@ -69,7 +69,7 @@ def _check_conditions(mode, conditions):
 
 
 def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
-              leptons=True, x0=None, **conditions):
+              leptons=None, x0=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -110,7 +110,7 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     if (T is None) == (SnB is None):
         raise ValueError("exactly one of T / SnB must be given")
     _check_conditions(mode, conditions)          # caller errors raise here
-    leptons = resolve_leptons(mode, leptons, default=True)
+    leptons = resolve_leptons(mode, leptons, default=False)
 
     def solve(temperature):
         line = dict(conditions)
@@ -142,7 +142,7 @@ def _entropy_per_baryon(point, n_B):
     return point.s_total / n_B
 
 
-def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=True,
+def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=None,
               skip_errors=True, rows=False, progress=None, verbose=False):
     """A solved grid over {n_B} x {T} [x fraction axes].
 
@@ -173,7 +173,7 @@ RESPONSE_FREEZES = ("equilibrium",)
 
 
 def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
-                 T=0.0, leptons=True, rel_step=1e-3, **conditions):
+                 T=0.0, leptons=None, rel_step=1e-3, **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' -- everything re-equilibrates under the perturbation,
