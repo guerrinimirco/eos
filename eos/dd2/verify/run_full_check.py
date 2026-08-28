@@ -245,6 +245,50 @@ def _check_backend_parity(par, flags, grid):
                        "eos_fast (analytic J) vs eos_ref")
 
 
+def _check_restarts_extend_the_basin(par):
+    """The perturbed restarts reach targets the published seed does not.
+
+    `nmp.N_RESTARTS = 32` exists because a single solve from the DD2 couplings
+    maps one basin of attraction and reads it as the feasible set. That is a
+    claim about the residual surface, not about the loop -- the loop keeping
+    the best of N tries is monotone by construction and asserts nothing -- so
+    what is checked is that the extra tries CHANGE THE ANSWER on a grid where
+    the single seed fails outright.
+
+    A count over a grid, deliberately, rather than a verdict at one cell: a
+    single 6x6 cell's verdict is decided in its target's last bits (ticket 67
+    measured eight targets at three perturbations each, none holding across its
+    own three), while the count is stable. Measured on python.org 3.14.2 /
+    numpy 2.3.5 / scipy 1.17.0: 0/9 at zero restarts, 4/9 at 32. The module
+    docstring records the same property on a 187-cell grid (7/68/115 at
+    0/32/64), which is where the number to quote lives; nine cells is what is
+    affordable to re-run.
+
+    Here rather than in `test/dd2/` because it is a property of the inverse
+    map's basin structure measured over a grid, the same class as the forward
+    and inverse maps agreeing, and because it costs ~10 s.
+    """
+    from eos.dd2.nmp import compute_nmp, invert_nmp
+
+    ref = compute_nmp(par)
+    six = {k: ref[k] for k in ("n_sat", "E_sat", "m_eff_ratio", "K_sat",
+                               "E_sym", "L_sym")}
+    cells = [(K, Q) for K in (200.0, 240.0, 280.0)
+             for Q in (0.0, 200.0, 400.0)]
+    reached = {}
+    for n_restarts in (0, 32):
+        n_ok = 0
+        for K_sat, Q_sat in cells:
+            _, status = invert_nmp(dict(six, K_sat=K_sat, Q_sat=Q_sat),
+                                   impose_Q_sat=True, n_restarts=n_restarts)
+            n_ok += bool(status.ok)
+        reached[n_restarts] = n_ok
+    gained = reached[32] - reached[0]
+    return CheckResult("restarts extend the basin", gained > 0, float(gained),
+                       f"{reached[0]}/{len(cells)} cells at 0 restarts, "
+                       f"{reached[32]}/{len(cells)} at 32")
+
+
 def _check_compose(par):
     from eos.dd2.verify.compose import DD2_COMPOSE, compare_slice
     if not os.path.isfile(os.path.join(DD2_COMPOSE, "eos.thermo")):
@@ -266,7 +310,7 @@ def run_full_check(par=None, flags=None, grid=None):
     an `EOSTable_for_TOV` -- is `eos.dd2.table`.
     """
     par = par or Parameters.default()
-    flags = flags or SpeciesFlags(hyperons=False, phi_field=False)
+    flags = flags or SpeciesFlags(hyperons=False)
     grid = np.array(grid) if grid is not None else np.array([0.1, 0.16, 0.3, 0.5])
 
     report = FullCheckReport()
@@ -278,6 +322,7 @@ def run_full_check(par=None, flags=None, grid=None):
     report.results.append(_check_coeff_cross(par, flags, grid))
     report.results.append(_check_backend_parity(par, flags, grid))
     report.results.append(_check_delivered_table(par, flags))
+    report.results.append(_check_restarts_extend_the_basin(par))
     report.results.append(_check_compose(par))
     return report
 

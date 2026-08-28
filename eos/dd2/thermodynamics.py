@@ -325,7 +325,7 @@ def build_matter_ctx(par, n_B, flags, T=0.0):
         Gs_N=Gs, Gw_N=Gw, Gr_N=Gr, dGs_N=dGs, dGw_N=dGw, dGr_N=dGr,
         m_e=Electron.mass, m_mu=Muon.mass, T=T,
         include_muons=flags.muons,
-        has_phi=flags.phi_field and flags.hyperons,
+        has_phi=flags.hyperons and par.has_phi_coupling,
         include_pseudoscalars=flags.thermal_mesons,
         include_thermal_vectors=flags.thermal_vectors,
         x_omega_L=lambda_omega_ratio(par),

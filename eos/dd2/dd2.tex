@@ -677,6 +677,20 @@ whether a target inverts can depend on the seed, so the solver retries from
 jittered seeds (deterministically) before declaring a target unrepresentable,
 and no feasibility boundary may be inferred from a scan run without restarts.
 
+Third, the published couplings are not a root of this closure. The fitted
+table obeys the cross-constraint only to $2.200718\times 10^{-3}$, so it is a
+stationary point of the residual norm rather than a zero of it and no seed
+recovers it; the $5\times 5$ closure reaches a root $3.9\%$ away that
+reproduces the same six imposed values. \texttt{InversionStatus} therefore
+reports \texttt{coupling\_shift}, the maximum relative distance from the
+seed, because \emph{converged} and \emph{recovered the published couplings}
+are different statements. It also decides the verdict: a Powell hybrid can
+give up on its first step and return its starting point bit for bit, and such
+a solve is reported as not converged. The residual alone cannot make that
+call --- a stalled solve was measured at $2.201\times 10^{-3}$ and a moved,
+accurate one at $1.944\times 10^{-3}$, so the two overlap and no threshold on
+the residual separates them.
+
 \section{Numerical implementation}
 \label{sec:numerics}
 

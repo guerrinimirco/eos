@@ -140,12 +140,15 @@ sweeping parameter sets need not know which models happen to have more than
 one. \emph{A new set:} every field carries a default, so
 \texttt{Parameters(a0=..., gamma=...)} names only what changes, and
 \texttt{dataclasses.replace} modifies one already in hand. \emph{From
-nuclear-matter parameters:} \textbf{no route.} \texttt{nmp.invert\_nmp} and
-\texttt{nmp.from\_nmp} raise \texttt{NotImplementedError} --- six couplings
-against the five nuclear-matter parameters of the standard list leaves a
-one-parameter family, and nothing in the literature singles out a member of it.
-The docstring names the two ways to close it. \texttt{nmp.compute\_nmp} is the
-forward direction and is complete.
+nuclear-matter parameters:} \texttt{nmp.from\_nmp} and
+\texttt{nmp.invert\_nmp}, in \textbf{closed form} --- the interaction enters
+the nuclear-matter parameters linearly in $a_0, b_0, a_1, b_1$ once the two
+exponents are known, and the exponents follow from ratios of the isoscalar
+data, so there is no seed, no basin and no restart count. Six couplings against
+the five nuclear-matter parameters of the standard list still leaves one free
+choice, and the caller names it: either $\gamma_1$, or a sixth datum
+$K_{\mathrm{sym}}$ (Sec.~\ref{sec:nmp}). \texttt{nmp.compute\_nmp} is the
+forward direction.
 
 \section{Single-nucleon thermodynamics}
 \label{sec:kinetic}
@@ -459,19 +462,127 @@ about $\pm 0.2$, and a four-digit value for it claims a precision the finite
 difference does not have. $L_{\mathrm{sym}}$, one derivative lower, converges
 cleanly over the same steps.
 
-The forward map is \texttt{nmp.compute\_nmp}. \textbf{The inverse is not
-implemented and raises.} ZL carries six couplings --- $a_0, b_0, \gamma, a_1,
-b_1, \gamma_1$ --- against the five nuclear-matter parameters of the standard
-list, so imposing that list leaves a one-parameter family of solutions rather
-than a unique set. \texttt{eos.dd2} closes its isoscalar sector with the
-structural cross-constraint $f''_\sigma(1) = f''_\omega(1)$ and one shape
-coefficient held at its published value; nothing in the ZL literature does the
-equivalent, so there is no warrant for singling out a member of the family
-here. Closing it needs either a sixth imposed datum ($Q_{\mathrm{sat}}$, or an
-effective mass) or one coupling held fixed --- $\gamma_1$ is the natural
-candidate, being the least constrained by the isoscalar sector --- and until one
-is chosen the function raises saying which, rather than returning an arbitrary
-member.
+\subsection{The inverse map}
+\label{sec:invert}
+
+The forward map is \texttt{nmp.compute\_nmp}; the inverse,
+\texttt{nmp.invert\_nmp}, is \textbf{closed form}. ZL carries six couplings
+--- $a_0, b_0, \gamma, a_1, b_1, \gamma_1$ --- against the five nuclear-matter
+parameters of the standard list, so imposing that list leaves one free choice.
+The caller names it and the rest is algebra rather than a root find, which is
+what distinguishes this inversion from every other one in the package: no seed,
+no basin, no restart count, and therefore no inversion lottery in an inference
+run over ZL couplings.
+
+Write $E_{\mathrm{b}} = E_{\mathrm{sat}} - E_{\mathrm{sat}}^{\mathrm{K}}$,
+$K_{\mathrm{b}} = K_{\mathrm{sat}} - K_{\mathrm{sat}}^{\mathrm{K}}$,
+$S_{\mathrm{b}} = E_{\mathrm{sym}} - E_{\mathrm{sym}}^{\mathrm{K}}$ and
+$L_{\mathrm{b}} = L_{\mathrm{sym}} - L_{\mathrm{sym}}^{\mathrm{K}}$ for the
+interaction remainders, each the total minus the free-Fermi-gas value at
+$n_0$, and let $P^{\mathrm{K}}_0$ be the kinetic pressure there. Setting the
+functional's $n_0$ equal to the requested $\nsat$ --- so that saturation is
+\emph{imposed} at $u = 1$ rather than found --- the conditions
+%
+\begin{equation}
+a_0 + b_0 = E_{\mathrm{b}}, \qquad
+n_0 (a_0 + \gamma b_0) = -P^{\mathrm{K}}_0, \qquad
+9 \gamma (\gamma - 1) b_0 = K_{\mathrm{b}}
+\label{eq:isoscalar_conditions}
+\end{equation}
+%
+(the second being $P(\nsat) = 0$) invert to, with
+$X = E_{\mathrm{b}} n_0 + P^{\mathrm{K}}_0$ and
+$D = (9 E_{\mathrm{b}} + K_{\mathrm{b}}) n_0^2 + 9 P^{\mathrm{K}}_0 n_0$,
+%
+\begin{equation}
+\gamma = -\frac{K_{\mathrm{b}} n_0}{9 X}, \qquad
+b_0 = \frac{9 X^2}{D}, \qquad
+a_0 = \frac{K_{\mathrm{b}} E_{\mathrm{b}} n_0^2
+      - 9 P^{\mathrm{K}}_0 (E_{\mathrm{b}} n_0 + P^{\mathrm{K}}_0)}{D} ,
+\label{eq:invert_isoscalar}
+\end{equation}
+%
+and the two $\delta^2$ conditions then give the isovector pair
+%
+\begin{equation}
+b_1 = \frac{3 S_{\mathrm{b}} - L_{\mathrm{b}} + 3 b_0 (1 - \gamma)}
+           {3 (1 - \gamma_1)}, \qquad
+a_1 = \frac{3 \gamma_1 S_{\mathrm{b}} - L_{\mathrm{b}}
+       + 3 a_0 (\gamma_1 - 1) + 3 b_0 (\gamma_1 - \gamma)}{3 (\gamma_1 - 1)} .
+\label{eq:invert_isovector}
+\end{equation}
+%
+For $\{\nsat = 0.16~\mathrm{fm}^{-3}, E_{\mathrm{sat}} = -16,
+K_{\mathrm{sat}} = 250, E_{\mathrm{sym}} = 31.6, L_{\mathrm{sym}} = 43\}$~MeV
+with $\gamma_1 = 2.45$ these return $a_0 = -96.6555$, $b_0 = 58.8619$,
+$\gamma = 1.39854$, $a_1 = -25.1985$, $b_1 = 7.1850$, and the round trip
+through \texttt{compute\_nmp} recovers $\nsat$ to $10^{-14}$,
+$E_{\mathrm{sat}}$ to $6 \times 10^{-13}$ and $E_{\mathrm{sym}}$ to
+$5 \times 10^{-7}$, with $K_{\mathrm{sat}}$ and $L_{\mathrm{sym}}$ to $10^{-2}$
+--- the forward map's own finite-difference stencil, not the algebra.
+
+\paragraph{Two conventions.} Both give silently wrong answers if mixed, and
+neither is visible in the equations above. First, the \emph{rest mass}: each
+remainder is the interaction piece only because both sides of the subtraction
+are binding energies, \texttt{energy\_per\_baryon} having removed
+$m_p n_p + m_n n_n$ from $\epsilon$; a derivation carrying an explicit
+$+\,m_H$ reads the same symbol the other way. Second, \emph{which}
+$E_{\mathrm{sym}}$: this package uses the $\delta^2$ curvature, while
+Constantinou et al.\ quote the full pure-neutron minus symmetric step. On the
+shipped set those read $30.848 / 41.270$ and $31.561 / 42.718$~MeV --- one
+functional, two conventions. The familiar target $\{31.6, 43\}$ is thus the
+shipped set stated in the \emph{second} convention, which is precisely why
+putting it through Eq.~\eqref{eq:invert_isovector} returns $a_1 = -25.20$,
+$b_1 = 7.19$ where the shipped set carries $-26.06$ and $7.34$. Neither is
+wrong; they answer different questions.
+
+\paragraph{$Q_{\mathrm{sat}}$ is not free in ZL.} The interaction carries a
+single power-law term, so its skewness and its incompressibility come from the
+same $b_0 u^{\gamma}$:
+%
+\begin{equation}
+Q_{\mathrm{sat}}^{\mathrm{pot}}
+  = 27\, \gamma (\gamma - 1)(\gamma - 2)\, b_0
+  = 3 (\gamma - 2)\, K_{\mathrm{sat}}^{\mathrm{pot}}
+\label{eq:qsat_rigidity}
+\end{equation}
+%
+exactly. Once $\{\nsat, E_{\mathrm{sat}}, K_{\mathrm{sat}}\}$ fix $\gamma$ and
+$b_0$ through Eq.~\eqref{eq:invert_isoscalar}, $Q_{\mathrm{sat}}$ follows: it
+cannot serve as the sixth datum, and a prior over
+$(K_{\mathrm{sat}}, Q_{\mathrm{sat}})$ in ZL lives on a curve rather than in a
+plane. Nothing isovector reaches $\gamma$ or $b_0$, which is how the identity
+is pinned in the test suite --- moving $E_{\mathrm{sym}}$, $L_{\mathrm{sym}}$
+and $\gamma_1$ leaves the predicted $Q_{\mathrm{sat}}$ bit-identical, an exact
+statement where comparing the third-derivative stencil against
+Eq.~\eqref{eq:qsat_rigidity} could only be checked to its own truncation error.
+
+\paragraph{$K_{\mathrm{sym}}$ may be imposed, and only here.} The isovector
+sector has \emph{three} knobs, $a_1, b_1, \gamma_1$, against three isovector
+data, so $\gamma_1$ can be determined rather than chosen. From
+%
+\begin{equation}
+K_{\mathrm{sym}}^{\mathrm{pot}}
+  = 9 \left[ \gamma_1 (\gamma_1 - 1) b_1 - \gamma (\gamma - 1) b_0 \right] ,
+\label{eq:ksym_pot}
+\end{equation}
+%
+and noting that $E_{\mathrm{sym}}$ and $L_{\mathrm{sym}}$ alone already fix the
+product $(\gamma_1 - 1) b_1 = L_{\mathrm{b}}/3 - S_{\mathrm{b}} - X/n_0$, the
+exponent follows in closed form as well,
+%
+\begin{equation}
+\gamma_1 = \frac{K_{\mathrm{sym}}^{\mathrm{pot}}/9
+                 + \gamma (\gamma - 1) b_0}{(\gamma_1 - 1) b_1} ,
+\label{eq:invert_gamma1}
+\end{equation}
+%
+after which Eq.~\eqref{eq:invert_isovector} supplies $a_1$ and $b_1$ as before.
+ZL is the only model in this package that can impose $K_{\mathrm{sym}}$; every
+other hadronic model has two isovector knobs and reports it as a prediction.
+It is offered rather than imposed: $K_{\mathrm{sym}}$ is passed in the
+nuclear-matter-parameter dictionary \emph{instead of} $\gamma_1$, and passing
+both, or neither, is refused --- they are two names for the same freedom.
 
 \section{What a solved point returns}
 \label{sec:returns}

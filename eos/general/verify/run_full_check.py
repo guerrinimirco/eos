@@ -47,6 +47,7 @@ from eos.general.bose_integrals import (
 )
 from eos.general.fermi_integrals import (
     solve_fermi_jel, solve_fermi_gl, solve_fermi_t0, Fermi_Numerical,
+    GL_MIN_DEGENERACY,
 )
 from eos.general.solve import undetermined_unknowns
 from eos.general.particles import (
@@ -121,14 +122,11 @@ BOSE_POINTS = [
 #: long before it crosses.
 INTEGRAL_TOL = 2.0e-3
 
-#: Below this degeneracy parameter, T / (mu - m), a 30-node Gauss-Laguerre
-#: rule cannot resolve the Fermi step and `solve_fermi_gl` is not usable: at
-#: T / (mu - m) = 0.001 it returns a density three orders of magnitude wrong.
-#: Its own T < 1e-4 analytic fallback sits far below the breakdown, so the
-#: window between is real. That is a property of the rule, not of JEL, so the
-#: comparison is made where the rule applies and the boundary is named here
-#: rather than left implicit in a hand-picked grid.
-GL_MIN_DEGENERACY = 0.1
+#: The boundary of `solve_fermi_gl`'s domain, imported rather than restated:
+#: below this degeneracy parameter, T / (mu - m), the rule cannot resolve the
+#: Fermi step, and it reports that with NaN rather than a wrong number. The
+#: comparison is therefore made where the rule applies -- a property of the
+#: rule, not of JEL.
 
 
 def _scaled_errors(candidate, reference):

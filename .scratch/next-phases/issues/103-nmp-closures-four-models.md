@@ -37,11 +37,26 @@ one place:
    isovector knobs and three isovector NMPs on offer (E_sym, L_sym, K_sym), so
    two is the maximum and K_sym is a prediction by arithmetic, not by
    preference. `zl` has three and is the one model that can take it.
+   **No longer hypothetical**: [ticket 104](104-zl-analytic-inversion.md)
+   shipped it on 2026-08-28, in closed form -- gamma1 falls out linearly from
+   `K_sym,V = 9[gamma1(gamma1-1) b1 - gamma(gamma-1) b0]` because E_sym and
+   L_sym alone already fix the product `(gamma1-1) b1`. So this row of the
+   table is a built API, not an arithmetic claim, and this ticket's job on it
+   is now vocabulary rather than feasibility.
 2. **`zl` cannot take m*/m at all** — it has no scalar field and therefore no
    effective mass (`thermodynamics.py:16` states this). So the eight-NMP list
    in the question is not one list: the imposable set is model-shaped.
 3. **Q_sat is where the conditioning dies**, and it is measured, not
-   suspected. It is a third density derivative of E/A: `h`-sweeps under
+   suspected. In `zl` it does not merely condition badly, it is not FREE:
+   [ticket 104](104-zl-analytic-inversion.md) confirmed
+   `Q_sat,V = 3(gamma - 2) K_sat,V` exactly, one power-law term supplying
+   both, so {n_sat, E_sat, K_sat} already determine it and a prior over
+   (K_sat, Q_sat) in zl lives on a curve rather than in a plane. That is a
+   fourth answer to "can this NMP be imposed?" beside imposed / predicted /
+   absent, and the vocabulary this ticket settles needs a word for it.
+   The same ticket also confirms row 2: zl's isoscalar sector is exactly
+   three conditions -- `a0 + b0 = Eb`, `P(n_sat) = 0`, `9 gamma(gamma-1) b0 =
+   Kb` -- against its three isoscalar couplings, with no room for a fourth. It is a third density derivative of E/A: `h`-sweeps under
    [ticket 67](67-dd2-t0-adoption.md) put its stencil floor at 1.5e-3
    relative, three orders above the four h-exact keys, and dd2's 6x6 closure
    that imposes it inverts 7 of 187 (K_sat, Q_sat) cells at zero restarts and
@@ -96,6 +111,17 @@ one place:
   constrains the S-branch only. Whether the proportionality is a fit result or
   a modelling choice, and whether a non-symmetric U_Y should be an input, is
   the DID-specific half of this ticket.
+- **A failed inversion is a `None` in dd2 and a `RuntimeError` in zl**, and
+  the two cannot both be right. Surfaced by
+  [ticket 93](93-invert-nmp-basin-lottery.md) (2026-08-28), which made
+  `ok=False` reachable where it previously was not and then hit its own
+  crash: `dd2.nmp.from_nmp` returns `None` without `return_status`, and the
+  None travels until `solver.py` raises `'NoneType' object has no attribute
+  'kernel_masses'` — a §6 non-convergence that reads as an AttributeError two
+  layers down. `zl.nmp.from_nmp` raises `RuntimeError` on the same event.
+  93 documented dd2's None rather than changing it, because which of the two
+  §6 means is a question about all four models and this ticket owns it.
+
 - **sfho's inversion silently invalidates a hyperonic base** and says so in
   `docs/DEFERRED.md`: hyperon couplings are stored absolutely, derived from
   ratios against nucleon couplings the inversion has just changed, so

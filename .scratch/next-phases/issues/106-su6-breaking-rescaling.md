@@ -23,6 +23,32 @@ and breaking it is a standard move — Fortin, Oertel & Providencia and the
 SFHoY family scale the SU(6) vector couplings by factors the user gives as
 1.5, 1.5 and 1.875, against all-1 for the SU(6) variant.
 
+## Downstream ping from [ticket 102](102-retire-phi-field-flag.md) (2026-08-28)
+
+**102 put a first knob on the `x_phi` column and this ticket should subsume
+it, not sit beside it.** Retiring `phi_field` left the phi sector controlled by
+its coupling, and dd2's named route is now
+`nmp.from_hyperon_potentials(..., x_phi=None)`: `None` keeps the SU(6) column,
+a float replaces it in EVERY row. That is a single scalar, deliberately the
+smallest thing that expresses "no phi sector" (`x_phi = 0.0`) — it is not
+per-multiplet and it cannot express the 1.5 / 1.5 / 1.875 pattern this ticket
+is about.
+
+`R_phi_Y` per multiplet, defaulting to 1.0, is the general form of the same
+knob: `R_phi_Y = 0` for every multiplet IS `x_phi = 0.0`. So this ticket should
+**replace** the scalar argument rather than add a second way to reach the same
+column, and it inherits one constraint from 102's gate — CLAUDE.md §4 now says
+the phi sector is controlled by its coupling, and
+`test/test_imports.py::test_phi_sector_is_off_exactly_when_its_coupling_is_zero`
+asserts `from_hyperon_potentials(x_phi=0.0)` builds a phi-free set through
+`eos_point`. Whatever replaces the argument must keep that check meaningful,
+which means keeping a reachable way to say "no phi".
+
+`sfho`'s side has no such argument: 102 was pure deletion there, and
+`SFHo_2fam` (g_phi = 0 for every hyperon) against `SFHo_2fam_phi` remains the
+only route, hardcoded per named set rather than parameterised — which is
+exactly the gap this ticket closes.
+
 ## Work
 
 1. Rescaling factors as PARAMETERS on the parameter object, per hyperon

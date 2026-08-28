@@ -203,13 +203,28 @@ no-op.
 **Defaults, including a model's own flags.** Every flag above defaults to
 False, so `SpeciesFlags()` means one thing in every model and no call inherits
 a sector it did not name. A model may add flags for physics only it has
-(`phi_field`, `gluons`, `csc`), and those follow the same rule: **a flag with
-two legal values is a DEFAULT and is False; a flag with only one legal value
-RAISES on the other and is a STATEMENT about the model.** There is no third
-category — nothing defaults to True and quietly accepts False, because that is
-the same implicit switch-on this section forbids, wearing a model-specific
-name. `enjl` is the single exemption and is the second kind throughout: it
-fixes every flag and raises on any move.
+(`gluons`, `csc`, dd2's matter-composition `neutrinos`), and those follow the
+same rule: **a flag with two legal values is a DEFAULT and is False; a flag
+with only one legal value RAISES on the other and is a STATEMENT about the
+model.** There is no third category — nothing defaults to True and quietly
+accepts False, because that is the same implicit switch-on this section
+forbids, wearing a model-specific name. `enjl` is the single exemption and is
+the second kind throughout: it fixes every flag and raises on any move.
+
+**A sector the model ALREADY carries a coupling for gets no flag: it is
+controlled by that coupling.** Setting the coupling to zero is the same
+statement, made where every other model number is made (§6 — parameters are
+arguments, so a sampler can vary it continuously), and a boolean beside it
+would be a second way to say one thing, reachable only by editing the call.
+This is not the implicit switch-off the paragraph above forbids: there the
+sector is off because a number *happens* to vanish and nothing says so; here
+the coupling IS the statement, named and documented as the sector's switch.
+The hidden-strange vector phi is the worked case — `dd2` reads the `x_phi`
+column of its hyperon couplings (`from_hyperon_potentials(x_phi=0.0)` builds a
+set without the sector), `sfho` reads `g_phi_N` and its SU(6) phi column, and
+`did` derives `g_phi` from `(g~_omegaN, z)` by a map with no zero, which is how
+that model states the sector is structural. None of the three carries a flag
+for it.
 
 **A flag's category is a property of the flag, judged over the modes the model
 has** — which is why a mode may refuse a sector its physics does not contain

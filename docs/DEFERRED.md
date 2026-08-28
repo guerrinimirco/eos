@@ -1081,33 +1081,42 @@ decision that cannot be made before the tables exist.
 ## Per model
 
 ### dd2
-- `nmp.invert_nmp(impose_Q_sat=True)` — the 6x6 isoscalar closure — has no
-  target known to converge reproducibly, so the option is available but not
-  certified. At DD2's own nuclear-matter parameters it does not converge at
-  all: hybr returns the published seed after 25 evaluations with status 5 and
-  48 jittered restarts never beat the 2.201e-03 cross-constraint violation the
-  published couplings carry. Away from that point the verdict is decided in the
-  target's last bits — a relative 1e-14 perturbation flips it between
-  converging to 6.7e-11 and returning the seed bit-for-bit — and a sweep of
-  eight targets over K_sat in {210, 220, 230, 240} and Q_sat in {300, 350},
-  each at three perturbations under two gas kernels, found none that holds its
-  verdict across its own configurations. The cause is the stencil: the Q_sat
-  row, scaled by 1e-2, moves 7.1e-04 under hybr's own 1.49e-08 probe step
-  against a base residual of 1.5e-03, so half of its Jacobian column is
-  finite-difference noise.
+- `nmp.invert_nmp(impose_Q_sat=True)` — the 6x6 isoscalar closure — converges
+  but does not IMPOSE what it names. Ticket 93 removed the half of this entry
+  that was a solver defect; what remains is the closure itself, and it is
+  ticket 105's.
 
-  The same lottery reaches the 5x5 default closure, which is the more serious
-  half: it too returns the seed unmoved on a 1e-14 target perturbation, and
-  `InversionStatus.ok` cannot tell that from a converged solve because
-  ISO_GATE = 2e-2 admits the seed's own 2.2e-03 violation. What is NOT
-  available as a workaround is dropping Q_sat: the 5x5 keeps the system square
-  by PINNING c_omega, so it has less freedom than the 6x6, not more, and at a
-  hard target (K_sat = 220 with L_sym = 30) it fails where the 6x6 succeeds.
+  Fixed by ticket 93 (2026-08-28), so no longer deferred: `root(method="hybr")`
+  could return its seed bit for bit and be certified, because the stall carries
+  the published couplings' own 2.201e-03 cross-row violation and ISO_GATE = 2e-2
+  admits it. That reached the 5x5 default closure, where it was the more serious
+  half. The gate could not be tightened to catch it — a moved and ACCURATE 5x5
+  solve was measured at 1.944e-03, K_sat recovered to 0.01 MeV, so stalled and
+  converged residuals overlap and no threshold on the residual alone separates
+  them. `InversionStatus.coupling_shift` separates them instead, and the same
+  condition now drives the restart loop, which the stall used to suppress by
+  keeping the residual under the gate. The 5x5 at DD2's own nuclear-matter
+  parameters no longer depends on the target's last bits: seven perturbations
+  over eps in [0, 1e-8] all converge to 2e-10 .. 9e-08, all at coupling_shift
+  3.9%, all recovering K_sat to 1e-4 MeV.
 
-  Ticket 93 owns this. What depends on it today: nothing in the library — every
-  shipped path uses the 5x5 default at targets near DD2's own — and no test
-  asserts a 6x6 verdict, `test_api.test_Q_sat_in_the_dict_selects_the_6x6_closure`
-  having been narrowed to the routing claim.
+  What is still deferred, and is the closure rather than the solver: the 6x6 at
+  DD2's own NMPs now reaches max|residual| = 1.408e-02 — under ISO_GATE by a
+  factor 1.4, so `ok=True` — while imposing Q_sat only to 1.585 MeV and K_sat
+  to 1.9e-03. It saturates there: 64 and 128 restarts find nothing better. So
+  the 6x6's `ok` is a statement about the residual and not about Q_sat, and
+  ISO_GATE = 2e-2 is the wrong instrument for a closure whose Q_sat row carries
+  the stencil floor. The cause is measured in ticket 105: the four shape
+  coefficients are collinear at |cos| >= 0.96 and Q_sat's 1.5e-03 stencil floor
+  is amplified 515x into the couplings. What is NOT available as a workaround is
+  dropping Q_sat: the 5x5 keeps the system square by PINNING c_omega, so it has
+  less freedom than the 6x6, not more, and at a hard target (K_sat = 220 with
+  L_sym = 30) it fails where the 6x6 succeeds.
+
+  What depends on it today: nothing in the library — every shipped path uses the
+  5x5 default at targets near DD2's own. Two tests route to the 6x6 by passing a
+  whole `compute_nmp` dict, whose Q_sat key selects that closure; ticket 93 moved
+  both onto the six imposed keys, where the 5x5 is idempotent to 3.8e-08.
 - `table.hadronic_row` emits a Y_C and Y_S that are BARYONS ONLY, while the
   `EoSPoint` it flattens carries the totals. It recomputes them itself:
 
@@ -1214,8 +1223,12 @@ decision that cannot be made before the tables exist.
   and {n_0, B, K, S_2, L_2} are different inversions with different answers.
   The refusal is NAMED rather than absent: `nmp.invert_nmp` and `nmp.from_nmp`
   exist, are exported from `eos.did`, and raise `NotImplementedError` giving
-  the reason and the two ways to close it, the way `eos.zl` does. An absent
-  attribute is an `AttributeError` a caller cannot interpret.
+  the reason and the two ways to close it. An absent attribute is an
+  `AttributeError` a caller cannot interpret. (`eos.zl` used to refuse for the
+  analogous reason and no longer does: its inverse is closed form, and the
+  free choice six couplings leave against five NMPs is named by the caller
+  rather than chosen by the function. DID cannot follow, because for DID it is
+  the LIST to impose that is undetermined, not one member of a family.)
 - `eos_response` implements the `equilibrium` freeze only (c_s^2 isothermal
   and adiabatic, C_V, C_P, Gamma_th, in every mode). The composition freezes
   — held species fractions, held Y_C with the species re-equilibrating — and

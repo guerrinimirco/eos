@@ -29,12 +29,17 @@ class SpeciesFlags:
                          carried as mu = 0 gases; they contribute to eps, P
                          and s only.
     photons           -- a thermal photon gas; matters only at T > 0.
-    phi_field         -- the hidden-strange vector phi. Unlike DD2Y, DID
-                         couples the phi to the NUCLEON as well (SU(3) with
-                         z != 1/sqrt6 gives g_phiN != 0, and at the published
-                         set g_phiN = -5.2), so the field is part of the
-                         system at every composition and False raises:
-                         dropping it would change the model, not a sector.
+
+    The hidden-strange vector phi has no flag, and unlike DD2Y or SFHo it has
+    no coupling that can switch it off either. DID stores neither g_omega nor
+    g_phi: both are DERIVED from the aggregated strength g~_omegaN and the
+    SU(3) ratio z through `couplings.g8_from_aggregate` (Eq. 52), because that
+    combination is what the Bayesian analysis varies. The per-multiplet ratios
+    g_phi/g_8 = -tan(theta) - c_i(z, alpha) then have no common zero: at ideal
+    mixing z = 1/sqrt6 kills only the nucleon's, tan(theta) = 0 only Lambda's
+    and Sigma's. So the phi is part of the model at every composition and at
+    every parameter set -- a structural statement, with no input that could
+    ask otherwise and nothing left to refuse.
     """
     hyperons: bool = False
     deltas: bool = False
@@ -42,15 +47,6 @@ class SpeciesFlags:
     thermal_mesons: bool = False
     thermal_neutrinos: bool = False
     photons: bool = False
-    phi_field: bool = True
-
-    def __post_init__(self):
-        if not self.phi_field:
-            raise NotImplementedError(
-                "SpeciesFlags: phi_field=False is not a DID configuration -- "
-                "the SU(3) vector sector gives the nucleon a phi coupling "
-                "(g_phiN = -5.2 at the published set), so the phi field is "
-                "part of the model at every composition")
 
     @property
     def has_strange_baryons(self):

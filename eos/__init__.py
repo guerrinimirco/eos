@@ -70,8 +70,13 @@ MODES = ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
 #: `SpeciesFlags` carries under these names. Nucleons are always present;
 #: everything else is an explicit boolean, and setting one a model does not
 #: implement raises rather than being silently ignored. A model adds flags of
-#: its own for physics only it has (`phi_field`, `gluons`, `csc`); those
-#: default by the same rule as these six, below.
+#: its own for physics only it has (`gluons`, `csc`, dd2's matter-composition
+#: `neutrinos`); those default by the same rule as these six, below. A sector
+#: a model ALREADY carries a coupling for gets no flag at all: setting that
+#: coupling to zero is the same statement, made where every other model number
+#: is made and continuously variable by a sampler, so a boolean beside it would
+#: be a second way to say one thing. This is why the hidden-strange vector phi
+#: has no flag in `dd2`, `sfho` or `did`.
 #:
 #: All ten models carry all six names: the six keywords construct a
 #: `SpeciesFlags` anywhere, and no model answers them with a TypeError that
@@ -92,12 +97,10 @@ MODES = ("beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
 #: a flag with two legal values is a DEFAULT and is False, whatever its name;
 #: a flag with only one legal value RAISES on the other and is a STATEMENT
 #: about the model rather than a default. There is no third category. So
-#: `alphabag.gluons` and `dd2.phi_field` are False (both values are legal
-#: physics -- a bag model without a thermal gluon gas is the standard MIT
-#: configuration, and dd2 reads `phi_field` only as `phi_field and hyperons`),
-#: while `sfho.phi_field` and `did.phi_field` stay True and raise on False,
-#: because those two models always solve the field. `njl.csc` and `ccdm.csc`
-#: were already False. `enjl` is the one exemption, and a different kind of
+#: `alphabag.gluons` is False (both values are legal physics -- a bag model
+#: without a thermal gluon gas is the standard MIT configuration), while
+#: `dd2.sigma_star` raises, the model not having that field. `njl.csc` and
+#: `ccdm.csc` were already False. `enjl` is the one exemption, and a different kind of
 #: default -- it fixes every flag and RAISES on any move, so its
 #: `hyperons=True` states which baryons the model has rather than a
 #: convenience the caller inherited.

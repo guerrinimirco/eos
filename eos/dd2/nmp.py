@@ -66,14 +66,29 @@ published couplings: no seed recovers them, because they are not a root. The
 6x6 path (impose_Q_sat=True) does reproduce the imposed NMPs, its shape
 coefficients to ~2e-3.
 
-A caveat on what "converged" means here. Whether a Powell hybrid leaves the
-published seed at all is a property of the SciPy version: through SciPy 1.13
-`root(..., method="hybr")` returns the seed unchanged from this starting
-point, reporting the 2.2e-3 cross-row violation as its residual, while
-SciPy >= 1.17 drives the same system to 6.7e-11. ISO_GATE (2e-2) admits both,
-so it cannot by itself distinguish a converged solve from one that never
-moved; compare the recovered couplings against the seed when that distinction
-matters.
+What "converged" means here, and why the residual alone cannot say. A Powell
+hybrid can give up on its first step and return the starting point bit for
+bit, reporting the seed's own 2.2e-3 cross-row violation as its residual --
+and whether it does so at any given target is decided in that target's last
+bits, not by the SciPy version. ISO_GATE (2e-2) admits that residual, and it
+cannot be tightened to reject it: a moved and ACCURATE solve was measured at
+1.944e-3 (K_sat recovered to 0.01 MeV), so stalled and converged residuals
+overlap and no threshold on the residual alone separates them.
+
+What separates them is that the stall has not moved. `InversionStatus`
+therefore carries `coupling_shift`, the max relative distance from the seed,
+and a solve that returns the seed unmoved on a residual above STALL_RES is
+reported as ok=False rather than certified. The same condition drives the
+restart loop, which is the substantive half: the stall used to keep the
+restarts from ever running, since its residual sat under the gate. It is not
+an unreachable target -- at DD2's own nuclear-matter parameters the FIRST
+jittered restart drives the 5x5 to 6.8e-08 and recovers K_sat to 1e-4 MeV.
+
+`coupling_shift` also answers a second question the residual never could:
+"converged" and "recovered the published couplings" are different statements.
+The converged 5x5 branch at DD2's own NMPs sits 3.9% from the published set
+and reproduces the same six NMPs -- see the section below on why the published
+couplings are not a root of this closure.
 
 What limits which NMPs invert: the seed, not the physics
 --------------------------------------------------------
@@ -211,6 +226,39 @@ ISO_GATE = 2e-2
 #: Raise it when mapping a boundary matters more than the wall clock.
 N_RESTARTS = 32
 
+#: Residual above which an UNMOVED seed is a stall rather than an answer.
+#: `root(method="hybr")` can return its starting point bit for bit, reporting
+#: the seed's own residual, and ISO_GATE is too coarse to notice: at DD2's own
+#: nuclear-matter parameters the 5x5 stalls at the published couplings' 2.201e-3
+#: cross-row violation, which sits UNDER the 2e-2 gate. The gate cannot be
+#: tightened to catch it either -- a moved and accurate solve was measured at
+#: 1.944e-3 (K_sat recovered to 0.01 MeV), so stalled and converged residuals
+#: overlap and no threshold on the residual alone separates them. What does
+#: separate them is that the stall has not moved at all. An unmoved seed is
+#: legitimate only when the seed was already the root, which lands at <= 2e-8
+#: (measured by re-seeding a solve at its own answer); five orders separate
+#: that from the stall and this floor sits in the middle. Measured on
+#: python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0.
+STALL_RES = 1e-5
+
+
+def _relative_shift(x, seed):
+    """max |x_i - seed_i| / |seed_i| -- how far the solve left its seed."""
+    x = np.asarray(x, dtype=float)
+    seed = np.asarray(seed, dtype=float)
+    return float(np.max(np.abs(x - seed) / np.abs(seed)))
+
+
+def _stalled(x, seed, res):
+    """The solve returned its seed unmoved while the residual is not zero.
+
+    Bit-for-bit equality, not a tolerance: this is hybr giving up on its first
+    step ("not making good progress", status 5), not a small final move.
+    """
+    return bool(np.array_equal(np.asarray(x, dtype=float),
+                               np.asarray(seed, dtype=float))) and res > STALL_RES
+
+
 #: The pinned isoscalar shape coefficient of the default closure, at its
 #: published DD2 value (Typel et al. 2010). See the module docstring for why
 #: it is c_omega and not a sigma-side coefficient.
@@ -227,6 +275,13 @@ class InversionStatus:
     #: the recovered couplings with the same stencils as nmp.compute_nmp:
     #: {"Q_sat": MeV, "K_sym": MeV}. Empty only if the build itself failed.
     predictions: dict = field(default_factory=dict)
+    #: How far the isoscalar solve left its seed, max relative over the free
+    #: couplings. Exactly 0.0 means the solver never moved, which `ok` reads
+    #: as a failure unless the seed was already the root (STALL_RES). Reported
+    #: because "converged" and "recovered the published couplings" are
+    #: different statements: at DD2's own NMPs the converged 5x5 branch sits
+    #: 3.9% from the published set and reproduces the same six NMPs.
+    coupling_shift: float = float("nan")
 
 
 def _f2_at1(b, c):
@@ -266,13 +321,24 @@ def _isoscalar_quantities(par, n_sat, h=1e-4, want_Q=True):
 def _restart_loop(iso_residual, seed, first, n_restarts, gate=ISO_GATE):
     """Keep the best of the first solve and up to n_restarts jittered ones.
 
+    A STALL counts as a miss, exactly as an over-gate residual does. Without
+    that, a hybr that gives up on its first step keeps a residual under the
+    gate and the restarts never run -- which is how DD2's own nuclear-matter
+    parameters used to come back as the published seed unmoved. They are not
+    unreachable: the FIRST jittered restart drives that same system to 6.8e-08
+    and recovers K_sat to 1e-4 MeV.
+
     Deterministic by construction: the same NMP must invert identically on
     every run and in every parallel worker, so the generator is seeded with a
     constant rather than left to entropy.
     """
+    def missed(x, res):
+        return res >= gate or _stalled(x, seed, res)
+
     best_x = first.x
     best_res = float(np.max(np.abs(iso_residual(best_x))))
-    if best_res >= gate and n_restarts:
+    stalled = _stalled(best_x, seed, best_res)
+    if missed(best_x, best_res) and n_restarts:
         rng = np.random.default_rng(0)
         base = np.asarray(seed, dtype=float)
         for _ in range(n_restarts):
@@ -283,9 +349,13 @@ def _restart_loop(iso_residual, seed, first, n_restarts, gate=ISO_GATE):
                 res = float(np.max(np.abs(iso_residual(trial.x))))
             except Exception:      # a jittered seed that will not build a
                 continue           # trial parametrization is not a finding
-            if res < best_res:
-                best_x, best_res = trial.x, res
-            if best_res < gate:
+            # A jittered start is never the seed, so no trial is itself a
+            # stall: the first one accepted always displaces one, even on a
+            # worse residual. The stalled residual is the SEED's, not an
+            # answer's, so keeping it would be keeping the wrong number.
+            if stalled or res < best_res:
+                best_x, best_res, stalled = trial.x, res, False
+            if not missed(best_x, best_res):
                 break
     return best_x, best_res
 
@@ -390,6 +460,23 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
     first = root(iso_residual, seed, method="hybr", tol=1e-12)
     best_x, iso_res = _restart_loop(iso_residual, seed, first, n_restarts)
     Gs, bS, cS, Gw, bW, cW = couplings_of(best_x)
+    shift = _relative_shift(best_x, seed)
+
+    if _stalled(best_x, seed, iso_res):
+        # The solver never left the seed, and the seed is not a root: this is
+        # the published couplings handed straight back with their own residual.
+        # ISO_GATE admits it (2.201e-3 < 2e-2) and cannot be tightened to
+        # reject it without also rejecting moved, accurate solves at 1.944e-3,
+        # so the verdict is made here instead. Section 6: a non-convergence is
+        # a reported return value, never a silent wrong answer.
+        return None, InversionStatus(
+            ok=False,
+            message=f"the isoscalar solve returned its seed unmoved at "
+                    f"residual {iso_res:.2e}; {n_restarts} restarts did not "
+                    f"find a root (the seed is a stationary point of the "
+                    f"residual norm, not a zero of it)",
+            isoscalar_residual=iso_res, isovector_residual=float("nan"),
+            coupling_shift=shift)
 
     if iso_res >= ISO_GATE:
         # The isoscalar sector did not converge. Fitting the isovector sector
@@ -404,7 +491,8 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
                     f"{ISO_GATE:.0e} floor after {n_restarts} restarts (the "
                     f"targets are probably inconsistent with the closure at "
                     f"this K_sat)",
-            isoscalar_residual=iso_res, isovector_residual=float("nan"))
+            isoscalar_residual=iso_res, isovector_residual=float("nan"),
+            coupling_shift=shift)
 
     # --- isovector: Gamma_rho analytic, a_rho by 1-D root -------------------
     # Built from best_x — the restart winner — not the first solve: the
@@ -455,7 +543,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
         message="converged" if isov_res < 1e-3 else
         f"isovector residual {isov_res:.2e} above 1e-3",
         isoscalar_residual=iso_res, isovector_residual=float(isov_res),
-        predictions=predictions)
+        predictions=predictions, coupling_shift=shift)
     return par, status
 
 
@@ -468,6 +556,13 @@ def from_nmp(nmp, m_sigma=546.212459, return_status=False):
     and K_sym as predictions in the status; with Q_sat present it is imposed
     instead of the pin. Returns the `Parameters`, or (Parameters,
     InversionStatus) when `return_status`.
+
+    **`Parameters` is None when the inversion did not converge**, since a soft
+    failure is a return value and not an exception (CLAUDE.md section 6). Pass
+    `return_status=True` and test `status.ok` before using the result: without
+    it a failed inversion is indistinguishable from a successful one until the
+    None reaches a solver. `build_parametrization` below does that test for
+    the caller and reports the stage instead.
 
     The hyperon and Delta sectors attach on top of the result through
     `from_hyperon_potentials` / `from_delta_potential` below, once the
@@ -487,7 +582,7 @@ def from_nmp(nmp, m_sigma=546.212459, return_status=False):
 # `parameters.py` is its bottom (CLAUDE.md section 5).
 
 def from_hyperon_potentials(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
-                            base=None):
+                            base=None, x_phi=None):
     """
     Nucleon + hyperon octet with SU(6) vector couplings and scalar couplings
     *inverted* from the hyperon potentials U_Y in SNM at saturation (report
@@ -499,6 +594,11 @@ def from_hyperon_potentials(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
     an NMP-inverted nucleon par, so NMP + hyperons compose); defaults to
     nucleonic DD2. The scalar inversion re-solves SNM on ``base``, so it
     adapts to that par's nucleon couplings automatically.
+
+    x_phi: override the SU(6) hidden-strange column x_phiY = g_phiY/g_omegaN.
+    None keeps the SU(6) value per hyperon; a float replaces it in every row.
+    `x_phi = 0.0` is how a hyperonic set is built with no phi sector at all --
+    the coupling carries that statement, there is no flag for it.
     """
     base = replace(base if base is not None else Parameters.default(),
                    U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
@@ -513,7 +613,8 @@ def from_hyperon_potentials(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
             sat.matter.fields["sigma"], sat.matter.fields["omega0"],
             sat.matter.Sigma_R)
         rows.append((name, DD2Y_HYPERON[name]["mass"], x_sigma,
-                     su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
+                     su6["x_omega"], su6["x_rho"],
+                     su6["phi_over_omegaN"] if x_phi is None else float(x_phi)))
     return replace(base, hyperon_couplings=tuple(rows))
 
 

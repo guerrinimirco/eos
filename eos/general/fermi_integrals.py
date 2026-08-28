@@ -467,12 +467,34 @@ def solve_fermi_jel(mu, T, m, g, include_antiparticles=True, return_error=False)
     )
 
 
+#: Smallest degeneracy parameter T / (mu - m) at which the 30-node
+#: Gauss-Laguerre rule of `solve_fermi_gl` is usable. The change of variables
+#: is x = (E - m) / T, so the Fermi step sits at x = (mu - m) / T and the rule
+#: has to resolve it with nodes that reach only x ~ 104. Measured against JEL
+#: for a nucleon gas, the error is 7e-4 at 0.1, 4e-3 at 0.08 and 5e+1 at 0.01.
+GL_MIN_DEGENERACY = 0.1
+
+
 def solve_fermi_gl(mu, T, m, g, include_antiparticles=True):
     """
     Solve Fermi integrals using Gauss-Laguerre quadrature.
-    
-    Higher accuracy than JEL, but slower.
-    Falls back to analytic limits for T→0 and m→0.
+
+    An alternative to `solve_fermi_jel` in the sense of CLAUDE.md section 7 --
+    supplementing it, never replacing it -- and agreeing with it to ~7e-4 ON
+    ITS DOMAIN, which is the gas that is NOT strongly degenerate:
+
+        mu <= m, or  T / (mu - m) >= GL_MIN_DEGENERACY.
+
+    Outside that domain the rule cannot resolve the Fermi step and the answer
+    is not merely inaccurate but wrong by orders of magnitude, so it is
+    returned as NaN rather than as a number -- the domain is reported the way
+    section 6 has every other boundary in this module report a failure. The
+    T = 0 form is NOT substituted there: it returns s = 0 identically, which
+    at T = 0.5 MeV would trade one silent error for another. A caller that
+    wants the strongly degenerate gas wants `solve_fermi_jel`, which is
+    validated everywhere.
+
+    Falls back to the analytic limits for T -> 0 and m -> 0.
     """
     mu, T, m, g = float(mu), float(T), float(m), float(g)
     
@@ -482,7 +504,10 @@ def solve_fermi_gl(mu, T, m, g, include_antiparticles=True):
     
     if T < 1.0e-4:
         return solve_fermi_t0(mu, m, g, include_antiparticles)
-    
+
+    if mu > m and T < GL_MIN_DEGENERACY * (mu - m):
+        return (np.nan,) * 5
+
     return _fermi_gauss_laguerre_kernel(
         mu, T, m, g, _GL_NODES, _GL_WEIGHTS, include_antiparticles
     )

@@ -124,6 +124,18 @@ class Parameters:
         """{name: (mass, x_sigma, x_omega, x_rho, x_phi)} from the tuple."""
         return {row[0]: row[1:] for row in self.hyperon_couplings}
 
+    @property
+    def has_phi_coupling(self):
+        """
+        True when some hyperon carries a nonzero hidden-strange ratio
+        x_phi = g_phiY/g_omegaN. This is what turns the phi field on: the
+        sector is carried by its coupling, not by a separate boolean, so
+        `x_phi = 0` in every row IS the statement that there is no phi
+        (`nmp.from_hyperon_potentials(x_phi=0.0)` builds such a set). Nucleons
+        do not couple to the phi, so a par with no hyperon rows has none.
+        """
+        return any(row[5] != 0.0 for row in self.hyperon_couplings)
+
     # ------------------------------------------------------------- couplings
     def couplings_at(self, n_B):
         """

@@ -69,9 +69,10 @@ class Parameters:
         A NEW set is `Parameters(a0=..., gamma=...)` -- every field carries a
         default, so only the ones that change need naming -- or
         `dataclasses.replace` of one already in hand. FROM nuclear-matter
-        parameters there is no route: `nmp.invert_nmp` raises, because six
-        couplings against five NMPs leaves a one-parameter family with no
-        published closure. `nmp.compute_nmp` is the forward direction.
+        parameters, `nmp.from_nmp` inverts in CLOSED FORM: six couplings
+        against five NMPs still leaves one free choice, so the caller names
+        it, either as `gamma1` or as a sixth datum `K_sym`. `nmp.compute_nmp`
+        is the forward direction.
         """
         return cls()
 

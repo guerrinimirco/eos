@@ -116,3 +116,31 @@ A ruling plus, if the reparametrisation is adopted, the measured
 condition numbers in the new coordinates beside the four above. No published
 number moves: this is the same closure in different coordinates, so
 `compute_nmp` on the shipped set must return the same eight values.
+
+
+## What [ticket 93](93-invert-nmp-basin-lottery.md) hands over (2026-08-28)
+
+93 removed the solver half of the complaint, so what is left here is the
+closure alone, and it is now measured at DD2's own point rather than inferred.
+
+- **The 6x6 no longer stalls; it converges to a wrong answer and says ok.**
+  With the stall counted as a miss the restarts fire, and at DD2's own NMPs the
+  6x6 reaches max|residual| = **1.408e-02** — under `ISO_GATE` by a factor 1.4,
+  so `ok=True` — while imposing **Q_sat only to 1.585 MeV** and K_sat to
+  1.9e-03. It **saturates**: 64 and 128 restarts find nothing better. So the
+  6x6's `ok` is a statement about a residual whose Q_sat row carries the
+  stencil floor, and no verdict change can rescue it. This is the arithmetic
+  of this ticket (515 x 1.5e-03) arriving as a measured Q_sat miss.
+- **The 5x5 was never the noise problem.** Its own residual floor is
+  2e-10 .. 1e-07 and its whole defect was the suppressed restarts. After 93 it
+  converges at all seven target perturbations over eps in [0, 1e-8], at
+  `coupling_shift` 3.948e-02 every time. So the "amplified noise, not a
+  singular Jacobian" framing splits the two closures rather than covering both:
+  the noise is the entire story in the 6x6 and no part of it in the 5x5.
+- **A routing question this ticket is the natural home for.** A whole
+  `compute_nmp` dict carries `Q_sat`, so `impose_Q_sat=None` sends
+  `from_nmp(compute_nmp(par))` — the natural round trip — to the **6x6**, the
+  worse-conditioned closure, while the shipped default is the 5x5. Two dd2
+  tests were 6x6 tests that read as 5x5 ones for exactly this reason. If the
+  reparametrisation lands, decide whether the presence of a key should still
+  choose a closure.

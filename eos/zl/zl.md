@@ -73,11 +73,13 @@ exists so that a caller sweeping parameter sets need not know which models
 happen to have more than one. *A new set:* every field carries a default, so
 `Parameters(a0=..., gamma=...)` names only what changes, and
 `dataclasses.replace` modifies one already in hand. *From nuclear-matter
-parameters:* **no route.** `nmp.invert_nmp` and `nmp.from_nmp` raise
-`NotImplementedError` -- six couplings against the five NMPs of the standard
-list leaves a one-parameter family, and nothing in the literature singles out a
-member of it. The docstring names the two ways to close it. `nmp.compute_nmp`
-is the forward direction and is complete.
+parameters:* `nmp.from_nmp` and `nmp.invert_nmp`, in **closed form** — the
+interaction enters the nuclear-matter parameters linearly in `a0, b0, a1, b1`
+once the two exponents are known, and the exponents come out of ratios of the
+isoscalar data, so there is no seed, no basin and no restart count. Six
+couplings against the five NMPs of the standard list still leaves one free
+choice, and the caller names it: either `gamma1`, or a sixth datum `K_sym`.
+`nmp.compute_nmp` is the forward direction.
 
 **Single-nucleon thermodynamics.** Each species is a free Fermi gas of mass
 `m_i` and degeneracy `g = 2` (spin), evaluated at its effective potential
@@ -244,13 +246,71 @@ contamination the published values do not include. The difference is real, not
 numerical: DID needs the full step because its `E/A` difference at small
 asymmetry sits in noise, and ZL's does not.
 
-**`invert_nmp` raises.** ZL has six couplings — `a0, b0, gamma, a1, b1, gamma1`
-— against the five NMPs of the standard list, so the inversion has a
-one-parameter family of solutions. DD2 closes its isoscalar sector with a
-structural cross-constraint; nothing in Constantinou et al. singles out a member
-of ZL's family. Closing it needs either a sixth imposed datum (`Q_sat`, or an
-effective mass) or one coupling held fixed, and until one is chosen the function
-raises saying so rather than returning an arbitrary member.
+**The inverse map, in closed form.** ZL has six couplings — `a0, b0, gamma,
+a1, b1, gamma1` — against the five NMPs of the standard list, so imposing that
+list leaves one free choice. `invert_nmp` makes the caller name it and then
+solves by algebra, not by a root find. Writing `Eb = E_sat - E_sat,K` and so on
+for each interaction remainder (the total minus its free-Fermi-gas part at
+`n0`, both rest-mass-subtracted), and setting the functional's `n0` equal to
+the requested `n_sat` so that saturation is imposed at `u = 1`:
+
+    X      = Eb n0 + P_K,0
+    D      = (9 Eb + Kb) n0^2 + 9 P_K,0 n0
+    gamma  = -Kb n0 / (9 X)
+    b0     = 9 X^2 / D
+    a0     = [Kb Eb n0^2 - 9 P_K,0 (Eb n0 + P_K,0)] / D
+    b1     = [3 Sb - Lb + 3 b0 (1 - gamma)] / [3 (1 - gamma1)]
+    a1     = [3 gamma1 Sb - Lb + 3 a0 (gamma1 - 1)
+              + 3 b0 (gamma1 - gamma)] / [3 (gamma1 - 1)]
+
+which is Eqs. (nmp-pot) read backwards: `a0 + b0 = Eb`, `n0 (a0 + gamma b0) =
+-P_K,0` (the total pressure vanishes), `9 gamma (gamma - 1) b0 = Kb`, and the
+two `delta^2` conditions. For `{n_sat = 0.16, E_sat = -16, K_sat = 250,
+E_sym = 31.6, L_sym = 43}` with `gamma1 = 2.45` it returns `a0 = -96.6555,
+b0 = 58.8619, gamma = 1.39854, a1 = -25.1985, b1 = 7.1850`, and the round trip
+through `compute_nmp` returns `n_sat` to 1e-14, `E_sat` to 6e-13 and `E_sym` to
+5e-7, with `K_sat` and `L_sym` to 1e-2 — the forward map's own stencil, not the
+algebra.
+
+**Two conventions decide whether that round trip means anything.** First, the
+rest mass: every remainder is a difference between a total and its kinetic
+part, which is the interaction piece only when both sides are binding energies
+(they are here — `energy_per_baryon` subtracts `m_p n_p + m_n n_n`), so a
+derivation carrying an explicit `+ m_H` is reading the same symbol the other
+way. Second, **which `E_sym`**: this repository uses the quadratic coefficient
+and Constantinou et al. use the full PNM − SNM step. On the shipped set those
+read `30.848 / 41.270` and `31.561 / 42.718` — one functional, two conventions.
+The familiar target `{31.6, 43}` is therefore the shipped set stated in the
+*second* convention, which is exactly why putting it through this inversion
+gives `a1 = -25.20, b1 = 7.19` where the shipped set carries `-26.06` and
+`7.34`. Neither is wrong; they answer different questions.
+
+**`Q_sat` is not free in ZL.** The interaction carries one power-law term, so
+its skewness and its incompressibility come from the same `b0 u^gamma`:
+
+    Q_sat,pot = 27 gamma (gamma - 1) (gamma - 2) b0
+              = 3 (gamma - 2) K_sat,pot        exactly.
+
+Once `{n_sat, E_sat, K_sat}` fix `gamma` and `b0`, `Q_sat` follows — so it
+cannot be the sixth datum, and a prior over `(K_sat, Q_sat)` in ZL lives on a
+curve rather than in a plane. Nothing isovector reaches `gamma` or `b0`, which
+is how the identity is pinned in `test/zl/test_zl_nmp.py`: moving `E_sym`,
+`L_sym` and `gamma1` leaves the predicted `Q_sat` bit-identical.
+
+**`K_sym` can be imposed, and only here.** The isovector sector has THREE knobs
+— `a1, b1, gamma1` — against three isovector data, so with
+
+    K_sym,pot = 9 [gamma1 (gamma1 - 1) b1 - gamma (gamma - 1) b0]
+
+`gamma1` is determined rather than chosen, again in closed form: with
+`(gamma1 - 1) b1 = Lb/3 - Sb - X/n0` fixed by `E_sym` and `L_sym` alone,
+
+    gamma1 = [K_sym,pot / 9 + gamma (gamma - 1) b0] / [(gamma1 - 1) b1] .
+
+ZL is the one model in this repository that can do this; every other hadronic
+model has two isovector knobs and reports `K_sym` as a prediction. It is
+offered rather than imposed — pass `K_sym` in the NMP dict *instead of*
+`gamma1`, never both.
 
 ## What a solved point returns
 

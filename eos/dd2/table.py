@@ -205,7 +205,7 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
             fracs = dict(spec.fixed)
             fracs.update(zip(frac_keys, (float(c) for c in combo)))
             mode_kw = _mode_kwargs(spec.mode, fracs, spec.leptons)
-            has_phi = flags.phi_field and flags.hyperons
+            has_phi = flags.hyperons and spec.parametrization.has_phi_coupling
             has_muS = mode_kw.get("strange_mode") == "fixed"
             has_muL = mode_kw.get("lepton_mode") == "trapped"
 
@@ -315,7 +315,7 @@ if __name__ == "__main__":
         parametrization=Parameters.named("DD2Y"),
         mode="beta_eq_neutrinoless",
         axes={"nB": np.linspace(0.1, 0.8, 8), "SnB": [1.0, 2.0]},
-        include=SpeciesFlags(hyperons=True, phi_field=True),
+        include=SpeciesFlags(hyperons=True),
         want_coeffs=True,
     )
     res = build_table(spec)

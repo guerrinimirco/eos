@@ -14,7 +14,7 @@ PER-PHASE — hyperons, deltas, thermal_mesons, and the muons that join the
     neutralizing lepton domains. These are degrees of freedom OF THE MODELS
     BEING COUPLED; the engine implements none of them and delegates, handing
     each `Phase` its own model's flags. A model's flag object carries these
-    same six names plus that model's private physics (DD2's phi_field, its
+    same six names plus that model's private physics (DD2's
     matter-composition neutrinos), which section 4 does not name and the
     engine never reads — which is why any model's flag object serves as the
     engine's too, through `mixture_flags` below.

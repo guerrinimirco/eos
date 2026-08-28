@@ -412,7 +412,7 @@ def default_guess(par, n_B, flags, T=0.0, has_muS=False, has_muL=False):
     """
     base = solve_beta_eq(par, n_B, T=T, include_muons=flags.muons,
                          include_photons=False, check_consistency=False)
-    has_phi = flags.phi_field and flags.hyperons
+    has_phi = flags.hyperons and par.has_phi_coupling
     m = base.matter
     return _x0((m.fields["sigma"], m.fields["omega0"], m.fields["rho0"],
                       -1e-3, m.mu_B - m.Sigma_R, m.mu_C, 0.0, 0.0),
@@ -1013,7 +1013,7 @@ def sweep(par, n_B_grid, flags, T=0.0, charge_mode="neutral", Y_C=0.0,
     returned point: at the boundary it has collapsed to ~0, and a sweep that
     merely gave up ends with a healthy effective mass.
     """
-    has_phi = flags.phi_field and flags.hyperons
+    has_phi = flags.hyperons and par.has_phi_coupling
     has_muS = (strange_mode == "fixed")
     has_muL = (lepton_mode == "trapped")
 

@@ -424,12 +424,24 @@ explicit named boolean, carrying the same name in every model.
 mode says which families are trapped, the flag adds the ones that are not
 (under trapping of the e and mu families, the flag means the tau family).
 
-A model may add flags of its own for physics only it has — `phi_field` and
-`sigma_star` for the hidden-strange mesons, `gluons` in a bag model, `csc` for
-colour superconductivity.
+A model may add flags of its own for physics only it has — `sigma_star` for
+the hidden-strange scalar, `gluons` in a bag model, `csc` for colour
+superconductivity.
+
+**A sector the model already carries a coupling for gets no flag**: it is
+controlled by that coupling, which is where every other model number lives and
+is the only form an inference sampler can vary continuously (CLAUDE.md §4, §6).
+The hidden-strange vector phi is the worked case and carries no flag anywhere —
+`dd2` reads the `x_phi` column of its hyperon rows
+(`from_hyperon_potentials(x_phi=0.0)` builds a set without the sector), `sfho`
+reads `g_phi_N` and its SU(6) phi column (`SFHo_2fam` against `SFHo_2fam_phi`),
+and `did` derives `g_phi` from `(g~_omegaN, z)` by a map with no zero, which is
+how that model states the sector is structural.
 
 **No sector is enabled or disabled implicitly** because "its coupling happens
-to be zero". If a sector is off, its flag is `False`. Setting a flag a model
+to be zero" — that is a number that vanishes with nothing saying so, not a
+coupling documented as the sector's switch. If a sector is off, its flag is
+`False`. Setting a flag a model
 does not implement **raises**; a `NotImplementedError` is never turned into a
 silent no-op:
 

@@ -147,8 +147,40 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
-**CURRENT, measured by [ticket 98](issues/98-fixed-ys-undeclared-mode.md) on
-2026-08-27:**
+**CURRENT, measured by [ticket 102](issues/102-retire-phi-field-flag.md) on
+2026-08-28:**
+
+    python.org 3.14.2  1812 passed, 23 skipped, 0 failed  (1835 collected, 34:45)
+
+Whole tree in one run, and **this is a POST-change collection with no
+pre-change control** — `test/` is gitignored, so this session could not
+snapshot the tree it started from and cannot close the denominator arithmetic.
+What 102 itself contributes is known exactly: **+1**, the drift check
+`test_phi_sector_is_off_exactly_when_its_coupling_is_zero`. Nothing was
+subtracted — DID's `test_phi_field_cannot_be_switched_off` became
+`test_phi_sector_has_no_off_switch` and dd2's `test_phi_field_presence` kept
+its name, both 1-for-1.
+
+**An off-by-one worth someone checking.** [Ticket 93](issues/93-dd2-nmp-inversion-noop.md)
+recorded 1835 collected / 1812 passed / 23 skipped earlier the same day. If
+that was measured on a tree already carrying tickets 104-107, then 102's +1
+should read 1836 here, not 1835 — so either 93's number predates one of those
+tickets or one of them is +0 where it was recorded as +1. **Nothing in this
+ticket's gate rests on it** (102's own claim is "no number moves", carried by
+the unmoved `dd2.npz`/`mixed.npz` and 0 failed), but the next session to quote
+a denominator should measure a control rather than chain onto either figure.
+
+**A run that lied, recorded because the failure mode is cheap to repeat.** The
+first attempt reported **exit code 0 with its output truncated at 54% and no
+summary line**, having printed two `F`s at 31%. The 29-33% band is
+`test_dd2_m9` -> `test/did/test_couplings`, which holds the timing-sensitive
+`test_dd2_speed.py`, and a concurrent session was running its own suite (it
+regenerated `test/baseline/vmit.npz` at 14:48). Re-running the same tree with
+the shell owning the log file: that band clean, 0 failed. **An exit code is not
+a result — only the summary line is**, and `pytest -q` into a captured pipe can
+lose the line that carries it.
+
+**Previously, [ticket 98](issues/98-fixed-ys-undeclared-mode.md), 2026-08-27:**
 
     python.org 3.14  1738 passed, 20 skipped, 0 failed  (1758 collected, 18:13)
 
@@ -2483,6 +2515,157 @@ against this file, not against the earlier `pytest_before*.txt`.
   `output/_audit/{inference_stress_500,mode_species_coverage,doc_examples_*}*`.
 
 
+- [`zl.invert_nmp`: the closed form exists and was verified](issues/104-zl-analytic-inversion.md):
+  **built, and it makes zl the one model here whose inversion is algebra.** No
+  seed, no basin, no restart count -- which is the property
+  [ticket 93](issues/93-invert-nmp-basin-lottery.md) and
+  [ticket 105](issues/105-dd2-isoscalar-conditioning.md) are about the ABSENCE
+  of. The ticket's closed form was re-derived rather than transcribed and
+  reproduces digit for digit (`a0=-96.6555 b0=58.8619 gamma=1.39854
+  a1=-25.1985 b1=7.1850`), round-tripping to n_sat 1.2e-14, E_sat 5.6e-13,
+  E_sym 5.4e-07 and K_sat/L_sym to 1e-2 -- the forward map's own stencil.
+  **The premise the ticket left unstated is `n0 := n_sat`**: the form is exact
+  only because the functional's reference density is SET to the requested
+  saturation density, so saturation is imposed at u = 1 rather than found,
+  which is also why inverting the published NMPs returns gamma to 3e-5 and
+  a0/b0 to 0.3 % rather than exactly. The two convention traps were the whole
+  risk and both are now measured, not asserted: on the shipped set the
+  quadratic E_sym/L_sym read **30.848 / 41.270** against the full-step
+  **31.561 / 42.718**, so the familiar target {31.6, 43} IS the shipped set in
+  Constantinou's convention and was never an independent target -- exactly the
+  0.87 MeV that moves a1 from -26.06 to -25.19. The rest-mass trap's FIRST
+  test was wrong (couplings are not mass-invariant; the free gas depends on m)
+  and is pinned instead by the one thing that is exact: feed E_sat = -16 and
+  the functional must bind at -16, not m - 16. Both ZL facts confirmed —
+  `Q_sat,V = 3(gamma-2) K_sat,V` exactly, so Q_sat is refused as the sixth
+  datum, and it is tested where it IS exact (nothing isovector reaches gamma
+  or b0, so the predicted Q_sat is **bit-identical** under moved E_sym, L_sym,
+  gamma1) rather than against a third-derivative stencil that only converges
+  as h^2; and K_sym imposition, which needs no root find either since gamma1
+  falls out linearly. Beyond the ticket: an `InversionStatus` (§6 -- a target
+  saturating outside `N_SAT_BRACKET` is a return value), and the free choice
+  named exactly once (gamma1 XOR a dict `K_sym`, never both, no default). **A
+  downstream site the ticket did not list**: `notebooks/hadronic_eos.py` called
+  `invert_nmp(**target)` relying on the `NotImplementedError`, which under the
+  new signature is a `TypeError` `run()` does not catch -- fixed, with the
+  markdown bullet that told the reader zl "cannot be built *from* a set of
+  them". Gate is the blast radius, not the tree: `test/zl` + all 12 baselines +
+  imports/routes/nonconvergence, **329 passed, 0 failed**, `zl.npz` unmoved, a
+  concurrent session holding dd2/general/mixed/CLAUDE.md making a whole-tree
+  run unattributable. `HADRONIC["zl"]` flips False -> True in
+  `test_parameter_routes`; `docs/STRUCTURE.md:292` needed no edit because it
+  already listed zl under "nuclear-matter parameters, inverse" at HEAD, which
+  was FALSE while the function raised -- a standing claim made true rather
+  than corrected. `docs/DEFERRED.md` carried no zl entry to retire,
+  only DID's "the way `eos.zl` does" cross-reference, corrected in place.
+
+- [`solve_fermi_gl` returns a density three orders wrong and says it is accurate](issues/107-fermi-gl-threshold.md)
+  (2026-08-28): **the threshold moves, but to a NaN, not to `solve_fermi_t0`.**
+  The ticket recommended raising the fallback threshold; measuring what there
+  is to raise it *to* rules that out twice over. There is a GAP — the 30-node
+  Gauss-Laguerre rule leaves the suite's 2e-3 below T/(mu - m) ~ 0.1 (6.9e-4 at
+  0.1, 4.3e-3 at 0.08, 5.2e+1 at 0.01) and the T = 0 form does not enter it
+  until ~0.02 — and, decisive at any threshold, **`solve_fermi_t0` returns
+  s = 0 identically**, so substituting it at the T = 0.5 MeV the ticket named
+  trades a density three orders wrong for an entropy 100% wrong, which is the
+  same defect wearing the fallback's name. So the guard is on the degeneracy
+  parameter and outside the domain the routine returns `(nan,) * 5`, following
+  §6 and this module's own habit — `invert_fermi_density` twenty lines below
+  already returns NaN for a target it cannot bracket. The guard's `mu > m` limb
+  is load-bearing, not defensive: `mu <= m` is the non-degenerate gas the rule
+  is BEST at, and it is the regime `test/dd2/test_dd2_m0.py:93` uses GL as its
+  reference in, so a guard written on T alone would have broken that test.
+  `GL_MIN_DEGENERACY` now lives with the routine and the verify suite imports
+  it instead of re-declaring it (§7). The T < 1e-4 fallback stays and stays
+  FIRST, so only the broken window 1e-4 < T < 0.1 (mu - m) changes. **No model
+  number can move, measured not argued**: the only importers outside
+  `eos/general/` are the verify suite and one dd2 test, both green, and a spy
+  on `solve_fermi_gl` counted **0 calls** through the ccdm baseline.
+
+- [`invert_nmp` returns ok=True when the solver never left the seed](issues/93-invert-nmp-basin-lottery.md):
+  **the defect was not the verdict — the stall SUPPRESSED THE RESTARTS that
+  would have solved it.** `_restart_loop` fired on `best_res >= ISO_GATE`, and a
+  stall carries the published couplings' own 2.201e-03 cross-row violation,
+  which sits UNDER the 2e-2 gate; so the 32 restarts never ran. They were never
+  needed to be many — at DD2's own NMPs the **FIRST** jittered restart drives
+  the 5x5 to 6.8e-08 and recovers K_sat to 1e-4 MeV. Feeding one condition,
+  `_stalled` (the seed returned BIT FOR BIT on a residual above
+  `STALL_RES = 1e-5`), into both the restart trigger and `ok` therefore turns a
+  silent wrong answer into a **correct** answer, not merely into the reported
+  failure §6 demanded. The 5x5 lottery is gone: seven target perturbations over
+  eps in [0, 1e-8] all converge, 2.4e-10 .. 9.1e-08, `coupling_shift` 3.948e-02
+  every time. **ISO_GATE stays 2e-2 and the ticket's own remedy is refuted by
+  measurement**: a moved and ACCURATE 5x5 solve lands at 1.944e-03 (K_sat to
+  0.0095 MeV) against the stall's 2.201e-03, so stalled and converged residuals
+  OVERLAP and no threshold on the residual separates them at any value —
+  the certificate had to stop being a gate reading. (`root()`'s own `success`
+  flag was tried and rejected: it reports the stall, but also reports status 5
+  at K_sat = 200 and 260, which land at 8.5e-08 with K_sat correct.) Restart
+  coverage is a **`verify/` entry**, `_check_restarts_extend_the_basin`, 0/9 ->
+  4/9 cells at 0 vs 32 restarts, ~10 s — asserting that the restarts CHANGE the
+  answer, since the keep-the-best loop is monotone by construction. **Decision 4
+  measured, not argued**: before the fix `from_nmp` handed back
+  `gamma_sigma == 10.686681` bit for bit and `build_parametrization` said
+  `stage='ok'`; both route through `invert_nmp` and inherit the fix. **Two dd2
+  tests were asserting the defect** — `test_roundtrip_recovers_couplings`
+  compared the published couplings with themselves, a premise `nmp.py`'s
+  docstring has always denied, and both it and `test_idempotent` routed to the
+  **6x6** because a whole `compute_nmp` dict carries `Q_sat`. Corrected onto the
+  six imposed keys, where the 5x5 is idempotent to 3.8e-08. **What is handed to
+  [ticket 105](issues/105-dd2-isoscalar-conditioning.md) is sharper than before**:
+  the 6x6 now converges instead of stalling — to 1.408e-02, under the gate by a
+  factor 1.4, `ok=True` — while imposing Q_sat only to **1.585 MeV**, saturating
+  (64 and 128 restarts find nothing better). The "amplified noise" framing
+  SPLITS the two closures rather than covering both: the noise is the whole
+  story in the 6x6 and no part of it in the 5x5, whose floor is 2e-10 .. 1e-07.
+  Also surfaced and handed to [ticket 103](issues/103-nmp-closures-four-models.md):
+  a failed inversion is a `None` in dd2 and a `RuntimeError` in zl, and dd2's
+  None reaches `solver.py` as an AttributeError.
+  Gate: dd2 `run_full_check` **PASS** with the new check, golden SNM(0.16)
+  `1.40e-05` and CompOSE HS(DD2) `2.83e-05` both UNMOVED; `test/dd2` 211 passed;
+  full suite on python.org 3.14.2 **1812 passed, 23 skipped, 0 failed**
+  (1835 collected, 46:30, exit 0).
+
+
+- [Retire `phi_field`; the hidden-strange vector is controlled by its coupling](issues/102-retire-phi-field-flag.md)
+  (2026-08-28): **executed, and DID's half of it dissolved rather than moved.**
+  The user's ruling stood; the ticket's plan for DID did not. It said "prefer
+  the refusal — the §4 statement just moves from a boolean to the coupling",
+  but DID's ratios `g_phi/g_8 = -tan(theta) - c_i(z, alpha)` have **no common
+  zero**, measured before anything was deleted: ideal mixing `z = 1/sqrt6`
+  kills only the nucleon's, `tan_theta = 0` only Lambda's and Sigma's. So a
+  `tan_theta == 0` guard would refuse a setting that is not "phi off" and say
+  something false, and an all-zero-column guard would be unreachable at every
+  parameter set. **User chose prose-only** (2026-08-28): DID states the sector
+  is structural in `species.py`/`did.md` plus a test asserting the
+  no-common-zero property over four settings. The other two moved as planned —
+  `dd2` gained `Parameters.has_phi_coupling` (the `x_phi` column) and
+  `from_hyperon_potentials(x_phi=None)`, a float override chosen over a
+  `phi=True/False` keyword because §6 wants a knob a sampler can vary
+  continuously, not the retired boolean one file over; `sfho` was **pure
+  deletion**, the flag having had no reader anywhere — it existed only to raise
+  on False, while `SFHo_2fam` against `SFHo_2fam_phi` was already the coupling
+  switch. **Two sites the ticket's list did not carry**: `notebooks/hybrid_eos`
+  rebuilds a retired run from a provenance header that records
+  `flags.phi_field`, so deleting the constructor line alone would have silently
+  rebuilt phi-OFF runs with the phi ON — the key now zeroes the `x_phi` column
+  instead; and `docs/STRUCTURE.md:427` used `phi_field` as its worked example,
+  in the paragraph directly above the "coupling happens to be zero" sentence
+  the ruling had to be reconciled with. **CLAUDE.md §4 gained the owed
+  paragraph** and it names that tension: there a number vanishes with nothing
+  saying so, here the coupling IS the statement, documented as the sector's
+  switch. Gate met — `grep phi_field eos/` empty, `dd2.npz`/`mixed.npz`
+  unmoved, drift check
+  `test_phi_sector_is_off_exactly_when_its_coupling_is_zero` beside
+  `test_every_species_flag_defaults_off_or_raises`, **1812 passed, 23 skipped,
+  0 failed**. No number could move and the mechanism says why: every
+  `phi_field=False` in the tree sat beside `hyperons=False`, every
+  `phi_field=True` beside a DD2Y par. **A first run lied**: exit code 0, output
+  truncated at 54%, two `F`s at 31% in the band holding `test_dd2_speed.py`,
+  all of it contention with the concurrent session that regenerated
+  `vmit.npz` — an exit code on a truncated pytest log is not a pass, only the
+  summary line is.
+
 ## Not yet specified
 
 Two patches graduated on 2026-08-27 out of
@@ -2497,6 +2680,29 @@ trapped mode's condition in three models and the measured lepton fraction in
 three others, and the zeros are a defect or correct depending which.
 
 In scope, not yet sharp enough to ticket:
+
+- **`test/baseline_py39/` is a snapshot nothing selects and nothing reproduces.**
+  Found while gating [ticket 107](issues/107-fermi-gl-threshold.md).
+  `generate_baseline.path_for()` returns `HERE / f"{name}.npz"` unconditionally,
+  so `test/baseline_py39/` is never read by `test_baseline` on any interpreter —
+  and it is staler than the directory that IS read: fresh ccdm on Python 3.9.7 /
+  numpy 1.26.4 differs from `baseline_py39/ccdm.npz` in **1256** of 6068 keys,
+  against 108 for `baseline/ccdm.npz`. Either it is dead weight to delete or
+  `path_for` is meant to branch on `sys.version_info` and never did; which one
+  has not been read, and the answer decides whether §12's "frozen at
+  rtol = 1e-10" is claimed for one interpreter or two.
+
+- **The baselines are interpreter-bound and §12 does not say so.** Same
+  gate: `test_baseline[ccdm]` fails on Python 3.9.7 / numpy 1.26.4 (108
+  quantities, worst `pattern.2SC.n1.5.T0.x` at 8.8e+03 relative, a CSC pattern
+  selection, plus `state.field_residual` at abs 1e-9 to 1e-5) while passing on
+  the canonical python.org 3.14.2 / numpy 2.3.5. It is NOT a regression — a spy
+  counted 0 calls to `solve_fermi_gl` through that baseline, and a concurrent
+  canonical run cleared `test/baseline` with 0 failures. `abpr` and `alphabag`
+  pass on 3.9.7, so the split is per-model, not global. Whether an rtol = 1e-10
+  freeze is meaningful across interpreters at all, or whether §12 should name
+  the stack the way a suite count does, is the question — and it is the same
+  question the `baseline_py39/` patch above asks from the other end.
 
 - *(A patch graduated on 2026-08-27: the mode list divergence is now
   [ticket 98](issues/98-fixed-ys-undeclared-mode.md), surfaced by a BayEoS

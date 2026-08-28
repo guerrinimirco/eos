@@ -306,6 +306,18 @@ difference — forward and inverse use the identical stencil so the bias
 cancels on round trips — and the inverter retries from jittered seeds before
 declaring a target unrepresentable.
 
+The published couplings are NOT a root of that closure: the fitted table obeys
+the cross-constraint to 2.200718e-3 rather than exactly, so it is a stationary
+point of the residual norm and no seed recovers it. The 5x5 reaches a root
+3.9% away that reproduces the same six imposed nuclear-matter parameters, and
+`InversionStatus` reports `coupling_shift` — the max relative distance from the
+seed — because "converged" and "recovered the published couplings" are
+different statements. A solve that returns its seed unmoved on a nonzero
+residual is a Powell hybrid giving up on its first step, not an answer, and
+comes back `ok=False`; the residual alone cannot make that call, since a
+stalled solve and a moved, accurate one were measured at 2.201e-3 and 1.944e-3
+respectively.
+
 **What `eos_response` returns.** A second derivative is only defined once one
 says what is held fixed, so the conditioning is an explicit argument. Two
 freezes are implemented; every other combination raises

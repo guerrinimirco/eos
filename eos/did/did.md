@@ -86,8 +86,9 @@ values (rho is the third isospin component):
 
 The phi is NOT a hyperon-only field here: the SU(3) sector below gives the
 NUCLEON `g_phiN = -5.20` at saturation for the published set, so the phi is
-active at every composition and `SpeciesFlags(phi_field=False)` RAISES rather
-than switching a sector off.
+active at every composition. Nor is there a parameter set that removes it: the
+ratios `g_phi/g_8 = -tan(theta) - c_i(z, alpha)` have no common zero over the
+multiplets, so the phi sector is structural in DID.
 
 ## The couplings
 
@@ -853,12 +854,12 @@ needs each pure phase at fixed Y_C WITHOUT leptons, which is the
 
 ## Species flags
 
-`hyperons`, `deltas`, `muons`, `thermal_mesons`, `thermal_neutrinos`, `photons`,
-`phi_field`. Nucleons are always present. Setting a flag DID does not implement
-RAISES; a NotImplementedError is never turned into a silent no-op —
-`phi_field=False` is the one DID refuses outright, because the SU(3) sector
-gives the nucleon a phi coupling and dropping the field would change the model,
-not switch off a sector.
+`hyperons`, `deltas`, `muons`, `thermal_mesons`, `thermal_neutrinos`,
+`photons`. Nucleons are always present. Setting a flag DID does not implement
+RAISES; a NotImplementedError is never turned into a silent no-op. The
+hidden-strange vector phi is not among them: it is carried by its coupling, and
+in DID that coupling is derived from `(g~_omegaN, z)` by Eq. 52 with no zero
+available, so the field is part of the model at every parameter set.
 
 ## Usage
 

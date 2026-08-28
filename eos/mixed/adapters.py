@@ -226,7 +226,7 @@ def hadronic_seed(par, flags, T, n_B_guess):
                                check_consistency=False)
     fields = base.matter.fields
     x = [fields["sigma"], fields["omega0"], fields["rho0"]]
-    if flags.phi_field and flags.hyperons:
+    if flags.hyperons and par.has_phi_coupling:
         x.append(fields["phi0"] if fields["phi0"] != 0.0 else -1.0e-3)
     x.append(n_B_guess * hc3)
     return x

@@ -39,7 +39,7 @@ def _state(par, n_B, flags, T):
     """Converged beta-eq point, its unknown vector x0, ctx and Jacobian."""
     p = solve_beta_eq_neutrinoless(par, n_B, replace(flags, photons=False),
                                    T=T)
-    has_phi = flags.phi_field and flags.hyperons
+    has_phi = flags.hyperons and par.has_phi_coupling
     x0 = np.array(warm_start(p, has_phi, False, False))
     ctx0 = build_matter_ctx(par, n_B, flags, T=T)
     J = np.array(residual_jacobian(x0, ctx0, _BETA))
@@ -111,7 +111,7 @@ def susceptibilities(par, n_B, flags, T=0.0):
     """
     p = solve_beta_eq_neutrinoless(par, n_B, replace(flags, photons=False),
                                    T=T)
-    has_phi = flags.phi_field and flags.hyperons
+    has_phi = flags.hyperons and par.has_phi_coupling
     # fixed+fixed ctx exposes the mu_S column and the hadronic charge/strange
     # rows; the Y_C/Y_S targets don't enter the (pointwise) Jacobian.
     held = mode_spec(charge_mode="fixed", strange_mode="fixed")
@@ -142,7 +142,7 @@ def susceptibilities(par, n_B, flags, T=0.0):
 if __name__ == "__main__":
     from eos.dd2 import Parameters, SpeciesFlags
     par = Parameters.named("DD2Y")
-    flags = SpeciesFlags(hyperons=True, phi_field=True)
+    flags = SpeciesFlags(hyperons=True)
     for n in (0.16, 0.4, 0.8):
         cs2 = sound_speed_eq(par, n, flags)
         chi = susceptibilities(par, n, flags)

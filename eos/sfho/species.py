@@ -42,9 +42,13 @@ class SpeciesFlags:
                          and s only.
     photons           -- a thermal photon gas. Carries no conserved charge and
                          matters only at T > 0.
-    phi_field         -- the hidden-strange vector phi. SFHo always carries it
-                         in the unknown vector, so False raises: dropping the
-                         field is a change to the system's size, not a flag.
+
+    The hidden-strange vector phi has no flag: SFHo already carries its
+    coupling, as `g_phi_N` (0.0 at every published set -- nucleons do not
+    couple to the phi) and the SU(6) phi column of the hyperon couplings. A
+    set with those zero has no phi sector, which is what `SFHo_2fam` is
+    against `SFHo_2fam_phi`; the field stays in the unknown vector and solves
+    to zero, so no solver branch depends on the choice.
     """
     hyperons: bool = False
     deltas: bool = False
@@ -52,7 +56,6 @@ class SpeciesFlags:
     thermal_mesons: bool = False
     thermal_neutrinos: bool = False
     photons: bool = False
-    phi_field: bool = True
 
     def __post_init__(self):
         if self.muons:
@@ -60,11 +63,6 @@ class SpeciesFlags:
                 "SpeciesFlags: the muon lepton family is not wired in SFHo — "
                 "it appears in no residual, no neutrality row and no total "
                 "(see docs/DEFERRED.md). eos.dd2 implements it.")
-        if not self.phi_field:
-            raise NotImplementedError(
-                "SpeciesFlags: SFHo always solves the phi field; phi_field="
-                "False would shrink the unknown vector, which is a solver "
-                "change rather than a flag (see docs/DEFERRED.md)")
 
     @property
     def has_strange_baryons(self):

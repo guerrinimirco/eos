@@ -16,11 +16,6 @@
 # %% [markdown]
 # # Hadronic equations of state — ZL, SFHo, DD2, DID
 #
-# Four hadronic models of `eos`, driven through the public API and nothing else:
-# `eos_point`, `eos_table` and the model's parameter and species objects. No
-# solver internal is touched and no helper module sits beside this notebook —
-# everything the notebook needs is either in the library or in the cells below.
-#
 # What is here:
 #
 # 1. **The knobs** — every choice this notebook makes, in one cell.
@@ -46,9 +41,6 @@ from pathlib import Path
 
 import numpy as np
 
-# `eos` is imported from this checkout rather than from site-packages: the
-# package is not installed, so the repository root goes on the path first. This
-# works whether the notebook is run from `notebooks/` or from the root.
 ROOT = Path.cwd()
 if not (ROOT / "eos").is_dir():
     ROOT = ROOT.parent
@@ -92,17 +84,18 @@ class Knobs:
     leptons: bool = True               # orthogonal to the mode
 
     # --- the grid -------------------------------------------------------
-    n_B: tuple = (0.10, 0.80, 12)      # (lo, hi, count), fm^-3
+    n_B: tuple = (0.08, 1.6, 300)      # (lo, hi, count), fm^-3
     thermal: str = "T"                 # "T" or "SnB"
-    thermal_grid: tuple = (0.0, 10.0, 2)   # MeV, or k_B per baryon
+    thermal_grid: tuple = (0.0, 100.0, 6)   # MeV, or k_B per baryon
 
     # --- the sectors ----------------------------------------------------
-    # Every one is explicit: a sector that is off is off because its flag is
-    # False, never because a coupling happens to vanish. Turning one on that a
-    # model has not wired raises, and section 2 below reports that as a refusal.
     species: dict = field(default_factory=lambda: dict(
-        hyperons=False, deltas=False, muons=False,
-        thermal_mesons=False, thermal_neutrinos=False, photons=True))
+        hyperons=True, 
+        deltas=True, 
+        muons=False,
+        thermal_mesons=True, 
+        thermal_neutrinos=True, 
+        photons=True))
 
     # --- the parameters (they are arguments, never module state) --------
     #   "default"              -> Parameters.default()
@@ -507,10 +500,13 @@ for name in KNOBS.models:
 # * **`sfho`** inverts, and returns a status alongside the parameters: a target
 #   the functional form cannot represent comes back as a failure to score, not
 #   as an exception.
-# * **`zl`** refuses. Six parameters against the five nuclear-matter parameters
-#   of the standard list leaves a one-parameter family, and nothing published
-#   singles out a member of it. So `zl` shows its nuclear-matter parameters as
-#   computed predictions, above, and cannot be built *from* a set of them.
+# * **`zl`** inverts in closed form — no seed, no basin, no restart count, the
+#   only one here that does. Six couplings against the five nuclear-matter
+#   parameters of the standard list still leaves one free choice, so the caller
+#   names it: either `gamma1`, or a sixth datum `K_sym` (`zl` is the one model
+#   with three isovector knobs, so it is the one that can impose `K_sym`).
+#   `Q_sat` cannot be that datum — in `zl` it is rigidly `3 (gamma - 2) K_sat`
+#   in the interaction part, so `{n_sat, E_sat, K_sat}` already fix it.
 # * **`did`** carries the forward map only.
 #
 # Turn `use_nmp_inversion` on in the knobs cell to run it.
@@ -522,9 +518,12 @@ print(f" target: {KNOBS.target_nmp}")
 if not KNOBS.use_nmp_inversion:
     print(" use_nmp_inversion is off; the calls below are skipped")
 else:
-    # The two inversions do not share a calling convention — dd2 takes the
-    # nuclear-matter parameters as one dictionary, sfho expands them as keyword
-    # arguments — so the two calls are written out rather than looped over.
+    # The three inversions do not share a calling convention — dd2 and zl take
+    # the nuclear-matter parameters as one dictionary, sfho expands them as
+    # keyword arguments, and zl needs the free isovector choice named on top —
+    # so the calls are written out rather than looped over. `m_eff_ratio` in
+    # the target is dd2's and sfho's; zl has no scalar field and hence no
+    # effective mass, so it takes the other five keys and ignores nothing.
     dd2_nmp = importlib.import_module("eos.dd2.nmp")
     status, out = run("dd2", dd2_nmp.invert_nmp, KNOBS.target_nmp)
     if status == "ok":
@@ -548,7 +547,15 @@ else:
                                     if k in ("Q_sat", "K_sym")})
 
     zl_nmp = importlib.import_module("eos.zl.nmp")
-    run("zl", zl_nmp.invert_nmp, **KNOBS.target_nmp)
+    zl_target = {k: v for k, v in KNOBS.target_nmp.items() if k != "m_eff_ratio"}
+    status, out = run("zl", zl_nmp.invert_nmp, zl_target, gamma1=2.45)
+    if status == "ok":
+        par, inversion = out
+        print(f"  [zl] {'recovered' if par is not None else 'no parameters'}"
+              f" — {getattr(inversion, 'message', inversion)}")
+        if par is not None:
+            print("   predicted:", {k: round(float(v), 4)
+                                    for k, v in inversion.predictions.items()})
 
     print("  [did] no inverse map: the forward map only")
 
