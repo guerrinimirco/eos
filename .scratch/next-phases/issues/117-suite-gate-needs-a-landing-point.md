@@ -64,8 +64,28 @@ that is an acceptable gate or a gap being normalised.
   WAITER loop, and a tree-quietness guard using `find -newermt` where `find` is
   a shim to `bfs` that rejects the relative timestamp, prints to stderr and
   EXITS 0. A mechanism trusted because it prints CLEAN is trusted for exactly
-  the reason the raw counts were. The obvious check — dirty the tree mid-run,
-  assert DISCARD — does not exist.
+  the reason the raw counts were. **Partly answered on 2026-08-29**:
+  `test/test_run_clean_suite.sh` now exists, 11 cases — a quiet tree certifies
+  CLEAN with the interpreter and HEAD on the certificate, a tree written DURING
+  the run certifies DISCARD and exits non-zero, a freshly-written tree is
+  REFUSED and the suite does not run at all, and `--check` reports without
+  starting anything. Confirmed 11 passed from a second session's shell. Its
+  case 3 is a regression test for a TRAP rather than for a line of code, which
+  is why it constructs its own fresh file: any check against a quiet tree
+  passes, and only a deliberately-fresh file separates the good guard from the
+  blind one.
+
+  **Still open: whether that test can be trusted by a THIRD PARTY.** Its author
+  verified it catches the bug by reintroducing the fail-open defect and
+  watching case 3 fail — the right discipline, since a test that has never
+  failed proves nothing. A second session tried to reproduce that independently
+  and could not: `SCRIPT=test/run_clean_suite.sh` is hardcoded at line 17, so
+  checking a mutant means relocating the harness, and a CONTROL arm (the
+  unmutated script through the same relocated harness) failed 7 of 11 — the arm
+  measured its own relocation rather than the mutation, and the control is the
+  only reason that was knowable. `SCRIPT=${SCRIPT:-...}` would turn the
+  mutation check from something one session did once into something anyone can
+  rerun, which is the same move the certificate made for the raw suite count.
 
 ## The distinction worth keeping whichever way it goes
 
