@@ -75,17 +75,28 @@ that is an acceptable gate or a gap being normalised.
   passes, and only a deliberately-fresh file separates the good guard from the
   blind one.
 
-  **Still open: whether that test can be trusted by a THIRD PARTY.** Its author
-  verified it catches the bug by reintroducing the fail-open defect and
-  watching case 3 fail — the right discipline, since a test that has never
-  failed proves nothing. A second session tried to reproduce that independently
-  and could not: `SCRIPT=test/run_clean_suite.sh` is hardcoded at line 17, so
-  checking a mutant means relocating the harness, and a CONTROL arm (the
-  unmutated script through the same relocated harness) failed 7 of 11 — the arm
-  measured its own relocation rather than the mutation, and the control is the
-  only reason that was knowable. `SCRIPT=${SCRIPT:-...}` would turn the
-  mutation check from something one session did once into something anyone can
-  rerun, which is the same move the certificate made for the raw suite count.
+  **ANSWERED on 2026-08-29, and reproducibly.** `SCRIPT` is now a seam
+  (`SCRIPT=${SCRIPT:-test/run_clean_suite.sh}`), so the mutation check is two
+  commands from the repo root rather than something one session did once:
+
+      CONTROL   sh test/test_run_clean_suite.sh                    -> 11 passed, 0 failed
+      MUTANT    SCRIPT=test/.mutant.sh sh test/test_run_clean_suite.sh -> 9 passed, 2 failed
+
+  The two failures are case 3's assertions, and the mutant's output is the
+  pathology verbatim: the suite runs on a tree written moments earlier and
+  prints "CLEAN: the count above is a measurement" over it. Verified by a
+  SECOND session writing its OWN fail-open mutant rather than rerunning the
+  author's — same result, which is what makes it a property of the test rather
+  than of one person's mutant.
+
+  **The mutant must live inside `test/`.** `run_clean_suite.sh` does
+  `cd "$(dirname "$0")/.."` to find the repo, so a mutant in `/tmp` resolves
+  the repo root to `/` and the script operates on the root filesystem and dies
+  — `mkdir: test: Read-only file system`, or a `git rev-parse` failure, or an
+  arithmetic error, depending which line it reaches first. Running from the
+  repo root is necessary and NOT sufficient. Two sessions hit this
+  independently before the cause was found, both reading it as a rig problem of
+  their own making.
 
 ## The distinction worth keeping whichever way it goes
 
