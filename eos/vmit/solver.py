@@ -22,7 +22,8 @@ is in `table.py`; the spec API (eos_point / eos_table) is in `api.py`. See
 
 Usage:
     from eos.vmit.solver import solve_beta_eq_neutrinoless
-    result = solve_beta_eq_neutrinoless(n_B=0.32, T=50.0)
+    from eos.vmit.species import SpeciesFlags
+    result = solve_beta_eq_neutrinoless(par, 0.32, 50.0, SpeciesFlags())
     print(result.converged, result.P_total)
 """
 import numpy as np
@@ -30,6 +31,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from eos.vmit.parameters import Parameters
+from eos.vmit.species import SpeciesFlags
 from eos.vmit.thermodynamics import (
     effective_state, thermo_from_mu_n, G_QUARK,
 )
@@ -234,10 +236,8 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
 # SOLVER: BETA EQUILIBRIUM
 # =============================================================================
 def solve_beta_eq_neutrinoless(
-    par: Parameters, n_B: float, T: float,
-    include_photons: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    par: Parameters, n_B: float, T: float, flags: SpeciesFlags,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
     Solve vMIT EOS in beta equilibrium with charge neutrality.
@@ -261,17 +261,19 @@ def solve_beta_eq_neutrinoless(
     carries.
     
     Args:
+        par: vMIT parameters
         n_B: Baryon density (fm⁻³)
         T: Temperature (MeV)
-        par: vMIT parameters
-        include_photons: Include photon contributions
+        flags: the active sectors; `photons` adds the thermal photon gas
+            and `two_flavour` takes the s flavour out of the matter
         initial_guess: Initial guess [μ_u, μ_d, μ_s, μ_e, n_u, n_d, n_s]
-        two_flavour: u and d only; the s flavour leaves the matter
         
     Returns:
         EoSPoint with all thermodynamic quantities
     """
     
+    two_flavour = flags.two_flavour
+
     result = EoSPoint(n_B=n_B, T=T)
     
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
@@ -340,7 +342,7 @@ def solve_beta_eq_neutrinoless(
     result.e_total = q_thermo.e + e_thermo.e
     result.s_total = q_thermo.s + e_thermo.s
     
-    if include_photons:
+    if flags.photons:
         gamma = photon_thermo(T)
         result.P_total += gamma.P
         result.e_total += gamma.e
@@ -357,17 +359,15 @@ def solve_beta_eq_neutrinoless(
 # SOLVER: FIXED Y_C
 # =============================================================================
 def solve_fixed_yc(
-    par: Parameters, n_B: float, Y_C: float, T: float,
-    include_photons: bool = True,
-    include_electrons: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    par: Parameters, n_B: float, Y_C: float, T: float, flags: SpeciesFlags,
+    leptons: bool = True,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
     Solve vMIT EOS with fixed charge fraction Y_C (strangeness equilibrium).
     
-    If include_electrons=False: 6 equations, 6 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s]
-    If include_electrons=True:  7 equations, 7 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e]
+    If leptons=False: 6 equations, 6 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s]
+    If leptons=True:  7 equations, 7 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e]
         with charge neutrality n_e(μ_e) = n_Q = n_B * Y_C
     
     Constraints:
@@ -381,17 +381,19 @@ def solve_fixed_yc(
     and `solve_fixed_yc_ys` refuses it.
     """
     
+    two_flavour = flags.two_flavour
+
     result = EoSPoint(n_B=n_B, T=T, Y_C=Y_C)
     
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
     x0_default = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C,
-                               leptons=include_electrons,
+                               leptons=leptons,
                                two_flavour=two_flavour)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
 
-    if include_electrons:
+    if leptons:
         # Solve 7 equations with electron charge neutrality
         def equations(x):
             if two_flavour:
@@ -492,13 +494,13 @@ def solve_fixed_yc(
     result.s_total = q_thermo.s
     
     # Add electron thermodynamics if included
-    if include_electrons:
+    if leptons:
         e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)
         result.P_total += e_thermo.P
         result.e_total += e_thermo.e
         result.s_total += e_thermo.s
     
-    if include_photons:
+    if flags.photons:
         gamma = photon_thermo(T)
         result.P_total += gamma.P
         result.e_total += gamma.e
@@ -516,16 +518,15 @@ def solve_fixed_yc(
 # =============================================================================
 def solve_fixed_yc_ys(
     par: Parameters, n_B: float, Y_C: float, Y_S: float, T: float,
-    include_photons: bool = True,
-    include_electrons: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    flags: SpeciesFlags,
+    leptons: bool = True,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
     Solve vMIT EOS with fixed charge fraction Y_C AND strangeness fraction Y_S.
     
-    If include_electrons=False: 6 equations, 6 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s]
-    If include_electrons=True:  7 equations, 7 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e]
+    If leptons=False: 6 equations, 6 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s]
+    If leptons=True:  7 equations, 7 unknowns: [μ_u, μ_d, μ_s, n_u, n_d, n_s, μ_e]
         with charge neutrality n_e(μ_e) = n_Q = n_B * Y_C
 
     THIS IS THE ONE MODE THAT REFUSES `two_flavour`, and the refusal is the
@@ -538,6 +539,7 @@ def solve_fixed_yc_ys(
     disabled implicitly because its coupling happens to be zero"); it is
     reached by switching the sector off, in `beta_eq_neutrinoless`.
     """
+    two_flavour = flags.two_flavour
     if two_flavour:
         raise NotImplementedError(
             "solve_fixed_yc_ys: this mode holds Y_S, and with the strange "
@@ -552,11 +554,11 @@ def solve_fixed_yc_ys(
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
     x0_default = default_guess("fixed_YC_YS", n_B, T, par, Y_C=Y_C,
-                               Y_S=Y_S, leptons=include_electrons)
+                               Y_S=Y_S, leptons=leptons)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
     
-    if include_electrons:
+    if leptons:
         # Solve 7 equations with electron charge neutrality
         def equations(x):
             mu_u, mu_d, mu_s, n_u, n_d, n_s, mu_e = x
@@ -637,13 +639,13 @@ def solve_fixed_yc_ys(
     result.s_total = q_thermo.s
     
     # Add electron thermodynamics if included
-    if include_electrons:
+    if leptons:
         e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)
         result.P_total += e_thermo.P
         result.e_total += e_thermo.e
         result.s_total += e_thermo.s
     
-    if include_photons:
+    if flags.photons:
         gamma = photon_thermo(T)
         result.P_total += gamma.P
         result.e_total += gamma.e
@@ -660,10 +662,8 @@ def solve_fixed_yc_ys(
 # SOLVER: TRAPPED NEUTRINOS
 # =============================================================================
 def solve_beta_eq_neutrino_trapped(
-    par: Parameters, n_B: float, Y_L: float, T: float,
-    include_photons: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    par: Parameters, n_B: float, Y_L: float, T: float, flags: SpeciesFlags,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
     Solve vMIT EOS with trapped neutrinos (fixed lepton fraction Y_L).
@@ -675,6 +675,8 @@ def solve_beta_eq_neutrino_trapped(
     being orthogonal to the mode.
     """
     
+    two_flavour = flags.two_flavour
+
     result = EoSPoint(n_B=n_B, T=T, Y_L=Y_L)
     
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
@@ -751,7 +753,7 @@ def solve_beta_eq_neutrino_trapped(
     result.e_total = q_thermo.e + e_thermo.e + nu_thermo.e
     result.s_total = q_thermo.s + e_thermo.s + nu_thermo.s
     
-    if include_photons:
+    if flags.photons:
         gamma = photon_thermo(T)
         result.P_total += gamma.P
         result.e_total += gamma.e

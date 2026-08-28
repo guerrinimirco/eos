@@ -46,32 +46,20 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     result, not as an exception.
     """
     T = conditions["T"]
-    photons = species.photons
-    two_flavour = species.two_flavour
     if mode == "beta_eq_neutrinoless":
-        return solve_beta_eq_neutrinoless(params, n_B, T,
-                                          include_photons=photons,
-                                          initial_guess=x0,
-                                          two_flavour=two_flavour)
+        return solve_beta_eq_neutrinoless(params, n_B, T, species,
+                                          initial_guess=x0)
     if mode == "beta_eq_neutrino_trapped":
         return solve_beta_eq_neutrino_trapped(params, n_B,
-                                              conditions["Y_Le"], T,
-                                              include_photons=photons,
-                                              initial_guess=x0,
-                                              two_flavour=two_flavour)
+                                              conditions["Y_Le"], T, species,
+                                              initial_guess=x0)
     if mode == "fixed_YC":
-        return solve_fixed_yc(params, n_B, conditions["Y_C"], T,
-                              include_photons=photons,
-                              include_electrons=leptons,
-                              initial_guess=x0,
-                              two_flavour=two_flavour)
+        return solve_fixed_yc(params, n_B, conditions["Y_C"], T, species,
+                              leptons=leptons, initial_guess=x0)
     if mode == "fixed_YC_YS":
         return solve_fixed_yc_ys(params, n_B, conditions["Y_C"],
-                                 conditions["Y_S"], T,
-                                 include_photons=photons,
-                                 include_electrons=leptons,
-                                 initial_guess=x0,
-                                 two_flavour=two_flavour)
+                                 conditions["Y_S"], T, species,
+                                 leptons=leptons, initial_guess=x0)
     raise ValueError(f"unknown mode {mode!r}; expected one of "
                      f"{list(MODE_FRACTIONS)}")
 

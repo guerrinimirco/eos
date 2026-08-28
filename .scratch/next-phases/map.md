@@ -380,6 +380,31 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 95 — `vmit.solver` takes `flags`, and `include_photons` goes](issues/95-vmit-solver-flags.md)**
+  (resolved 2026-08-28). Second of the three serial solver-flag tickets.
+  **108 of 1119 `vmit.npz` keys moved, every one one photon gas at T > 0** —
+  36 points x (P, eps, s), zero composition keys, zero at T = 0, residue
+  against `frozen - gamma` EXACT at all 108. **The before-image is the
+  post-[ticket 100](issues/100-vmit-point-Y_S-never-assigned.md) state and
+  that is measured, not assumed**: the same run with `photons=True` moves 0 of
+  1119 against the on-disk file, whose 42 `.Y_S` keys are all non-zero, so
+  100's regeneration is inside the frozen file and outside this delta. That
+  control is stronger than 94's — it isolates the flag rather than only the
+  generator's determinism. **The signature is njl's and ccdm's,
+  `(par, n_B, [fraction], T, flags)`**, not zl's: vMIT is a quark model and
+  §13's "read one, read the next" points at its own neighbours, which order
+  `T` before the flags. **`two_flavour` went into the flags object too** — it
+  was a parallel kwarg for a sector `SpeciesFlags` already carried, which is
+  what [91](issues/91-leptons-default-and-drift-checks.md)'s second drift
+  check forbids; value-neutral, both spellings defaulted False. `vmit_phase`
+  got `photons=False` and NO `flags=` parameter
+  ([109](issues/109-flagless-mixed-adapters.md) owns that). Thirteen other
+  `.npz` BYTE-identical. **One call site reached only through an `as`-alias**
+  (`vmit_trapped` in `test/mixed/test_hybrid_modes.py`) survived the grep and
+  failed in the test run — a source enumeration here has to grep the aliases.
+  `eos/zlvmit/mixed_phase_eos.py:2460-2464` is DEAD the same way 94 found zl's
+  to be, and is left alone for the same reason.
+
 - **[Ticket 94 — `zl.solver` takes `flags`, and `include_photons` goes](issues/94-zl-solver-flags.md)**
   (resolved 2026-08-28). First of the three serial solver-flag tickets
   ([95](issues/95-vmit-solver-flags.md), [96](issues/96-alphabag-solver-flags.md),

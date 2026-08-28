@@ -33,6 +33,13 @@ from eos.general.thermodynamics_leptons import (
 )
 
 
+#: Every solver call in this suite carries the photon gas, deliberately:
+#: `_quark_only` subtracts exactly one photon gas off each state before the
+#: Euler and free-energy identities are tested, so the gas has to be added
+#: and removable rather than woven into the equations.
+GAMMA = SpeciesFlags(photons=True)
+
+
 @dataclass
 class CheckResult:
     name: str
@@ -91,12 +98,13 @@ def _states(par, grid, T):
     """One solved state per mode, at each density of the grid."""
     out = []
     for n_B in grid:
-        out.append(("beta", solve_beta_eq_neutrinoless(par, n_B, T)))
-        out.append(("yc", solve_fixed_yc(par, n_B, 0.3, T)))
-        out.append(("yc_nolep", solve_fixed_yc(par, n_B, 0.3, T,
-                                               include_electrons=False)))
-        out.append(("ycys", solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T)))
-        out.append(("trapped", solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T)))
+        out.append(("beta", solve_beta_eq_neutrinoless(par, n_B, T, GAMMA)))
+        out.append(("yc", solve_fixed_yc(par, n_B, 0.3, T, GAMMA)))
+        out.append(("yc_nolep", solve_fixed_yc(par, n_B, 0.3, T, GAMMA,
+                                               leptons=False)))
+        out.append(("ycys", solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T, GAMMA)))
+        out.append(("trapped", solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T,
+                                                              GAMMA)))
     return out
 
 
@@ -156,7 +164,7 @@ def _check_mode_closures(par, grid, T):
     """Each mode's defining conditions, evaluated at its own solution."""
     worst = 0.0
     for n_B in grid:
-        r = solve_beta_eq_neutrinoless(par, n_B, T)
+        r = solve_beta_eq_neutrinoless(par, n_B, T, GAMMA)
         _, mu_C, mu_S = charge_potentials_from_quarks(r.mu_u, r.mu_d, r.mu_s)
         _, n_C, _ = quark_charges(r.n_u, r.n_d, r.n_s)
         mu_scale = abs(r.mu_B)
@@ -165,17 +173,17 @@ def _check_mode_closures(par, grid, T):
                     abs(mu_S) / mu_scale,              # strangeness equilibrium
                     abs(n_C - r.n_e) / n_B)            # electric neutrality
 
-        r = solve_fixed_yc(par, n_B, 0.3, T)
+        r = solve_fixed_yc(par, n_B, 0.3, T, GAMMA)
         _, n_C, _ = quark_charges(r.n_u, r.n_d, r.n_s)
         _, _, mu_S = charge_potentials_from_quarks(r.mu_u, r.mu_d, r.mu_s)
         worst = max(worst, abs(n_C - 0.3 * n_B) / n_B,
                     abs(mu_S) / abs(r.mu_B), abs(n_C - r.n_e) / n_B)
 
-        r = solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T)
+        r = solve_fixed_yc_ys(par, n_B, 0.0, 1.0, T, GAMMA)
         _, n_C, n_S = quark_charges(r.n_u, r.n_d, r.n_s)
         worst = max(worst, abs(n_C - 0.0) / n_B, abs(n_S - 1.0 * n_B) / n_B)
 
-        r = solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T)
+        r = solve_beta_eq_neutrino_trapped(par, n_B, 0.4, T, GAMMA)
         _, mu_C, _ = charge_potentials_from_quarks(r.mu_u, r.mu_d, r.mu_s)
         worst = max(worst, abs(mu_C + r.mu_e - r.mu_nu) / abs(r.mu_B),
                     abs((r.n_e + r.n_nu) / n_B - 0.4))
@@ -195,7 +203,7 @@ def _check_free_gas_limit(par, grid, T):
                       a=0.0, B4=0.0)
     worst = 0.0
     for n_B in grid:
-        r = solve_beta_eq_neutrinoless(free, n_B, T)
+        r = solve_beta_eq_neutrinoless(free, n_B, T, GAMMA)
         gases = [kinetic_thermo(mu, T, m) for mu, m in
                  ((r.mu_u, free.m_u), (r.mu_d, free.m_d), (r.mu_s, free.m_s))]
         P_kin = sum(g.P for g in gases)

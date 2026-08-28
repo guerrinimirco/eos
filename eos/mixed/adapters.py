@@ -54,6 +54,7 @@ from eos.dd2.thermodynamics import thermo_from_mu as _dd2_at_mu
 from eos.dd2.solver import solve_beta_eq_neutrinoless, solve, sweep
 from eos.mixed.charges import Regime
 from eos.vmit.parameters import Parameters as VMITParameters
+from eos.vmit.species import SpeciesFlags as VMITFlags
 from eos.vmit.thermodynamics import (
     thermo_from_mu as _vmit_from_mu, thermo_from_n as _vmit_from_n,
     thermo_from_mu_n as _vmit_from_mu_n,
@@ -62,6 +63,15 @@ from eos.vmit.thermodynamics import (
 #: Post-solve residual gate for a phase-internal solve. Matches the tolerance
 #: eos/dd2/solver.py accepts its own equilibrium solves at.
 RESIDUAL_TOL = 1.0e-10
+
+#: The flags every vMIT solve behind this adapter is made with. Photons are
+#: phase-common and are counted once at the mixture level
+#: (`eos.mixed.species`), so the phase contributes matter only: the cold start
+#: discards P, eps and s outright -- it reads potentials -- and the wing
+#: agrees with the mixture's own all-False default. `vmit_phase` takes no
+#: caller flags, so unlike `dd2_phase` its wing cannot follow one; the same
+#: holds for `zl_phase` and `alphabag_phase`.
+_VMIT_MATTER_ONLY = VMITFlags(photons=False)
 
 
 @dataclass(frozen=True)
@@ -499,8 +509,8 @@ def _vmit_wing_solve(spec, n_B, T, params):
     """One pure vMIT point at the spec's equilibrium.
 
     The vmit naming differences are absorbed here and go no further: the
-    engine's Y_Le is vmit's Y_L, the engine's `leptons` is vmit's
-    `include_electrons`. Each point cold-starts from vmit's own default guess
+    engine's Y_Le is vmit's Y_L. Each point cold-starts from vmit's own
+    default guess
     — those solves are cheap and robust, and a cold start keeps every wing
     row exactly reproducible by the pure model's own call at the same
     conditions, which is what test/mixed/test_hybrid_modes.py asserts.
@@ -513,14 +523,15 @@ def _vmit_wing_solve(spec, n_B, T, params):
     )
     if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
         if spec.L_e is Regime.GLOBAL:
-            return _vmit_trapped(params, n_B, spec.targets["Y_Le"], T)
-        return _vmit_beta(params, n_B, T)
+            return _vmit_trapped(params, n_B, spec.targets["Y_Le"], T,
+                                 _VMIT_MATTER_ONLY)
+        return _vmit_beta(params, n_B, T, _VMIT_MATTER_ONLY)
     if spec.S is Regime.GLOBAL:
         return _vmit_yc_ys(params, n_B, spec.targets["Y_C"],
-                           spec.targets["Y_S"], T,
-                           include_electrons=spec.yc_leptons)
-    return _vmit_yc(params, n_B, spec.targets["Y_C"], T,
-                    include_electrons=spec.yc_leptons)
+                           spec.targets["Y_S"], T, _VMIT_MATTER_ONLY,
+                           leptons=spec.yc_leptons)
+    return _vmit_yc(params, n_B, spec.targets["Y_C"], T, _VMIT_MATTER_ONLY,
+                    leptons=spec.yc_leptons)
 
 
 
@@ -647,7 +658,9 @@ def vmit_phase(params=None):
 
     def cold_start(n_B, T):
         from eos.vmit.solver import solve_beta_eq_neutrinoless as _vmit_beta
-        q = _vmit_beta(params, n_B, T)
+        # Potentials only: P, eps and s are discarded, so the photon gas
+        # would be dead weight even if the mixture did not count it itself.
+        q = _vmit_beta(params, n_B, T, _VMIT_MATTER_ONLY)
         return q.mu_B, q.mu_e, q.mu_B
 
     def wing_sweep(spec, n_B_grid, T):
