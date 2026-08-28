@@ -70,22 +70,79 @@ Why two coefficients are pinned, and why these two
 E_sat and m*/m at fixed n_sat are blind to the shape coefficients -- they need
 only f_i(1) = 1 -- so of the four default rows only P and K_sat carry any
 shape information, and the four shape coefficients answer to two rows. Two
-must be held. Measured at the published DD2 point (isoscalar Jacobian,
-central differences, rows scaled by a physical size and columns by the
-coupling), the condition number over the six choices is
+must be held.
 
-    b_sigma + c_omega    128      <- pinned here
-    c_sigma + c_omega    165
-    b_sigma + b_omega    185
-    b_sigma + c_sigma    305
-    c_sigma + b_omega    323
-    b_omega + c_omega    354
+Which two is decided in two steps, a local statistic and a global scan.
+Build the isoscalar Jacobian d(NMP)/d(ln coupling) at the published DD2 point
+-- rows divided by each parameter's own published magnitude (P by
+1 MeV/fm^3), columns by the coupling -- and pin whichever subset leaves the
+largest SMALLEST SINGULAR VALUE. Then confirm with a basin scan over a grid
+of targets, which may VETO a locally-best choice: sigma_min is a statement
+about one point, basin coverage is the statement about the space a sampler
+actually walks.
 
-One coefficient from each meson beats holding either shape whole, because
-what is left free should be the least collinear surviving pair, and c_sigma
-against b_omega at |cos| = 0.974 is the least collinear pair in the matrix.
-The same measurement over the five-row closure ranks its single pin
-c_omega 259, b_omega 354, c_sigma 703, b_sigma 4191.
+The statistic is sigma_min and not `cond`, because cond = sigma_max/sigma_min
+divides out the absolute strength of the weakest knob -- which is exactly the
+number that decides whether that knob can reach an inference prior at all.
+cond is quoted below beside sigma_min, never instead of it.
+
+DEFAULT closure, rows {P, E_sat, m*/m, K_sat}, two of the four shape
+coefficients pinned:
+
+    b_sigma + c_omega    sigma_min 0.4657    cond 135    <- pinned here
+    c_sigma + c_omega              0.3573         176
+    b_sigma + b_omega              0.3230         195
+    b_sigma + c_sigma              0.1919         326
+    c_sigma + b_omega              0.1819         346
+    b_omega + c_omega              0.1730         366
+
+Both statistics agree, and the shipped pair is first under both. One
+coefficient from each meson beats holding either shape whole, because what is
+left free should be the least collinear surviving pair, and c_sigma against
+b_omega at |cos| = 0.974 is the least collinear pair in the matrix.
+
+Q_SAT closure, five rows, ONE pinned -- and here the local statistic and the
+scan disagree, which is the case the second step exists for:
+
+    c_sigma              sigma_min 2.9692e-01    cond 1236
+    b_omega                        2.7379e-01         1378
+    c_omega                        2.3706e-01         1590    <- pinned here
+    b_sigma                        1.1771e-01         3092
+    Gamma_sigma, Gamma_omega       ~1e-10 (numerically zero)
+
+Neither vertex coupling can be pinned: holding one leaves the matrix rank
+deficient, so only the four shape coefficients are candidates. Among those
+sigma_min prefers c_sigma over the shipped c_omega by 25%, and cond ranks
+them in the identical order -- so this is not the two statistics disagreeing
+with each other. It is that c_omega was chosen on a Jacobian whose Q_sat row
+still carried a third-difference stencil. That measurement ranked c_omega
+259, b_omega 354, c_sigma 703, b_sigma 4191; those numbers are the stencil's
+rather than the map's and are superseded by the table above.
+
+THE BASIN SCAN VETOES c_sigma. Same targets, same seeds, both pins, counting
+the targets each REACHES (status.ok):
+
+                                             0 restarts   32 restarts
+    72-cell grid, K_sat x Q_sat x m*/m x n_sat
+      pin c_omega                              59/72         64/72
+      pin c_sigma                              42/72         59/72
+    200 random targets, the same four axes plus E_sat
+      pin c_omega                             156/200       172/200
+      pin c_sigma                             102/200       134/200
+
+c_omega reaches more targets on both grids at both restart counts, and gets
+there in about half the wall clock, because a target reached on the first
+solve never pays for restarts. Among the targets BOTH reach the two are
+indistinguishable -- worst relative error over the five imposed rows 2.6e-11
+against 2.7e-11, medians ~1e-12 either way -- so what separates them is the
+SIZE of the basin, not the accuracy inside it. c_omega stands: a 25% local
+margin at one point does not survive the question of which targets are
+findable from the published seed.
+
+All eight counts above are the SAME on python.org 3.14.2 / numpy 2.3.5 /
+scipy 1.17.0 and on anaconda 3.9.7 / numpy 1.26.4 / scipy 1.13.1, so the veto
+is a property of the residual surface rather than of a solver version. The
+sigma_min and cond tables agree to five digits across the two as well.
 
 Q_sat is imposable now that it is analytic
 ------------------------------------------
