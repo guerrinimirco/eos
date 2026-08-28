@@ -98,6 +98,24 @@ that is an acceptable gate or a gap being normalised.
   independently before the cause was found, both reading it as a rig problem of
   their own making.
 
+## The hazard the certificate CREATES, which the gate must also settle
+
+A certificate moves the failure mode; it does not remove one. Before it, the
+risk was **believing an invalidated run**. After it, the risk is **re-running
+until one comes back CLEAN** — which is the same sin wearing the mechanism's
+own clothes, and harder to see because every individual certificate is honest.
+Two properties follow, and whichever arm wins should state them:
+
+- **A DISCARD is reported, not retried into silence.** The verdict of the run
+  you took is the verdict, and a later CLEAN does not erase an earlier DISCARD
+  that was never mentioned.
+- **A DISCARD is CHEAP and must stay cheap.** Twenty minutes of CPU and nothing
+  else. So nobody should block real work to protect someone's measurement:
+  holding `eos/*.py` still for twenty minutes to keep a run valid inverts which
+  of the two matters. The certificate exists precisely so that an invalidated
+  run is cheap to DETECT rather than expensive to BELIEVE — that is the whole
+  trade, and a session sitting on its hands has paid for the mechanism twice.
+
 ## The distinction worth keeping whichever way it goes
 
 **The guard reduces the chance of WASTING a run; the certificate removes the
