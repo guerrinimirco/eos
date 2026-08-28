@@ -25,7 +25,10 @@ The thermodynamic kernels are in `thermodynamics.py`, the table driver in
 
 Usage:
     from eos.zl.solver import solve_beta_eq_neutrinoless
-    result = solve_beta_eq_neutrinoless(n_B=0.16, T=10.0)
+    from eos.zl.parameters import Parameters
+    from eos.zl.species import SpeciesFlags
+    result = solve_beta_eq_neutrinoless(Parameters.default(), 0.16,
+                                        SpeciesFlags(photons=True), T=10.0)
     print(result.converged, result.P_total)
 """
 import numpy as np
@@ -41,6 +44,7 @@ from eos.general.thermodynamics_leptons import (
     electron_thermo, neutrino_thermo, photon_thermo,
 )
 from eos.zl.parameters import Parameters
+from eos.zl.species import SpeciesFlags
 from eos.zl.thermodynamics import (
     G_NUCLEON, effective_state, interaction_potentials, thermo_from_mu_n,
 )
@@ -180,9 +184,13 @@ def _mu_scale(mu_n):
     return max(abs(mu_n), MU_SCALE_FLOOR)
 
 
-def _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
+def _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
             e_thermo=None, nu_thermo=None):
-    """Assemble the totals of a solved state: matter, leptons, photons."""
+    """Assemble the totals of a solved state: matter, leptons, photons.
+
+    The photon gas is present exactly when `flags.photons` says so. Photons
+    carry no conserved charge, so they reach eps, P and s and nothing else.
+    """
     matter = thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, par)
 
     result.P_total = matter.P
@@ -193,7 +201,7 @@ def _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
             result.P_total += gas.P
             result.e_total += gas.e
             result.s_total += gas.s
-    if include_photons:
+    if flags.photons:
         gamma = photon_thermo(T)
         result.P_total += gamma.P
         result.e_total += gamma.e
@@ -208,8 +216,7 @@ def _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
 # SOLVER: BETA EQUILIBRIUM, NEUTRINOS FREE-STREAMING
 # =============================================================================
 def solve_beta_eq_neutrinoless(
-    par: Parameters, n_B: float, T: float,
-    include_photons: bool = True,
+    par: Parameters, n_B: float, flags: SpeciesFlags, T: float,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Charge-neutral beta equilibrium with mu_nue = 0.
@@ -230,7 +237,8 @@ def solve_beta_eq_neutrinoless(
         n_B: baryon density (fm^-3)
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons: add a thermal photon gas to eps, P and s
+        flags: the active degrees of freedom; `photons` is the only sector
+            this model has, and it is honoured here rather than by a caller
         initial_guess: warm start in the layout above
 
     Returns:
@@ -270,7 +278,7 @@ def solve_beta_eq_neutrinoless(
     result.n_e = e_thermo.n
     result.Y_e = result.n_e / n_B
 
-    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
+    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
                    e_thermo=e_thermo)
 
 
@@ -278,9 +286,8 @@ def solve_beta_eq_neutrinoless(
 # SOLVER: FIXED CHARGE FRACTION
 # =============================================================================
 def solve_fixed_yc(
-    par: Parameters, n_B: float, Y_C: float, T: float,
-    include_photons: bool = True,
-    include_electrons: bool = True,
+    par: Parameters, n_B: float, Y_C: float, flags: SpeciesFlags, T: float,
+    leptons: bool = True,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Fixed non-leptonic charge fraction, Y_C = n_p/n_B.
@@ -289,11 +296,11 @@ def solve_fixed_yc(
     n_n = (1-Y_C) n_B -- so both densities leave the unknown vector and only
     the self-consistency rows remain:
 
-        include_electrons=False   x = [mu_p, mu_n],        rows r1, r2
-        include_electrons=True    x = [mu_p, mu_n, mu_e],  rows r1, r2 and
-                                  r5 = n_e(mu_e, T) - n_p (electric neutrality)
+        leptons=False   x = [mu_p, mu_n],        rows r1, r2
+        leptons=True    x = [mu_p, mu_n, mu_e],  rows r1, r2 and
+                        r5 = n_e(mu_e, T) - n_p (electric neutrality)
 
-    With `include_electrons=False` the result is electrically CHARGED
+    With `leptons=False` the result is electrically CHARGED
     nucleonic matter, which is what a mixed-phase construction needs per pure
     phase before global neutrality is imposed. Y_C is the non-leptonic charge
     fraction in both cases; neutrality is a separate, additional condition.
@@ -303,8 +310,10 @@ def solve_fixed_yc(
         Y_C: non-leptonic charge fraction
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons: add a thermal photon gas to eps, P and s
-        include_electrons: add the neutralizing electron gas
+        flags: the active degrees of freedom; `photons` is the only sector
+            this model has, and it is honoured here rather than by a caller
+        leptons: add the neutralizing electron gas. NOT a species flag --
+            CLAUDE.md section 5 makes it an orthogonal named argument
         initial_guess: warm start in the layout above
 
     Returns:
@@ -316,11 +325,11 @@ def solve_fixed_yc(
     n_n = (1.0 - Y_C) * n_B
 
     cold = default_guess("fixed_YC", n_B, T, par, Y_C=Y_C,
-                         leptons=include_electrons)
+                         leptons=leptons)
     x0 = cold if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else cold
 
-    if include_electrons:
+    if leptons:
         def residual(x):
             mu_p, mu_n, mu_e = x
             state = effective_state(mu_p, mu_n, n_p, n_n, T, par)
@@ -335,7 +344,7 @@ def solve_fixed_yc(
             return [state.n_p_calc - n_p,
                     state.n_n_calc - n_n]
 
-    n_rows = 3 if include_electrons else 2
+    n_rows = 3 if leptons else 2
 
     def scales_at(x):
         """Every row of this mode balances a density."""
@@ -344,7 +353,7 @@ def solve_fixed_yc(
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     result.converged, result.error = converged, error
 
-    if include_electrons:
+    if leptons:
         mu_p, mu_n, mu_e = x
         e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
         result.mu_e = mu_e
@@ -358,7 +367,7 @@ def solve_fixed_yc(
     result.n_p, result.n_n = n_p, n_n
     result.Y_p, result.Y_n = Y_C, 1.0 - Y_C
 
-    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
+    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
                    e_thermo=e_thermo)
 
 
@@ -381,8 +390,7 @@ def solve_fixed_yc_ys(*args, **kwargs):
 # SOLVER: BETA EQUILIBRIUM WITH TRAPPED NEUTRINOS
 # =============================================================================
 def solve_beta_eq_neutrino_trapped(
-    par: Parameters, n_B: float, Y_Le: float, T: float,
-    include_photons: bool = True,
+    par: Parameters, n_B: float, Y_Le: float, flags: SpeciesFlags, T: float,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Beta equilibrium with the electron family trapped at Y_Le.
@@ -402,7 +410,8 @@ def solve_beta_eq_neutrino_trapped(
         Y_Le: electron-family lepton fraction (n_e + n_nue)/n_B
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons: add a thermal photon gas to eps, P and s
+        flags: the active degrees of freedom; `photons` is the only sector
+            this model has, and it is honoured here rather than by a caller
         initial_guess: warm start in the layout above
 
     Returns:
@@ -449,7 +458,7 @@ def solve_beta_eq_neutrino_trapped(
     result.n_nu = nu_thermo.n
     result.Y_e = result.n_e / n_B
 
-    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, include_photons,
+    return _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
                    e_thermo=e_thermo, nu_thermo=nu_thermo)
 
 

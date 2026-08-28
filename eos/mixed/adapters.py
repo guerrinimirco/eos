@@ -918,6 +918,7 @@ def zl_phase(params=None):
     reaches the model.
     """
     from eos.zl.parameters import Parameters as ZLParameters
+    from eos.zl.species import SpeciesFlags as ZLFlags
     from eos.zl.thermodynamics import thermo_from_mu as _zl_from_mu
     from eos.zl.thermodynamics import thermo_from_n as _zl_from_n
     from eos.zl.solver import (
@@ -927,6 +928,13 @@ def zl_phase(params=None):
     )
     if params is None:
         params = ZLParameters.default()
+    # Photons are phase-common and are counted once at the mixture level
+    # (`eos.mixed.species`), so the phase contributes matter only. The cold
+    # start discards P, eps and s outright -- it reads potentials -- and the
+    # wing agrees with the mixture's own all-False default. This phase takes
+    # no caller flags, so unlike `dd2_phase` its wing cannot follow one; see
+    # the note in `eos/mixed/species.py`.
+    flags = ZLFlags(photons=False)
 
     def _as_record(m, mu_p, mu_n, T):
         return PhaseThermo(
@@ -949,7 +957,7 @@ def zl_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        p = _zl_beta(params, n_B, T)
+        p = _zl_beta(params, n_B, flags, T)
         if not p.converged:
             raise RuntimeError(f"zl cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
@@ -957,10 +965,11 @@ def zl_phase(params=None):
     def _wing_point(spec, n_B, T):
         if spec.C is Regime.NOT_CONSERVED:
             if spec.L_e is Regime.GLOBAL:
-                return _zl_trapped(params, n_B, spec.targets["Y_Le"], T)
-            return _zl_beta(params, n_B, T)
-        return _zl_yc(params, n_B, spec.targets["Y_C"], T,
-                      include_electrons=spec.yc_leptons)
+                return _zl_trapped(params, n_B, spec.targets["Y_Le"],
+                                   flags, T)
+            return _zl_beta(params, n_B, flags, T)
+        return _zl_yc(params, n_B, spec.targets["Y_C"], flags, T,
+                      leptons=spec.yc_leptons)
 
     def wing_sweep(spec, n_B_grid, T):
         out = []

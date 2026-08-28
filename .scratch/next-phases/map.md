@@ -147,7 +147,37 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
-**CURRENT, measured by [ticket 102](issues/102-retire-phi-field-flag.md) on
+**CURRENT, measured by [ticket 94](issues/94-zl-solver-flags.md) on
+2026-08-28, as a BEFORE/AFTER PAIR in one session:**
+
+    before  1812 passed, 23 skipped, 0 failed  (1835 collected, 21:04)
+            output/_audit/pytest_before_ticket94_py314.txt
+    after   1816 passed, 23 skipped, 0 failed  (1839 collected, 30:10)
+            output/_audit/pytest_after_ticket94_py314.txt
+
+**Zero added failures, and zero failures full stop on both sides** — which is
+the one comparison a concurrent session cannot corrupt. The before-image
+reproduces ticket 102's 1835/1812/23 exactly, which closes that block's
+off-by-one worry from the other side: 1835 was right.
+
+**But this pair is NOT a clean control, and the +4 is not this ticket's.**
+Another session wrote `eos/enjl/*`, `eos/mixed/{boundaries,construction,
+__init__}.py`, `docs/DEFERRED.md` and three issue files between 16:13 and
+16:29 — inside the before-run (16:05-16:26) and across the edits. The +4
+splits **3 theirs / 1 mine**, checkable from mtimes:
+`test/enjl/test_enjl_construction.py` (16:23:56),
+`test/mixed/test_enjl_pair.py` (16:24:07),
+`test/mixed/test_locate_maxwell.py` (16:26:10) against
+`test/zl/test_zl_modes.py` (16:29:39, exactly one added test). The two diffs
+touch **disjoint files**, verified per-set with `git diff --stat`. The
+runtime 21:04 -> 30:10 is contention between the two sessions.
+
+So a session quoting 1839 should say which tree it means. What carried ticket
+94's own claim was the attributable subset, disjoint from the other session's
+files: `test/baseline` 20 passed, `test/zl` + `test/mixed/test_phase_pairs.py`
+61 passed, `zl/verify` PASS 10/10.
+
+**Previously, [ticket 102](issues/102-retire-phi-field-flag.md) on
 2026-08-28:**
 
     python.org 3.14.2  1812 passed, 23 skipped, 0 failed  (1835 collected, 34:45)
@@ -349,6 +379,32 @@ freezing an undetermined `mu_S` under six derived names. Compare later work
 against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
+
+- **[Ticket 94 — `zl.solver` takes `flags`, and `include_photons` goes](issues/94-zl-solver-flags.md)**
+  (resolved 2026-08-28). First of the three serial solver-flag tickets
+  ([95](issues/95-vmit-solver-flags.md), [96](issues/96-alphabag-solver-flags.md),
+  then [91](issues/91-leptons-default-and-drift-checks.md)). **144 of 1356
+  `zl.npz` keys moved, and every one is one photon gas at T > 0** — 48 points
+  x (P, eps, s), zero composition keys, zero of the 216 T = 0 keys, and the
+  residue against `frozen - gamma` is **0.000e+00, exact**, which is stronger
+  than ticket 89's 0.89 ulp because the gas is not added rather than added
+  differently. The control ran first: **0 of 1356 moved with the edits held
+  back**, so the null hypothesis is measured at zero. Twelve other `.npz`
+  BYTE-identical; `mixed.npz` and `zlvmit.npz` asserted, not assumed.
+  **The signature is sfho's and did's — `(par, n_B, [fraction], flags, T)`** —
+  not the literal "after `par`" the ticket wrote, which would have been a
+  fourth argument order against §13. `leptons` keeps `True`; ticket 91 owns
+  the flip. **Two call sites the work list did not have**:
+  `eos/zlvmit/mixed_phase_eos.py:2386-2390` has been DEAD since ticket 90
+  (pre-90 argument order inside a bare `except: pass`) and is left alone
+  because repairing it can move `zlvmit.npz`; and **`zl_phase`,
+  `vmit_phase` and `alphabag_phase` take no flags object at all**, so none can
+  obey `eos/mixed/species.py`'s "a wing carries the caller's own `photons`".
+  zl's now carries `photons=False`, which agrees with the mixture at its
+  default. **Whether those three adapters grow a `flags=` parameter is ONE
+  ruling for after 95 and 96, not three.** Ticket 81's named coverage gap is
+  closed for zl by both a flags-passing baseline case and
+  `test_the_photon_flag_reaches_the_solver`.
 
 - **[Ticket 100 — `eos.vmit.EoSPoint.Y_S` is never assigned, and the baseline froze the zero](issues/100-vmit-point-Y_S-never-assigned.md)**
   (resolved 2026-08-28). **Fixed and regenerated, in that order, and the sweep

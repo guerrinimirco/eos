@@ -43,20 +43,16 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     result, not as an exception.
     """
     T = conditions["T"]
-    photons = species.photons
     if mode == "beta_eq_neutrinoless":
-        return solve_beta_eq_neutrinoless(params, n_B, T,
-                                          include_photons=photons,
+        return solve_beta_eq_neutrinoless(params, n_B, species, T,
                                           initial_guess=x0)
     if mode == "beta_eq_neutrino_trapped":
         return solve_beta_eq_neutrino_trapped(params, n_B,
-                                              conditions["Y_Le"], T,
-                                              include_photons=photons,
+                                              conditions["Y_Le"], species, T,
                                               initial_guess=x0)
     if mode == "fixed_YC":
-        return solve_fixed_yc(params, n_B, conditions["Y_C"], T,
-                              include_photons=photons,
-                              include_electrons=leptons, initial_guess=x0)
+        return solve_fixed_yc(params, n_B, conditions["Y_C"], species, T,
+                              leptons=leptons, initial_guess=x0)
     if mode == "fixed_YC_YS":
         return solve_fixed_yc_ys()      # raises, naming the physics
     raise ValueError(f"unknown mode {mode!r}; expected one of "

@@ -77,7 +77,9 @@ def eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
     mode : str
         One of the keys of `eos.zl.solver.MODE_FRACTIONS`.
     species : SpeciesFlags
-        The active degrees of freedom; the default has photons on.
+        The active degrees of freedom. Every one defaults to False, so
+        `SpeciesFlags()` asks for bare nucleonic matter; `photons` is the
+        only sector this model wires.
     n_B : float
         Baryon density [fm^-3].
     T, SnB : float
