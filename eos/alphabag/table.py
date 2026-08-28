@@ -56,59 +56,29 @@ def solve_at(params, mode, n_B, conditions, species, leptons, x0=None):
     Non-convergence comes back on the result, not as an exception.
     """
     T = conditions["T"]
-    photons, gluons = species.photons, species.gluons
-    neutrinos = species.thermal_neutrinos
-    two_flavour = species.two_flavour
     if mode == "beta_eq_neutrinoless":
-        return solve_beta_eq_neutrinoless(
-            params, n_B, T, include_photons=photons, include_gluons=gluons,
-            include_thermal_neutrinos=neutrinos, initial_guess=x0,
-            two_flavour=two_flavour)
+        return solve_beta_eq_neutrinoless(params, n_B, T, species,
+                                          initial_guess=x0)
     if mode == "beta_eq_neutrino_trapped":
         return solve_beta_eq_neutrino_trapped(
-            params, n_B, conditions["Y_Le"], T, include_photons=photons,
-            include_gluons=gluons, include_thermal_neutrinos=neutrinos,
-            initial_guess=x0, two_flavour=two_flavour)
+            params, n_B, conditions["Y_Le"], T, species, initial_guess=x0)
     if mode == "fixed_YC":
-        return solve_fixed_yc(
-            params, n_B, conditions["Y_C"], T, include_photons=photons,
-            include_gluons=gluons, include_electrons=leptons,
-            include_thermal_neutrinos=neutrinos, initial_guess=x0,
-            two_flavour=two_flavour)
+        return solve_fixed_yc(params, n_B, conditions["Y_C"], T, species,
+                              leptons=leptons, initial_guess=x0)
     if mode == "fixed_YC_YS":
         return solve_fixed_yc_ys(
-            params, n_B, conditions["Y_C"], conditions["Y_S"], T,
-            include_photons=photons, include_gluons=gluons,
-            include_electrons=leptons, include_thermal_neutrinos=neutrinos,
-            initial_guess=x0, two_flavour=two_flavour)
+            params, n_B, conditions["Y_C"], conditions["Y_S"], T, species,
+            leptons=leptons, initial_guess=x0)
     if mode == "cfl":
-        # The paired phase carries no lepton condition, and two of the
-        # thermal sectors are not its physics. `gluons` is refused inside
-        # solve_cfl (the eight gluons are Meissner-massive; only the rotated
-        # photon stays massless), and the thermal neutrino gas is refused
-        # here, because the paired phase has never carried it -- see
-        # docs/DEFERRED.md. Neither is silently dropped: section 4 of
-        # CLAUDE.md requires a sector a model does not implement to raise
-        # rather than be ignored.
-        if two_flavour:
-            raise NotImplementedError(
-                "alphaBag 'cfl': colour-flavour locking pairs the three "
-                "flavours at equal densities, so Y_S = +1 identically and "
-                "there is no strangeness fraction free to switch off. "
-                "two_flavour is refused here for the same reason gluons is: "
-                "the flag keeps both its values in the unpaired modes and is "
-                "a statement about the phase in this one. Two-flavour quark "
-                "matter is 'beta_eq_neutrinoless' with two_flavour=True")
-        if neutrinos:
-            raise NotImplementedError(
-                "alphaBag 'cfl': the paired phase carries no thermal "
-                "neutrino gas, where every unpaired solver adds one. The "
-                "asymmetry is inherited from the first-generation CFL table "
-                "builder and is preserved deliberately, because closing it "
-                "moves published CFL tables; see docs/DEFERRED.md. Use "
-                "thermal_neutrinos=False in the 'cfl' mode")
-        return solve_cfl(params, n_B, T, conditions["Delta0"],
-                         include_photons=photons, include_gluons=gluons,
+        # The paired phase carries no lepton condition, and three of the
+        # sectors are not its physics: `gluons` (the eight gluons are
+        # Meissner-massive, only the rotated photon stays massless),
+        # `thermal_neutrinos` (the paired phase has never carried the gas --
+        # docs/DEFERRED.md) and `two_flavour` (locking fixes Y_S = +1). All
+        # three are refused inside `solve_cfl`, where the flags object now
+        # arrives, so a direct caller meets the same refusal rather than
+        # having it silently dropped (CLAUDE.md section 4).
+        return solve_cfl(params, n_B, T, conditions["Delta0"], species,
                          initial_guess=x0)
     raise ValueError(f"unknown mode {mode!r}; expected one of "
                      f"{list(MODE_FRACTIONS)}")
@@ -307,10 +277,10 @@ class TableSettings:
     Y_S_values: List[float] = field(default_factory=lambda: [0.0])
 
     # Options
-    include_photons: bool = True
-    include_gluons: bool = True
+    include_photons: bool = False
+    include_gluons: bool = False
     include_electrons: bool = False
-    include_thermal_neutrinos: bool = True
+    include_thermal_neutrinos: bool = False
 
     # Output control
     print_results: bool = True

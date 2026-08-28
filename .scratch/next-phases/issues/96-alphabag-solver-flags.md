@@ -1,7 +1,7 @@
 # `alphabag.solver` takes `flags`, and all three `include_*` sectors go
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: [90](90-solver-signature-and-units-sweep.md)
             ([92](92-cfl-gluon-term.md) is RESOLVED — see below)
 Parent: ../map.md
@@ -151,3 +151,140 @@ Two more findings from 94 that apply directly:
   [Ticket 91](91-leptons-default-and-drift-checks.md) owns the flip to False,
   and moving it here moves rows the measure-then-regenerate gate does not
   allow for.
+
+## Resolution
+
+Executed on python.org 3.14.2 (numpy 2.3.5, scipy 1.17.0). `eos/alphabag/solver.py`
+takes a required `flags: SpeciesFlags` at every entry point — the four mode
+solvers, `solve_cfl`, and the two inner `*_point_from_mu` builders — and the
+three `include_*` names are gone from all seven, about forty lines of
+pass-through with them. `include_electrons` is `leptons`; `table.py` stops
+translating and passes the flags object through.
+
+### The signature is njl's, ccdm's and now vmit's
+
+The same finding [ticket 95](95-vmit-solver-flags.md) recorded and for the same
+reason: the quark models order `(par, n_B, [fraction], T, flags, ...)`, with `T`
+before the flags, where the hadronic three order it the other way. alphaBag's
+`T` was already the third positional, so every call site gains an argument
+rather than reordering. `solve_cfl` is `(par, n_B, T, Delta0, flags,
+initial_guess=None)`.
+
+### The three cfl refusals moved INTO `solve_cfl`
+
+Work item 2 said "`solve_cfl`'s and `table.solve_at`'s refusals read the flags
+object instead of the kwargs". Read literally that leaves `solve_cfl` — which
+now receives the flags object itself — silently ignoring `thermal_neutrinos`
+and `two_flavour`, because [ticket 92](92-cfl-gluon-term.md) put those two
+refusals in `table.solve_at` where only the table path could see them. A direct
+`solve_cfl` caller would then get the no-op §4 forbids, through the very object
+that was supposed to end it.
+
+All three now raise inside `solve_cfl`, with ticket 92's messages verbatim, and
+`table.solve_at`'s `cfl` arm keeps a comment pointing at them rather than a
+second copy. **Nothing about ticket 92's ruling changed** — same three sectors,
+same reasons, same `NotImplementedError` — only the place, and the place is now
+where the flag arrives. It is also less code: one refusal apiece instead of two.
+
+### `two_flavour` went into the flags object, as it did in vmit
+
+Same shape, same reason: `SpeciesFlags.two_flavour` existed AND every solver
+carried a parallel `two_flavour: bool = False` kwarg for the same sector, which
+is what [ticket 91](91-leptons-default-and-drift-checks.md)'s second drift
+check forbids. Value-neutral — both spellings defaulted False.
+
+### The measurement, taken BEFORE regenerating
+
+`alphabag.npz` has **1158 keys**.
+
+    control, the three old kwarg defaults       0 moved of 1158
+    moved at rtol = 1e-10                     120   (30 points x 4 fields)
+    moved keys that are not P/eps/s/f           0
+    moved keys at T = 0                         0
+    moved `cfl.*` keys                          0 of 12
+    decomposes into gamma + gluons + nu_th    EXACT at 92 of 120
+    worst relative residue                    2.013e-16
+
+The control is the delta's own null: the same new code run with
+`SpeciesFlags(photons=True, gluons=True, thermal_neutrinos=True)` for the
+unpaired modes and `SpeciesFlags(photons=True)` for `cfl` — the exact sector
+configuration the seven deleted kwarg defaults gave — reproduces the frozen
+file at 0 of 1158.
+
+**The moved field list is four names, not three**: `P_total`, `e_total`,
+`s_total` AND `f_total`. `f = eps - T s` is a combination of two of them and
+moves by `de - T ds` of the same three gases; it is not a fourth quantity and
+not a composition key. It is also why 28 of the 120 are not bit-exact — a
+derived difference cannot be — and why the other 28 land at 2.0e-16 relative,
+which is one machine epsilon: unlike zl and vmit, where deleting the LAST
+addition leaves the preceding sum bit-for-bit, here three gases are added into
+a running total and removing them re-associates the sum.
+
+**Ticket 82's numbers reproduce to every digit quoted.** The gluon component
+alone, at the shipped `alpha`:
+
+    T =  0    -0.000000e+00 MeV/fm^3      (ticket 82: unchanged)
+    T = 10    -1.465838e-03 MeV/fm^3      (ticket 82: -1.465838e-03)
+    T = 30    -1.187329e-01 MeV/fm^3      (ticket 82: -1.187329e-01)
+
+so the delta measured here contains ticket 82's measured delta exactly, plus
+the photon and thermal-neutrino gases ticket 65 had already defaulted off.
+
+**Zero `cfl.*` keys moved**, as ticket 92 predicted: all twelve are at T = 0,
+where no thermal sector contributes at all, so the CFL ruling could not have
+moved a frozen number under either answer.
+
+md5 over all fourteen `test/baseline/*.npz` before and after: **only
+`alphabag.npz` differs**; the other thirteen are BYTE-identical. Key-by-key
+diff at `output/_audit/baseline_diff_ticket96_py314.txt`.
+
+### The legacy `TableSettings` layer
+
+Work item 4 and [ticket 91](91-leptons-default-and-drift-checks.md) item 2.
+All four sector fields — `include_photons`, `include_gluons`,
+`include_electrons`, `include_thermal_neutrinos` — now default `False`, which
+is what `SpeciesFlags` defaults them to, so the shim FOLLOWS the flags object
+instead of being a third place the same switch is thrown. `docs/DEFERRED.md`'s
+paragraph is rewritten: the shim no longer raises on a default CFL table, it
+returns one without the sectors, and the reason it still cannot reproduce the
+first-generation tables is ticket 92's ruling rather than the defaults.
+
+### Call sites: what the enumeration found
+
+- **`eos/mixed/adapters.py`'s `alphabag_phase` takes no flags object**, the
+  third of the three ticket 94 named. Given a bare `SpeciesFlags()` throughout
+  — not just `photons=False`: the gluon gas and the thermal neutrino gases are
+  phase-common thermal sectors in exactly the same sense, and this phase has no
+  caller flags to follow either. **No `flags=` parameter added**;
+  [ticket 109](109-flagless-mixed-adapters.md) owns that for all three.
+  `eos/mixed/species.py` now names all three adapters.
+- **`test/abpr/test_abpr_alphabag_limit.py` is the §1 carve-out and needed
+  eight edits.** It is the file CLAUDE.md §1 exempts by name — "abpr checks
+  itself against the CFL phase of alphabag" — and it calls
+  `alphabag.solve_cfl` directly. A sweep over `eos/` and `test/alphabag/` does
+  not see it. Given `SpeciesFlags()`: the comparison is at T = 0 on both sides,
+  so no thermal sector is in either.
+- **One test shadowed its own module import.**
+  `test_the_paired_phase_refuses_the_free_gluon_gas` had a function-local
+  `from eos.alphabag import SpeciesFlags, eos_point` after a line that now uses
+  the module-level `SpeciesFlags`, which Python reads as an unbound local. The
+  local imports are gone. Not a physics defect, but the second time in this
+  session that a call site was invisible to grep and visible only to the run.
+
+### The README needs no recapture
+
+The gate's last line says "README example 1 quotes a captured alphaBag number".
+It no longer does: all five README examples are `dd2`, `mixed` and the M–R
+sequence, and the only alphaBag mentions are the model table and two prose
+sentences about `gluons` being a default. Ticket 82's recapture is what moved
+it. Nothing to redo; the line is stale and is recorded here rather than acted
+on.
+
+### Gate
+
+    interpreter   python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0
+
+    test/alphabag + test/abpr   314 passed, 0 failed
+    alphabag/verify             PASS, all eleven checks
+    other .npz                  13 of 13 BYTE-identical
+

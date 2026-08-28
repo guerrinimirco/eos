@@ -42,6 +42,7 @@ from eos.general.thermodynamics_leptons import (
     photon_thermo,
 )
 from eos.alphabag.parameters import Parameters
+from eos.alphabag.species import SpeciesFlags
 from eos.general.basis import quark_charges
 from eos.alphabag.thermodynamics import (
     cfl_n_correction, cfl_thermo_from_mu, gluon_thermo, quark_density,
@@ -236,14 +237,10 @@ def default_guess(mode: str, n_B: float, T: float, par: Parameters,
 # =============================================================================
 def point_from_mu(
     mu_u: float, mu_d: float, mu_s: float, mu_e: float,
-    T: float, par: Parameters,
-    include_photons: bool = True,
-    include_gluons: bool = True,
-    include_thermal_neutrinos: bool = True,
+    T: float, par: Parameters, flags: SpeciesFlags,
     mu_nu: float = 0.0,
     converged: bool = True,
-    error: float = 0.0,
-    two_flavour: bool = False
+    error: float = 0.0
 ) -> EoSPoint:
     """The totals of an unpaired state at given potentials.
 
@@ -264,14 +261,16 @@ def point_from_mu(
         mu_e: electron chemical potential (MeV)
         T: temperature (MeV)
         par: the parameter set
-        include_photons, include_gluons, include_thermal_neutrinos: sectors
+        flags: the active sectors -- `photons`, `gluons` and
+            `thermal_neutrinos` are the phase-common gases;
+            `two_flavour` takes the s flavour out of the matter
         mu_nu: electron-neutrino chemical potential (MeV)
         converged, error: the status of the solve this came from
-        two_flavour: u and d only; the s flavour leaves the matter
 
     Returns:
         EoSPoint
     """
+    two_flavour = flags.two_flavour
     quark = thermo_from_mu(mu_u, mu_d, mu_s, T, par, two_flavour)
 
     thermo_e = electron_thermo(mu_e, T)
@@ -288,19 +287,19 @@ def point_from_mu(
         e_total += thermo_nu.e
         s_total += thermo_nu.s
 
-    if include_photons:
+    if flags.photons:
         thermo_gamma = photon_thermo(T)
         P_total += thermo_gamma.P
         e_total += thermo_gamma.e
         s_total += thermo_gamma.s
 
-    if include_gluons:
+    if flags.gluons:
         thermo_g = gluon_thermo(T, par.alpha)
         P_total += thermo_g.P
         e_total += thermo_g.e
         s_total += thermo_g.s
 
-    if include_thermal_neutrinos:
+    if flags.thermal_neutrinos:
         thermo_nu_th = neutrino_thermo(0.0, T)
         n_thermal_flavors = 2.0 if mu_nu != 0.0 else 3.0
         P_total += n_thermal_flavors * thermo_nu_th.P
@@ -330,10 +329,7 @@ def point_from_mu(
 
 def cfl_point_from_mu(
     mu_u: float, mu_d: float, mu_s: float, mu_e: float,
-    T: float, Delta0: float, par: Parameters,
-    include_photons: bool = True,
-    include_gluons: bool = True,
-    include_thermal_neutrinos: bool = True,
+    T: float, Delta0: float, par: Parameters, flags: SpeciesFlags,
     mu_nu: float = 0.0,
 ) -> CFLPoint:
     """The totals of a paired state at given potentials, WITH a lepton gas.
@@ -360,19 +356,19 @@ def cfl_point_from_mu(
         e_total += thermo_nu.e
         s_total += thermo_nu.s
 
-    if include_photons:
+    if flags.photons:
         thermo_gamma = photon_thermo(T)
         P_total += thermo_gamma.P
         e_total += thermo_gamma.e
         s_total += thermo_gamma.s
 
-    if include_gluons:
+    if flags.gluons:
         thermo_g = gluon_thermo(T, par.alpha)
         P_total += thermo_g.P
         e_total += thermo_g.e
         s_total += thermo_g.s
 
-    if include_thermal_neutrinos:
+    if flags.thermal_neutrinos:
         thermo_nu_th = neutrino_thermo(0.0, T)
         n_thermal_flavors = 2.0 if mu_nu != 0.0 else 3.0
         P_total += n_thermal_flavors * thermo_nu_th.P
@@ -401,12 +397,8 @@ def cfl_point_from_mu(
 # SOLVER: BETA EQUILIBRIUM, NEUTRINOS FREE-STREAMING
 # =============================================================================
 def solve_beta_eq_neutrinoless(
-    par: Parameters, n_B: float, T: float,
-    include_photons: bool = True,
-    include_gluons: bool = True,
-    include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    par: Parameters, n_B: float, T: float, flags: SpeciesFlags,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Charge-neutral beta equilibrium with mu_nue = 0.
 
@@ -435,14 +427,16 @@ def solve_beta_eq_neutrinoless(
         n_B: baryon density (fm^-3)
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons, include_gluons, include_thermal_neutrinos: sectors
+        flags: the active sectors -- `photons`, `gluons` and
+            `thermal_neutrinos` are the phase-common gases;
+            `two_flavour` takes the s flavour out of the matter
         initial_guess: warm start in the layout above
-        two_flavour: u and d only; the s flavour leaves the matter
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
 
+    two_flavour = flags.two_flavour
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
@@ -486,13 +480,9 @@ def solve_beta_eq_neutrinoless(
         mu_u, mu_d, mu_s, mu_e = x
 
     return point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, par,
-        include_photons=include_photons,
-        include_gluons=include_gluons,
-        include_thermal_neutrinos=include_thermal_neutrinos,
+        mu_u, mu_d, mu_s, mu_e, T, par, flags,
         converged=converged,
-        error=error,
-        two_flavour=two_flavour
+        error=error
     )
 
 
@@ -500,12 +490,8 @@ def solve_beta_eq_neutrinoless(
 # SOLVER: BETA EQUILIBRIUM WITH TRAPPED NEUTRINOS
 # =============================================================================
 def solve_beta_eq_neutrino_trapped(
-    par: Parameters, n_B: float, Y_Le: float, T: float,
-    include_photons: bool = True,
-    include_gluons: bool = True,
-    include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    par: Parameters, n_B: float, Y_Le: float, T: float, flags: SpeciesFlags,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Beta equilibrium with the electron family trapped at Y_Le.
 
@@ -524,13 +510,16 @@ def solve_beta_eq_neutrino_trapped(
         Y_Le: electron-family lepton fraction (n_e + n_nue)/n_B
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons, include_gluons, include_thermal_neutrinos: sectors
+        flags: the active sectors -- `photons`, `gluons` and
+            `thermal_neutrinos` are the phase-common gases;
+            `two_flavour` takes the s flavour out of the matter
         initial_guess: warm start in the layout above
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
 
+    two_flavour = flags.two_flavour
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
@@ -577,14 +566,10 @@ def solve_beta_eq_neutrino_trapped(
         mu_u, mu_d, mu_s, mu_e, mu_nu = x
 
     point = point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, par,
-        include_photons=include_photons,
-        include_gluons=include_gluons,
-        include_thermal_neutrinos=include_thermal_neutrinos,
+        mu_u, mu_d, mu_s, mu_e, T, par, flags,
         mu_nu=mu_nu,
         converged=converged,
-        error=error,
-        two_flavour=two_flavour
+        error=error
     )
     point.Y_L = Y_Le
     return point
@@ -594,13 +579,9 @@ def solve_beta_eq_neutrino_trapped(
 # SOLVER: FIXED CHARGE FRACTION
 # =============================================================================
 def solve_fixed_yc(
-    par: Parameters, n_B: float, Y_C: float, T: float,
-    include_photons: bool = True,
-    include_gluons: bool = True,
-    include_electrons: bool = False,
-    include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    par: Parameters, n_B: float, Y_C: float, T: float, flags: SpeciesFlags,
+    leptons: bool = False,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Fixed non-leptonic charge fraction, with strangeness equilibrium.
 
@@ -611,11 +592,11 @@ def solve_fixed_yc(
         r4  = mu_s - mu_d                   strangeness equilibrium, mu_S = 0
 
     Y_C is the NON-leptonic charge fraction; total electric neutrality is a
-    separate, additional condition. With `include_electrons=False` the result
+    separate, additional condition. With `leptons=False` the result
     is electrically CHARGED quark matter, which is what a mixed-phase
     construction needs per pure phase before global neutrality is imposed.
 
-    With `include_electrons=True` a neutralizing electron gas is added AFTER
+    With `leptons=True` a neutralizing electron gas is added AFTER
     the solve, by inverting n_e(mu_e, T) = n_C for mu_e -- a one-dimensional
     inversion rather than a fourth row, because the quark sector does not
     respond to mu_e at fixed Y_C. The two calls therefore share the same quark
@@ -626,14 +607,17 @@ def solve_fixed_yc(
         Y_C: non-leptonic charge fraction
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons, include_gluons, include_thermal_neutrinos: sectors
-        include_electrons: add the neutralizing electron gas
+        flags: the active sectors -- `photons`, `gluons` and
+            `thermal_neutrinos` are the phase-common gases;
+            `two_flavour` takes the s flavour out of the matter
+        leptons: add the neutralizing electron gas
         initial_guess: warm start in the layout above
 
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
 
+    two_flavour = flags.two_flavour
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
 
@@ -675,17 +659,13 @@ def solve_fixed_yc(
         mu_s = mu_d
     else:
         mu_u, mu_d, mu_s = x
-    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
+    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, leptons,
                               initial_guess, two_flavour)
 
     return point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, par,
-        include_photons=include_photons,
-        include_gluons=include_gluons,
-        include_thermal_neutrinos=include_thermal_neutrinos,
+        mu_u, mu_d, mu_s, mu_e, T, par, flags,
         converged=converged,
-        error=error,
-        two_flavour=two_flavour
+        error=error
     )
 
 
@@ -694,12 +674,9 @@ def solve_fixed_yc(
 # =============================================================================
 def solve_fixed_yc_ys(
     par: Parameters, n_B: float, Y_C: float, Y_S: float, T: float,
-    include_photons: bool = True,
-    include_gluons: bool = True,
-    include_electrons: bool = False,
-    include_thermal_neutrinos: bool = True,
-    initial_guess: Optional[np.ndarray] = None,
-    two_flavour: bool = False
+    flags: SpeciesFlags,
+    leptons: bool = False,
+    initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """Fixed charge AND strangeness fractions -- no strangeness equilibrium.
 
@@ -722,8 +699,10 @@ def solve_fixed_yc_ys(
         Y_S: strangeness fraction, S = +1 per s quark
         T: temperature (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons, include_gluons, include_thermal_neutrinos: sectors
-        include_electrons: add the neutralizing electron gas
+        flags: the active sectors -- `photons`, `gluons` and
+            `thermal_neutrinos` are the phase-common gases;
+            `two_flavour` takes the s flavour out of the matter
+        leptons: add the neutralizing electron gas
         initial_guess: warm start in the layout above
 
     THIS IS THE ONE UNPAIRED MODE THAT REFUSES `two_flavour`, and the refusal
@@ -738,6 +717,7 @@ def solve_fixed_yc_ys(
     Returns:
         EoSPoint; test `.converged` before using any other field.
     """
+    two_flavour = flags.two_flavour
     if two_flavour:
         raise NotImplementedError(
             "solve_fixed_yc_ys: this mode holds Y_S, and with the strange "
@@ -778,20 +758,17 @@ def solve_fixed_yc_ys(
 
     x, error, converged = solve_system(residual, x0, scales_at, x0_fallback)
     mu_u, mu_d, mu_s = x
-    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
+    mu_e = _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, leptons,
                               initial_guess)
 
     return point_from_mu(
-        mu_u, mu_d, mu_s, mu_e, T, par,
-        include_photons=include_photons,
-        include_gluons=include_gluons,
-        include_thermal_neutrinos=include_thermal_neutrinos,
+        mu_u, mu_d, mu_s, mu_e, T, par, flags,
         converged=converged,
         error=error
     )
 
 
-def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
+def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, leptons,
                        initial_guess, two_flavour=False):
     """mu_e of the electron gas that neutralises the solved quark charge.
 
@@ -799,7 +776,7 @@ def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
     quark state is already determined, so the electrons follow by inverting
     n_e(mu_e, T) = n_C once. Returns 0.0 where the phase is left charged.
     """
-    if not include_electrons:
+    if not leptons:
         return 0.0
 
     alpha = par.alpha
@@ -824,8 +801,7 @@ def _neutralizing_mu_e(mu_u, mu_d, mu_s, T, par, include_electrons,
 # =============================================================================
 def solve_cfl(
     par: Parameters, n_B: float, T: float, Delta0: float,
-    include_photons: bool = True,
-    include_gluons: bool = False,
+    flags: SpeciesFlags,
     initial_guess: Optional[np.ndarray] = None
 ) -> CFLPoint:
     """Colour-flavour locked quark matter at a given density and gap.
@@ -853,14 +829,14 @@ def solve_cfl(
     which the medium is transparent -- and the other eight acquire Meissner
     masses. Hence:
 
-      - `include_photons` is the rotated photon. At leading order it is a free
+      - `flags.photons` is the rotated photon. At leading order it is a free
         massless gas of two polarizations, thermodynamically the same
         `photon_thermo(T)` the unpaired phase carries, so the sector is
         available here exactly as it is there.
-      - `include_gluons` is REFUSED. The gluon gas of the unpaired phase is
+      - `flags.gluons` is REFUSED. The gluon gas of the unpaired phase is
         g_g = 2 x 8 = 16 massless bosons; in this phase every one of those
         degrees of freedom is massive, so adding that closed form here would
-        assume the masslessness the condensate removes. `include_gluons=True`
+        assume the masslessness the condensate removes. `gluons=True`
         raises rather than returning a number the phase does not have.
 
     The light bosonic sector the locked phase DOES have -- the superfluid
@@ -875,22 +851,39 @@ def solve_cfl(
         T: temperature (MeV)
         Delta0: zero-temperature pairing gap (MeV)
         par: model parameters; required (CLAUDE.md section 6)
-        include_photons: the rotated photon, as above
-        include_gluons: refused; True raises NotImplementedError
+        flags: `photons` is the rotated photon, as above; `gluons`,
+            `thermal_neutrinos` and `two_flavour` are refused, each with the
+            reason above
         initial_guess: warm start [mu_u, mu_d, mu_s]
 
     Returns:
         CFLPoint; test `.converged` before using any other field.
     """
-    if include_gluons:
+    if flags.gluons:
         raise NotImplementedError(
             "solve_cfl: the colour-flavour-locked phase has no free thermal "
             "gluon gas -- all eight gluons are Meissner-massive, only the "
-            "rotated photon stays massless. Use include_gluons=False here "
+            "rotated photon stays massless. Use gluons=False here "
             "(the unpaired solvers carry the sector); the phonon and "
             "pseudo-Goldstone octet that ARE light in this phase are not "
             "implemented, see docs/DEFERRED.md")
-
+    if flags.two_flavour:
+        raise NotImplementedError(
+            "solve_cfl: colour-flavour locking pairs the three flavours at "
+            "equal densities, so Y_S = +1 identically and there is no "
+            "strangeness fraction free to switch off. two_flavour is refused "
+            "here for the same reason gluons is: the flag keeps both its "
+            "values in the unpaired modes and is a statement about the phase "
+            "in this one. Two-flavour quark matter is "
+            "'beta_eq_neutrinoless' with two_flavour=True")
+    if flags.thermal_neutrinos:
+        raise NotImplementedError(
+            "solve_cfl: the paired phase carries no thermal neutrino gas, "
+            "where every unpaired solver adds one. The asymmetry is "
+            "inherited from the first-generation CFL table builder and is "
+            "preserved deliberately, because closing it moves published CFL "
+            "tables; see docs/DEFERRED.md. Use thermal_neutrinos=False in "
+            "the 'cfl' mode")
 
     alpha = par.alpha
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
@@ -925,7 +918,7 @@ def solve_cfl(
     e_total = cfl.e
     s_total = cfl.s
 
-    if include_photons and T > 0:
+    if flags.photons and T > 0:
         photon = photon_thermo(T)
         P_total += photon.P
         e_total += photon.e

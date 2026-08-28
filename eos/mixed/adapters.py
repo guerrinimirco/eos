@@ -1020,6 +1020,7 @@ def alphabag_phase(params=None):
     raise for a pairing that includes it (docs/DEFERRED.md).
     """
     from eos.alphabag.parameters import Parameters as ABParameters
+    from eos.alphabag.species import SpeciesFlags as ABFlags
     from eos.alphabag.thermodynamics import thermo_from_mu as _ab_from_mu
     from eos.alphabag.solver import (
         solve_beta_eq_neutrinoless as _ab_beta,
@@ -1029,6 +1030,13 @@ def alphabag_phase(params=None):
     )
     if params is None:
         params = ABParameters.default()
+    # Matter only, for the reason `_VMIT_MATTER_ONLY` states: the photon gas
+    # is phase-common and is counted once at the mixture level, the cold start
+    # discards P, eps and s outright, and the wing agrees with the mixture's
+    # own all-False default. The gluon gas and the thermal neutrino gases go
+    # with it -- both are phase-common thermal sectors in the same sense, and
+    # this phase takes no caller flags to follow. See `eos/mixed/species.py`.
+    flags = ABFlags()
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
                return_state=False):
@@ -1046,7 +1054,7 @@ def alphabag_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        p = _ab_beta(params, n_B, T)
+        p = _ab_beta(params, n_B, T, flags)
         if not p.converged:
             raise RuntimeError(f"alphabag cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
@@ -1054,14 +1062,15 @@ def alphabag_phase(params=None):
     def _wing_point(spec, n_B, T):
         if spec.C is Regime.NOT_CONSERVED:
             if spec.L_e is Regime.GLOBAL:
-                return _ab_trapped(params, n_B, spec.targets["Y_Le"], T)
-            return _ab_beta(params, n_B, T)
+                return _ab_trapped(params, n_B, spec.targets["Y_Le"], T,
+                                   flags)
+            return _ab_beta(params, n_B, T, flags)
         if spec.S is Regime.GLOBAL:
             return _ab_yc_ys(params, n_B, spec.targets["Y_C"],
-                             spec.targets["Y_S"], T,
-                             include_electrons=spec.yc_leptons)
-        return _ab_yc(params, n_B, spec.targets["Y_C"], T,
-                      include_electrons=spec.yc_leptons)
+                             spec.targets["Y_S"], T, flags,
+                             leptons=spec.yc_leptons)
+        return _ab_yc(params, n_B, spec.targets["Y_C"], T, flags,
+                      leptons=spec.yc_leptons)
 
     def wing_sweep(spec, n_B_grid, T):
         out = []

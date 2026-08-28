@@ -380,6 +380,37 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 96 — `alphabag.solver` takes `flags`, and all three `include_*` sectors go](issues/96-alphabag-solver-flags.md)**
+  (resolved 2026-08-28). Third and largest of the three serial solver-flag
+  tickets. Seven entry points — four mode solvers, `solve_cfl` and the two
+  inner `*_point_from_mu` builders — take a required `flags`, and ~40 lines of
+  three-name pass-through go with the kwargs. **120 of 1158 `alphabag.npz`
+  keys moved**, 30 points x FOUR fields: `P_total`, `e_total`, `s_total` and
+  `f_total`, the last because `f = eps - T s` is a combination of two of them,
+  not a fourth quantity. Zero at T = 0, **zero of the twelve `cfl.*` keys**
+  (ticket 92 predicted exactly that), zero composition keys. The move
+  decomposes into gamma + gluons + nu_th exactly at 92 of 120 and to 2.0e-16
+  relative — one machine epsilon — at the rest; three gases removed from a
+  running sum re-associate it, where zl's and vmit's single last addition did
+  not. **Ticket 82's measured sizes reproduce to every digit quoted**
+  (T = 10: -1.465838e-03, T = 30: -1.187329e-01 MeV/fm^3 for gluons alone).
+  Control 0 of 1158; thirteen other `.npz` BYTE-identical. **The three `cfl`
+  refusals moved INTO `solve_cfl`** from `table.solve_at` — ticket 92's ruling
+  and messages unchanged, but a direct caller now meets them too, which the
+  literal work item would have left as the §4 no-op it was ending.
+  `two_flavour` went into the flags object here as in
+  [95](issues/95-vmit-solver-flags.md). The legacy `TableSettings` shim's four
+  sector fields now default False, FOLLOWING the flags object — that is
+  [91](issues/91-leptons-default-and-drift-checks.md) item 2 for this model,
+  and `docs/DEFERRED.md` is rewritten around it. `alphabag_phase` got a bare
+  `SpeciesFlags()` and no `flags=` parameter
+  ([109](issues/109-flagless-mixed-adapters.md) owns that). **Two more
+  grep-invisible call sites**: `test/abpr/test_abpr_alphabag_limit.py`, the §1
+  carve-out file, needed eight edits, and one test shadowed its own
+  module-level `SpeciesFlags` with a function-local import. **The gate's README
+  line is stale** — no README example quotes an alphaBag number any more
+  (ticket 82's recapture moved it to dd2), so nothing was recaptured.
+
 - **[Ticket 95 — `vmit.solver` takes `flags`, and `include_photons` goes](issues/95-vmit-solver-flags.md)**
   (resolved 2026-08-28). Second of the three serial solver-flag tickets.
   **108 of 1119 `vmit.npz` keys moved, every one one photon gas at T > 0** —

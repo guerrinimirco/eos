@@ -28,10 +28,13 @@ PHASE-COMMON — photons and thermal_neutrinos. These belong to neither phase:
     False is correct by construction rather than correct by accident. The one
     exception is a phase's `wing_sweep`, whose rows are stitched into the
     hybrid table as they stand, with no mixture layer above them to add the
-    radiation: those carry the caller's own `photons`. `zl_phase` and
-    `vmit_phase` are built from parameters alone and are handed no flag
-    object, so their wings have none to follow and carry `photons=False` --
-    which agrees with the mixture whenever this flag is at its default.
+    radiation: those carry the caller's own `photons`. `zl_phase`,
+    `vmit_phase` and `alphabag_phase` are built from parameters alone and are
+    handed no flag object, so their wings have none to follow and carry
+    `photons=False` -- which agrees with the mixture whenever this flag is at
+    its default. `alphabag_phase` carries its gluon gas and thermal neutrino
+    gases off for the same reason: both are phase-common thermal sectors and
+    neither has a caller flag here to follow.
 
 The engine's OWN physics — eta, the quark volume fraction chi — is not a
 species flag and is not carried here; it is an argument of the solve.

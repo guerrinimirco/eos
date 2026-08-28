@@ -1469,17 +1469,22 @@ decision that cannot be made before the tables exist.
   -- new physics with its own literature, not a mass added to the gluon gas,
   which is why it is a deferred sector rather than a corrected one.
 
-- The legacy `TableSettings` shim defaults `include_gluons=True` and
-  `include_thermal_neutrinos=True`, so `compute_table(TableSettings(
-  phase='cfl'))` now raises where it used to return a table. That is the
-  ruling above reaching the shim, and it is correct: the first-generation
-  CFL tables of the 2fam PNS study DO contain the free gluon gas, so the shim
-  can no longer reproduce them at `T > 0` without naming
-  `include_gluons=False` (and `include_thermal_neutrinos=False`, which the
-  `cfl` arm used to drop in silence) and accepting the difference. The
-  defaults are left as they are because they are the unpaired path's legacy
-  defaults, which are unaffected; the shim's only caller in this repository
-  is `test/alphabag/test_alphabag_api.py`, where the two flags are now named.
+- The legacy `TableSettings` shim now FOLLOWS the flags object: since
+  ticket 96 its four sector fields default `False`, as
+  `eos.alphabag.SpeciesFlags` does. Before that they were `True` and
+  `compute_table(TableSettings(phase='cfl'))` raised on the gluon and thermal
+  neutrino sectors; now it returns a table again, but a table without them.
+  Either way the shim no longer reproduces the first-generation CFL tables of
+  the 2fam PNS study at `T > 0`, because those DO contain the free gluon gas
+  and the phase is now ruled to have none --- the difference is the ruling
+  above, not the default. What the flipped defaults change is the UNPAIRED
+  path, where all three sectors are real physics and a legacy table built
+  without naming them is now the quarks and the bag alone
+  (`include_electrons` was already `False`). That is CLAUDE.md
+  section 4 reaching the shim: a sector is off because its flag says so, and
+  a second set of defaults in a legacy layer is the third place the same
+  switch was being made. The shim's only caller in this repository is
+  `test/alphabag/test_alphabag_api.py`, where the flags are named.
 - The flavour densities are not constrained positive -- the same gap vmit
   has, from the same cause: at exotic fixed fractions the equations have
   solutions with net anti-down and anti-strange densities and the solver
