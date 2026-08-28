@@ -35,6 +35,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional
 
+from eos.general.basis import lepton_charges
 from eos.general.fermi_integrals import invert_fermi_density
 from eos.general.physics_constants import hc, PI2
 from eos.general.solve import (
@@ -78,9 +79,14 @@ class EoSPoint:
     # Inputs
     n_B: float = 0.0       # baryon density (fm^-3)
     T: float = 0.0         # temperature (MeV)
+    # Conserved-charge fractions, MEASURED on the solved state: Y_X = n_X/n_B
+    # for every charge (CLAUDE.md section 2). A mode that HOLDS one of these
+    # reports what it solved, not what it was asked for, and every one of them
+    # is defined in every mode -- Y_Le included, not only in the trapped mode
+    # that holds it.
     Y_C: float = 0.0       # non-leptonic charge fraction
     Y_S: float = 0.0       # strangeness fraction (identically zero)
-    Y_L: float = 0.0       # electron-family lepton fraction (trapped mode)
+    Y_Le: float = 0.0      # electron family, (n_e + n_nue)/n_B
 
     # Chemical potentials (MeV)
     mu_p: float = 0.0
@@ -277,6 +283,8 @@ def solve_beta_eq_neutrinoless(
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
     result.n_e = e_thermo.n
     result.Y_e = result.n_e / n_B
+    n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
+    result.Y_Le = n_Le / n_B
 
     return _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
                    e_thermo=e_thermo)
@@ -366,6 +374,8 @@ def solve_fixed_yc(
     result.mu_p, result.mu_n = mu_p, mu_n
     result.n_p, result.n_n = n_p, n_n
     result.Y_p, result.Y_n = Y_C, 1.0 - Y_C
+    n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
+    result.Y_Le = n_Le / n_B
 
     return _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
                    e_thermo=e_thermo)
@@ -418,7 +428,7 @@ def solve_beta_eq_neutrino_trapped(
         EoSPoint; test `.converged` before using any other field.
     """
 
-    result = EoSPoint(n_B=n_B, T=T, Y_L=Y_Le)
+    result = EoSPoint(n_B=n_B, T=T)
     cold = default_guess("beta_eq_neutrino_trapped", n_B, T, par,
                          Y_Le=Y_Le)
     x0 = cold if initial_guess is None else initial_guess
@@ -457,6 +467,8 @@ def solve_beta_eq_neutrino_trapped(
     result.n_e = e_thermo.n
     result.n_nu = nu_thermo.n
     result.Y_e = result.n_e / n_B
+    n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
+    result.Y_Le = n_Le / n_B
 
     return _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
                    e_thermo=e_thermo, nu_thermo=nu_thermo)

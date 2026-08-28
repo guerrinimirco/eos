@@ -610,7 +610,7 @@ because nothing downstream consumes it.
 | `error` | — | largest scaled residual, dimensionless |
 | `n_B` | n_B | fm^-3, the condition |
 | `T` | T | MeV, the condition |
-| `Y_C`, `Y_L` | Y_C, Y_{L_e} | the fractions the mode fixed |
+| `Y_C`, `Y_Le` | Y_C, Y_{L_e} | the fractions, MEASURED on the solved state in every mode -- a mode that fixes one reports what it solved |
 | `Y_S` | Y_S = n_S/n_B | MEASURED on the solved flavour densities through the charge map, in every mode — what the equilibrium populated, not what was requested |
 | `mu_u`, `mu_d`, `mu_s` | mu_u, mu_d, mu_s | MeV, *physical* potentials (not `mu_eff_q`) |
 | `mu_e`, `mu_nu` | mu_e, mu_nue | MeV |

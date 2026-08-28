@@ -5,7 +5,7 @@ self-consistency n_q(mu_eff_q, T, m_q) = n_q for the three flavours and fixes
 the baryon density; the mode supplies the rest:
 
     beta equilibrium (neutrinoless)   mu_C + mu_e = 0, mu_S = 0, n_C = n_e
-    beta equilibrium (trapped)        ... with mu_nu kept and Y_L fixed
+    beta equilibrium (trapped)        ... with mu_nu kept and Y_Le fixed
     fixed Y_C                         n_C = Y_C n_B, mu_S = 0
     fixed Y_C and Y_S                 n_C = Y_C n_B, n_S = Y_S n_B
 
@@ -35,6 +35,7 @@ from eos.vmit.species import SpeciesFlags
 from eos.vmit.thermodynamics import (
     effective_state, thermo_from_mu_n, G_QUARK,
 )
+from eos.general.basis import lepton_charges
 from eos.general.thermodynamics_leptons import (
     electron_thermo, neutrino_thermo, photon_thermo,
 )
@@ -76,7 +77,11 @@ class EoSPoint:
     # the solver's own residual and come apart everywhere else, which is the
     # whole reason it is reported.
     Y_S: float = 0.0
-    Y_L: float = 0.0       # Lepton fraction
+    # Electron-family lepton fraction (n_e + n_nue)/n_B, MEASURED the same
+    # way, through eos.general.basis.lepton_charges. L_e is a conserved charge
+    # like C and S, so this is defined in every mode and not only in the
+    # trapped mode that holds it.
+    Y_Le: float = 0.0
     
     # Chemical potentials (MeV)
     mu_u: float = 0.0
@@ -331,6 +336,8 @@ def solve_beta_eq_neutrinoless(
     # Add electron contribution
     e_thermo = electron_thermo(mu_e, T, include_antiparticles=True)
     result.n_e = e_thermo.n
+    n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
+    result.Y_Le = n_Le / n_B
     result.Y_C = q_thermo.Y_C
     result.Y_S = q_thermo.Y_S
     result.Y_u = n_u / n_B 
@@ -489,6 +496,8 @@ def solve_fixed_yc(
                                 two_flavour)
 
     result.Y_S = q_thermo.Y_S
+    n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
+    result.Y_Le = n_Le / n_B
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
     result.s_total = q_thermo.s
@@ -634,6 +643,8 @@ def solve_fixed_yc_ys(
                                 two_flavour)
 
     result.Y_S = q_thermo.Y_S
+    n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
+    result.Y_Le = n_Le / n_B
     result.P_total = q_thermo.P
     result.e_total = q_thermo.e
     result.s_total = q_thermo.s
@@ -662,11 +673,11 @@ def solve_fixed_yc_ys(
 # SOLVER: TRAPPED NEUTRINOS
 # =============================================================================
 def solve_beta_eq_neutrino_trapped(
-    par: Parameters, n_B: float, Y_L: float, T: float, flags: SpeciesFlags,
+    par: Parameters, n_B: float, Y_Le: float, T: float, flags: SpeciesFlags,
     initial_guess: Optional[np.ndarray] = None
 ) -> EoSPoint:
     """
-    Solve vMIT EOS with trapped neutrinos (fixed lepton fraction Y_L).
+    Solve vMIT EOS with trapped neutrinos (fixed lepton fraction Y_Le).
     
     8 equations, 8 unknowns: [μ_u, μ_d, μ_s, μ_e, μ_ν, n_u, n_d, n_s]
 
@@ -677,12 +688,12 @@ def solve_beta_eq_neutrino_trapped(
     
     two_flavour = flags.two_flavour
 
-    result = EoSPoint(n_B=n_B, T=T, Y_L=Y_L)
+    result = EoSPoint(n_B=n_B, T=T)
     
     m_u, m_d, m_s = par.m_u, par.m_d, par.m_s
     
     x0_default = default_guess("beta_eq_neutrino_trapped", n_B, T, par,
-                               Y_Le=Y_L, two_flavour=two_flavour)
+                               Y_Le=Y_Le, two_flavour=two_flavour)
     x0 = x0_default if initial_guess is None else initial_guess
     x0_fallback = None if initial_guess is None else x0_default
 
@@ -708,7 +719,7 @@ def solve_beta_eq_neutrino_trapped(
         if not two_flavour:
             rows.append(mu_d - mu_s)                    # strangeness eq
         rows += [mu_u + mu_e - mu_d - mu_nu,            # beta eq, trapped
-                 n_L / n_B - Y_L]                       # lepton fraction
+                 n_L / n_B - Y_Le]                      # lepton fraction
         return rows
 
     def scales_at(x):
@@ -742,6 +753,8 @@ def solve_beta_eq_neutrino_trapped(
     
     result.n_e = e_thermo.n
     result.n_nu = nu_thermo.n
+    n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
+    result.Y_Le = n_Le / n_B
     result.Y_C = q_thermo.Y_C
     result.Y_S = q_thermo.Y_S
     result.Y_u = n_u / n_B

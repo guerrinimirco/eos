@@ -457,7 +457,7 @@ it asked for:
 |---|---|---|
 | `converged`, `error` | — | the status and the largest scaled residual |
 | `n_B`, `T` | `n_B`, `T` | the conditions the point was solved at |
-| `Y_C`, `Y_S`, `Y_L` | `Y_C`, `Y_S`, `Y_Le` | as realised, (charges) |
+| `Y_C`, `Y_S`, `Y_Le` | `Y_C`, `Y_S`, `Y_Le` | as realised, (charges) |
 | `mu_u`, `mu_d`, `mu_s` | `mu_u`, `mu_d`, `mu_s` | the unknowns |
 | `mu_e`, `mu_nu` | `mu_e`, `mu_nue` | zero where the mode has no lepton condition |
 | `mu_B`, `mu_C`, `mu_S` | `mu_B`, `mu_C`, `mu_S` | derived, (basis) |

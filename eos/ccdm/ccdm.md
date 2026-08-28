@@ -1080,7 +1080,7 @@ solve got to. The point carries:
 | group | fields | units |
 |---|---|---|
 | status | `converged`, `error` (the scaled residual), `mode` | |
-| state point | `n_B`, `T`, `Y_C`, `Y_S`, `Y_L` | fm^-3, MeV, — |
+| state point | `n_B`, `T`, `Y_C`, `Y_S`, `Y_Le` | fm^-3, MeV, — |
 | the answer | `branch`, `pattern`, `Delta` = `(\|Delta_eta\|)`, `gapless`, `beyond_cutoff` | MeV |
 | fields | `phi_bar` = `Phi^(1/4)`, `chi`, `sigma`, `zeta`, `omega_0`, `Sigma_R` | —, MeV |
 | masses | `M_star` = `(M*_u, M*_d, M*_s)` | MeV |

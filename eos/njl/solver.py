@@ -58,6 +58,7 @@ import math
 
 import numpy as np
 
+from eos.general.basis import lepton_charges
 from eos.general.modes import (
     beta_eq_neutrino_trapped, beta_eq_neutrinoless, electron_potential,
     fixed_YC, fixed_YC_YS, muon_potential, resolve_leptons,
@@ -394,9 +395,14 @@ class EoSPoint:
 
     n_B: float = 0.0                # fm^-3
     T: float = 0.0                  # MeV
+    # Conserved-charge fractions, MEASURED on the solved state: Y_X = n_X/n_B
+    # for every charge (CLAUDE.md section 2). A mode that HOLDS one of these
+    # reports what it solved, not what it was asked for, and every one of them
+    # is defined in every mode -- Y_Le included, not only in the trapped mode
+    # that holds it.
     Y_C: float = 0.0
     Y_S: float = 0.0
-    Y_L: float = 0.0
+    Y_Le: float = 0.0               # electron family, (n_e + n_nue)/n_B
 
     pattern: str = "unpaired"
     gapless: bool = False
@@ -466,11 +472,12 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
     n_B = st.n_B_fm
     per_B = (lambda n: n / n_B if n_B else 0.0)
     n_u, n_d, n_s = st.n_flavour / hc3
+    n_Le, _ = lepton_charges(n_e=electrons.n, n_nue=neutrinos.n)
     return EoSPoint(
         converged=converged, error=error, mode=mode, n_B=n_B, T=T,
         Y_C=st.n_C_fm / n_B if n_B else 0.0,
         Y_S=st.n_S_fm / n_B if n_B else 0.0,
-        Y_L=per_B(electrons.n + neutrinos.n),
+        Y_Le=per_B(n_Le),
         pattern=st.pattern, gapless=st.gapless,
         Delta=tuple(float(d) for d in st.Delta),
         M=tuple(float(m) for m in st.M),

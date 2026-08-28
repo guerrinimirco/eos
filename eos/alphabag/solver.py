@@ -43,7 +43,7 @@ from eos.general.thermodynamics_leptons import (
 )
 from eos.alphabag.parameters import Parameters
 from eos.alphabag.species import SpeciesFlags
-from eos.general.basis import quark_charges
+from eos.general.basis import lepton_charges, quark_charges
 from eos.alphabag.thermodynamics import (
     cfl_n_correction, cfl_thermo_from_mu, gluon_thermo, quark_density,
     thermo_from_mu,
@@ -93,9 +93,14 @@ class EoSPoint:
     # Input conditions
     n_B: float = 0.0        # baryon density (fm^-3)
     T: float = 0.0          # temperature (MeV)
+    # Conserved-charge fractions, MEASURED on the solved state: Y_X = n_X/n_B
+    # for every charge (CLAUDE.md section 2). A mode that HOLDS one of these
+    # reports what it solved, not what it was asked for, and every one of them
+    # is defined in every mode -- Y_Le included, not only in the trapped mode
+    # that holds it.
     Y_C: float = 0.0        # non-leptonic charge fraction
     Y_S: float = 0.0        # strangeness fraction, S = +1 per s quark
-    Y_L: float = 0.0        # electron-family lepton fraction (trapped mode)
+    Y_Le: float = 0.0       # electron family, (n_e + n_nue)/n_B
 
     # Chemical potentials (MeV)
     mu_u: float = 0.0
@@ -312,6 +317,8 @@ def point_from_mu(
     Y_s = quark.n_s / n_B if n_B > 0 else 0.0
     Y_e = thermo_e.n / n_B if n_B > 0 else 0.0
     Y_nu = n_nu / n_B if n_B > 0 else 0.0
+    n_Le, _ = lepton_charges(n_e=thermo_e.n, n_nue=n_nu)
+    Y_Le = n_Le / n_B if n_B > 0 else 0.0
 
     f_total = e_total - T * s_total
 
@@ -323,7 +330,7 @@ def point_from_mu(
         mu_B=quark.mu_B, mu_C=quark.mu_C, mu_S=quark.mu_S,
         n_u=quark.n_u, n_d=quark.n_d, n_s=quark.n_s, n_e=thermo_e.n, n_nu=n_nu,
         P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
-        Y_u=Y_u, Y_d=Y_d, Y_s=Y_s, Y_e=Y_e, Y_nu=Y_nu
+        Y_u=Y_u, Y_d=Y_d, Y_s=Y_s, Y_e=Y_e, Y_nu=Y_nu, Y_Le=Y_Le
     )
 
 
@@ -571,7 +578,6 @@ def solve_beta_eq_neutrino_trapped(
         converged=converged,
         error=error
     )
-    point.Y_L = Y_Le
     return point
 
 

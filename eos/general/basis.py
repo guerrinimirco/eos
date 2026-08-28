@@ -150,6 +150,32 @@ def quark_charges(n_u, n_d, n_s):
     return n_B, n_C, n_S
 
 
+def lepton_charges(n_e=0.0, n_nue=0.0, n_mu=0.0, n_numu=0.0):
+    """(n_Le, n_Lmu), the lepton family number densities.
+
+        n_Le  = n_e  + n_nue
+        n_Lmu = n_mu + n_numu
+
+    L_e and L_mu are conserved charges of the reduced basis (B, C, S, L_e,
+    L_mu), so Y_Le = n_Le/n_B and Y_Lmu = n_Lmu/n_B are fractions OF THE
+    SOLVED STATE, defined in every mode -- exactly as Y_C and Y_S are. A mode
+    that holds one of them (`beta_eq_neutrino_trapped` holds Y_Le) constrains
+    the value the state reaches; it does not create the quantity, any more
+    than `fixed_YC` makes Y_C meaningless everywhere else.
+
+    The densities are net, with antiparticles already subtracted, and the
+    result carries whatever units the caller passes in. A family the model
+    does not track contributes zero, and that zero is the right answer rather
+    than a placeholder: with no muons there is no muon-family number to
+    report, and with the lepton sector off there are no leptons at all.
+
+    Leptons carry no strong charge and so are absent from the `n_C` the other
+    maps here return (section 2). Total electric neutrality, n_C = n_e + n_mu,
+    is a separate condition a mode may or may not impose.
+    """
+    return n_e + n_nue, n_mu + n_numu
+
+
 # --------------------------------------------------------------------------
 # Potentials: conserved charges <-> species
 # --------------------------------------------------------------------------

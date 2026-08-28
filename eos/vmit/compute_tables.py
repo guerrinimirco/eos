@@ -181,7 +181,7 @@ def save_vmit_results(
 
 def results_to_arrays(results: List[EoSPoint]) -> Dict[str, np.ndarray]:
     """Converged points of one line as {quantity: array}, ready for plotting."""
-    input_attrs = ['n_B', 'T', 'Y_C', 'Y_S', 'Y_L']
+    input_attrs = ['n_B', 'T', 'Y_C', 'Y_S', 'Y_Le']
     mu_attrs = ['mu_u', 'mu_d', 'mu_s', 'mu_e', 'mu_nu']
     Y_attrs = ['Y_u', 'Y_d', 'Y_s', 'Y_e', 'Y_nu']
     thermo_attrs = ['P_total', 'e_total', 's_total', 'f_total']

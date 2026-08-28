@@ -644,7 +644,7 @@ Fm-based throughout: densities in fm^-3, potentials and masses in MeV, `P`,
     n_B, T               the independent variables
     Y_C = n_C/n_B        the non-leptonic charge fraction — imposed in a
     Y_S = n_S/n_B        fixed-fraction mode, an outcome in a beta one
-    Y_L = (n_e + n_nue)/n_B      the electron-family lepton fraction
+    Y_Le = (n_e + n_nue)/n_B     the electron-family lepton fraction
     pattern, gapless     which candidate won, and whether a quasiparticle
                          branch has reached zero — both part of the answer
     Delta_1,2,3          the gaps, zero in the channels the winner leaves unpaired

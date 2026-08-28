@@ -322,7 +322,7 @@ because nothing downstream consumes it.
 | `converged` | — | the status a caller must test first |
 | `error` | — | largest scaled residual, dimensionless |
 | `n_B`, `T` | n_B, T | fm^-3, MeV: the conditions |
-| `Y_C`, `Y_S`, `Y_L` | Y_C, Y_S, Y_Le | the fractions; `Y_S = 0` always |
+| `Y_C`, `Y_S`, `Y_Le` | Y_C, Y_S, Y_Le | the fractions, MEASURED on the solved state in every mode; `Y_S = 0` always |
 | `mu_p`, `mu_n` | mu_p, mu_n | MeV, *physical* potentials (not `mu_eff_i`) |
 | `mu_e`, `mu_nu` | mu_e, mu_nue | MeV |
 | `mu_B`, `mu_C`, `mu_S`, `mu_L` | mu_B, mu_C, mu_S, mu_L | MeV; `mu_S = 0` by convention |

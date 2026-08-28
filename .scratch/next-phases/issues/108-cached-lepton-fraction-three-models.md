@@ -1,7 +1,8 @@
 # `Y_L` on a point is two different quantities wearing one name
 
 Type: grilling
-Status: open
+Status: resolved (2026-08-28)
+Assignee: session dc4b25ab
 Blocked by: -
 Parent: ../map.md
 
@@ -89,3 +90,128 @@ off one of these points.
   convention to assert yet. That paragraph comes out when this ticket lands.
 - Any baseline key that moves is named, and the regeneration sequenced
   against ticket 95.
+
+
+## Resolution (2026-08-28) — arm (b), respelled: `Y_Le`, measured, every mode
+
+**Neither camp was spelled right.** Section 2 already decides the question:
+"Y_X = n_X / n_B for every charge: Y_C, Y_S, Y_Le, Y_Lmu", and L_e is a
+conserved charge of that section's reduced basis (B, C, S, L_e, L_mu). So the
+lepton fraction is a property of the SOLVED STATE, defined in every mode,
+exactly as Y_C is — `beta_eq_neutrino_trapped` holds it the way `fixed_YC`
+holds Y_C, and nobody claims Y_C is undefined outside `fixed_YC`. Arm (a)
+would have made Y_Le the one fraction in the vocabulary that is not a state
+property. Arm (c) was refused for the narrower reason that the trapped mode's
+own condition would stop being readable off its result while Y_C and Y_S
+stayed cached, splitting the vocabulary rather than unifying it.
+
+`Y_L` appears **nowhere in CLAUDE.md**. The conformant models were the two the
+ticket did not list among either camp — `did` and `dd2`, both already `Y_Le`
+and both already measuring it — and `eos/mixed` had ruled the same way
+already: `test/mixed/test_mixed_api.py` carries
+`test_the_lepton_fraction_has_exactly_one_name`, which asserts `Y_Le` is the
+condition name and `Y_L` is refused. This ticket brings the five stragglers to
+where the engine already was.
+
+### What changed
+
+- **`eos/general/basis.py`** gains `lepton_charges(n_e, n_nue, n_mu, n_numu)
+  -> (n_Le, n_Lmu)` — the single home (section 7) for the map from lepton
+  densities to the two family charges, and where the convention is now stated.
+- **`zl`, `vmit`, `alphabag`**: field `Y_L` -> `Y_Le`, and it is ASSIGNED from
+  the point's own lepton densities in every mode instead of carrying the
+  dataclass default. `alphabag`'s `point.Y_L = Y_Le` echo (solver.py:574) is
+  gone — the trapped mode now reports what it solved, like every other mode.
+- **`njl`, `ccdm`**: rename only. Both already measured the right quantity.
+- **`vmit`**: the trapped solver's condition kwarg was also `Y_L`; it is
+  `Y_Le`, which is what section 5 names and what `vmit/api.py` already spoke
+  at its own boundary. All callers pass positionally, so nothing else moved.
+- **`eos/vmit/compute_tables.py:184`** listed `'Y_L'` in the attribute names
+  `results_to_arrays` reads — the one place the rename would have broken
+  silently.
+- **Documents** (section 11): `zl.md`, `vmit.md`, `alphabag.md`, `njl.md`,
+  `ccdm.md`, `njl.tex`. `vmit.md` also had the row described as "the fractions
+  the mode fixed", which the ruling makes false; it now says measured.
+
+### On `Y_C`, which the ticket asked be settled alongside
+
+Same ruling, and **no code change**: a fraction is measured on the state, and
+an echo is legitimate only where it is exact by construction (`zl`'s fixed_YC
+sets n_p = Y_C n_B, so echo and measurement agree to round-off). `alphabag`
+reporting 0.29999999998989824 was always the correct behaviour rather than the
+outlier, and the 1e-8 comparison in `test/test_cached_fractions.py` is what
+keeps the distinction honest without forbidding the echo.
+
+### Gate
+
+- `test/test_cached_fractions.py` no longer skips the field: its module
+  docstring's "there is no convention to assert yet" paragraph is replaced by
+  the section 2 argument, `Y_Le` joins `Y_C`/`Y_S` in the comparison loop, and
+  it joins the set in `test_no_model_was_left_out_of_the_table_above` so a new
+  model caching it must join CHARGES. **21 passed, 3 skipped** (the three
+  pre-existing non-convergence skips).
+- The ticket's own six-row table now agrees on both sides —
+  `zl` `beta_eq_neutrinoless` reports **0.11398814** against the recomputed
+  0.11398814.
+- `test/zl test/vmit test/alphabag test/njl test/ccdm test/mixed test/general
+  test/test_cached_fractions.py test/test_imports.py`: **932 passed, 3
+  skipped, 3 xfailed** (8m25s). `test/baseline`: **20 passed**.
+
+### The baselines, key by key
+
+Regenerated `zl`, `vmit`, `alphabag`, `njl`, `ccdm` (`test/` is gitignored, so
+this is a local freeze, not a committed one). Audited against a before-image:
+
+| model | `.Y_L` -> `.Y_Le` renamed | of those, value moved | OTHER keys moved |
+|---|---|---|---|
+| `zl` | 57 | **39** (beta 27, yc 12) | 0 |
+| `vmit` | 42 | **29** (beta 18, yc 9, ycys 2) | 0 |
+| `alphabag` | 36 | **23** (beta 18, yc 5) | 0 |
+| `njl` | 105 | 0 | 0 |
+| `ccdm` | 76 | 0 | 0 |
+
+**316 keys renamed, 91 changed value, and NOTHING ELSE MOVED** — every removed
+key had a `.Y_Le` twin added, and no other key in any of the five files
+differs at rtol = 1e-10. Every one of the 91 is a frozen wrong value
+corrected: the field was never written, so it shipped 0.0 while the point's
+own leptons said otherwise. `njl` and `ccdm` move zero values because they
+were already right.
+
+Of the 91, **84 move by more than 1e-8** and **7 move from an exact 0.0 to a
+number of size 1e-11 to 1e-21** — all seven are `Y_C = 0` states with leptons
+on (`yc.lep.YC0.*`, `ycys.*`), where the electron density solves to the
+solver's own residual rather than to a hard zero. They are correct measured
+values, but they are also a relative comparison of a quantity that is zero by
+construction, which is the shape ticket 76 warned about; noted below rather
+than fixed here.
+
+### Two corrections to this ticket's own framing
+
+1. **The blast radius was understated.** It named `vmit.npz` and `zl.npz`; it
+   missed `alphabag.npz` (23 value moves) and the 181 name-only moves in
+   `njl.npz` and `ccdm.npz`.
+2. **"Nothing in the package reads a `Y_L` off one of these points"** is true
+   of the package and false of the suite: `test/ccdm/test_ccdm_modes.py:40`
+   asserted `p.Y_L`, and `test/alphabag/test_alphabag_modes.py:64` asserted
+   `r.Y_L == Y_Le` by exact equality — which the ruling turns into a measured
+   comparison, so it is now `pytest.approx(..., abs=CLOSURE_TOL)`.
+
+Also: the table's `0.30000000` column for the `fixed_YC` rows was recorded
+before [ticket 91](91-leptons-default-and-drift-checks.md) made `leptons`
+default to False. Under today's defaults those rows read 0.0 on BOTH sides,
+because there are no leptons; at `leptons=True` both sides read 0.3. The
+lepton arms are why only half the frozen `yc` zeros moved.
+
+### Deliberately left alone
+
+- The `'Y_L'` **column header** written by `eos/zl/table.py:320` and
+  `eos/vmit/compute_tables.py:146`. Those label a written text table, take
+  their value from the grid key rather than from the point, and `nucleation`
+  carries its own unrelated `GRIDS['Y_L']` vocabulary. Renaming an output
+  format is a separate decision with a downstream blast radius; it is on the
+  map as fog.
+- `eos/zlvmit/`, exempt under section 1, and its `Y_L_input` baseline keys.
+- No model caches `Y_Lmu`. The unsuffixed name invited summing families while
+  every implementation summed only the electron one; `Y_Le` is honest today
+  because `zl`/`vmit`/`alphabag` carry no muon fields at all, but the muon
+  family number is simply not reported anywhere. Recorded, not fixed.
