@@ -84,7 +84,13 @@ fi
 
 CERT_DIR=${CERT_DIR:-test/suite_certificates}
 mkdir -p "$CERT_DIR"
-CERT="$CERT_DIR/$(date +%Y%m%dT%H%M%S).txt"
+# Stamp the open time ONCE, here, and reuse it for both the filename and the
+# certificate's `opened` line. Calling `date` again inside the heredoc below
+# stamps the moment the certificate is WRITTEN, which is twenty minutes after
+# the window opened -- the first real certificate carried a close time under
+# an `opened` label, disagreeing with its own filename.
+OPENED=$(date +%Y-%m-%dT%H:%M:%S)
+CERT="$CERT_DIR/$(echo "$OPENED" | tr -d ':-').txt"
 PY=$(PYTHONPATH=. python3 -c 'import sys,numpy,scipy;print(f"CPython {sys.version.split()[0]}, numpy {numpy.__version__}, scipy {scipy.__version__}")')
 SHA=$(git rev-parse --short HEAD)
 
@@ -97,7 +103,8 @@ echo "window closed  $(date +%H:%M:%S)  eos/ $after"
 
 {
     echo "suite certificate"
-    echo "  opened      $(date +%Y-%m-%dT%H:%M:%S)"
+    echo "  opened      $OPENED"
+    echo "  closed      $(date +%Y-%m-%dT%H:%M:%S)"
     echo "  HEAD        $SHA"
     echo "  interpreter $PY"
     echo "  eos/ before $before"

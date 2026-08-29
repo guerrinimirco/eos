@@ -1,0 +1,33 @@
+suite certificate
+  opened      2026-08-29T10:55:03
+  HEAD        286da5f
+  interpreter CPython 3.14.2, numpy 2.3.5, scipy 1.17.0
+  eos/ before d2a05904b9897e572e98cd146dfb58679a0e3c22
+  eos/ after  d2a05904b9897e572e98cd146dfb58679a0e3c22
+  verdict     CLEAN -- no eos/*.py changed during the run
+
+........................................................................ [ 53%]
+........................................................................ [ 57%]
+........................................................................ [ 61%]
+........................................................................ [ 65%]
+........................................................................ [ 69%]
+........................................................................ [ 73%]
+................................................ss....s................. [ 76%]
+........................................................................ [ 80%]
+........................................................................ [ 84%]
+........................................................................ [ 88%]
+...........................s.s....sss................................... [ 92%]
+......................sssssssssssssss................................... [ 96%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+=============================== warnings summary ===============================
+test/baseline/test_baseline.py: 43 warnings
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/astro/tov/solver.py:395: DeprecationWarning: `trapz` is deprecated. Use `trapezoid` instead, or one of the numerical integration functions in `scipy.integrate`.
+    M_b_MeV = m_nucleon_MeV * np.trapz(integrand, dx=dr_fm)
+
+test/baseline/test_baseline.py::test_baseline[zlvmit]
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/zl/thermodynamics.py:331: RuntimeWarning: invalid value encountered in scalar divide
+    Y_p=n_p_calc / n_B, Y_n=n_n_calc / n_B, Y_C=n_C / n_B, Y_S=n_S / n_B,
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1850 passed, 23 skipped, 44 warnings in 1148.61s (0:19:08)

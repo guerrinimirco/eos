@@ -147,7 +147,23 @@ decision tickets; `research` for the audit tickets; `prototype` for ticket 04.
 
 ## Suite status
 
-**CURRENT, measured by [ticket 94](issues/94-zl-solver-flags.md) on
+**CURRENT, and for the first time a CERTIFIED LANDING MEASUREMENT** --
+[ticket 118](issues/118-first-landing-measurement.md), 2026-08-29, the first
+run taken under [ticket 117](issues/117-suite-gate-needs-a-landing-point.md)'s
+gate:
+
+    test/suite_certificates/20260829T103554.txt
+    HEAD 286da5f   CPython 3.14.2, numpy 2.3.5, scipy 1.17.0
+    verdict CLEAN -- eos/ fingerprint identical either side of the run
+    1850 passed, 23 skipped, 0 failed  (19:08)
+
+**One certificate, no DISCARDs.** The +17 against ticket 114's 1833 is 112's
+and 114's own new tests, landed in `286da5f`. **anaconda 3.9.7 was not run**:
+four `test/baseline/*.npz` red there because they are 3.14 artifacts, a known
+non-regression. Everything below this block predates the certifier and is a
+measurement of a tree rather than of a SHA -- read the qualifications.
+
+**PRIOR, measured by [ticket 94](issues/94-zl-solver-flags.md) on
 2026-08-28, as a BEFORE/AFTER PAIR in one session:**
 
     before  1812 passed, 23 skipped, 0 failed  (1835 collected, 21:04)
@@ -3182,6 +3198,33 @@ against this file, not against the earlier `pytest_before*.txt`.
   97's §12 line is SATISFIED retroactively with no new run**; its subsets were
   always the gate. Raised [ticket 118](issues/118-first-landing-measurement.md):
   the mechanism has still certified nothing.
+
+- [The landing measurement has never actually been taken](issues/118-first-landing-measurement.md)
+  (2026-08-29): **it has now, and the store holds exactly one file.**
+  `test/suite_certificates/20260829T103554.txt` — HEAD `286da5f`, CPython
+  3.14.2 / numpy 2.3.5 / scipy 1.17.0, verdict **CLEAN** (eos/ fingerprint
+  identical either side), **1850 passed, 23 skipped, 0 failed in 19:08**.
+  **No DISCARDs**, so the cite-every-certificate obligation is discharged by
+  citing this one.
+  **The landing point did not exist and had to be created by a COMMIT.** 112
+  and 114 were not in flight as the ticket assumed — both resolved at ~02:38,
+  newest `eos/*.py` write 7.5 h old, no pytest running — but their thirteen
+  files sat uncommitted, 114 having deferred the commit to "whoever commits
+  stages those by name". The tree was quiet because the work had FINISHED, so
+  nobody was asked to stop; what was missing was an authorization, and it was
+  put to the human and taken on their instruction. `286da5f`, staged by name.
+  **One commit, not two, deliberately**: the two file lists interleave inside
+  `eos/sfho/nmp.py`, and any split leaves an intermediate tree whose
+  `parameters.py` has `y_phi_*` fields its `nmp.py` does not read.
+  **anaconda 3.9.7 was NOT run** — four baselines red there as 3.14 artifacts,
+  a documented non-regression, so a second 20 minutes buys a known number.
+  **A fourth certifier defect, found by using it, and the third to lie toward
+  looking fine**: the certificate carried the CLOSE time under an `opened`
+  label, nineteen minutes off its own filename, because `date` was called
+  again inside the heredoc. `OPENED` is now stamped once and the filename
+  derived from it; `closed` is its own field; `test_run_clean_suite.sh`
+  11 passed, 0 failed. **The certificate was not edited to match** — evidence
+  is not corrected after the fact, and its filename already carries the truth.
 
 - [The basin scan vetoes the pin sigma_min prefers, and c_omega stands](issues/115-dd2-qsat-pin-recheck.md)
   (2026-08-29): **the first time 103's second half has fired, and it overrules
