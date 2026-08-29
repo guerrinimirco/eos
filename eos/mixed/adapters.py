@@ -64,13 +64,10 @@ from eos.vmit.thermodynamics import (
 #: eos/dd2/solver.py accepts its own equilibrium solves at.
 RESIDUAL_TOL = 1.0e-10
 
-#: The flags every vMIT solve behind this adapter is made with. Photons are
-#: phase-common and are counted once at the mixture level
-#: (`eos.mixed.species`), so the phase contributes matter only: the cold start
-#: discards P, eps and s outright -- it reads potentials -- and the wing
-#: agrees with the mixture's own all-False default. `vmit_phase` takes no
-#: caller flags, so unlike `dd2_phase` its wing cannot follow one; the same
-#: holds for `zl_phase` and `alphabag_phase`.
+#: The flags a vMIT COLD START is made with. It reads potentials and discards
+#: P, eps and s outright, so the radiation would be dead weight; `dd2_phase`
+#: strips it from its own cold start for the same reason. A WING is a
+#: different matter and follows the caller (`eos.mixed.species`).
 _VMIT_MATTER_ONLY = VMITFlags(photons=False)
 
 
@@ -505,7 +502,7 @@ def _dd2_wing_kwargs(spec, flags):
     return kw
 
 
-def _vmit_wing_solve(spec, n_B, T, params):
+def _vmit_wing_solve(spec, n_B, T, params, flags):
     """One pure vMIT point at the spec's equilibrium.
 
     There is no naming difference left to absorb: vmit names the condition
@@ -514,6 +511,10 @@ def _vmit_wing_solve(spec, n_B, T, params):
     — those solves are cheap and robust, and a cold start keeps every wing
     row exactly reproducible by the pure model's own call at the same
     conditions, which is what test/mixed/test_hybrid_modes.py asserts.
+
+    `flags` is vMIT's own `SpeciesFlags`, the caller's: a wing row is stitched
+    into the hybrid table as it stands, so it carries the same radiation the
+    window does (`eos.mixed.species`).
     """
     from eos.vmit.solver import (
         solve_beta_eq_neutrinoless as _vmit_beta,
@@ -524,13 +525,13 @@ def _vmit_wing_solve(spec, n_B, T, params):
     if spec.C is Regime.NOT_CONSERVED:                  # beta equilibrium
         if spec.L_e is Regime.GLOBAL:
             return _vmit_trapped(params, n_B, spec.targets["Y_Le"], T,
-                                 _VMIT_MATTER_ONLY)
-        return _vmit_beta(params, n_B, T, _VMIT_MATTER_ONLY)
+                                 flags)
+        return _vmit_beta(params, n_B, T, flags)
     if spec.S is Regime.GLOBAL:
         return _vmit_yc_ys(params, n_B, spec.targets["Y_C"],
-                           spec.targets["Y_S"], T, _VMIT_MATTER_ONLY,
+                           spec.targets["Y_S"], T, flags,
                            leptons=spec.yc_leptons)
-    return _vmit_yc(params, n_B, spec.targets["Y_C"], T, _VMIT_MATTER_ONLY,
+    return _vmit_yc(params, n_B, spec.targets["Y_C"], T, flags,
                     leptons=spec.yc_leptons)
 
 
@@ -640,15 +641,29 @@ def dd2_phase(par, flags):
                  frozen_thermo=frozen_thermo, jacobian_block=jac)
 
 
-def vmit_phase(params=None):
+def vmit_phase(params=None, flags=None):
     """The vMIT quark phase as a `Phase` (physical potential slot).
 
     The (mu_B, mu_C, mu_S) -> (mu_u, mu_d, mu_s) rotation happens HERE, so
     the engine hands every adapter the same conserved-charge potentials and
     no flavour basis leaks past this closure.
+
+    `flags` is vMIT's own `SpeciesFlags`; omitted, every sector is off. The
+    wing follows it, exactly as `dd2_phase`'s does, so that a hybrid table's
+    wings and window agree about the phase-common radiation at T > 0
+    (`eos.mixed.species`).
     """
     if params is None:
         params = VMITParameters.default()
+    if flags is None:
+        flags = VMITFlags()
+    if flags.two_flavour:
+        raise NotImplementedError(
+            "SpeciesFlags.two_flavour is not wired in the vMIT phase: the "
+            "phase-internal surface `thermo` and the analytic quark Jacobian "
+            "block (eos/mixed/backends/jacobian.py) are both written for "
+            "three flavours, so honouring it in the wing alone would give a "
+            "hybrid table whose wings and window describe different matter")
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
                return_state=False):
@@ -669,7 +684,7 @@ def vmit_phase(params=None):
         out = []
         for n in n_B_grid:
             try:
-                q = _vmit_wing_solve(spec, float(n), T, params)
+                q = _vmit_wing_solve(spec, float(n), T, params, flags)
             except Exception:
                 continue
             if not q.converged:
@@ -705,8 +720,11 @@ def default_pair(par, flags=None, vmit_params=None):
     sectors); the mixture's phase-common ones are the engine's `species=`
     argument, not this.
     """
-    return dd2_phase(par, DD2SpeciesFlags() if flags is None else flags), \
-           vmit_phase(vmit_params)
+    flags = DD2SpeciesFlags() if flags is None else flags
+    # Photons are phase-common: the mixture counts them once, and both wings
+    # must carry whatever it carries. One flags object in, one answer out.
+    return dd2_phase(par, flags), \
+           vmit_phase(vmit_params, VMITFlags(photons=flags.photons))
 
 
 def sfho_phase(par, flags):
@@ -770,11 +788,15 @@ def sfho_phase(par, flags):
         # Y_C and Y_S held while the species re-equilibrate within them,
         # matter only — the same convention as the DD2 block.
         n = th.n_B * scale
+        # Matter only: this block's P and eps ARE the frozen sound speed, so
+        # a photon gas in it is not a seed's dead weight but a wrong number.
+        # `_dd2_frozen_block` strips them the same way.
+        matter = replace(flags, photons=False)
         if flags.hyperons:
-            p = _sfho_yc_ys(par, n, th.n_C / th.n_B, th.n_S / th.n_B, flags,
+            p = _sfho_yc_ys(par, n, th.n_C / th.n_B, th.n_S / th.n_B, matter,
                             T=T, leptons=False)
         else:
-            p = _sfho_yc(par, n, th.n_C / th.n_B, flags, T=T, leptons=False)
+            p = _sfho_yc(par, n, th.n_C / th.n_B, matter, T=T, leptons=False)
         if not p.converged:
             raise RuntimeError(f"sfho frozen block failed at n_B={n}")
         return p.P, p.eps, (th.n_C / th.n_B) * n
@@ -892,10 +914,11 @@ def did_phase(par, flags):
         # start from the same deterministic vector.
         n_B = th.n_B * scale
         Y_C, Y_S = th.n_C / th.n_B, th.n_S / th.n_B
+        matter = replace(flags, photons=False)     # see `sfho_phase`
         if flags.hyperons:
-            point = _did_yc_ys(par, n_B, Y_C, Y_S, flags, T=T, leptons=False)
+            point = _did_yc_ys(par, n_B, Y_C, Y_S, matter, T=T, leptons=False)
         else:
-            point = _did_yc(par, n_B, Y_C, flags, T=T, leptons=False)
+            point = _did_yc(par, n_B, Y_C, matter, T=T, leptons=False)
         if not point.converged:
             raise RuntimeError(f"DID frozen block failed at n_B={n_B}")
         return point.P, point.eps, Y_C * n_B
@@ -922,13 +945,17 @@ def _did_warm(point, spec, flags):
     return _warm(point, mode)
 
 
-def zl_phase(params=None):
+def zl_phase(params=None, flags=None):
     """The ZL nucleonic phase as a `Phase` (physical potential slot).
 
     The species-basis rotation happens here — mu_p = mu_B + mu_C,
     mu_n = mu_B — and ZL carries no strangeness: `supports_S=False`, so any
-    mode that conserves S globally raises before a solve, and mu_S never
+    modes that conserves S globally raises before a solve, and mu_S never
     reaches the model.
+
+    `flags` is ZL's own `SpeciesFlags`; omitted, every sector is off. The wing
+    follows it, so a hybrid table's wings and window agree about the
+    phase-common radiation at T > 0 (`eos.mixed.species`).
     """
     from eos.zl.parameters import Parameters as ZLParameters
     from eos.zl.species import SpeciesFlags as ZLFlags
@@ -941,13 +968,12 @@ def zl_phase(params=None):
     )
     if params is None:
         params = ZLParameters.default()
-    # Photons are phase-common and are counted once at the mixture level
-    # (`eos.mixed.species`), so the phase contributes matter only. The cold
-    # start discards P, eps and s outright -- it reads potentials -- and the
-    # wing agrees with the mixture's own all-False default. This phase takes
-    # no caller flags, so unlike `dd2_phase` its wing cannot follow one; see
-    # the note in `eos/mixed/species.py`.
-    flags = ZLFlags(photons=False)
+    if flags is None:
+        flags = ZLFlags()
+    # The cold start reads potentials and discards P, eps and s, so the
+    # radiation would be dead weight; `dd2_phase` strips it for the same
+    # reason. The wing keeps it -- see the docstring.
+    cold_flags = replace(flags, photons=False)
 
     def _as_record(m, mu_p, mu_n, T):
         return PhaseThermo(
@@ -970,7 +996,7 @@ def zl_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        p = _zl_beta(params, n_B, flags, T)
+        p = _zl_beta(params, n_B, cold_flags, T)
         if not p.converged:
             raise RuntimeError(f"zl cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
@@ -1009,7 +1035,7 @@ def zl_phase(params=None):
                  wing_sweep=wing_sweep, frozen_thermo=frozen_thermo)
 
 
-def alphabag_phase(params=None):
+def alphabag_phase(params=None, flags=None):
     """The alphaBag quark phase as a `Phase` (physical potential slot).
 
     `eos.alphabag.thermodynamics.thermo_from_mu` is a pure evaluation — the
@@ -1018,6 +1044,12 @@ def alphabag_phase(params=None):
     `vmit_phase`. No `frozen_thermo`: alphabag exposes no
     thermo-at-given-densities surface, so the frozen-composition responses
     raise for a pairing that includes it (docs/DEFERRED.md).
+
+    `flags` is alphaBag's own `SpeciesFlags`; omitted, every sector is off.
+    The wing follows it, so a hybrid table's wings and window agree about the
+    phase-common radiation at T > 0 (`eos.mixed.species`). Three of the
+    model's sectors have no counterpart in the window and RAISE rather than
+    becoming a wing-only gas: see below.
     """
     from eos.alphabag.parameters import Parameters as ABParameters
     from eos.alphabag.species import SpeciesFlags as ABFlags
@@ -1030,13 +1062,34 @@ def alphabag_phase(params=None):
     )
     if params is None:
         params = ABParameters.default()
-    # Matter only, for the reason `_VMIT_MATTER_ONLY` states: the photon gas
-    # is phase-common and is counted once at the mixture level, the cold start
-    # discards P, eps and s outright, and the wing agrees with the mixture's
-    # own all-False default. The gluon gas and the thermal neutrino gases go
-    # with it -- both are phase-common thermal sectors in the same sense, and
-    # this phase takes no caller flags to follow. See `eos/mixed/species.py`.
-    flags = ABFlags()
+    if flags is None:
+        flags = ABFlags()
+    # Three sectors the wing could solve and the mixture could not match, so
+    # each would become a gas present in the wing rows and absent from the
+    # window rows -- the kink this adapter's `photons` handling exists to
+    # prevent. CLAUDE.md section 4: an unimplemented flag raises, never a
+    # silent no-op.
+    if flags.gluons:
+        raise NotImplementedError(
+            "SpeciesFlags.gluons is not wired in the alphaBag phase: the "
+            "phase-internal surface `thermo` adds no gluon gas, so the "
+            "sector would reach a hybrid table's wing rows and not its "
+            "window rows")
+    if flags.thermal_neutrinos:
+        raise NotImplementedError(
+            "SpeciesFlags.thermal_neutrinos is not wired in the alphaBag "
+            "phase, and eos.mixed.species.SpeciesFlags refuses it at the "
+            "mixture level too")
+    if flags.two_flavour:
+        raise NotImplementedError(
+            "SpeciesFlags.two_flavour is not wired in the alphaBag phase: "
+            "`thermo` is written for three flavours, so honouring it in the "
+            "wing alone would give a hybrid table whose wings and window "
+            "describe different matter")
+    # The cold start reads potentials and discards P, eps and s, so the
+    # radiation would be dead weight; `dd2_phase` strips it for the same
+    # reason. The wing keeps it -- see the docstring.
+    cold_flags = replace(flags, photons=False)
 
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
                return_state=False):
@@ -1054,7 +1107,7 @@ def alphabag_phase(params=None):
         return (th, None) if return_state else th
 
     def cold_start(n_B, T):
-        p = _ab_beta(params, n_B, T, flags)
+        p = _ab_beta(params, n_B, T, cold_flags)
         if not p.converged:
             raise RuntimeError(f"alphabag cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B

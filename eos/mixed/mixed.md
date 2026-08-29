@@ -371,9 +371,15 @@ The six split by where they are consumed. `hyperons`, `deltas`,
 models being coupled, and are delegated: each `Phase` carries its own model's
 flags. `photons` and `thermal_neutrinos` belong to NEITHER phase — like the
 eta-split leptons they are uniform across the mixture — and are consumed at
-the mixture level, counted once. That is why every adapter solves its phase
-with `photons=False`: the phases contribute matter, the mixture contributes
-the radiation, and (photons) appears exactly once in (Ptot)-(stot). `thermal_neutrinos` is carried and raises: the flavours a
+the mixture level, counted once. That is why no adapter's `thermo` — the
+surface the mixture assembles from — adds a photon gas: the phases contribute
+matter, the mixture contributes the radiation, and (photons) appears exactly
+once in (Ptot)-(stot). A phase's `wing_sweep` takes the opposite rule and
+carries the caller's own `photons`, because its rows are stitched into the
+hybrid table as they stand with no mixture layer above them; the two paths
+meet at n_offset, where chi = 1 and both describe the same matter, so a wing
+short of the gas would put a spurious step of (photons) there.
+`thermal_neutrinos` is carried and raises: the flavours a
 mode does not track are not wired in the engine.
 
 **Euler / Hugenholtz-Van Hove.** The identity

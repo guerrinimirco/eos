@@ -81,9 +81,11 @@ def assemble(chi, eta, th_H, th_Q, L_H, L_Q, G, nu, mu_nue=0.0, T=0.0,
     mu_nue       : the neutrino potential entering sum mu_i n_i
 
     photons      : the phase-common radiation gas (CLAUDE.md section 4).
-                   Every phase is solved with its own photons switched off
-                   (`eos.mixed.adapters`), so the mixture's single term here
-                   is the whole of it.
+                   No adapter's `thermo` — the surface this assembles from —
+                   adds a photon gas (`eos.mixed.adapters`), so the single
+                   term here is the whole of it. A phase's `wing_sweep` is
+                   the other path and DOES carry the caller's photons; see
+                   `eos.mixed.species` for why the two rules differ.
 
     Weighted as the module docstring states; photons enter at T > 0 with
     mu = 0, so they contribute to P, eps and s but not to sum mu_i n_i.

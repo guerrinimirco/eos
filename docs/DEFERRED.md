@@ -2130,6 +2130,21 @@ decision that cannot be made before the tables exist.
   to be large. The change rides with the T = 0 entry-point work on the same file.
 
 ### mixed
+- **Three species sectors are refused by a quark adapter, and each is a
+  wing/window mismatch rather than a missing model capability.** A phase's
+  `wing_sweep` carries the caller's flags (its rows are stitched into the
+  hybrid table as they stand); its `thermo` — the surface the mixture
+  assembles from — is matter only and takes no flags. A sector the wing
+  solves and `thermo` cannot match therefore reaches the wing rows and not
+  the window rows, and the two segments meet at n_offset where chi = 1 and
+  describe the same matter. So `alphabag_phase` raises on `gluons` and on
+  `two_flavour`, and `vmit_phase` raises on `two_flavour`, rather than
+  becoming that step (CLAUDE.md section 4: never a silent no-op).
+  `alphabag_phase` also raises on `thermal_neutrinos`, which
+  `eos.mixed.species.SpeciesFlags` refuses at the mixture level anyway.
+  Closing any of them means adding the sector to the adapter's `thermo`
+  — and, for `two_flavour`, to the analytic quark Jacobian block of
+  `backends/jacobian.py`, which builds the s-flavour kappa unconditionally.
 - Capability gaps of the shipped pairings, each a loud NotImplementedError
   naming the phase, never a silent skip: `alphabag_phase` has no
   `frozen_thermo` (alphabag exposes no thermo-at-given-densities surface, so

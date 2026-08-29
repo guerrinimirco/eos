@@ -21,20 +21,31 @@ PER-PHASE — hyperons, deltas, thermal_mesons, and the muons that join the
 
 PHASE-COMMON — photons and thermal_neutrinos. These belong to neither phase:
     like the eta-split leptons of `eos.mixed.thermodynamics` they are uniform
-    across the whole mixture and are counted ONCE, at the mixture level. That
-    is why every shipped adapter hands the phase it wraps a flag object with
-    `photons=False` (`eos.mixed.adapters`): the phases contribute matter, the
-    mixture contributes the radiation. With the flag here, that hardcoded
-    False is correct by construction rather than correct by accident. The one
-    exception is a phase's `wing_sweep`, whose rows are stitched into the
-    hybrid table as they stand, with no mixture layer above them to add the
-    radiation: those carry the caller's own `photons`. `zl_phase`,
-    `vmit_phase` and `alphabag_phase` are built from parameters alone and are
-    handed no flag object, so their wings have none to follow and carry
-    `photons=False` -- which agrees with the mixture whenever this flag is at
-    its default. `alphabag_phase` carries its gluon gas and thermal neutrino
-    gases off for the same reason: both are phase-common thermal sectors and
-    neither has a caller flag here to follow.
+    across the whole mixture and are counted ONCE, at the mixture level. So
+    on the MIXTURE path — a phase's `thermo`, evaluated at fixed potentials
+    and weighted by chi — the phases contribute matter and the mixture
+    contributes the radiation, and no adapter's `thermo` adds a photon gas.
+
+    A `wing_sweep` is the other path and takes the opposite rule. Its rows
+    are that phase's own pure solve, stitched into the hybrid table AS THEY
+    STAND with no mixture layer above them to add the radiation, so a wing
+    carries the CALLER'S OWN `photons` — every adapter, without exception.
+    The two paths meet at n_offset, where chi = 1 and the last window row and
+    the first wing row describe the same matter; a wing short of the gas puts
+    a step of P_gamma = pi^2 T^4/45(hc)^3 there, which is 0.023 MeV/fm^3 at
+    T = 30 and nothing the physics puts in a table CLAUDE.md section 8
+    requires be monotone. That is why every shipped adapter takes a `flags`
+    argument: `zl_phase`, `vmit_phase` and `alphabag_phase` used to be built
+    from parameters alone and could only hardcode `photons=False`, and the
+    DD2 + vMIT front door — one flags object into `default_pair` and into the
+    mixture — produced exactly that step at T > 0.
+
+    A sector the wing could solve and the mixture cannot match would be the
+    same defect wearing another name, so it RAISES rather than becoming a
+    wing-only gas: `alphabag_phase` refuses `gluons` and `two_flavour`,
+    `vmit_phase` refuses `two_flavour` (CLAUDE.md section 4 — never a silent
+    no-op). `thermal_neutrinos` is refused here, at the mixture level, for
+    every pairing.
 
 The engine's OWN physics — eta, the quark volume fraction chi — is not a
 species flag and is not carried here; it is an argument of the solve.
