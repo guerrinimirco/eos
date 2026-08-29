@@ -231,3 +231,77 @@ call, not this ticket's.
 switches the interpreter's architecture, and what it breaks (numpy) reports an
 error that names a cause it does not have. `test/run_clean_suite.sh` and any
 future timing harness must call the interpreter directly.
+
+---
+
+## Addendum after closure: a third defect, and a correction to how it was reported
+
+Filed 2026-08-29 by a session sweeping the PAPER NOTEBOOK's `eos` call sites,
+after this ticket closed. It reopens nothing — defects 1 and 2 stand resolved —
+but the third site belongs with them, and one claim made while filing it was
+wrong.
+
+### Defect 3: the notebook died at its first `eos` call
+
+The consumer sweep that found `filters.py` reached that file and stopped.
+`notebooks/2fam_PNS_nucleation.py:246` builds `params_H` — the hadronic
+parameter set every downstream cell consumes — through
+
+    from_potential_depths(..., x_sigma_delta=, x_omega_delta=, x_rho_delta=)
+
+against today's `x_Delta_sigma`, `x_Delta_omega`, `x_Delta_rho`, renamed by
+`286da5f` (tickets 112, 114). `TypeError` within the first few cells.
+`test/make_fixture.py:68`'s `PARAM_KW` carried the same break.
+
+**Both sites are exactly the two the map's fog named** in "a rename landing
+green is not a rename landing safe": a lazy import inside `main()`, and a
+notebook pytest never collects. The fog predicted the shape and the sites; it
+could not predict which rename would land in them.
+
+**Fixed in `nucleation`'s working tree** at all three sites (`.py`, the paired
+`.ipynb`, `make_fixture.py`), keyword names only; the notebook's local
+variables keep their names, so `xsd_tag` and every output filename are
+unchanged. Verified by binding the call parsed back out of the file, and by
+executing it: `g_sigma_N = 7.531282`, `g_omega_N = 9.022391`, recovering
+`U_Lambda = -28.0, U_Sigma = +30.0, U_Xi = -18.0`. Reproduced independently by
+the tree's owner to 1e-14. Left uncommitted; the owner carries them.
+
+### The correction, and it is about this ticket's own defect 2
+
+The session filing defect 3 described defect 2 as "a numpy ImportError that
+appears only under pytest", and concluded "there is no suite to catch a renamed
+result field". **Both halves are wrong**, and this ticket had already
+established why: it is `timeout`, not pytest. `/usr/local/bin/timeout` is a
+Mach-O x86_64 binary, so it starts python under Rosetta and numpy's arm64
+`_multiarray_umath.so` fails to load — which numpy masks as the "do not import
+from the source directory" error.
+
+    PYTHONPATH=<eos> timeout 300 python3 -m pytest test -q  ->  9 errors in 0.23s
+    PYTHONPATH=<eos>            python3 -m pytest test -q  ->  72 passed
+
+Re-verified a third time while writing this addendum: **72 passed in 2.86s**.
+
+The miss is worth recording because the evidence sat in the filing session's own
+transcript: it had hit the identical Rosetta error an hour earlier running a
+Jacobian script under `timeout`, and had written "never Python under `timeout`"
+into its own dispatch notes — then quoted this ticket's pre-resolution text
+without connecting the two. **A stale ticket description outran a fact the
+reader had already measured**, which is the fog entry "nothing notices when a
+stated limitation stops being true" seen from the reader's side rather than the
+writer's.
+
+### What the coverage actually is
+
+Narrower than "no suite", wider than "static only". The owner re-ran a signature
+sweep over the notebook plus all 25 package modules against today's `eos`: every
+call site binds, and the 72 tests pass. So renamed RESULT fields are partly
+covered too.
+
+**One checked and deliberately not changed**: `3844142` dropped the `_total`
+suffixes on the alphaBag point dataclasses only, NOT on the sfho table columns,
+which still ship `P_total` / `e_total`. `nucleation/tables/grid.py:221` and
+`tables/qstar.py:139-142` read those raw keys and are correct as they stand.
+Do not "fix" them.
+
+**What remains genuinely uncovered**: the notebook has not been executed end to
+end since the rename. That is a coverage gap, not a broken suite.
