@@ -459,10 +459,10 @@ layout. Every quantity in it is listed here, with the equation it comes from:
 | `mu_B`, `mu_C`, `mu_S` | `3 mu`, 0, 0 | (potentials) |
 | `mu_e`, `mu_nu` | 0 | no leptons |
 | `n_u`, `n_d`, `n_s` | `n_B` | (locking) |
-| `P_total` | `P` | (P) |
-| `e_total` | `eps` | (eps) |
-| `s_total` | `s = 0` | (s) |
-| `f_total` | `f = eps` | (f) |
+| `P` | `P` | (P) |
+| `eps` | `eps` | (eps) |
+| `s` | `s = 0` | (s) |
+| `f` | `f = eps` | (f) |
 | `Y_u`, `Y_d`, `Y_s` | 1 each | (locking) |
 | `Y_C`, `Y_S` | 0, +1 | (fractions) |
 

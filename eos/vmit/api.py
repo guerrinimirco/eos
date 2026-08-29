@@ -139,7 +139,7 @@ def _entropy_per_baryon(point, n_B):
     if not point.converged:
         raise RuntimeError("the entropy solve stepped onto a state the "
                            "equilibrium solver could not reach")
-    return point.s_total / n_B
+    return point.s / n_B
 
 
 def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=None,
@@ -220,12 +220,12 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     dn = rel_step * n_B
     try:
         lo, hi = state(n_B - dn, T), state(n_B + dn, T)
-        out = {"cs2_isothermal": (hi.P_total - lo.P_total) / (hi.e_total - lo.e_total)}
+        out = {"cs2_isothermal": (hi.P - lo.P) / (hi.eps - lo.eps)}
 
         if T > 0.0:
             dT = rel_step * T
             cold, hot = state(n_B, T - dT), state(n_B, T + dT)
-            out["C_V"] = T * (hot.s_total - cold.s_total) / (2.0 * dT) / n_B
+            out["C_V"] = T * (hot.s - cold.s) / (2.0 * dT) / n_B
     except RuntimeError as err:
         return unconverged_response(
             str(err), ("cs2_isothermal", "C_V") if T > 0.0 else ("cs2_isothermal",))
@@ -290,7 +290,7 @@ def zero_pressure_point(par, species=None, n_lo=N_LO_DEFAULT,
         # n_B that makes eps/n_B the Gibbs energy per baryon the Euler
         # relation names.
         n_B_solved, _, n_S = quark_charges(p.n_u, p.n_d, p.n_s)
-        return (p.P_total, p.e_total / n_B_solved, p.mu_B,
+        return (p.P, p.eps / n_B_solved, p.mu_B,
                 n_S / n_B_solved, p.mu_S)
 
     return locate_zero_pressure(point_at, two_flavour=flags.two_flavour,

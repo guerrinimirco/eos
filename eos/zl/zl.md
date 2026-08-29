@@ -327,9 +327,9 @@ because nothing downstream consumes it.
 | `mu_e`, `mu_nu` | mu_e, mu_nue | MeV |
 | `mu_B`, `mu_C`, `mu_S`, `mu_L` | mu_B, mu_C, mu_S, mu_L | MeV; `mu_S = 0` by convention |
 | `n_p`, `n_n`, `n_e`, `n_nu` | n_p, n_n, n_e, n_nue | fm^-3 |
-| `P_total` | P | MeV/fm^3 |
-| `e_total` | eps | MeV/fm^3 |
-| `s_total` | s | fm^-3 |
+| `P` | P | MeV/fm^3 |
+| `eps` | eps | MeV/fm^3 |
+| `s` | s | fm^-3 |
 | `Y_p`, `Y_n`, `Y_e` | n_i/n_B | per-species fractions |
 
 When `converged` is False every other field holds the best iterate reached,

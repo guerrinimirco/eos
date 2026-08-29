@@ -159,21 +159,21 @@ def save_vmit_results(
 
             for r in results:
                 if r.converged:
-                    f_total = r.e_total - r.s_total * r.T
+                    f_total = r.eps - r.s * r.T
 
                     if eq_type == 'fixed_yc':
                         row = [r.n_B, Y_C_val, r.T, r.mu_u, r.mu_d, r.mu_s, r.mu_e,
-                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, r.P_total, r.e_total, r.s_total, f_total, 1]
+                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, r.P, r.eps, r.s, f_total, 1]
                     elif eq_type == 'fixed_yc_ys':
                         row = [r.n_B, Y_C_val, Y_S_val, r.T, r.mu_u, r.mu_d, r.mu_s, r.mu_e,
-                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, r.P_total, r.e_total, r.s_total, f_total, 1]
+                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, r.P, r.eps, r.s, f_total, 1]
                     elif eq_type == 'trapped_neutrinos':
                         Y_nu = r.n_nu / r.n_B if r.n_B > 0 else 0.0
                         row = [r.n_B, Y_L_val, r.T, r.mu_u, r.mu_d, r.mu_s, r.mu_e, r.mu_nu,
-                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, Y_nu, r.P_total, r.e_total, r.s_total, f_total, 1]
+                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, Y_nu, r.P, r.eps, r.s, f_total, 1]
                     else:  # beta_eq
                         row = [r.n_B, r.T, r.mu_u, r.mu_d, r.mu_s, r.mu_e,
-                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, r.P_total, r.e_total, r.s_total, f_total, 1]
+                               r.Y_u, r.Y_d, r.Y_s, r.Y_e, r.P, r.eps, r.s, f_total, 1]
                     f.write(" ".join(f"{v:>14.6e}" if isinstance(v, float) else f"{v:>14}" for v in row) + "\n")
 
     print(f"\nSaved to: {filename}")
@@ -184,7 +184,7 @@ def results_to_arrays(results: List[EoSPoint]) -> Dict[str, np.ndarray]:
     input_attrs = ['n_B', 'T', 'Y_C', 'Y_S', 'Y_Le']
     mu_attrs = ['mu_u', 'mu_d', 'mu_s', 'mu_e', 'mu_nu']
     Y_attrs = ['Y_u', 'Y_d', 'Y_s', 'Y_e', 'Y_nu']
-    thermo_attrs = ['P_total', 'e_total', 's_total', 'f_total']
+    thermo_attrs = ['P', 'eps', 's', 'f']
     other_attrs = ['error']
 
     all_attrs = input_attrs + mu_attrs + Y_attrs + thermo_attrs + other_attrs
@@ -198,9 +198,9 @@ def results_to_arrays(results: List[EoSPoint]) -> Dict[str, np.ndarray]:
             pass
 
     # f = e - Ts, if the result did not carry it
-    if 'f_total' not in arrays and 'e_total' in arrays and 's_total' in arrays:
+    if 'f' not in arrays and 'eps' in arrays and 's' in arrays:
         T_arr = np.array([r.T for r in results if r.converged])
-        arrays['f_total'] = arrays['e_total'] - arrays['s_total'] * T_arr
+        arrays['f'] = arrays['eps'] - arrays['s'] * T_arr
 
     arrays['converged'] = np.array([r.converged for r in results])
     return arrays

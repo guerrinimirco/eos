@@ -95,14 +95,14 @@ def sequence_derivs(par, flags, mode, n_B, T, rel_dn=1e-3, dT=0.05,
         return _solve(par, flags, mode, n, temp, branches, patterns, fractions)
 
     hi, lo = at(n_B + dn, T), at(n_B - dn, T)
-    sigma = (lambda p: p.s_total / p.n_B if p.n_B else 0.0)
-    out = dict(dP_dn=(hi.P_total - lo.P_total) / (2.0 * dn),
-               de_dn=(hi.e_total - lo.e_total) / (2.0 * dn),
+    sigma = (lambda p: p.s / p.n_B if p.n_B else 0.0)
+    out = dict(dP_dn=(hi.P - lo.P) / (2.0 * dn),
+               de_dn=(hi.eps - lo.eps) / (2.0 * dn),
                dsig_dn=(sigma(hi) - sigma(lo)) / (2.0 * dn),
                dP_dT=0.0, dsig_dT=0.0)
     if T > 0.0:
         hot, cold = at(n_B, T + dT), at(n_B, T - dT)
-        out["dP_dT"] = (hot.P_total - cold.P_total) / (2.0 * dT)
+        out["dP_dT"] = (hot.P - cold.P) / (2.0 * dT)
         out["dsig_dT"] = (sigma(hot) - sigma(cold)) / (2.0 * dT)
     return out
 
@@ -190,7 +190,7 @@ def thermal_index(par, flags, mode, n_B, T, branches=None, patterns=None,
     cold = _solve(par, flags, mode, n_B, 0.0, branches, patterns, fractions)
     if (hot.branch, hot.pattern) != (cold.branch, cold.pattern):
         return float("nan")
-    d_eps = hot.e_total - cold.e_total
+    d_eps = hot.eps - cold.eps
     if d_eps <= 0.0:
         return float("nan")
-    return 1.0 + (hot.P_total - cold.P_total) / d_eps
+    return 1.0 + (hot.P - cold.P) / d_eps

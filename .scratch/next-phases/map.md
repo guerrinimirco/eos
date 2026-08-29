@@ -3346,6 +3346,36 @@ against this file, not against the earlier `pytest_before*.txt`.
   saturation point rather than the par's own.
 
 
+- [`P`/`eps` wins over `P_total`/`e_total`, in all ten models](issues/101-pressure-and-energy-field-names.md)
+  (2026-08-29): **`P`, `eps`, `s`, `f`; the `_total` spelling is gone from
+  every point object with no alias left.** Seven dataclasses in six models
+  moved (zl, vmit, alphabag ×2, abpr, njl, ccdm). `_total`'s one real argument
+  — that a total differs from a sector's `e` — fails on inspection: **no point
+  object carries both**, so the suffix disambiguates nothing at any read site
+  and is §13 rule 3's name-restates-its-container. What decided it is that the
+  cost was already being paid four times over: `eos/mixed/adapters.py` reads
+  BOTH spellings (`p.P, p.eps` on the hadronic branches, `p.P_total, p.e_total`
+  on the quark ones) while every adapter converges on the bare names on the way
+  out, and `MixedPoint`/`PhaseThermo`/`HybridBranch` are all `P`/`eps` — the
+  composite engine had already ruled. Deleted with the split: the
+  `hasattr(point, "P")` helper in BOTH usage notebooks, `_pressure_of` in
+  `test/test_imports.py`. **Column headers deliberately unchanged** (that is
+  this map's own open fog patch, and `sfho/table.py:619` already proves a model
+  can hold one name inside and write another out), as are the legacy `zlvmit`
+  and `nucleation`'s own `QuarkResult`. **No number moved and it is checked**:
+  1191 baseline keys re-keyed IN PLACE across five `.npz` (alphabag 168, ccdm
+  305, njl 421, vmit 126, zl 171) by load/re-key/save — never regenerated, so
+  §12's rtol = 1e-10 freeze is untouched — and every value compared
+  `array_equal` against a pre-rename copy: **0 mismatches**. Gate: `pytest`
+  over the six models + `test/mixed` + `test/baseline` + `test/test_imports.py`
+  = **1039 passed, 0 failed** (8:13, python.org 3.14.2); five of six `verify`
+  suites PASS and **ccdm's one FAIL is reproduced byte-identically by a HEAD
+  control**. Consumer sweep found `nucleation` reads an `eos` point in exactly
+  one file — and that it is **broken today against a signature `eos` removed**,
+  behind a suite that **cannot collect at all**, which is
+  [ticket 119](issues/119-nucleation-cannot-run.md).
+
+
 ## Not yet specified
 
 Two patches graduated on 2026-08-27 out of
@@ -3353,12 +3383,25 @@ Two patches graduated on 2026-08-27 out of
 [ticket 100](issues/100-vmit-point-Y_S-never-assigned.md) (a cached conserved
 fraction its solvers never fill, frozen into a baseline) and
 [ticket 101](issues/101-pressure-and-energy-field-names.md) (`P`/`eps` against
-`P_total`/`e_total`, six models against four). Ticket 100's own sweep
+`P_total`/`e_total`, six models against four) — **both now resolved above**.
+Ticket 100's own sweep
 graduated a third on 2026-08-28,
 [ticket 108](issues/108-cached-lepton-fraction-three-models.md), which is
 resolved above.
 
 In scope, not yet sharp enough to ticket:
+
+- **`EOSTable_for_TOV` is a THIRD spelling, and ticket 101's gate did not reach
+  it.** `eos/general/state.py:335` calls the delivered table's columns `P`,
+  `epsilon`, `nB` — against `P`, `eps`, `n_B` everywhere else in the package
+  now that 101 has landed. It is not a model point, so 101's "one name per
+  quantity across all ten models" did not bind it, and it was left alone
+  deliberately. Whether the model↔astro contract owes §13's vocabulary the same
+  conformance the point fields now do has not been read, and the cost is not
+  small: `eos/astro/tov/{solver,crust}.py`, `nucleation`'s `replay.py`,
+  `stellar.py`, `filters.py` and its notebook all construct or read one. Note
+  it sits in `general/`, the layer both sides import, which is what makes it a
+  contract rather than one side's name.
 
 - **Is `test/` still "not published"?** Left standing by
   [ticket 117](issues/117-suite-gate-needs-a-landing-point.md), which untracked

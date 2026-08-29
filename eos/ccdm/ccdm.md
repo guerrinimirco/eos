@@ -1087,7 +1087,7 @@ solve got to. The point carries:
 | potentials | `mu_B`, `mu_C`, `mu_S`, `mu_3`, `mu_8`, `mu_e`, `mu_nu` | MeV |
 | densities | `n_u`, `n_d`, `n_s`, `n_e`, `n_mu`, `n_nu` | fm^-3 |
 | colour | `n_3`, `n_8` (zero identically when unpaired), `n_q` | fm^-3 |
-| totals | `P_total`, `e_total`, `f_total` = `eps - T s`; `s_total` | MeV/fm^3; fm^-3 |
+| totals | `P`, `eps`, `f` = `eps - T s`; `s` | MeV/fm^3; fm^-3 |
 | fractions | `Y_u`, `Y_d`, `Y_s`, `Y_e`, `Y_nu` | — |
 | internals | `_state` (the matter block, INTERNAL, natural units [MeV^n] — the underscore says it is not on the fm-based boundary; reachable for `euler_residual()`), `x` (the unknown vector, the warm start) | |
 

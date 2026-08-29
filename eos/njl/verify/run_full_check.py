@@ -330,7 +330,7 @@ def check_density_derivative(par, tol=1.0e-5):
         if not all(p.converged for p in points):
             return CheckResult("n = dP/dmu_B", False, float("inf"),
                                "a stencil point did not converge")
-        slope = ((points[2].P_total - points[0].P_total)
+        slope = ((points[2].P - points[0].P)
                  / (points[2].mu_B - points[0].mu_B))
         error = abs(slope / points[1].n_B - 1.0)
         if error > worst:
@@ -367,13 +367,13 @@ def check_anchor(par, tol=1.0e-3):
     plain = SpeciesFlags(csc=False)
     p = solve(par, "beta_eq_neutrinoless", ANCHOR_UNPAIRED["n_B"], 0.0, plain)
     compare({"M_u": p.M[0], "M_d": p.M[1], "M_s": p.M[2], "mu_C": p.mu_C,
-             "n_B": p.n_B, "P": p.P_total}, ANCHOR_UNPAIRED, "unpaired")
+             "n_B": p.n_B, "P": p.P}, ANCHOR_UNPAIRED, "unpaired")
 
     paired = SpeciesFlags(csc=True)
     q = solve(par, "beta_eq_neutrinoless", ANCHOR_2SC["n_B"], 0.0, paired,
               patterns=("2SC",))
     compare({"M_s": q.M[2], "mu_C": q.mu_C, "mu_8": q.mu_8,
-             "Delta_3": q.Delta[2], "n_B": q.n_B, "P": q.P_total},
+             "Delta_3": q.Delta[2], "n_B": q.n_B, "P": q.P},
             ANCHOR_2SC, "2SC")
     return CheckResult("solved anchor", worst < tol, worst,
                        f"worst {where}; 2SC M_u = {q.M[0]:.2f}, "

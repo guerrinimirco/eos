@@ -628,7 +628,7 @@ def check_causality(par, tol=0.0):
             return CheckResult("causality", False, float("inf"),
                                f"the reference solve at n_B = {n_B:.2f} "
                                f"fm^-3 did not converge")
-        pressures.append(point.P_total)
+        pressures.append(point.P)
     dP = np.diff(pressures)
     violation = max(max(-v for v in values), max(values) - 1.0,
                     -float(dP.min()), 0.0)
@@ -665,7 +665,7 @@ def check_glue_scale_stiffens(par, tol=0.0):
         if not (soft_p.converged and stiff_p.converged):
             return CheckResult("glue scale stiffens", False, float("inf"),
                                f"a reference solve at n_B = {n} failed")
-        deltas.append(soft_p.P_total - stiff_p.P_total)
+        deltas.append(soft_p.P - stiff_p.P)
     worst = min(deltas)
     return CheckResult(
         "glue scale stiffens", worst > tol, worst,

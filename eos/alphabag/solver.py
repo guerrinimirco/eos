@@ -27,7 +27,7 @@ The thermodynamic kernels are in `thermodynamics.py`, the table driver in
 Usage:
     from eos.alphabag.solver import solve_beta_eq_neutrinoless
     point = solve_beta_eq_neutrinoless(0.8, 30.0)
-    print(point.converged, point.P_total)
+    print(point.converged, point.P)
 """
 import numpy as np
 from dataclasses import dataclass
@@ -120,10 +120,10 @@ class EoSPoint:
     n_nu: float = 0.0
 
     # Thermodynamics (MeV/fm^3 for P, e and f; fm^-3 for s)
-    P_total: float = 0.0
-    e_total: float = 0.0
-    s_total: float = 0.0
-    f_total: float = 0.0
+    P: float = 0.0
+    eps: float = 0.0
+    s: float = 0.0
+    f: float = 0.0
 
     # Fractions, per baryon
     Y_u: float = 0.0
@@ -171,10 +171,10 @@ class CFLPoint:
     n_s: float = 0.0
 
     # Thermodynamics
-    P_total: float = 0.0
-    e_total: float = 0.0
-    s_total: float = 0.0
-    f_total: float = 0.0
+    P: float = 0.0
+    eps: float = 0.0
+    s: float = 0.0
+    f: float = 0.0
 
     # Fractions
     Y_u: float = 0.0
@@ -329,7 +329,7 @@ def point_from_mu(
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s, mu_e=mu_e, mu_nu=mu_nu,
         mu_B=quark.mu_B, mu_C=quark.mu_C, mu_S=quark.mu_S,
         n_u=quark.n_u, n_d=quark.n_d, n_s=quark.n_s, n_e=thermo_e.n, n_nu=n_nu,
-        P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
+        P=P_total, eps=e_total, s=s_total, f=f_total,
         Y_u=Y_u, Y_d=Y_d, Y_s=Y_s, Y_e=Y_e, Y_nu=Y_nu, Y_Le=Y_Le
     )
 
@@ -395,7 +395,7 @@ def cfl_point_from_mu(
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s, mu_e=mu_e, mu_nu=mu_nu,
         mu_B=cfl.mu_B, mu_C=cfl.mu_C, mu_S=cfl.mu_S,
         n_u=cfl.n_u, n_d=cfl.n_d, n_s=cfl.n_s,
-        P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
+        P=P_total, eps=e_total, s=s_total, f=f_total,
         Y_u=cfl.Y_u, Y_d=cfl.Y_d, Y_s=cfl.Y_s, Y_e=Y_e, Y_nu=Y_nu,
     )
 
@@ -940,7 +940,7 @@ def solve_cfl(
         mu_u=mu_u, mu_d=mu_d, mu_s=mu_s,
         mu_B=cfl.mu_B, mu_C=cfl.mu_C, mu_S=cfl.mu_S,
         n_u=cfl.n_u, n_d=cfl.n_d, n_s=cfl.n_s,
-        P_total=P_total, e_total=e_total, s_total=s_total, f_total=f_total,
+        P=P_total, eps=e_total, s=s_total, f=f_total,
         Y_u=cfl.Y_u, Y_d=cfl.Y_d, Y_s=cfl.Y_s
     )
 

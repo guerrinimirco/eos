@@ -24,7 +24,7 @@ Usage:
     from eos.vmit.solver import solve_beta_eq_neutrinoless
     from eos.vmit.species import SpeciesFlags
     result = solve_beta_eq_neutrinoless(par, 0.32, 50.0, SpeciesFlags())
-    print(result.converged, result.P_total)
+    print(result.converged, result.P)
 """
 import numpy as np
 from dataclasses import dataclass
@@ -101,9 +101,9 @@ class EoSPoint:
     n_nu: float = 0.0
     
     # Thermodynamics (MeV/fm³ for P, e; fm⁻³ for s)
-    P_total: float = 0.0
-    e_total: float = 0.0
-    s_total: float = 0.0
+    P: float = 0.0
+    eps: float = 0.0
+    s: float = 0.0
     
     # Fractions
     Y_u: float = 0.0
@@ -345,15 +345,15 @@ def solve_beta_eq_neutrinoless(
     result.Y_s = n_s / n_B 
     result.Y_e = result.n_e / n_B 
     
-    result.P_total = q_thermo.P + e_thermo.P
-    result.e_total = q_thermo.e + e_thermo.e
-    result.s_total = q_thermo.s + e_thermo.s
+    result.P = q_thermo.P + e_thermo.P
+    result.eps = q_thermo.e + e_thermo.e
+    result.s = q_thermo.s + e_thermo.s
     
     if flags.photons:
         gamma = photon_thermo(T)
-        result.P_total += gamma.P
-        result.e_total += gamma.e
-        result.s_total += gamma.s
+        result.P += gamma.P
+        result.eps += gamma.e
+        result.s += gamma.s
     
     result.mu_B = q_thermo.mu_B
     result.mu_C = q_thermo.mu_C
@@ -498,22 +498,22 @@ def solve_fixed_yc(
     result.Y_S = q_thermo.Y_S
     n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
     result.Y_Le = n_Le / n_B
-    result.P_total = q_thermo.P
-    result.e_total = q_thermo.e
-    result.s_total = q_thermo.s
+    result.P = q_thermo.P
+    result.eps = q_thermo.e
+    result.s = q_thermo.s
     
     # Add electron thermodynamics if included
     if leptons:
         e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)
-        result.P_total += e_thermo.P
-        result.e_total += e_thermo.e
-        result.s_total += e_thermo.s
+        result.P += e_thermo.P
+        result.eps += e_thermo.e
+        result.s += e_thermo.s
     
     if flags.photons:
         gamma = photon_thermo(T)
-        result.P_total += gamma.P
-        result.e_total += gamma.e
-        result.s_total += gamma.s
+        result.P += gamma.P
+        result.eps += gamma.e
+        result.s += gamma.s
     
     result.mu_B = q_thermo.mu_B
     result.mu_C = q_thermo.mu_C
@@ -645,22 +645,22 @@ def solve_fixed_yc_ys(
     result.Y_S = q_thermo.Y_S
     n_Le, _ = lepton_charges(n_e=result.n_e, n_nue=result.n_nu)
     result.Y_Le = n_Le / n_B
-    result.P_total = q_thermo.P
-    result.e_total = q_thermo.e
-    result.s_total = q_thermo.s
+    result.P = q_thermo.P
+    result.eps = q_thermo.e
+    result.s = q_thermo.s
     
     # Add electron thermodynamics if included
     if leptons:
         e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)
-        result.P_total += e_thermo.P
-        result.e_total += e_thermo.e
-        result.s_total += e_thermo.s
+        result.P += e_thermo.P
+        result.eps += e_thermo.e
+        result.s += e_thermo.s
     
     if flags.photons:
         gamma = photon_thermo(T)
-        result.P_total += gamma.P
-        result.e_total += gamma.e
-        result.s_total += gamma.s
+        result.P += gamma.P
+        result.eps += gamma.e
+        result.s += gamma.s
     
     result.mu_B = q_thermo.mu_B
     result.mu_C = q_thermo.mu_C
@@ -762,15 +762,15 @@ def solve_beta_eq_neutrino_trapped(
     result.Y_s = n_s / n_B
     result.Y_e = result.n_e / n_B
     
-    result.P_total = q_thermo.P + e_thermo.P + nu_thermo.P
-    result.e_total = q_thermo.e + e_thermo.e + nu_thermo.e
-    result.s_total = q_thermo.s + e_thermo.s + nu_thermo.s
+    result.P = q_thermo.P + e_thermo.P + nu_thermo.P
+    result.eps = q_thermo.e + e_thermo.e + nu_thermo.e
+    result.s = q_thermo.s + e_thermo.s + nu_thermo.s
     
     if flags.photons:
         gamma = photon_thermo(T)
-        result.P_total += gamma.P
-        result.e_total += gamma.e
-        result.s_total += gamma.s
+        result.P += gamma.P
+        result.eps += gamma.e
+        result.s += gamma.s
 
     result.mu_B = q_thermo.mu_B
     result.mu_C = q_thermo.mu_C

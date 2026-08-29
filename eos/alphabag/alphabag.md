@@ -463,8 +463,8 @@ it asked for:
 | `mu_B`, `mu_C`, `mu_S` | `mu_B`, `mu_C`, `mu_S` | derived, (basis) |
 | `n_u`, `n_d`, `n_s` | `n_u`, `n_d`, `n_s` | net densities, antiquarks subtracted |
 | `n_e`, `n_nu` | `n_e`, `n_nue` | net, antiparticles subtracted |
-| `P_total`, `e_total` | `P`, `eps` | MeV/fm^3 |
-| `s_total`, `f_total` | `s`, `f = eps - T s` | fm^-3, MeV/fm^3 |
+| `P`, `eps` | `P`, `eps` | MeV/fm^3 |
+| `s`, `f` | `s`, `f = eps - T s` | fm^-3, MeV/fm^3 |
 | `Y_u`, `Y_d`, `Y_s`, `Y_e`, `Y_nu` | `n_i/n_B` | per baryon |
 
 The CFL record carries the same fields and adds `Delta0` and `Delta` — the

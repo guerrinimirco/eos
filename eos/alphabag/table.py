@@ -95,8 +95,8 @@ def quark_row(result, mode):
     """
     n_B = result.n_B
     row = dict(n_B=n_B, T=result.T, chi=1.0, phase="Q",
-               P=result.P_total, eps=result.e_total, s=result.s_total,
-               S_per_B=(result.s_total / n_B if n_B else 0.0),
+               P=result.P, eps=result.eps, s=result.s,
+               S_per_B=(result.s / n_B if n_B else 0.0),
                mu_B=result.mu_B, mu_C=result.mu_C, mu_S=result.mu_S,
                mu_e=result.mu_e,
                Y_C=result.Y_C, Y_S=result.Y_S,
@@ -423,18 +423,18 @@ def save_results(all_results: Dict[Tuple, List], settings: TableSettings,
             for r in line:
                 if mode == "cfl":
                     row = [r.n_B, r.T, r.Delta0, r.Delta, r.mu_u, r.mu_d,
-                           r.mu_s, r.P_total, r.e_total, r.s_total, r.f_total]
+                           r.mu_s, r.P, r.eps, r.s, r.f]
                 else:
                     if not r.converged:
                         continue
                     if mode == "beta_eq_neutrinoless":
                         row = [r.n_B, r.T, r.mu_u, r.mu_d, r.mu_s, r.mu_e,
-                               r.Y_u, r.Y_d, r.Y_s, r.P_total, r.e_total,
-                               r.s_total, 1]
+                               r.Y_u, r.Y_d, r.Y_s, r.P, r.eps,
+                               r.s, 1]
                     else:
                         row = [r.n_B, r.Y_C, r.T, r.mu_u, r.mu_d, r.mu_s,
-                               r.Y_u, r.Y_d, r.Y_s, r.P_total, r.e_total,
-                               r.s_total, 1]
+                               r.Y_u, r.Y_d, r.Y_s, r.P, r.eps,
+                               r.s, 1]
 
                 f.write(" ".join(f"{v:>14.6e}" if isinstance(v, float)
                                  else f"{v:>14}" for v in row) + "\n")

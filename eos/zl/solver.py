@@ -29,7 +29,7 @@ Usage:
     from eos.zl.species import SpeciesFlags
     result = solve_beta_eq_neutrinoless(Parameters.default(), 0.16,
                                         SpeciesFlags(photons=True), T=10.0)
-    print(result.converged, result.P_total)
+    print(result.converged, result.P)
 """
 import numpy as np
 from dataclasses import dataclass
@@ -105,9 +105,9 @@ class EoSPoint:
     n_nu: float = 0.0
 
     # Thermodynamics (MeV/fm^3 for P and e, fm^-3 for s)
-    P_total: float = 0.0
-    e_total: float = 0.0
-    s_total: float = 0.0
+    P: float = 0.0
+    eps: float = 0.0
+    s: float = 0.0
 
     # Fractions
     Y_p: float = 0.0
@@ -199,19 +199,19 @@ def _finish(result, mu_p, mu_n, n_p, n_n, T, par, flags,
     """
     matter = thermo_from_mu_n(mu_p, mu_n, n_p, n_n, T, par)
 
-    result.P_total = matter.P
-    result.e_total = matter.e
-    result.s_total = matter.s
+    result.P = matter.P
+    result.eps = matter.e
+    result.s = matter.s
     for gas in (e_thermo, nu_thermo):
         if gas is not None:
-            result.P_total += gas.P
-            result.e_total += gas.e
-            result.s_total += gas.s
+            result.P += gas.P
+            result.eps += gas.e
+            result.s += gas.s
     if flags.photons:
         gamma = photon_thermo(T)
-        result.P_total += gamma.P
-        result.e_total += gamma.e
-        result.s_total += gamma.s
+        result.P += gamma.P
+        result.eps += gamma.e
+        result.s += gamma.s
 
     result.mu_B = matter.mu_B
     result.mu_C = matter.mu_C

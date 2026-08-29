@@ -102,8 +102,8 @@ def check_euler():
     for par in SETS:
         for n_B in DENSITIES:
             point = solve_cfl(par, n_B)
-            lhs = point.e_total + point.P_total
-            rhs = (point.T * point.s_total
+            lhs = point.eps + point.P
+            rhs = (point.T * point.s
                    + point.mu_u * point.n_u
                    + point.mu_d * point.n_d
                    + point.mu_s * point.n_s)
@@ -122,11 +122,11 @@ def check_free_energy():
     for par in SETS:
         for n_B in DENSITIES:
             point = solve_cfl(par, n_B)
-            scale = abs(point.e_total)
+            scale = abs(point.eps)
             for value, name in (
-                    (point.f_total - (point.e_total
-                                      - point.T * point.s_total), "eps - Ts"),
-                    (point.f_total - (-point.P_total
+                    (point.f - (point.eps
+                                      - point.T * point.s), "eps - Ts"),
+                    (point.f - (-point.P
                                       + point.mu_B * point.n_B), "-P + mu n")):
                 err = abs(value) / scale
                 if err > worst:
@@ -200,8 +200,8 @@ def check_surface():
             return CheckResult("surface", False, np.inf,
                                f"{par.name}: no P = 0 root")
         point = solve_cfl(par, baryon_density(mu0, par))
-        err_P = abs(point.P_total) / (par.B / hc3)
-        E_per_A = point.e_total / point.n_B
+        err_P = abs(point.P) / (par.B / hc3)
+        E_per_A = point.eps / point.n_B
         err_EA = abs(E_per_A - point.mu_B) / point.mu_B
         for err, name in ((err_P, "P(mu_0)"), (err_EA, "E/A - mu_B")):
             if err > worst:
@@ -353,7 +353,7 @@ def check_zero_pressure():
         for err, name in (
                 (located.identity_error, "E/A - (mu_B + Y_S mu_S)"),
                 (abs(located.n_B - closed.n_B) / closed.n_B, "n_B"),
-                (abs(located.E_per_A - closed.e_total / closed.n_B)
+                (abs(located.E_per_A - closed.eps / closed.n_B)
                  / located.E_per_A, "E/A vs the closed form")):
             if err > worst:
                 worst, = (err,)

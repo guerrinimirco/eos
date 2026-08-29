@@ -689,7 +689,7 @@ def vmit_phase(params=None, flags=None):
                 continue
             if not q.converged:
                 continue
-            out.append((q.n_B, q.P_total, q.e_total))
+            out.append((q.n_B, q.P, q.eps))
         return out
 
     def frozen_thermo(th, scale, T, mu_slot=None):
@@ -1019,7 +1019,7 @@ def zl_phase(params=None, flags=None):
                 continue
             if not p.converged:
                 continue
-            out.append((p.n_B, p.P_total, p.e_total))
+            out.append((p.n_B, p.P, p.eps))
         return out
 
     def frozen_thermo(th, scale, T, mu_slot=None):
@@ -1134,7 +1134,7 @@ def alphabag_phase(params=None, flags=None):
                 continue
             if not p.converged:
                 continue
-            out.append((p.n_B, p.P_total, p.e_total))
+            out.append((p.n_B, p.P, p.eps))
         return out
 
     return Phase(name="alphaBag", thermo=thermo, potential_kind="physical",
@@ -1251,7 +1251,7 @@ def njl_phase(par, flags=None, patterns=None):
             except Exception:
                 continue
             if p.converged:
-                out.append((p.n_B, p.P_total, p.e_total))
+                out.append((p.n_B, p.P, p.eps))
         return out
 
     return Phase(name="NJL", thermo=thermo, potential_kind="physical",
@@ -1413,7 +1413,7 @@ def ccdm_phase(par, flags=None, branches=None, patterns=None):
             except Exception:
                 continue
             if p.converged:
-                out.append((p.n_B, p.P_total, p.e_total))
+                out.append((p.n_B, p.P, p.eps))
         return out
 
     return Phase(name="CCDM", thermo=thermo, potential_kind="physical",

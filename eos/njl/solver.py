@@ -432,10 +432,10 @@ class EoSPoint:
     n_8: float = 0.0
     n_q: float = 0.0
 
-    P_total: float = 0.0            # MeV/fm^3
-    e_total: float = 0.0
-    s_total: float = 0.0            # fm^-3
-    f_total: float = 0.0            # MeV/fm^3
+    P: float = 0.0            # MeV/fm^3
+    eps: float = 0.0
+    s: float = 0.0            # fm^-3
+    f: float = 0.0            # MeV/fm^3
 
     Y_u: float = 0.0
     Y_d: float = 0.0
@@ -497,7 +497,7 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
         mu_e=mu_e, mu_nu=mu_nue,
         n_u=n_u, n_d=n_d, n_s=n_s,
         n_e=electrons.n, n_mu=muons.n, n_nu=neutrinos.n,
-        P_total=P, e_total=e, s_total=s, f_total=e - T * s,
+        P=P, eps=e, s=s, f=e - T * s,
         Y_u=per_B(n_u), Y_d=per_B(n_d), Y_s=per_B(n_s),
         Y_e=per_B(electrons.n), Y_nu=per_B(neutrinos.n),
         n_3=st.n_3 / hc3, n_8=st.n_8 / hc3, n_q=st.n_q / hc3,
@@ -664,7 +664,7 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
 
     converged = [p for p in candidates if p.converged]
     if converged:
-        return min(converged, key=lambda p: p.f_total)
+        return min(converged, key=lambda p: p.f)
     if candidates:
         return candidates[0]
     return solve_pattern(par, mode, n_B, T, flags, "unpaired", spec=spec,

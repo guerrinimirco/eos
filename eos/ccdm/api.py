@@ -137,7 +137,7 @@ def eos_point(par, mode, species=None, n_B=None,
         def entropy_at(temp):
             p = solve(par, mode, n_B, temp, species, x0, branches=branches,
                       patterns=patterns, leptons=leptons, **conditions)
-            return p.s_total / p.n_B if p.n_B else 0.0
+            return p.s / p.n_B if p.n_B else 0.0
         try:
             T = temperature_at_entropy(entropy_at, SnB)
         except (RuntimeError, ValueError) as err:
@@ -326,7 +326,7 @@ def zero_pressure_point(par, species=None, n_lo=N_LO_DEFAULT,
         # n_B that makes eps/n_B the Gibbs energy per baryon the Euler
         # relation names.
         n_B_solved, _, n_S = quark_charges(p.n_u, p.n_d, p.n_s)
-        return (p.P_total, p.e_total / n_B_solved, p.mu_B,
+        return (p.P, p.eps / n_B_solved, p.mu_B,
                 n_S / n_B_solved, p.mu_S)
 
     return locate_zero_pressure(point_at, two_flavour=flags.two_flavour,

@@ -79,7 +79,7 @@ def _matter_only(result):
     the leptonic and radiative parts have to be subtracted before the nucleon
     identity can be tested on its own.
     """
-    P, eps, s = result.P_total, result.e_total, result.s_total
+    P, eps, s = result.P, result.eps, result.s
     T = result.T
     if result.n_e != 0.0 or result.mu_e != 0.0:
         e_thermo = electron_thermo(result.mu_e, T, include_antiparticles=True)

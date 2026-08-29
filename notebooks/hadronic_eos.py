@@ -210,19 +210,6 @@ def flags_for(name):
     return model(name).SpeciesFlags(**KNOBS.species)
 
 
-def thermo(point):
-    """`(P, eps, s)` from a solved point.
-
-    One naming divergence has to be crossed here: `zl` spells the totals
-    `P_total`, `e_total`, `s_total` and the other three spell them `P`, `eps`,
-    `s`. Nothing else about the point objects is read by this notebook — the
-    grids below go through `rows_from_result`, whose column names are uniform.
-    """
-    if hasattr(point, "P"):
-        return point.P, point.eps, point.s
-    return point.P_total, point.e_total, point.s_total
-
-
 # %% [markdown]
 # ### What the selected models accept
 #
@@ -315,7 +302,7 @@ for mode in KNOBS.modes:
 
         status, result = run(name, solve)
         if status == "ok":
-            P, eps, s = thermo(result.point)
+            P, eps, s = (result.point.P, result.point.eps, result.point.s)
             print(f"  [{name}] n_B={POINT_N_B:.3f}  T={POINT_T:.1f}  "
                   f"P={P:9.3f}  eps={eps:9.3f}  s={s:7.4f}")
 
@@ -416,7 +403,7 @@ for name in KNOBS.models:
 
         status, result = run(f"{name} {published}", solve)
         if status == "ok":
-            P, eps, _ = thermo(result.point)
+            P, eps, _ = (result.point.P, result.point.eps, result.point.s)
             print(f"  [{name} {published:15s}] n_B=0.600  "
                   f"P={P:9.3f}  eps={eps:9.3f}")
 
@@ -459,7 +446,7 @@ for name in KNOBS.models:
 
         status, result = run(f"{name} {published}", solve)
         if status == "ok":
-            P, eps, _ = thermo(result.point)
+            P, eps, _ = (result.point.P, result.point.eps, result.point.s)
             print(f"  [{name} {published:15s}] hyperons on  n_B=0.600  "
                   f"P={P:9.3f}  eps={eps:9.3f}")
 

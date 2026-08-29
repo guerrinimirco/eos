@@ -247,19 +247,6 @@ def flags_for(name):
     return model(name).SpeciesFlags(**KNOBS.species)
 
 
-def thermo(point):
-    """`(P, eps, s)` from a solved point.
-
-    All four quark models spell the totals `P_total`, `e_total`, `s_total` on
-    the point object — the `zl` spelling rather than the `dd2` one. Nothing
-    else about the point objects is read by this notebook: the grids below go
-    through table rows, whose column names are uniform.
-    """
-    if hasattr(point, "P"):
-        return point.P, point.eps, point.s
-    return point.P_total, point.e_total, point.s_total
-
-
 def lepton_kwargs(mode):
     """`leptons=` where it means something, nothing where it does not.
 
@@ -385,7 +372,7 @@ for mode in KNOBS.modes:
 
         status, result = run(name, solve)
         if status == "ok":
-            P, eps, s = thermo(result.point)
+            P, eps, s = (result.point.P, result.point.eps, result.point.s)
             print(f"  [{name}] n_B={POINT_N_B:.3f}  T={POINT_T:.1f}  "
                   f"P={P:9.3f}  eps={eps:9.3f}  s={s:7.4f}")
 
@@ -483,7 +470,7 @@ for name in KNOBS.models:
 
         status, result = run(f"{name} {published}", solve)
         if status == "ok":
-            P, eps, _ = thermo(result.point)
+            P, eps, _ = (result.point.P, result.point.eps, result.point.s)
             print(f"  [{name} {published:15s}] n_B={PROBE_N_B:.3f}  "
                   f"P={P:9.3f}  eps={eps:9.3f}")
 
@@ -1383,10 +1370,10 @@ if status == "ok":
         ("Omega", state.Omega / hc3, "MeV/fm^3",
          "= -P of the matter, vacuum-subtracted"),
         ("P (matter)", state.P, "MeV/fm^3", "quarks only, no leptons"),
-        ("P", point.P_total, "MeV/fm^3", "matter + leptons + thermal sectors"),
-        ("eps", point.e_total, "MeV/fm^3", "energy density"),
-        ("s", point.s_total, "fm^-3", "entropy density"),
-        ("f = eps - T s", point.f_total, "MeV/fm^3", "free-energy density"),
+        ("P", point.P, "MeV/fm^3", "matter + leptons + thermal sectors"),
+        ("eps", point.eps, "MeV/fm^3", "energy density"),
+        ("s", point.s, "fm^-3", "entropy density"),
+        ("f = eps - T s", point.f, "MeV/fm^3", "free-energy density"),
         ("mu_B", point.mu_B, "MeV", "baryon chemical potential"),
         ("mu_C", point.mu_C, "MeV", "= mu_p - mu_n; beta equilibrium is mu_C + mu_e = 0"),
         ("mu_e", point.mu_e, "MeV", "electron chemical potential"),
@@ -1473,10 +1460,10 @@ if status == "ok":
         ("V", state.V / hc3, "MeV/fm^3", "chiral potential"),
         ("Omega", state.Omega / hc3, "MeV/fm^3", "= -P of the matter"),
         ("P (matter)", state.P, "MeV/fm^3", "quarks and fields, no leptons"),
-        ("P", point.P_total, "MeV/fm^3", "matter + leptons + thermal sectors"),
-        ("eps", point.e_total, "MeV/fm^3", ""),
-        ("s", point.s_total, "fm^-3", ""),
-        ("f = eps - T s", point.f_total, "MeV/fm^3", ""),
+        ("P", point.P, "MeV/fm^3", "matter + leptons + thermal sectors"),
+        ("eps", point.eps, "MeV/fm^3", ""),
+        ("s", point.s, "fm^-3", ""),
+        ("f = eps - T s", point.f, "MeV/fm^3", ""),
         ("mu_B", point.mu_B, "MeV", ""),
         ("mu_C", point.mu_C, "MeV", "= mu_p - mu_n"),
         ("mu_e", point.mu_e, "MeV", ""),
@@ -1545,10 +1532,10 @@ for name in CSC_MODELS:
             ("pair cost", state.pair_cost / hc3, "MeV/fm^3",
              "sum_eta Delta_eta^2/(4 G_D)"),
             ("Omega", -state.P, "MeV/fm^3", "= -P of the matter"),
-            ("P", point.P_total, "MeV/fm^3", ""),
-            ("eps", point.e_total, "MeV/fm^3", ""),
-            ("s", point.s_total, "fm^-3", ""),
-            ("f = eps - T s", point.f_total, "MeV/fm^3",
+            ("P", point.P, "MeV/fm^3", ""),
+            ("eps", point.eps, "MeV/fm^3", ""),
+            ("s", point.s, "fm^-3", ""),
+            ("f = eps - T s", point.f, "MeV/fm^3",
              "what the enumeration compares at fixed n_B"),
             ("mu_B", point.mu_B, "MeV", ""),
             ("mu_C", point.mu_C, "MeV", ""),
@@ -1902,9 +1889,9 @@ for name in CSC_MODELS:
         if point is None:
             print(f"  {name:6s} {pattern:9s} (not solved here)")
             continue
-        shift = (point.f_total - reference.f_total) if reference else float("nan")
-        print(f"  {name:6s} {pattern:9s} {point.P_total:10.3f} "
-              f"{point.e_total:10.3f} {point.f_total:10.3f} {shift:10.3f} "
+        shift = (point.f - reference.f) if reference else float("nan")
+        print(f"  {name:6s} {pattern:9s} {point.P:10.3f} "
+              f"{point.eps:10.3f} {point.f:10.3f} {shift:10.3f} "
               f"{point.mu_B:9.2f} "
               f"{max(abs(float(g)) for g in point.Delta):10.2f}")
 print("  units: P, eps, f in MeV/fm^3; mu_B and Delta in MeV. A NEGATIVE "
@@ -1918,15 +1905,15 @@ ax_f, ax_P, ax_eps = axes.ravel()
 
 for name in CSC_MODELS:
     reference = dict()
-    n_ref, f_ref = sweep_line(name, "unpaired", CSC_T, "f_total")
+    n_ref, f_ref = sweep_line(name, "unpaired", CSC_T, "f")
     for i, n in enumerate(n_ref):
         reference[float(n)] = f_ref[i]
     for pattern in CSC_PATTERNS:
-        n, f_total, P, eps = sweep_line(name, pattern, CSC_T,
-                                        "f_total", "P_total", "e_total")
+        n, f, P, eps = sweep_line(name, pattern, CSC_T,
+                                        "f", "P", "eps")
         if not n.size:
             continue
-        shift = np.array([f_total[i] - reference.get(float(n[i]), np.nan)
+        shift = np.array([f[i] - reference.get(float(n[i]), np.nan)
                           for i in range(n.size)])
         ax_f.plot(n, shift, MODEL_DASH[name], color=PATTERN_COLOR[pattern],
                   label=(pattern if name == "njl" else None))

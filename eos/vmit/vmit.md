@@ -617,9 +617,9 @@ because nothing downstream consumes it.
 | `mu_B`, `mu_C`, `mu_S` | mu_B, mu_C, mu_S | MeV, from the basis map |
 | `n_u`, `n_d`, `n_s` | n_u, n_d, n_s | fm^-3, net flavour densities |
 | `n_e`, `n_nu` | n_e, n_nue | fm^-3 |
-| `P_total` | P | MeV/fm^3, the grand total |
-| `e_total` | eps | MeV/fm^3 |
-| `s_total` | s | fm^-3 |
+| `P` | P | MeV/fm^3, the grand total |
+| `eps` | eps | MeV/fm^3 |
+| `s` | s | fm^-3 |
 | `Y_u`, `Y_d`, `Y_s`, `Y_e`, `Y_nu` | n_i/n_B | per-species fractions |
 
 When `converged` is False every other field holds the best iterate reached,
@@ -628,7 +628,8 @@ which is not a physical state.
 Two of these are worth stating separately because CLAUDE.md §11 singles them
 out.
 
-**`s`** is `s_total`, assembled as the sum of the sectors' entropy densities.
+**`s`** is the grand total, assembled as the sum of the sectors' entropy
+densities.
 Each sector's own `s` comes through the single-gas Euler identity at its own
 potential; the model does NOT compute `s` from the TOTAL Euler relation, which
 is why that relation is available as an independent `verify/` check rather than

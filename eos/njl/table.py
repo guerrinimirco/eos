@@ -60,7 +60,7 @@ def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None):
         def entropy_at(T):
             point = solve(par, mode, n_B, T, flags, x0, leptons=leptons,
                           **fractions)
-            return point.s_total / point.n_B if point.n_B else 0.0
+            return point.s / point.n_B if point.n_B else 0.0
         T = temperature_at_entropy(entropy_at, conditions["SnB"])
     else:
         T = conditions["T"]
@@ -80,8 +80,8 @@ def quark_row(point):
     """
     n_B = point.n_B
     row = dict(n_B=n_B, T=point.T, chi=1.0, phase="Q",
-               P=point.P_total, eps=point.e_total, s=point.s_total,
-               S_per_B=(point.s_total / n_B if n_B else 0.0),
+               P=point.P, eps=point.eps, s=point.s,
+               S_per_B=(point.s / n_B if n_B else 0.0),
                mu_B=point.mu_B, mu_C=point.mu_C, mu_S=point.mu_S,
                mu_e=point.mu_e,
                Y_C=point.Y_C, Y_S=point.Y_S,
@@ -147,11 +147,11 @@ class TableResult:
 
     @property
     def P(self):
-        return [np.array([p.P_total for p in line]) for line in self.points]
+        return [np.array([p.P for p in line]) for line in self.points]
 
     @property
     def eps(self):
-        return [np.array([p.e_total for p in line]) for line in self.points]
+        return [np.array([p.eps for p in line]) for line in self.points]
 
     @property
     def nB_solved(self):

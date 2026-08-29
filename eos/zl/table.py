@@ -70,8 +70,8 @@ def nucleon_row(result, mode):
     """
     n_B = result.n_B
     row = dict(n_B=n_B, T=result.T, chi=0.0, phase="H",
-               P=result.P_total, eps=result.e_total, s=result.s_total,
-               S_per_B=(result.s_total / n_B if n_B else 0.0),
+               P=result.P, eps=result.eps, s=result.s,
+               S_per_B=(result.s / n_B if n_B else 0.0),
                mu_B=result.mu_B, mu_C=result.mu_C, mu_S=0.0,
                mu_e=result.mu_e,
                Y_C=(result.n_p / n_B), Y_S=0.0,
@@ -332,20 +332,20 @@ def save_results(all_results: Dict[Tuple, List[EoSPoint]],
 
             for r in results:
                 if r.converged:
-                    f_total = r.e_total - r.s_total * r.T
+                    f_total = r.eps - r.s * r.T
                     if eq_type == 'fixed_yc':
                         row = [r.n_B, r.Y_C, r.T, r.mu_p, r.mu_n, r.mu_e,
-                               r.Y_p, r.Y_n, r.Y_e, r.P_total, r.e_total,
-                               r.s_total, f_total, 1]
+                               r.Y_p, r.Y_n, r.Y_e, r.P, r.eps,
+                               r.s, f_total, 1]
                     elif eq_type == 'trapped_neutrinos':
                         Y_nu = r.n_nu / r.n_B if r.n_B > 0 else 0.0
                         row = [r.n_B, Y_L_val, r.T, r.mu_p, r.mu_n, r.mu_e,
-                               r.mu_nu, r.Y_p, r.Y_n, r.Y_e, Y_nu, r.P_total,
-                               r.e_total, r.s_total, f_total, 1]
+                               r.mu_nu, r.Y_p, r.Y_n, r.Y_e, Y_nu, r.P,
+                               r.eps, r.s, f_total, 1]
                     else:  # beta_eq
                         row = [r.n_B, r.T, r.mu_p, r.mu_n, r.mu_e,
-                               r.Y_p, r.Y_n, r.Y_e, r.P_total, r.e_total,
-                               r.s_total, f_total, 1]
+                               r.Y_p, r.Y_n, r.Y_e, r.P, r.eps,
+                               r.s, f_total, 1]
                     f.write(" ".join(f"{v:>14.6e}" if isinstance(v, float)
                                      else f"{v:>14}" for v in row) + "\n")
 

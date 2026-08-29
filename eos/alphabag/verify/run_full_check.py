@@ -98,7 +98,7 @@ def _matter_only(result, par):
     the leptonic, radiative and gluonic parts have to be subtracted before the
     quark identity can be tested on its own.
     """
-    P, eps, s = result.P_total, result.e_total, result.s_total
+    P, eps, s = result.P, result.eps, result.s
     T = result.T
     e_thermo = electron_thermo(result.mu_e, T)
     P, eps, s = P - e_thermo.P, eps - e_thermo.e, s - e_thermo.s
@@ -148,8 +148,8 @@ def _check_euler(par, grid, T):
         for Delta0 in (50.0, 100.0):
             c = solve_cfl(par, n_B, T, Delta0, CFL_BARE)
             mu_n_sum = c.mu_u * c.n_u + c.mu_d * c.n_d + c.mu_s * c.n_s
-            worst = max(worst, abs(c.e_total + c.P_total - T * c.s_total
-                                   - mu_n_sum) / abs(c.e_total))
+            worst = max(worst, abs(c.eps + c.P - T * c.s
+                                   - mu_n_sum) / abs(c.eps))
     return CheckResult("Euler relation", worst < 1e-10, worst,
                        f"T={T} MeV, {5*len(grid)} unpaired + "
                        f"{2*len(grid)} paired states")
@@ -373,7 +373,7 @@ def _check_cfl(par, grid, T):
             if T > 0.0:
                 num_s = (P_at(*mus, T + h) - P_at(*mus, T - h)) / (2 * h)
                 worst_deriv = max(worst_deriv,
-                                  abs(num_s - c.s_total) / abs(c.s_total))
+                                  abs(num_s - c.s) / abs(c.s))
 
     for Delta0 in (50.0, 100.0):
         T_c = T_critical(Delta0)
@@ -505,7 +505,7 @@ def _check_zero_pressure(par):
             return None
         q = result.point
         n_B_solved, _, n_S = quark_charges(q.n_u, q.n_d, q.n_s)
-        return (q.P_total, q.e_total / n_B_solved, q.mu_B,
+        return (q.P, q.eps / n_B_solved, q.mu_B,
                 n_S / n_B_solved, q.mu_S)
 
     paired = locate_zero_pressure(cfl_point_at, n_lo=0.20, n_hi=0.70,

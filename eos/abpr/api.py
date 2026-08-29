@@ -139,7 +139,7 @@ def cfl_row(point):
     """
     n_B = point.n_B
     return dict(n_B=n_B, T=point.T, chi=1.0, phase="Q",
-                P=point.P_total, eps=point.e_total, s=point.s_total,
+                P=point.P, eps=point.eps, s=point.s,
                 S_per_B=0.0,
                 mu_B=point.mu_B, mu_C=point.mu_C, mu_S=point.mu_S,
                 mu_e=point.mu_e,
@@ -294,7 +294,7 @@ def zero_pressure_point(par, species=None, n_lo=N_LO_DEFAULT,
         # locked phase closes n_B to a residual too, and eps goes with the
         # densities rather than with the request.
         n_B_solved, _, n_S = quark_charges(p.n_u, p.n_d, p.n_s)
-        return (p.P_total, p.e_total / n_B_solved, p.mu_B,
+        return (p.P, p.eps / n_B_solved, p.mu_B,
                 n_S / n_B_solved, p.mu_S)
 
     return locate_zero_pressure(point_at, two_flavour=False, n_lo=n_lo,

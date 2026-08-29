@@ -73,8 +73,8 @@ def quark_row(result, mode):
     """
     n_B = result.n_B
     row = dict(n_B=n_B, T=result.T, chi=1.0, phase="Q",
-               P=result.P_total, eps=result.e_total, s=result.s_total,
-               S_per_B=(result.s_total / n_B if n_B else 0.0),
+               P=result.P, eps=result.eps, s=result.s,
+               S_per_B=(result.s / n_B if n_B else 0.0),
                mu_B=result.mu_B, mu_C=result.mu_C, mu_S=result.mu_S,
                mu_e=result.mu_e,
                Y_C=_charge_fraction(result),

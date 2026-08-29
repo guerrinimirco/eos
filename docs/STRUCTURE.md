@@ -349,7 +349,7 @@ r = eos_point(Parameters.default(), "cfl", SpeciesFlags(), n_B=0.8, T=0.0)
 p = r.point
 print(f"abpr cfl at n_B = 0.8: ok = {r.ok}")
 print(f"  Y_C = {p.Y_C:+.12f}   Y_S = {p.Y_S:+.12f}   (locked by the phase)")
-print(f"  P   = {p.P_total:.4f} MeV/fm^3   eps = {p.e_total:.4f} MeV/fm^3")
+print(f"  P   = {p.P:.4f} MeV/fm^3   eps = {p.eps:.4f} MeV/fm^3")
 print(f"  n_u = n_d = n_s = {p.n_u:.6f}, {p.n_d:.6f}, {p.n_s:.6f} fm^-3")
 ```
 

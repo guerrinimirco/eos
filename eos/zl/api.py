@@ -137,7 +137,7 @@ def _entropy_per_baryon(point, n_B):
     if not point.converged:
         raise RuntimeError("the entropy solve stepped onto a state the "
                            "equilibrium solver could not reach")
-    return point.s_total / n_B
+    return point.s / n_B
 
 
 def eos_table(par, mode, species=None, axes=None, fixed=None, leptons=None,
@@ -218,12 +218,12 @@ def eos_response(par, mode, species=None, frozen="equilibrium", n_B=None,
     dn = rel_step * n_B
     try:
         lo, hi = state(n_B - dn, T), state(n_B + dn, T)
-        out = {"cs2_isothermal": (hi.P_total - lo.P_total) / (hi.e_total - lo.e_total)}
+        out = {"cs2_isothermal": (hi.P - lo.P) / (hi.eps - lo.eps)}
 
         if T > 0.0:
             dT = rel_step * T
             cold, hot = state(n_B, T - dT), state(n_B, T + dT)
-            out["C_V"] = T * (hot.s_total - cold.s_total) / (2.0 * dT) / n_B
+            out["C_V"] = T * (hot.s - cold.s) / (2.0 * dT) / n_B
     except RuntimeError as err:
         return unconverged_response(
             str(err), ("cs2_isothermal", "C_V") if T > 0.0 else ("cs2_isothermal",))

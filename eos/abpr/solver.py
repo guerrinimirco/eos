@@ -149,10 +149,10 @@ class CFLPoint:
     n_s: float = 0.0
 
     # Thermodynamics
-    P_total: float = 0.0
-    e_total: float = 0.0
-    s_total: float = 0.0
-    f_total: float = 0.0
+    P: float = 0.0
+    eps: float = 0.0
+    s: float = 0.0
+    f: float = 0.0
 
     # Fractions
     Y_u: float = 0.0
@@ -319,7 +319,7 @@ def point_from_mu(mu, par, converged=True, error=0.0):
         mu_u=mu, mu_d=mu, mu_s=mu, mu_e=0.0, mu_nu=0.0,
         mu_B=mu_B, mu_C=mu_C, mu_S=mu_S,
         n_u=n_B, n_d=n_B, n_s=n_B,
-        P_total=block.P, e_total=block.e, s_total=block.s, f_total=block.f,
+        P=block.P, eps=block.e, s=block.s, f=block.f,
         Y_u=1.0, Y_d=1.0, Y_s=1.0,
     )
 
