@@ -1,7 +1,7 @@
 # The natural-units record leaves the public result, and its accessors take the fm names
 
 Type: task
-Status: resolved (2026-08-29), §12 full-suite line OUTSTANDING
+Status: resolved (2026-08-29); the §12 line is SATISFIED as of ticket 117
 Assignee: session dc4b25ab
 Blocked by: [90](90-solver-signature-and-units-sweep.md) — RESOLVED
 Parent: ../map.md
@@ -249,7 +249,17 @@ prose mentions carry no dot.
   **215 passed, 0 xfailed**.
 - `notebooks/quark_eos.py` follows the record to `_state` and its `.ipynb` pair
   is synced through jupytext (3 stale sites, now 0).
-- **OUTSTANDING: the §12 full-suite line.** Not skipped and not claimed. A run
+- **The §12 full-suite line: SATISFIED, retroactively, by
+  [ticket 117](117-suite-gate-needs-a-landing-point.md)'s ruling (2026-08-29),
+  with no new run.** 117 split §12's sentence: the per-commit gate is every
+  test the change can REACH, and the full suite is a landing measurement bound
+  to a SHA rather than to anyone's commit. This ticket's three subset runs and
+  its bit-identity baseline audit ARE that gate, in full. The killed run was
+  never this ticket's to owe — and killing it was the correct act, not a
+  shortfall. What follows is the record of why it could not be taken, which is
+  the evidence 117 was decided on.
+
+  A run
   started 01:08 spanned another session's writes to `eos/dd2/nmp.py`,
   `eos/sfho/parameters.py` and `eos/enjl/thermodynamics.py` at 01:13 and
   01:19-01:21, and was concurrent with a second session's

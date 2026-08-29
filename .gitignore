@@ -72,7 +72,17 @@ plot/data/samples/*.mismatch
 # The test suite is kept local and not published. The Phase-1 regression
 # baseline lives in test/baseline/ and is regenerated with
 # `python test/baseline/generate_baseline.py`.
-/test/
+#
+# Three exceptions, tracked because CLAUDE.md §12's landing measurement is only
+# a gate if its mechanism and its evidence can be cited from a commit. `/test/*`
+# rather than `/test/`: git cannot re-include a file whose parent DIRECTORY is
+# excluded. The certifier cannot be moved somewhere already tracked -- it finds
+# the repo with `cd "$(dirname "$0")/.."`, and a copy outside test/ resolves the
+# root to `/` and dies there.
+/test/*
+!/test/run_clean_suite.sh
+!/test/test_run_clean_suite.sh
+!/test/suite_certificates/
 
 # Notebook scratch
 notebooks/zlvmit_test.ipynb

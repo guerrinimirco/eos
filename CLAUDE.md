@@ -609,7 +609,11 @@ FileNotFoundError.
                     subfolders. Gitignored, EXCEPT `output/public/`, the
                     curated tracked subfolder for tables meant to be shared
                     on GitHub.
-    test/           the test suite; kept locally, gitignored, not published
+    test/           the test suite; kept locally, gitignored, not published —
+                    except `run_clean_suite.sh`, its own test and
+                    `suite_certificates/`, which ARE tracked: §12's landing
+                    measurement is only a gate if its mechanism and its
+                    evidence can be cited from a commit
     docs/           documents, incl. STRUCTURE.md and DEFERRED.md (the
                     tracked ledger of per-model gaps), shared eos.bib
 
@@ -650,7 +654,39 @@ changes the rows, the table of modes says which rows.
 - New physics gets a test in the same style AND an entry in the model's
   `verify/` suite where it is a physics invariant rather than a unit
   behaviour.
-- The full suite must pass before any commit that touches solver internals.
+- **Before a commit, every test the change can reach passes** — the model's own
+  `test/<model>/`, `test/baseline/`, and the suites that import the names the
+  change touches. A change to solver internals reaches past its own model and
+  the set widens to match. Naming a set is a claim about blast radius, so what
+  ran and why those are the reachable suites is stated with the result.
+- **The full suite is a LANDING MEASUREMENT, not a commit gate.** It runs for
+  ~20 minutes and this checkout is shared, so what it measures is a TREE and
+  not a change: a run spanning any `eos/*.py` edit is not a measurement even
+  when the edit is whitespace, and the invalidation is discovered twenty
+  minutes after the number is believed. Measured, on 2026-08-29: a window that
+  opened on "no pytest running and no `eos/*.py` written for two minutes" was
+  shut again twenty-nine seconds later. A timer measures a PAUSE, not a quiet
+  tree, so the full suite is taken at a LANDING POINT — no uncommitted
+  `eos/*.py`, a state someone CHOOSES to enter and which therefore cannot
+  flicker — and it is a property of a SHA rather than of anyone's commit.
+  It goes through `test/run_clean_suite.sh`, which refuses to start against a
+  live tree, fingerprints every `eos/*.py` either side of the run, and writes
+  `test/suite_certificates/<timestamp>.txt` carrying the count, the verdict
+  CLEAN or DISCARD, the HEAD SHA and the interpreter with its numpy and scipy
+  versions. **A count naming no interpreter names nothing**: this machine has
+  two Python stacks that disagree, and the baselines below are frozen against
+  one of them.
+- **A DISCARD is cheap, and stays cheap.** Twenty minutes of CPU and nothing
+  else, so nobody holds `eos/*.py` still to protect someone else's run: the
+  certificate exists precisely so an invalidated run is cheap to DETECT rather
+  than expensive to BELIEVE, and a session sitting on its hands has paid for
+  the mechanism twice. There is no cap on re-running and exactly one
+  obligation instead — **a result claiming a full-suite number cites its
+  certificate path, and cites every other certificate the same work produced,
+  DISCARDs included.** Re-running until one comes back CLEAN is the old sin in
+  the mechanism's own clothes, and harder to see because each certificate is
+  individually honest; a later CLEAN does not erase an earlier DISCARD that
+  went unmentioned.
 - Do not loosen a numerical tolerance to make a test pass. If a tolerance
   genuinely needs to change, say why in the test.
 - **Golden reference values are ground truth**: a new implementation that

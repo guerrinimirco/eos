@@ -3049,7 +3049,9 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 - [The natural-units record leaves the public result, and its accessors take the fm names](issues/97-natural-record-leaves-the-result.md)
   (2026-08-29): **all five work items landed; the §12 full-suite line is
-  OUTSTANDING and deliberately not claimed.** `njl`/`ccdm` hold their matter
+  SATISFIED retroactively by
+  [ticket 117](issues/117-suite-gate-needs-a-landing-point.md), whose ruling
+  makes this ticket's subsets the gate — no new run.** `njl`/`ccdm` hold their matter
   record as `_state`, `enjl` as `_point`, the six/three natural-units fields
   take `_nat` and the accessors take the bare fm names, and `n_3`/`n_8`/`n_q`
   are lifted onto the njl/ccdm point in fm. **The finding: `_` was not one line
@@ -3113,6 +3115,45 @@ against this file, not against the earlier `pytest_before*.txt`.
   paper never says: any fit or datum behind the VALUE `e = 1/3`, and what
   varying `alpha` would cost -- it was pinned at 1 "to simplify the Bayesian
   analysis", so it stays legal in [0, 1].
+
+- [A "full suite green" gate assumes a tree that holds still, and this one does not](issues/117-suite-gate-needs-a-landing-point.md)
+  (2026-08-29): **neither arm — the sentence welded two measurements with
+  different SUBJECTS.** "Did this change break anything" is a property of a
+  CHANGE and the reachable subsets measure it better than the full suite does;
+  "what is the suite's state" is a property of a SHA. §12 attached the second
+  to the first's event, which is why it could only be met by a tree nobody owns
+  holding still for twenty minutes. **The per-commit gate is now the tests the
+  change can REACH; the full suite is demoted from a gate to a LANDING
+  MEASUREMENT** bound to a SHA, taken through `run_clean_suite.sh` at a
+  declared landing point and cited by certificate path. (a) could never have
+  been the per-commit gate anyway: "no uncommitted `eos/*.py`" is a property of
+  the TREE, so every commit would gate on everyone else's idleness. The obvious
+  third arm is closed by the record — a `git worktree` has no suite and the
+  archive copy has no numba cache (`test/mixed` runs for HOURS) while inventing
+  six abpr failures.
+  **The ticket's own phenomenon fired inside the ticket**: `git status` on
+  `eos/*.py` was empty when the session opened and carried ten modified files
+  minutes later, so no landing measurement was taken and none is claimed.
+  **What checks the certifier, answered from the other end: the store's only
+  file was written by the fail-open MUTANT** — `20260829T013708.txt`, real
+  HEAD, real interpreter, verdict CLEAN, and `ran anyway` where the pytest
+  count belongs. `TREE` and `SUITE` were seams and the certificate PATH was
+  not, and case 3 only reaches past the guards when the script is broken. A new
+  class beside 1c/1d: not a check that fails open, but a check whose EXHAUST is
+  indistinguishable from what it certifies. `CERT_DIR` is now the third seam,
+  the rig writes to its own `$TMP`, the pollutant is deleted, and the store is
+  EMPTY after both arms — control 11/11 against mutant 9/11, same two case-3
+  failures, so the seam did not weaken the rig. Sniffing the log for pytest
+  output was rejected as a fourth thing that can fail open.
+  **The tooling is tracked in place, never moved**: the script finds the repo
+  with `cd "$(dirname "$0")/.."` so a copy outside `test/` dies on `/`, and git
+  cannot re-include a file under an excluded DIRECTORY, so `/test/` became
+  `/test/*` plus three negations. **Retry hazard: disclosure, no cap** — the
+  sin is not re-running but re-running unmentioned. Landed in CLAUDE.md §12
+  (three bullets replacing the one sentence) and §11's `test/` line. **Ticket
+  97's §12 line is SATISFIED retroactively with no new run**; its subsets were
+  always the gate. Raised [ticket 118](issues/118-first-landing-measurement.md):
+  the mechanism has still certified nothing.
 
 - [The basin scan vetoes the pin sigma_min prefers, and c_omega stands](issues/115-dd2-qsat-pin-recheck.md)
   (2026-08-29): **the first time 103's second half has fired, and it overrules
@@ -3191,15 +3232,16 @@ resolved above.
 
 In scope, not yet sharp enough to ticket:
 
-- *(This patch graduated on 2026-08-29 into
-  [ticket 117](issues/117-suite-gate-needs-a-landing-point.md) — a "full suite
-  green" gate assumes a tree that holds still, and a waiter measured the real
-  window at TWENTY-NINE SECONDS. It blocks
-  [ticket 97](issues/97-natural-record-leaves-the-result.md)'s §12 line, and it
-  carries with it the two questions that were fog beside it: where
-  `test/run_clean_suite.sh` can live when `test/` is untracked, and what checks
-  the certifier — it had three defects in its first twenty minutes, two failing
-  open.)*
+- **Is `test/` still "not published"?** Left standing by
+  [ticket 117](issues/117-suite-gate-needs-a-landing-point.md), which untracked
+  three paths out of it by negation and asked the owner where the line sits;
+  the answer was "everybody can use my code if they want". §11 still says the
+  suite is kept local and not published, and the two are now in tension. What
+  publishing the suite would cost (the golden `.npz` are 3.14 artifacts, and
+  §12 calls them ground truth) and whether the baselines belong in git at all
+  has not been read. Note the standing hazard either way: `test/` being
+  untracked means the goldens have NO history and a lost checkout loses data
+  nothing can reconstruct.
 
 - **A written table's column headers are a format nobody has ruled on.**
   Left standing by [ticket 108](issues/108-cached-lepton-fraction-three-models.md),

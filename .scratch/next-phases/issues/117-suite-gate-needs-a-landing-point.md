@@ -1,7 +1,7 @@
 # A "full suite green" gate assumes a tree that holds still, and this one does not
 
 Type: grilling
-Status: open
+Status: resolved (2026-08-29)
 Blocked by: -
 Parent: ../map.md
 
@@ -122,3 +122,143 @@ Two properties follow, and whichever arm wins should state them:
 chance of BELIEVING one. Only the second is a guarantee.** No local check can
 promise a 20-minute window exists, so the two-minute threshold is a floor
 against the obvious cases, never a predictor.
+
+
+## Resolution (2026-08-29)
+
+**Neither (a) nor (b): the sentence was welding together two measurements with
+different SUBJECTS, and that is why it could not be satisfied.** "Did this
+change break anything" is a property of a CHANGE — its blast radius is
+knowable, and the reachable subsets measure it better than the full suite does,
+being faster, targeted, and run on a tree the session controls. "What is the
+suite's state" is a property of a SHA. §12 attached the second to the first's
+event ("before any commit"), so the gate could only be met by a tree nobody
+owns holding still for twenty minutes.
+
+So the ruling is the split:
+
+- **the per-commit gate is (b)** — every test the change can reach, with what
+  ran and why those are the reachable suites stated alongside the result;
+- **the full suite is (a), demoted from a gate to a LANDING MEASUREMENT** bound
+  to a SHA, taken at a landing point through `run_clean_suite.sh`, and cited by
+  path.
+
+(a) could not have been the per-commit gate on its own terms anyway: "no
+uncommitted `eos/*.py`" is a property of the TREE, so the moment you commit and
+the next session starts typing, your successor's window is gone — every commit
+would gate on everyone else's idleness.
+
+**The obvious third arm is closed by the record, not by preference.** "Run it
+somewhere the tree cannot move" fails twice over: a `git worktree` has no suite
+(`test/` is gitignored), and the `git archive` + `cp -R test` copy has no numba
+cache — `test/mixed` runs for HOURS where the repo takes minutes, and copying
+`eos/**/__pycache__` in did not help — while also inventing six
+`test/abpr/test_abpr_inverses.py` failures that read as yours. Isolation is
+affordable for subsets and unaffordable for the full suite.
+
+### The ticket's phenomenon fired inside the ticket
+
+`git status --porcelain -- 'eos/*.py'` was **empty** when this session opened,
+and carried **ten modified files** (dd2, sfho and zl `nmp.py` among them) by
+the time the first round of questions was written — minutes later. A landing
+point existed, was not declared, and was gone before anyone could spend it.
+That is the twenty-nine-second window again at a different scale, and it is why
+**the landing measurement was NOT taken here**: no certificate is claimed by
+this resolution, and none is fabricated.
+
+### What checks the certifier: answered from the other end
+
+The store the mechanism writes to had exactly one file in it, and **the
+fail-open MUTANT wrote it.** `test/suite_certificates/20260829T013708.txt`,
+timestamp matching commit `1bf091b`'s mutation check:
+
+    HEAD        7deeb06
+    interpreter CPython 3.14.2, numpy 2.3.5, scipy 1.17.0
+    verdict     CLEAN -- no eos/*.py changed during the run
+
+    ran anyway
+
+Real HEAD, real interpreter, verdict CLEAN, and the rig's stub string where the
+pytest count belongs. `TREE` and `SUITE` were seams; the certificate PATH was
+not, so every rig case reaching past the guards wrote into the real evidence
+store — and case 3 only reaches past them when the script is broken, which is
+why the first certificate this repository ever held was produced by a
+deliberately-defective certifier. Case 1 removes its own certificate; nothing
+removed that one. **An evidence store its own test can write to is not
+evidence**, and this is the same family as 1c/1d: not a check that fails open,
+but a check whose EXHAUST is indistinguishable from the thing it certifies.
+
+Fixed rather than sniffed for: `CERT_DIR` is now the third seam
+(`CERT_DIR=${CERT_DIR:-test/suite_certificates}`), the rig exports it to its
+own `$TMP`, and the mutant's certificate is deleted. Teaching the store to
+recognise real pytest output would have been a fourth thing that can fail open,
+in a repository whose recorded failure class is exactly that.
+
+Re-measured after the change, both arms sequentially, and the store checked
+afterwards:
+
+    CONTROL   sh test/test_run_clean_suite.sh                          -> 11 passed, 0 failed
+    MUTANT    SCRIPT=test/.mutant.sh sh test/test_run_clean_suite.sh   ->  9 passed, 2 failed
+    test/suite_certificates/  after both arms                          -> EMPTY
+
+Same two case-3 failures as before, so the seam did not weaken the rig; the
+empty store is the new property.
+
+### Where the tooling lives
+
+**Tracked in place, by negating the ignore** — not moved. Moving is what breaks
+it: `run_clean_suite.sh` finds the repo with `cd "$(dirname "$0")/.."`, so a
+copy outside `test/` resolves the root to `/` and dies there, which is the trap
+two sessions hit independently. And git cannot re-include a file whose parent
+DIRECTORY is excluded, so `/test/` had to become `/test/*` first:
+
+    /test/*
+    !/test/run_clean_suite.sh
+    !/test/test_run_clean_suite.sh
+    !/test/suite_certificates/
+
+Verified: `git check-ignore -v` still names `/test/*` for
+`test/dd2/test_dd2_m8.py` and `test/baseline/dd2.npz`, and
+`git status --porcelain -uall -- test/` lists exactly the two scripts. §11's
+layout line now carries the exception.
+
+### The retry hazard: disclosure, no cap
+
+Rationing re-runs prices a DISCARD as expensive, which is the inversion the
+ticket names — the certificate exists so an invalidated run is cheap to DETECT
+rather than expensive to BELIEVE, and a session sitting on its hands has paid
+for the mechanism twice. The sin is not re-running; it is re-running
+UNMENTIONED. So: no cap, and one obligation — a result claiming a full-suite
+number cites its certificate path AND every other certificate the same work
+produced, DISCARDs included. Both properties are in §12 verbatim.
+
+### What landed
+
+- **CLAUDE.md §12**: the one-line sentence is gone, replaced by three bullets —
+  the reachable-subset commit gate, the landing measurement (with the
+  twenty-nine-second measurement quoted, the certificate's fields named, and
+  "a count naming no interpreter names nothing"), and the DISCARD/disclosure
+  rule. **§11**'s `test/` line carries the three tracked exceptions.
+- `test/run_clean_suite.sh`: `CERT_DIR` seam, header updated to three seams
+  with the mutant-certificate finding recorded in it.
+- `test/test_run_clean_suite.sh`: exports `CERT_DIR` to its own `$TMP`.
+- `test/suite_certificates/20260829T013708.txt`: deleted.
+- `.gitignore`: `/test/` -> `/test/*` plus three negations.
+
+### Ticket 97's §12 line, retroactively
+
+**Satisfied, and it always was under the ruling.** 97's per-commit gate is the
+tests its change could reach, and it ran and reported them: `test/njl test/ccdm
+...` 349 passed, `test/enjl test/mixed` 391 passed, `test/test_imports.py` 215
+passed / 0 xfailed, plus the bit-identity baseline audit
+(`np.array_equal(equal_nan=True)` against a pre-image, zero surviving keys
+changed by a single bit, independently reproduced by a concurrent session).
+That IS the gate now. The full-suite run it killed was never 97's to owe: it is
+a property of a SHA, it belongs to a landing point, and killing a compromised
+run was the correct act rather than a shortfall. 97's OUTSTANDING marker is
+cleared with no new run required.
+
+### Still owed by somebody, and it is not a decision
+
+No real certificate exists yet — the mechanism has never certified an actual
+20-minute suite. Raised as [ticket 118](118-first-landing-measurement.md).
