@@ -3376,6 +3376,47 @@ against this file, not against the earlier `pytest_before*.txt`.
   [ticket 119](issues/119-nucleation-cannot-run.md).
 
 
+- [`nucleation` runs again, and `timeout` was the reason it looked like it could not](issues/119-nucleation-cannot-run.md)
+  (2026-08-29): **both defects closed, and the second one's stated cause was
+  wrong in a way worth carrying forward.** The three call sites in
+  `nucleation/analysis/filters.py` now build a `SpeciesFlags` each — CFL
+  `gluons=False` (the flag RAISES in `cfl`: locking leaves one unbroken
+  U(1)_Qtilde and all eight gluons are Meissner-massive), the two unpaired
+  paths keep the published `gluons=True`, and `include_electrons` became
+  `leptons=True`, a separate named argument (§5). The asymmetry between the
+  branches is **free only at `FilterConfig.T_eos = 0.0`**, which is the
+  default and is load-bearing, since the Witten and no-rehadronization filters
+  compare the two branches directly. Built on top of the uncommitted par-first
+  edit whose owner was **found** (`nucleation` session `d1826fe2`, 2026-08-28
+  14:43 UTC) and had already **finished** it — asked, cleared, verified
+  independently by them. Scope held to the three direct `eos` solver calls;
+  nucleation's ~20 other `.P_total` reads and ~40 other `include_*` kwargs are
+  its OWN API and widening would break it. **The suite that "could not
+  collect" collects fine: 72 passed in 2.61s** (python.org CPython 3.14.2,
+  pytest 9.1.1, numpy 2.3.5, scipy 1.17.0), and also on `/usr/local/bin`
+  3.14.2 (72 passed, 2.49s) and anaconda 3.9.7 (72 passed, 5.60s) — though
+  those two corroborate the COLLECTION claim only, and **anaconda is not
+  evidence of correctness**: it carries scipy 1.13.1 / numpy 1.26.4, below
+  both declared floors, and eos's own `pyproject.toml` records scipy 1.13
+  reporting success while returning its seed unchanged on one of eos's
+  closures. 3.14.2 is the measurement. `ud_eps_per_nB` is a P = 0 crossing
+  and moves with the grid's resolution AND span (985.07 at 12 points,
+  959.56 at 250, 959.51 at 2000, 965.12 on a narrower 12-point span), so the
+  production default is converged to ~0.05 MeV — and all four clear 930, so
+  the Witten conclusion never depended on the grid. The 9
+  collection errors were **`/usr/local/bin/timeout`, an x86_64 binary**: it
+  starts the interpreter under Rosetta (`platform.machine()` → `x86_64`
+  wrapped, `arm64` bare), numpy's arm64 `_multiarray_umath.so` then fails
+  `dlopen` with *"incompatible architecture (have 'arm64', need 'x86_64')"*,
+  and `numpy/__init__.py:117` masks it as the source-directory error. Nothing
+  to do with the checkout, a `conftest.py` or a shadowing `numpy` dir — those
+  searches were sound and correctly found nothing. **Standing consequence:
+  never wrap a measurement on this machine in `timeout`** — it is not a no-op,
+  it changes the interpreter's architecture and misattributes what it breaks.
+  Not committed: the edit sits in `nucleation`'s working tree on
+  `paper-release` with the owner's notebook edits and an `output/`
+  regeneration, none of it the user's committed work.
+
 ## Not yet specified
 
 Two patches graduated on 2026-08-27 out of
