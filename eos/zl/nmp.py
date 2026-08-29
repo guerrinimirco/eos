@@ -135,7 +135,8 @@ def compute_nmp(par, T=0.0):
         K_sym       its curvature,      9 n^2 d^2S/dn^2
 
     Every one is a prediction: ZL imposes none of them. The published set of
-    Constantinou et al. is pinned in `verify/run_full_check.py`.
+    Constantinou et al. is `PUBLISHED_NMP` at the bottom of this module, and
+    `verify/run_full_check.py` is what asserts the agreement.
 
     Derivatives in x = n_B/n_sat rather than in n_B directly, so that
     K_sat = 9 d^2(E/A)/dx^2 and L_sym = 3 dS/dx with no density factors left
@@ -408,6 +409,51 @@ def from_nmp(nmp, gamma1=None, par_base=None, return_status=False):
     if not status.ok:
         raise RuntimeError(f"NMP inversion failed: {status.message}")
     return (par, status) if return_status else par
+
+
+# =============================================================================
+# THE PUBLISHED NUCLEAR-MATTER PARAMETERS, TWICE
+# =============================================================================
+# Two dicts, because they answer two different questions. A reader checking
+# this model against the paper's table needs the digits the paper prints; a
+# caller starting an inference "around" the published set needs the numbers
+# the published COUPLINGS actually produce, which the printed digits are a
+# rounding of. Neither is a gate.
+#
+# No m*/m in either: ZL has no scalar field and therefore no effective mass
+# (`thermodynamics.py`), so the imposable set is five, not six.
+
+#: The nuclear-matter parameters as PRINTED by C. Constantinou et al.,
+#: Phys. Rev. D 104, 123032 (2021) for the ZL parametrization. Four to five
+#: significant figures. Q_sat and K_sym are not in the published set;
+#: `compute_nmp` reports them, and no check can assert a number nobody
+#: published.
+PUBLISHED_NMP = {
+    "n_sat": 0.15951, "E_sat": -16.00, "K_sat": 250.2,
+    "E_sym": 30.85, "L_sym": 41.26,
+}
+
+#: The same five at full precision: `compute_nmp(Parameters.default())` on the
+#: published couplings, frozen here so that reading them costs no saturation
+#: solve. Regenerate with that call.
+#:
+#: What the paper's rounding costs, measured as the worst relative distance
+#: between the couplings `invert_nmp` returns (at the published gamma1 = 2.45)
+#: and the published ones, over (a0, b0, gamma, a1, b1):
+#:
+#:     from PUBLISHED_NMP         7.4e-03
+#:     from PUBLISHED_NMP_EXACT   7.2e-03
+#:
+#: Precision buys essentially nothing here, and that is a property of the
+#: published FIT rather than of the closure or of the rounding: the ZL
+#: couplings saturate about 0.3% below their own n0, so they are not a root of
+#: any closure and no full-precision target can return them exactly. This is
+#: reported, not gated -- there is no gate that could improve it.
+PUBLISHED_NMP_EXACT = {
+    "n_sat": 0.1595146218272416, "E_sat": -15.996481134715676,
+    "K_sat": 250.1743447708593, "E_sym": 30.848024365592863,
+    "L_sym": 41.270333434040296,
+}
 
 
 if __name__ == "__main__":

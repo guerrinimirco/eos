@@ -432,11 +432,11 @@ superconductivity.
 controlled by that coupling, which is where every other model number lives and
 is the only form an inference sampler can vary continuously (CLAUDE.md §4, §6).
 The hidden-strange vector phi is the worked case and carries no flag anywhere —
-`dd2` reads the `x_phi` column of its hyperon rows
-(`from_hyperon_potentials(x_phi=0.0)` builds a set without the sector), `sfho`
-reads `g_phi_N` and its SU(6) phi column (`SFHo_2fam` against `SFHo_2fam_phi`),
-and `did` derives `g_phi` from `(g~_omegaN, z)` by a map with no zero, which is
-how that model states the sector is structural.
+`dd2` and `sfho` read the hyperon `x_phi` column, which is SU(6) times a free
+factor per multiplet, so `y_phi_Lambda = y_phi_Sigma = y_phi_Xi = 0` builds a
+set without the sector (that IS `SFHo_2fam`, against `SFHo_2fam_phi`); `sfho`
+reads `g_phi_N` besides; and `did` derives `g_phi` from `(g~_omegaN, z)` by a
+map with no zero, which is how that model states the sector is structural.
 
 **No sector is enabled or disabled implicitly** because "its coupling happens
 to be zero" — that is a number that vanishes with nothing saying so, not a
@@ -640,10 +640,35 @@ them must pass.
 **The hyperon and Δ sectors are a separate closure and no nuclear-matter
 parameter reaches them.** They are fixed by single-particle potentials —
 U_Λ, U_Σ, U_Ξ at saturation in symmetric matter, and U_Δ — with only the
-SCALAR coupling ratios inverted from those depths; the vector ratios are taken
-from SU(6). SU(6) is an assumption rather than a measurement, and the published
-sets differ precisely there: SFHoY scales the ω and φ ratios by 1.5 for Λ and
-Σ and by 1.875 for Ξ, where SFHoY\* leaves them at SU(6).
+SCALAR coupling ratios inverted from those depths. SU(6) is an assumption
+rather than a measurement, so the vector ratios are **SU(6) × a free factor**,
+
+    x_MY = y_MY × x_MY(SU(6)),   M ∈ {ω, ρ, φ},   Y ∈ {Λ, Σ, Ξ},
+
+nine named parameters on `Parameters` in every RMF with a hyperon sector
+(`dd2`, `sfho`), each defaulting to 1, which is SU(6) exactly. Nine and not
+three because the published sets differ precisely in a pattern neither a
+per-meson nor a per-multiplet factor can express: Fortin, Oertel &
+Providência (PASA 35 (2018) e044, §2.2 and Table 1) scale the ω **and** φ
+ratios by 1.5 for Λ and Σ and by 1.875 for Ξ while leaving ρ at SU(6), which
+is SFHoY; SFHoY\* and DD2Y are all ones. `y_φY` multiplies a NEGATIVE ratio,
+so a factor above one makes g_φY more negative, and `y_φY = 0` in every
+multiplet is the set with no φ sector at all.
+
+**The scalar inversion runs AFTER the rescaling**, because
+U_Y = −g_σY σ + g_ωY ω (+ Σ^R in a DD-RMF) holds both couplings: a rescaled
+vector coupling changes the scalar coupling that reproduces the same depth.
+So it is one call — `from_hyperon_potentials(base=…)` / `from_potential_depths(base=…)`
+on a base carrying the factors — and never a rescale applied to a finished
+set. **Whether the depths or the ratios are held is the caller's physics and
+is an explicit argument, never a default**: `sfho`'s `invert_nmp` refuses to
+run on a hyperonic base without `hold_hyperons='depths'` or `'ratios'`, since
+its hyperon couplings are stored absolutely against nucleon couplings the
+inversion moves.
+
+**The Δ sector takes no factors.** `x_Delta_sigma`, `x_Delta_omega`,
+`x_Delta_rho` are free variables directly, carrying those names in both
+models; only `x_Delta_sigma` has a depth to be inverted from (U_Δ).
 
 **Non-convergence is a return value at the boundary a sampler uses.**
 `invert_nmp` returns `(Parameters, InversionStatus)` in every model that has

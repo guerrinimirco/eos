@@ -380,6 +380,33 @@ against this file, not against the earlier `pytest_before*.txt`.
 
 ## Decisions so far
 
+- **[Ticket 109 — the three flagless quark adapters take a `flags`, and the wing exception stands](issues/109-flagless-mixed-adapters.md)**
+  (resolved 2026-08-29). **Candidate 1**, plus a `default_pair` forwarding the
+  ticket's wording did not include. `sfho_phase`'s unverified row measures as
+  **"the rule, obeyed"** — its wing passes the caller's flags through exactly
+  as dd2's does. The physics question is answered **yes**: wing and window
+  must agree about the radiation, because at n_offset chi = 1 and both
+  describe the same matter, so a short wing puts a step of
+  P_gamma = 0.023 MeV/fm^3 (T = 30) in a table §8 requires be monotone. **The
+  defect was reachable through the documented front door** — one flags object
+  into `default_pair` and into `hybrid_table` left the `Q` rows bit-identical
+  while every `H` and `mix` row gained the gas. The ticket counts five
+  adapters; there are **eight**, and `njl_phase`/`ccdm_phase` ALREADY carry
+  candidate 1's exact `flags=None` shape, so this copies the file rather than
+  inventing an API. Candidate 2 was weighed and lost: it reverses
+  [ticket 89](issues/89-dd2-honours-species-flags.md) across eight wings and
+  makes a wing row stop being the pure model's own solve, which is
+  `test_hybrid_modes.py`'s stated strongest check. What candidate 1 does NOT
+  buy is recorded: a hand-built pairing can still be given inconsistent photon
+  flags. **Three sectors are REFUSED** rather than becoming wing-only gases
+  (alphabag `gluons`/`two_flavour`/`thermal_neutrinos`, vmit `two_flavour`) —
+  §4, on `dd2_phase`'s `sigma_star` precedent. **Q4 was ruled in scope and the
+  fix went to TWO sites**: `did_phase`'s `frozen_thermo` has sfho's identical
+  unstripped-flags shape and identical "matter only" comment. The T > 0 gap
+  that let this survive two tickets is closed — `test_hybrid_modes.py` was
+  entirely T = 0 — and the new check is **proved able to fail** by rebuilding
+  the pre-fix wiring through the new API.
+
 - **[Ticket 110 — `zlvmit`'s pure-phase warm start is deleted, not repaired](issues/110-zlvmit-dead-warm-start-calls.md)**
   (resolved 2026-08-29). The failure is **arity, not `par.m_p`**: all six calls
   are short exactly one required positional argument, so `TypeError` fires at
@@ -3040,8 +3067,9 @@ against this file, not against the earlier `pytest_before*.txt`.
   for Xi, which neither a per-meson nor a per-multiplet factor can express), and
   the **Delta sector takes no factors** — `x_Delta_{sigma,omega,rho}` free.
   DID's prerequisite is already met (Table VI at 0.84x tolerance). Five tickets
-  raised: [112](issues/112-su6-vector-ratios-as-parameters.md) (unblocks
-  [106](issues/106-su6-breaking-rescaling.md)),
+  raised: [112](issues/112-su6-vector-ratios-as-parameters.md) (which shipped
+  on 2026-08-29 and SUBSUMED
+  [106](issues/106-su6-breaking-rescaling.md) rather than unblocking it),
   [113](issues/113-did-parameter-provenance.md),
   [114](issues/114-nmp-api-conformance.md),
   [115](issues/115-dd2-qsat-pin-recheck.md),
@@ -3177,6 +3205,34 @@ against this file, not against the earlier `pytest_before*.txt`.
   hardcodes `held["c_omega"]`, so the scan needed a temporary patch, reverted),
   and `invert_nmp`'s docstring still describes the pre-111 world.
 
+- [dd2's `from_nmp` raises, and every published NMP quote gains its full-precision twin](issues/114-nmp-api-conformance.md)
+  (2026-08-29): 103's two authorised surface fixes, executed. **dd2's
+  `from_nmp` raises** like sfho's and zl's — the three convenience faces now
+  carry identical lines — while `invert_nmp` is untouched as the section-6
+  boundary. `build_parametrization` behaves exactly as before but reaches its
+  `(None, "inversion_failed", ...)` through `invert_nmp` directly, since the
+  face it leaned on no longer answers a failure with a value. The regression
+  test needed a target the two feasibility tests already in the file do NOT
+  cover: they raise `ValueError`, and **hard infeasibility never returned
+  None** — what did is a SOFT miss, both values inside their windows and the
+  root unfound after 32 restarts, shipped as `K_sat = 400` at `m*/m = 0.85`
+  (0.3 s), and the test asserts `not status.ok` first so it cannot quietly
+  stop testing. **`PUBLISHED_NMP` + `PUBLISHED_NMP_EXACT` in all three**: only
+  sfho had a constant at all, dd2 had none, and **zl's quote lived only inside
+  its `verify` suite**, which now reads the constant instead. 103's recovery
+  distances were re-measured rather than transcribed, because they were quoted
+  without their metric and re-deriving them landed elsewhere; the metric is
+  now written beside each number (worst relative coupling distance, over the
+  free couplings, named per model). sfho and zl reproduce 103 including the
+  cause — one two-digit `m*/m = 0.76` against 0.761564, and zl's 7.2e-03 that
+  precision cannot move because its published set is a root of no closure.
+  **New: dd2's rounding costs nothing measurable** — 8.5e-05 from the quote
+  against 7.6e-05 at full precision, both at the isoscalar solve's own
+  convergence floor. A cross-model test pins the frozen twin to
+  `compute_nmp(default())` at 1e-12, since a literal claiming to be a call is
+  what rots. No baseline moved (284 passed); all three `verify` suites green;
+  full suite 1833 passed / 23 skipped / **0 failed**.
+
 - [SFHo's nuclear-matter derivatives are analytic, and the stencil's floor was never h](issues/116-sfho-analytic-nmp-derivatives.md)
   (2026-08-29): **111's program, executed for sfho, with the ticket's own
   premise refuted along the way.** Every derivative in `sfho/nmp.py` is
@@ -3216,6 +3272,35 @@ against this file, not against the earlier `pytest_before*.txt`.
   3.2e-03). `DEFERRED.md` sharpened: Q_sat is still not imposable in sfho and
   derivative accuracy was never the obstacle (c3's Jacobian column 550x weaker,
   sigma_min 0.051 -> 0.0063).
+
+- [The SU(6) vector ratios become parameters, and the Delta ratios become free variables](issues/112-su6-vector-ratios-as-parameters.md)
+  (2026-08-29): ticket 103's ruling executed, with
+  [ticket 106](issues/106-su6-breaking-rescaling.md) **folded in and closed as
+  superseded** — the same work charted from the physics side, with neither file
+  pointing at the other. `dd2` and `sfho` each gain the same **nine** named
+  fields `y_{omega,rho,phi}_{Lambda,Sigma,Xi}`, defaulting to 1.0, with
+  `x_MY = y_M_Y * SU(6)`; `x_sigma_H` still comes from the depth. **The factors
+  are not inert**: dd2's hyperon rows drop from six columns to three
+  `(name, mass, x_sigma)` and sfho's `couplings_map` holds only `'sigma'` for a
+  hyperon, both deriving the vector ratios on read, so `replace(par,
+  y_omega_Lambda=1.5)` actually moves the coupling. **1.5 / 1.5 / 1.875 read
+  out of arXiv:1711.09427v2 §2.2 and Table 1**, not inferred: the paper scales
+  omega AND phi per multiplet and leaves rho at SU(6), which is what makes nine
+  the right count. **y = 1 is bit-identical**, checked by loading HEAD's two
+  `parameters.py` beside the working tree's and comparing every coupling of
+  every published set with `==` — zero mismatches in both models, because
+  `1.5*(2/3) == 1.0` and `1.875*(1/3) == 0.625` exactly. Each model's `verify/`
+  gained `hyperon depths vs SU(6) breaking` (U_Y held to 6.4e-14 / 1.4e-14 MeV
+  on a broken base). **`invert_nmp` now REFUSES a hyperonic base without
+  `hold_hyperons='depths'|'ratios'`** — 106's third trap, and `DEFERRED.md`'s
+  entry turns from a deferral into a description. Along the way:
+  `from_hyperon_potentials(x_phi=...)` deleted in favour of `y_phi_* = 0`
+  (102's ping, replaced not doubled), `sfho.from_coupling_ratios` deleted (a
+  second constructor with rounded absolute vectors behind a
+  `use_scaled_vectors` boolean, no callers), `x_wD`/`x_rD` renamed to
+  `x_Delta_omega`/`x_Delta_rho` (§13), and one real bug fixed —
+  `compute_hyperon_potentials` was reading the depths at nucleonic SFHo's
+  saturation point rather than the par's own.
 
 
 ## Not yet specified

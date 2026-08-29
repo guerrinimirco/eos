@@ -33,7 +33,7 @@ from eos.sfho.table import (
 from eos.sfho.nmp import (
     compute_nmp, snm_derivatives, energy_per_baryon, pressure, esym,
     from_potential_depths, compute_saturation_fields,
-    compute_hyperon_potentials, PUBLISHED_NMP,
+    compute_hyperon_potentials, PUBLISHED_NMP, PUBLISHED_NMP_EXACT,
 )
 from eos.sfho.api import (
     eos_point, eos_table, eos_response, PointResult, RESPONSE_FREEZES,
@@ -50,7 +50,7 @@ __all__ = [
     "load_eos_table", "build_interpolators", "EOSTableData",
     "compute_nmp", "snm_derivatives", "energy_per_baryon", "pressure", "esym",
     "from_potential_depths", "compute_saturation_fields",
-    "compute_hyperon_potentials", "PUBLISHED_NMP",
+    "compute_hyperon_potentials", "PUBLISHED_NMP", "PUBLISHED_NMP_EXACT",
     "eos_point", "eos_table", "eos_response", "PointResult",
     "RESPONSE_FREEZES",
 ]

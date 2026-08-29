@@ -1,7 +1,7 @@
 # SU(6) is an assumption: give the vector hyperon couplings a rescaling factor
 
 Type: task
-Status: open
+Status: superseded by [ticket 112](112-su6-vector-ratios-as-parameters.md) (2026-08-29)
 Blocked by: -
 Parent: ../map.md
 
@@ -83,3 +83,50 @@ whole regression argument, and `test/baseline/{dd2,sfho}.npz` must not move.
 The named breaking set reproduces its published U_Y depths through
 `compute_hyperon_potentials`. One test that a rescaling actually moves
 `g_omega_Y` and that the scalar coupling follows it at fixed depth.
+
+
+## Superseded (2026-08-29)
+
+**Folded into [ticket 112](112-su6-vector-ratios-as-parameters.md) and closed.**
+This ticket and 112 are the same work charted twice — 106 from the physics
+side (2026-08-28, before the ruling), 112 from the API side (2026-08-29, as
+[ticket 103](103-nmp-closures-four-models.md)'s execution order) — and neither
+file pointed at the other, which is how both stayed open. 112 is the one that
+shipped, and it carries this ticket's three traps rather than dropping them:
+
+1. **The factors come from Fortin et al.'s own text**, not from arithmetic
+   that comes out round. Read at the source (arXiv:1711.09427v2 §2.2): "we
+   rescale the ω and φ-meson hyperon couplings as follows:
+   g_MΛ = 1.5 g_MΛ(SU(6)), g_MΣ = 1.5 g_MΣ(SU(6)), g_MΞ = 1.875 g_MΞ(SU(6))",
+   with Table 1 listing the result (R_ωΛ = 1, R_ωΞ = 0.62, R_φΞ = -1.77, ρ
+   left at SU(6)). The reading this ticket flagged as "a reading" is the
+   paper's own, and it is now cited where the factors are defined.
+2. **The scalar inversion runs after the rescaling.** Both constructors take
+   a `base` carrying the factors and invert the depths on it, so there is no
+   order for a caller to get wrong; 112 adds a `verify/` entry in each model
+   that rebuilds the breaking set from its factors and requires U_Y back.
+3. **"Depths or ratios held" is an argument.** `sfho.invert_nmp` refuses a
+   hyperonic base without `hold_hyperons='depths'|'ratios'`.
+
+Two of this ticket's proposals did NOT survive, and both were narrowed by the
+ruling rather than by taste:
+
+- **Three factors became nine.** `R_omega_Y`, `R_phi_Y`, `R_rho_Y` per
+  multiplet is what this ticket asked for and is not what SFHoY is: that set
+  breaks ω and φ while leaving ρ at SU(6), which needs a factor per
+  (meson, multiplet) pair. Nine named fields, not a dict — §13.
+- **The named breaking set is not a new `Parameters.named(...)`.** `SFHoY` and
+  `SFHoY*` already exist; 112 re-expressed them as factor sets in place, which
+  is what "not as absolute numbers" meant. Nothing was added beside them.
+
+The downstream ping from [ticket 102](102-retire-phi-field-flag.md) is
+honoured as this ticket asked: `from_hyperon_potentials(x_phi=...)` is GONE,
+replaced rather than doubled, and the reachable way to say "no phi" is
+`y_phi_Lambda = y_phi_Sigma = y_phi_Xi = 0` — strictly more expressive, since
+it is per-multiplet. `test_imports.py`'s phi-sector check was rewritten onto
+it and still passes.
+
+`sfho`'s side of the gap this ticket named — `SFHo_2fam` against
+`SFHo_2fam_phi` "hardcoded per named set rather than parameterised" — is
+closed: `SFHo_2fam` is now literally `SFHo_2fam_phi` with the three y_phi
+factors at zero.

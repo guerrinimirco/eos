@@ -67,7 +67,7 @@ from scipy.optimize import brentq, root
 from eos.general.physics_constants import hc, hc3
 from eos.sfho.species import SpeciesFlags
 from eos.sfho.parameters import (
-    Parameters, SU6_RATIOS, SQRT2, _get_base_sfho
+    Parameters, MULTIPLET, vector_ratios, _get_base_sfho
 )
 
 
@@ -132,7 +132,10 @@ def compute_hyperon_potentials(params: Parameters,
         Dictionary with U_Λ, U_Σ, U_Ξ in MeV
     """
     if sigma is None or omega is None:
-        sigma, omega, _, _ = compute_saturation_fields()
+        # On `params`, not on the default set: the depth is defined at the
+        # saturation point of the parametrization being read, and an inverted
+        # or rescaled base does not saturate where nucleonic SFHo does.
+        sigma, omega, _, _ = compute_saturation_fields(params)
     
     potentials = {}
     
@@ -140,8 +143,8 @@ def compute_hyperon_potentials(params: Parameters,
                            ('sigma+', 'U_Sigma'), 
                            ('xi0', 'U_Xi')]:
         if hyperon in params.couplings_map:
-            g_sigma_H = params.couplings_map[hyperon]['sigma']
-            g_omega_H = params.couplings_map[hyperon]['omega']
+            g_sigma_H = params.get_coupling(hyperon, 'sigma')
+            g_omega_H = params.get_coupling(hyperon, 'omega')
             U_H = -g_sigma_H * sigma + g_omega_H * omega
             potentials[label] = U_H
         else:
@@ -455,134 +458,136 @@ def from_potential_depths(
     U_Lambda_N: float = -30.0,
     U_Sigma_N: float = +30.0,
     U_Xi_N: float = -14.0,
-    # Vector coupling enhancement factors (per hyperon family)
-    # g_ωH = g_ωN × SU(6)_ratio × y_H, g_φH = g_ωN × SU(6)_ratio × y_H
-    y_Lambda: float = 1.0,
-    y_Sigma: float = 1.0,
-    y_Xi: float = 1.0,
-    # Delta couplings
-    x_sigma_delta: float = 1.15,
-    x_omega_delta: float = 1.0,
-    x_rho_delta: float = 1.0,
+    # The base whose nucleon couplings and SU(6)-breaking factors are used
+    base: Parameters = None,
+    # Delta couplings (no measured depth in this model, so given as ratios)
+    x_Delta_sigma: float = 1.15,
+    x_Delta_omega: float = 1.0,
+    x_Delta_rho: float = 1.0,
     # Name
     name: str = "Custom"
 ) -> Parameters:
     """
-    Create custom parametrization from target hyperon potential depths.
+    Create a parametrization from target hyperon potential depths.
 
-    The scalar coupling R_σH is determined from the target potential depth:
-        U_H = -g_σH × σ + g_ωH × ω
-        R_σH = (R_ωH × y_H × g_ωN × ω - U_H) / (g_σN × σ)
+    The scalar coupling R_sigma_H is determined from the target depth:
+        U_H = -g_sigma_H * sigma + g_omega_H * omega
+        R_sigma_H = (R_omega_H * g_omega_N * omega - U_H) / (g_sigma_N * sigma)
 
-    σ and ω are SOLVED for at saturation, by `compute_saturation_fields`, and
-    that is why this function lives in `nmp.py` rather than in `parameters.py`:
-    it is an inverse map from a physical observable to a coupling, so it needs
-    the solver, and `parameters.py` is the bottom of the import layer and
-    cannot reach it (CLAUDE.md §5). A second copy did live there, with the two
-    fields written in as constants; the constants were mutually inconsistent —
-    no single density reproduces both — and the couplings they produced missed
-    the requested depths by about 3 MeV, so asking for U_Λ = -30 delivered
-    -33.07. Hardcoding them is also wrong in principle for an inference run,
-    where the base couplings vary and the saturation fields move with them.
+    sigma and omega are SOLVED for at saturation ON `base`, by
+    `compute_saturation_fields`, and that is why this function lives in
+    `nmp.py` rather than in `parameters.py`: it is an inverse map from a
+    physical observable to a coupling, so it needs the solver, and
+    `parameters.py` is the bottom of the import layer and cannot reach it
+    (CLAUDE.md section 5). A second copy did live there, with the two fields
+    written in as constants; the constants were mutually inconsistent -- no
+    single density reproduces both -- and the couplings they produced missed
+    the requested depths by about 3 MeV, so asking for U_Lambda = -30
+    delivered -33.07. Hardcoding them is also wrong in principle for an
+    inference run, where the base couplings vary and the saturation fields
+    move with them.
 
-    Vector couplings follow SU(6) symmetry × y_H enhancement factor per family:
-        g_ωΛ = g_ωN × (2/3) × y_Lambda
-        g_ωΣ = g_ωN × (2/3) × y_Sigma  
-        g_ωΞ = g_ωN × (1/3) × y_Xi
-    
-    Example: y_Lambda=1.5, y_Sigma=1.5, y_Xi=1.875 gives:
-        g_ωΛ = 1.0 × g_ωN, g_ωΣ = 1.0 × g_ωN, g_ωΞ = 0.625 × g_ωN
-    
+    **The vector sector comes from `base`'s nine SU(6)-breaking factors, and
+    the scalar inversion runs AFTER them**, which is the whole reason this is
+    one call rather than two. R_omega_H enters the equation above, so a
+    rescaled vector coupling changes the scalar coupling that reproduces the
+    same depth; inverting first and rescaling after would silently move U_H.
+    To break SU(6), set the factors on the base and let this function close
+    the depths on them:
+
+        base = replace(Parameters.default(),
+                       y_omega_Lambda=1.5, y_phi_Lambda=1.5,
+                       y_omega_Sigma=1.5, y_phi_Sigma=1.5,
+                       y_omega_Xi=1.875, y_phi_Xi=1.875)
+        par = from_potential_depths(U_Xi_N=-14.0, base=base)
+
+    reproduces SFHoY's couplings (Fortin, Oertel & Providencia 2018, Table 1)
+    to the rounding of the published R_sigma column.
+
     Args:
-        U_Lambda_N: Λ potential depth at n_sat in SNM (MeV), ~ -30 MeV
-        U_Sigma_N: Σ potential depth at n_sat in SNM (MeV), ~ +30 MeV  
-        U_Xi_N: Ξ potential depth at n_sat in SNM (MeV), ~ +10 to -20 MeV
-        y_Lambda: Enhancement factor for Λ (1.0 = SU(6))
-        y_Sigma: Enhancement factor for Σ (1.0 = SU(6))
-        y_Xi: Enhancement factor for Ξ (1.0 = SU(6))
-        x_sigma_delta: R_σΔ = g_σΔ/g_σN
-        x_omega_delta: R_ωΔ = g_ωΔ/g_ωN
-        x_rho_delta: R_ρΔ = g_ρΔ/g_ρN
+        U_Lambda_N: Lambda depth at n_sat in SNM (MeV), ~ -30 MeV
+        U_Sigma_N: Sigma depth at n_sat in SNM (MeV), ~ +30 MeV
+        U_Xi_N: Xi depth at n_sat in SNM (MeV), ~ +10 to -20 MeV
+        base: parametrization supplying the nucleon couplings and the nine
+            breaking factors; defaults to nucleonic SFHo (SU(6) throughout)
+        x_Delta_sigma: R_sigma_Delta = g_sigma_Delta/g_sigma_N
+        x_Delta_omega: R_omega_Delta = g_omega_Delta/g_omega_N
+        x_Delta_rho: R_rho_Delta = g_rho_Delta/g_rho_N
         name: Name for the parametrization
-        
+
     Returns:
         Parameters with computed couplings
     """
-    # Get base SFHo parameters
-    p = _get_base_sfho()
+    p = copy.deepcopy(base if base is not None else _get_base_sfho())
     p.name = name
-    
-    # Compute saturation fields
-    sigma, omega, _, _ = compute_saturation_fields()
-    
-    # SU(6) vector ratios (before enhancement)
-    R_omega_Lambda_SU6 = 2.0/3.0
-    R_omega_Sigma_SU6 = 2.0/3.0
-    R_omega_Xi_SU6 = 1.0/3.0
-    
-    R_phi_Lambda_SU6 = -SQRT2/3.0
-    R_phi_Sigma_SU6 = -SQRT2/3.0
-    R_phi_Xi_SU6 = -2.0*SQRT2/3.0
-    
-    # Apply enhancement factors
-    R_omega_Lambda = R_omega_Lambda_SU6 * y_Lambda
-    R_omega_Sigma = R_omega_Sigma_SU6 * y_Sigma
-    R_omega_Xi = R_omega_Xi_SU6 * y_Xi
-    
-    R_phi_Lambda = R_phi_Lambda_SU6 * y_Lambda
-    R_phi_Sigma = R_phi_Sigma_SU6 * y_Sigma
-    R_phi_Xi = R_phi_Xi_SU6 * y_Xi
-    
-    # Compute scalar coupling ratios from potential depths
-    # U_H = -R_σH × g_σN × σ + R_ωH × g_ωN × ω
-    # R_σH = (R_ωH × g_ωN × ω - U_H) / (g_σN × σ)
-    
-    def compute_R_sigma(U_H: float, R_omega: float) -> float:
-        return (R_omega * p.g_omega_N * omega - U_H) / (p.g_sigma_N * sigma)
-    
-    R_sigma_Lambda = compute_R_sigma(U_Lambda_N, R_omega_Lambda)
-    R_sigma_Sigma = compute_R_sigma(U_Sigma_N, R_omega_Sigma)
-    R_sigma_Xi = compute_R_sigma(U_Xi_N, R_omega_Xi)
-    
-    # Lambda couplings
-    p.couplings_map['lambda'] = {
-        'sigma': R_sigma_Lambda * p.g_sigma_N,
-        'omega': R_omega_Lambda * p.g_omega_N,
-        'phi': R_phi_Lambda * p.g_omega_N,
-        'rho': 0.0,
-    }
-    
-    # Sigma couplings (all Σ+, Σ0, Σ-)
-    sigma_couplings = {
-        'sigma': R_sigma_Sigma * p.g_sigma_N,
-        'omega': R_omega_Sigma * p.g_omega_N,
-        'phi': R_phi_Sigma * p.g_omega_N,
-        'rho': 2.0 * p.g_rho_N,
-    }
-    for s_name in ['sigma+', 'sigma0', 'sigma-']:
-        p.couplings_map[s_name] = sigma_couplings.copy()
-    
-    # Xi couplings
-    xi_couplings = {
-        'sigma': R_sigma_Xi * p.g_sigma_N,
-        'omega': R_omega_Xi * p.g_omega_N,
-        'phi': R_phi_Xi * p.g_omega_N,
-        'rho': 1.0 * p.g_rho_N,
-    }
-    for x_name in ['xi0', 'xi-']:
-        p.couplings_map[x_name] = xi_couplings.copy()
-    
-    # Delta couplings
+    p.couplings_map = {}
+    p.U_Lambda, p.U_Sigma, p.U_Xi = U_Lambda_N, U_Sigma_N, U_Xi_N
+
+    # Saturation fields of the base, on which the depths are defined.
+    sigma, omega, _, _ = compute_saturation_fields(p)
+
+    # U_H = -R_sigma_H g_sigma_N sigma + R_omega_H g_omega_N omega, one linear
+    # equation per multiplet, solved AFTER the vector ratios are known.
+    depths = {'Lambda': U_Lambda_N, 'Sigma': U_Sigma_N, 'Xi': U_Xi_N}
+    scalar_ratio = {}
+    for multiplet, U_H in depths.items():
+        R_omega, _, _ = vector_ratios(multiplet, *p.su6_breaking[multiplet])
+        scalar_ratio[multiplet] = (
+            (R_omega * p.g_omega_N * omega - U_H) / (p.g_sigma_N * sigma))
+
+    for particle, multiplet in MULTIPLET.items():
+        p.couplings_map[particle] = {
+            'sigma': scalar_ratio[multiplet] * p.g_sigma_N}
+
+    # Delta couplings: all four stored, there being no depth to invert.
     delta_couplings = {
-        'sigma': x_sigma_delta * p.g_sigma_N,
-        'omega': x_omega_delta * p.g_omega_N,
-        'phi': 0.0,  # Deltas don't couple to φ
-        'rho': x_rho_delta * p.g_rho_N,
+        'sigma': x_Delta_sigma * p.g_sigma_N,
+        'omega': x_Delta_omega * p.g_omega_N,
+        'phi': 0.0,  # Deltas carry no strangeness
+        'rho': x_Delta_rho * p.g_rho_N,
     }
     for d_name in ['delta++', 'delta+', 'delta0', 'delta-']:
         p.couplings_map[d_name] = delta_couplings.copy()
-    
+
     return p
+
+
+def _rescale_hyperon_scalars(par, base):
+    """Hold g_sigma_H / g_sigma_N across an inversion; the depths move."""
+    for particle, entry in base.couplings_map.items():
+        par.couplings_map[particle] = {
+            'sigma': entry['sigma'] / base.g_sigma_N * par.g_sigma_N,
+            **{meson: value / _nucleon_coupling(base, meson)
+               * _nucleon_coupling(par, meson)
+               for meson, value in entry.items() if meson != 'sigma'},
+        }
+    return par
+
+
+def _reinvert_hyperon_depths(par, base):
+    """Hold U_Lambda, U_Sigma, U_Xi across an inversion; the ratios move."""
+    deltas = [name for name in base.couplings_map if name.startswith('delta')]
+    ratios = {}
+    for meson, x_name in (('sigma', 'x_Delta_sigma'),
+                          ('omega', 'x_Delta_omega'),
+                          ('rho', 'x_Delta_rho')):
+        g_N = _nucleon_coupling(base, meson)
+        ratios[x_name] = (base.couplings_map[deltas[0]][meson] / g_N
+                          if deltas else 1.0)
+    rebuilt = from_potential_depths(
+        U_Lambda_N=base.U_Lambda, U_Sigma_N=base.U_Sigma, U_Xi_N=base.U_Xi,
+        base=par, name=par.name, **ratios)
+    if not deltas:
+        for name in list(rebuilt.couplings_map):
+            if name.startswith('delta'):
+                del rebuilt.couplings_map[name]
+    return rebuilt
+
+
+def _nucleon_coupling(par, meson):
+    """g_MN, the coupling a hyperon ratio is measured against (phi over g_omegaN)."""
+    return {'sigma': par.g_sigma_N, 'omega': par.g_omega_N,
+            'rho': par.g_rho_N, 'phi': par.g_omega_N}[meson]
 
 
 # =============================================================================
@@ -755,7 +760,8 @@ def _restart_loop(residual, seed, first, n_restarts, gate):
     return best_x, best_res
 
 
-def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
+def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS,
+               hold_hyperons=None, **nmp):
     """Recover SFHo couplings from a target nuclear-matter-parameter set.
 
     The inverse of `compute_nmp`, closed as documented above: the classical
@@ -787,11 +793,22 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
         physical window, where there is no question of a fit failing to be
         found because there is nothing to find.
 
-    The hyperon and Delta sectors are NOT refitted: they ride along from
-    `par_base`, and their coupling ratios are defined against the nucleon
-    couplings this function has just changed. Re-derive them with
-    `from_potential_depths` on the result if the potential depths are
-    meant to be held.
+    **`hold_hyperons` says what the strange sector keeps**, and it is an
+    argument rather than a default because the answer is physics, not
+    bookkeeping. A hyperon's scalar coupling is stored ABSOLUTELY while its
+    depth U_H = -g_sigma_H sigma + g_omega_H omega is a statement about the
+    nucleon couplings and fields this function has just moved, so the two
+    cannot both survive an inversion:
+
+      "ratios"  keep g_sigma_H / g_sigma_N fixed. The hyperon sector is a
+                fixed multiple of the nucleon one and the depths move.
+      "depths"  keep U_Lambda, U_Sigma, U_Xi fixed, re-inverting the scalar
+                couplings on the new nucleon sector through
+                `from_potential_depths`. The ratios move.
+
+    Required whenever `par_base` carries hyperons; ignored (and pointless)
+    otherwise. The Delta couplings are ratios in both arms -- this model
+    inverts no Delta depth.
     """
     required = ("n_sat", "E_sat", "m_eff_ratio", "K_sat", "E_sym", "L_sym")
     missing = [k for k in required if k not in nmp]
@@ -799,6 +816,15 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
         raise ValueError(f"invert_nmp needs {required}; missing {missing}")
     base = par_base or Parameters.default()
     n_sat = float(nmp["n_sat"])
+
+    has_hyperons = any(name in base.couplings_map for name in MULTIPLET)
+    if has_hyperons and hold_hyperons not in ("ratios", "depths"):
+        raise ValueError(
+            f"invert_nmp on a base carrying hyperons must say what the "
+            f"strange sector holds: hold_hyperons='ratios' keeps "
+            f"g_sigma_H/g_sigma_N and lets U_H move, hold_hyperons='depths' "
+            f"keeps U_Lambda/U_Sigma/U_Xi and re-inverts the scalar "
+            f"couplings. Got {hold_hyperons!r}.")
 
     # Hard infeasibility: below about 0.35 the scalar field has eaten the
     # nucleon mass (g_sigma sigma -> m_N, scalar collapse) and above about
@@ -890,6 +916,10 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS, **nmp):
 
     par = _trial_par(base, g_sigma, g_omega, b, c, g_rho=g_rho, b1=b1)
     par.name = f"{getattr(base, 'name', 'SFHo')}_from_nmp"
+    if has_hyperons and hold_hyperons == "depths":
+        par = _reinvert_hyperon_depths(par, base)
+    elif has_hyperons:
+        par = _rescale_hyperon_scalars(par, base)
 
     at_final = _snm(par, n_sat)
     fields = at_final.matter.fields
@@ -951,13 +981,42 @@ def from_nmp(par_base=None, return_status=False, **nmp):
 # =============================================================================
 # A SUMMARY, FOR READING RATHER THAN FOR SOLVING
 # =============================================================================
-#: Steiner, Hempel & Fischer, ApJ 774 (2013) 17, as tabulated by Fortin,
-#: Oertel & Providencia, PASA 35 (2018) e044 Table 2 and by the CompOSE
-#: HS(SFHo) entry. Q_sat and K_sym are not fitted quantities and carry no
-#: published value here; `compute_nmp` reports them as predictions.
+# Two dicts, because they answer two different questions. A reader checking
+# this model against the paper's table needs the digits the paper prints; a
+# caller starting an inference "around" the published set needs the numbers
+# the published COUPLINGS actually produce, which the printed digits are a
+# rounding of. Neither is a gate.
+
+#: The nuclear-matter parameters as PRINTED: Steiner, Hempel & Fischer, ApJ
+#: 774 (2013) 17, as tabulated by Fortin, Oertel & Providencia, PASA 35
+#: (2018) e044 Table 2 and by the CompOSE HS(SFHo) entry. Q_sat and K_sym are
+#: not fitted quantities and carry no published value here; `compute_nmp`
+#: reports them as predictions.
 PUBLISHED_NMP = {
     "n_sat": 0.1583, "E_sat": -16.19, "m_eff_ratio": 0.76,
     "K_sat": 245.4, "E_sym": 31.57, "L_sym": 47.10,
+}
+
+#: The same six at full precision: `compute_nmp(Parameters.default())` on the
+#: published couplings, frozen here so that reading them costs no saturation
+#: solve. Regenerate with that call.
+#:
+#: What the paper's rounding costs, measured as the worst relative distance
+#: between the couplings `invert_nmp` returns and the published ones, over
+#: (g_sigma_N, g_omega_N, g2, g3, g_rho_N):
+#:
+#:     from PUBLISHED_NMP                            3.7e-02
+#:     from PUBLISHED_NMP with m*/m exact, rest rounded  1.5e-03
+#:     from PUBLISHED_NMP_EXACT                      0
+#:
+#: The whole factor of 25 is ONE two-digit entry: the table prints
+#: m*/m = 0.76 where the couplings give 0.761564. The inversion is exact at
+#: full precision -- SFHo's published set IS a root of this closure -- so
+#: what the first row measures is the paper's rounding and not the closure.
+PUBLISHED_NMP_EXACT = {
+    "n_sat": 0.15824150323199773, "E_sat": -16.172403667396566,
+    "m_eff_ratio": 0.7615635771754136, "K_sat": 245.2196926301282,
+    "E_sym": 31.54573112181783, "L_sym": 47.07659754891122,
 }
 
 

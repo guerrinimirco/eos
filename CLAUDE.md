@@ -219,9 +219,10 @@ would be a second way to say one thing, reachable only by editing the call.
 This is not the implicit switch-off the paragraph above forbids: there the
 sector is off because a number *happens* to vanish and nothing says so; here
 the coupling IS the statement, named and documented as the sector's switch.
-The hidden-strange vector phi is the worked case — `dd2` reads the `x_phi`
-column of its hyperon couplings (`from_hyperon_potentials(x_phi=0.0)` builds a
-set without the sector), `sfho` reads `g_phi_N` and its SU(6) phi column, and
+The hidden-strange vector phi is the worked case — `dd2` and `sfho` read the
+hyperon `x_phi` column, which is SU(6) times a free factor per multiplet
+(`y_phi_Lambda = y_phi_Sigma = y_phi_Xi = 0` builds a set without the sector,
+and is what `sfho`'s `SFHo_2fam` is), `sfho` reads `g_phi_N` besides, and
 `did` derives `g_phi` from `(g~_omegaN, z)` by a map with no zero, which is how
 that model states the sector is structural. None of the three carries a flag
 for it.

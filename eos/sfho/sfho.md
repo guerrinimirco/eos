@@ -68,10 +68,10 @@ keys to builders:
 | key | contents |
 |---|---|
 | `SFHo_Nucleonic` | nucleons only, the CompOSE SFHo table. What `default()` returns, what `nmp.py` reports the published NMPs against, and what `test/baseline` is frozen at |
-| `SFHoY_Fortin` | + hyperons, scaled vector couplings (`y = 1.5`), scalar couplings from `U_Y` (Fortin et al. 2017) |
-| `SFHoY*_Fortin` | + hyperons, SU(6) vector couplings (same reference) |
+| `SFHoY_Fortin` | + hyperons, SU(6) omega and phi broken by `y = 1.5` (Lambda, Sigma) and `1.875` (Xi), scalar couplings from `U_Y` (Fortin et al. 2017) |
+| `SFHoY*_Fortin` | + hyperons, every breaking factor 1, i.e. SU(6) vector couplings (same reference) |
 | `SFHo_2fam_phi` | + hyperons and Deltas, SU(6) vectors, hyperons coupled to phi |
-| `SFHo_2fam` | as `SFHo_2fam_phi` with `g_phi = 0` for every strange baryon |
+| `SFHo_2fam` | as `SFHo_2fam_phi` with `y_phi = 0` in every multiplet, so `g_phi = 0` for every strange baryon |
 
 All five share the isoscalar and isovector couplings above; they differ only in
 which baryons are active and how those baryons couple.
@@ -100,12 +100,26 @@ on an eps wrong by up to 1.8 percent in asymmetric matter, which put E_sym at
 18.7 MeV instead of 31.6 and made L_sym negative. Every assembled state is now
 checked against `eps + P - T s = sum_i mu_i n_i` at 1e-8.
 
-**Extensions.** Hyperons: SU(6) vector ratios with the SFHoY enhancement
-y = 1.5 (Lambda, Sigma) and 1.875 (Xi) of Fortin, Oertel & Providência, PASA
-35 (2018) e044; scalar ratios either the published SFHoY values or inverted
-from the potentials U_Lambda = -30, U_Sigma = +30, U_Xi = -14 MeV in saturated
-symmetric matter. Deltas: universal vector coupling by default, or
-x_Delta_sigma from U_Delta. The thermal pseudoscalar nonet (pi, K, eta, eta')
+**Extensions.** Hyperons: the vector ratios are SU(6) times a free factor,
+`x_MY = y_MY * SU(6)`, nine of them over M = omega, rho, phi and
+Y = Lambda, Sigma, Xi, each an ordinary parameter defaulting to 1 (= SU(6),
+which is SFHoY*). SFHoY is `y_omega = y_phi = 1.5` for Lambda and Sigma and
+1.875 for Xi with every `y_rho = 1`: Fortin, Oertel & Providência, PASA 35
+(2018) e044 §2.2 rescales the omega AND phi hyperon couplings by those factors
+per multiplet and leaves rho at SU(6), and its Table 1 lists the result
+(R_omegaLambda = 1, R_omegaXi = 0.62, R_phiXi = -1.77). That set is why nine
+factors are needed and not three. `y_phi_*` multiplies a NEGATIVE ratio, so a
+factor above one makes g_phiY more negative; `y_phi_* = 0` in every multiplet
+is `SFHo_2fam`. Scalar ratios are either the published SFHoY values or
+inverted from the potentials U_Lambda = -30, U_Sigma = +30, U_Xi = -14 MeV in
+saturated symmetric matter — and that inversion runs AFTER the rescaling,
+since U_Y holds the scalar and vector couplings together. Which of the two is
+held, the depths or the ratios, is an explicit argument and never a default;
+`invert_nmp` demands it (`hold_hyperons=`) whenever its base carries hyperons,
+because the stored hyperon couplings are defined against nucleon couplings it
+moves. Deltas take no SU(6) factors: x_Delta_sigma, x_Delta_omega,
+x_Delta_rho are free variables directly (1.15, 1, 1), or x_Delta_sigma comes
+from U_Delta. The thermal pseudoscalar nonet (pi, K, eta, eta')
 enters as Bose gases whose effective potentials are shifted by the same vector
 mean fields (Lavagno 2010); the gas contributes charge and strangeness to the
 equilibrium constraints, no baryon number, and no field sources. Bose

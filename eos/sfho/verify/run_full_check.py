@@ -500,6 +500,46 @@ def _check_susceptibilities(hyp, n_B=0.8, T=10.0, rel=1e-4):
                        f"n_B={n_B:g} fm^-3, T={T:g} MeV, hyperons")
 
 
+def _check_hyperon_depths(hyp):
+    """SFHoY's SU(6)-breaking factors and its potential depths are one system.
+
+    U_Y = -g_sigmaY sigma + g_omegaY omega holds the scalar and vector
+    couplings TOGETHER, so a set whose vector couplings are SU(6) times a
+    factor is only consistent if the scalar couplings were inverted AFTER the
+    rescaling. Rebuild the shipped breaking set from its own nine factors and
+    its own published depths and require the depths back: the invariant is
+    that the two halves of the hyperon closure agree, not that any one number
+    is right. Fortin, Oertel & Providencia, PASA 35 (2018) e044, Table 1.
+    """
+    from dataclasses import replace
+    from eos.sfho.nmp import from_potential_depths, compute_hyperon_potentials
+
+    base = replace(Parameters.default(), **{
+        f"y_{meson}_{mult}": y
+        for mult, y in (("Lambda", 1.5), ("Sigma", 1.5), ("Xi", 1.875))
+        for meson in ("omega", "phi")})
+    rebuilt = from_potential_depths(U_Lambda_N=hyp.U_Lambda,
+                                    U_Sigma_N=hyp.U_Sigma,
+                                    U_Xi_N=hyp.U_Xi, base=base)
+    U = compute_hyperon_potentials(rebuilt)
+    targets = {"U_Lambda": hyp.U_Lambda, "U_Sigma": hyp.U_Sigma,
+               "U_Xi": hyp.U_Xi}
+    err = max(abs(U[k] - targets[k]) for k in targets)
+
+    # and the couplings land on the shipped set, to the rounding of its
+    # published six-digit R_sigma column
+    drift = max(
+        abs(rebuilt.get_coupling(h, m) - hyp.get_coupling(h, m))
+        / max(abs(hyp.get_coupling(h, m)), 1.0)
+        for h in ("lambda", "sigma+", "xi0")
+        for m in ("sigma", "omega", "rho", "phi"))
+    return CheckResult(
+        "hyperon depths vs SU(6) breaking", err < 1e-6 and drift < 1e-3,
+        max(err, drift),
+        f"U_Y held to {err:.1e} MeV, couplings within {drift:.1e} of "
+        f"{hyp.name}")
+
+
 # =============================================================================
 def run_full_check(par=None, hyp=None, grid=None):
     """Run the SFHo verification suite; returns a structured FullCheckReport."""
@@ -517,6 +557,7 @@ def run_full_check(par=None, hyp=None, grid=None):
     report.results.append(_check_jacobian(par, hyp))
     report.results.append(_check_susceptibilities(hyp))
     report.results.append(_check_nmp_roundtrip())
+    report.results.append(_check_hyperon_depths(hyp))
     return report
 
 

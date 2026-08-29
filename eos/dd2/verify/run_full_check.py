@@ -375,6 +375,47 @@ def _check_compose(par):
     return CheckResult("CompOSE HS(DD2)", m < 1e-3, m, "nucleonic T=1 Yq=0.5")
 
 
+def _check_hyperon_depths(par):
+    """The hyperon closure's two halves agree: SU(6) x y, then the depths.
+
+    U_Y = -Gamma_sigmaY sigma + Gamma_omegaY omega0 + Sigma^R holds the scalar
+    and vector couplings TOGETHER, so a set whose vector couplings are SU(6)
+    times a factor is only consistent if the scalar couplings were inverted
+    AFTER the rescaling. Invert on a broken base and require the depths back;
+    then check that y = 1 reproduces the published DD2Y vector column exactly
+    (Fortin, Oertel & Providencia, PASA 35 (2018) e044, Table 1).
+    """
+    from dataclasses import replace
+    from eos.dd2.couplings import SU6_HYPERON
+    from eos.dd2.nmp import from_hyperon_potentials
+
+    su6_exact = max(
+        max(abs(row[2] - SU6_HYPERON[name]["x_omega"]),
+            abs(row[3] - SU6_HYPERON[name]["x_rho"]),
+            abs(row[4] - SU6_HYPERON[name]["phi_over_omegaN"]))
+        for name, row in Parameters.named("DD2Y").hyperon_coupling_map.items())
+
+    depths = dict(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0)
+    broken = from_hyperon_potentials(
+        base=replace(par, y_omega_Lambda=1.5, y_phi_Lambda=1.5,
+                     y_omega_Xi=1.875, y_phi_Xi=1.875), **depths)
+    sat = solve_snm(broken, broken.n_sat)
+    Gs, Gw, _, _, _, _ = broken.couplings_at(broken.n_sat)
+    err = 0.0
+    for name, key in (("Lambda", "U_Lambda"), ("Sigma-", "U_Sigma"),
+                      ("Xi-", "U_Xi")):
+        _, x_sigma, x_omega, _, _ = broken.hyperon_coupling_map[name]
+        U = (-x_sigma * Gs * sat.matter.fields["sigma"]
+             + x_omega * Gw * sat.matter.fields["omega0"] + sat.matter.Sigma_R)
+        err = max(err, abs(U - depths[key]))
+
+    worst = max(err, su6_exact)
+    return CheckResult(
+        "hyperon depths vs SU(6) breaking", worst < 1e-8, worst,
+        f"U_Y held to {err:.1e} MeV on a broken base; DD2Y is SU(6) to "
+        f"{su6_exact:.1e}")
+
+
 def run_full_check(par=None, flags=None, grid=None):
     """
     Run the DD2 verification suite. Returns a FullCheckReport (structured
@@ -402,6 +443,7 @@ def run_full_check(par=None, flags=None, grid=None):
     report.results.append(_check_analytic_derivatives(par))
     report.results.append(_check_restarts_extend_the_basin(par))
     report.results.append(_check_compose(par))
+    report.results.append(_check_hyperon_depths(par))
     return report
 
 

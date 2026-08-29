@@ -99,6 +99,41 @@ DD2Y_HYPERON = {
     "Xi-": dict(mass=1321.68, R_sigma=0.32),
 }
 
+#: Which SU(6) multiplet each hyperon belongs to, and hence which of the nine
+#: breaking factors y_M_H scales its vector couplings.
+MULTIPLET = {
+    "Lambda": "Lambda", "Sigma+": "Sigma", "Sigma0": "Sigma",
+    "Sigma-": "Sigma", "Xi0": "Xi", "Xi-": "Xi",
+}
+
+
+def vector_ratios(name, y_omega, y_rho, y_phi):
+    """(x_omega, x_rho, x_phi) of hyperon `name`: SU(6) times a free factor.
+
+        x_omegaY = y_omega * SU6_HYPERON[name]["x_omega"]
+        x_rhoY   = y_rho   * SU6_HYPERON[name]["x_rho"]
+        x_phiY   = y_phi   * SU6_HYPERON[name]["phi_over_omegaN"]
+
+    SU(6) spin-flavour symmetry with ideal omega-phi mixing is a quark-model
+    ASSUMPTION, not a measurement, so each vertex carries a factor that a
+    sampler may vary; y = 1 is SU(6) exactly. Fortin, Oertel & Providencia,
+    PASA 35 (2018) e044 section 2.2 break it multiplet by multiplet in exactly
+    this form -- "g_MLambda = 1.5 g_MLambda(SU(6)), g_MSigma = 1.5
+    g_MSigma(SU(6)), g_MXi = 1.875 g_MXi(SU(6))" for M = omega and phi -- which
+    is the SFHoY set; DD2Y leaves every factor at 1.
+
+    **y_phi multiplies a NEGATIVE ratio** (-sqrt(2)/3 for Lambda and Sigma,
+    -2 sqrt(2)/3 for Xi), so y_phi > 1 makes g_phiY MORE negative, not more
+    repulsive-looking; the phi repulsion in matter goes as g_phiY^2 and grows
+    either way. `y_phi = 0` in every multiplet is how a hyperonic set is built
+    with no hidden-strange sector at all.
+    """
+    su6 = SU6_HYPERON[name]
+    return (su6["x_omega"] * y_omega,
+            su6["x_rho"] * y_rho,
+            su6["phi_over_omegaN"] * y_phi)
+
+
 #: Which measured potential each hyperon's scalar coupling is fitted to.
 _POTENTIAL_KEY = {
     "Lambda": "U_Lambda", "Sigma+": "U_Sigma", "Sigma0": "U_Sigma",

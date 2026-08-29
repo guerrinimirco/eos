@@ -62,6 +62,45 @@ SU6_RATIOS = {
 }
 
 
+#: Which SU(6) multiplet each hyperon belongs to, and hence which of the nine
+#: breaking factors y_M_H scales its vector couplings.
+MULTIPLET = {
+    'lambda': 'Lambda',
+    'sigma+': 'Sigma', 'sigma0': 'Sigma', 'sigma-': 'Sigma',
+    'xi0': 'Xi', 'xi-': 'Xi',
+}
+
+#: The key each multiplet carries in `SU6_RATIOS`.
+_SU6_KEY = {'Lambda': 'lambda', 'Sigma': 'sigma', 'Xi': 'xi'}
+
+
+def vector_ratios(multiplet, y_omega, y_rho, y_phi):
+    """(x_omega, x_rho, x_phi) of a hyperon multiplet: SU(6) times a factor.
+
+        x_omegaY = y_omega * SU6_RATIOS[..]['omega']
+        x_rhoY   = y_rho   * SU6_RATIOS[..]['rho']
+        x_phiY   = y_phi   * SU6_RATIOS[..]['phi']
+
+    SU(6) spin-flavour symmetry with ideal omega-phi mixing is a quark-model
+    ASSUMPTION, not a measurement, so each vertex carries a factor a sampler
+    may vary; y = 1 is SU(6) exactly, which is SFHoY*. SFHoY breaks it exactly
+    in this form: Fortin, Oertel & Providencia, PASA 35 (2018) e044 §2.2 reads
+    "we rescale the omega and phi-meson hyperon couplings as follows:
+    g_MLambda = 1.5 g_MLambda(SU(6)), g_MSigma = 1.5 g_MSigma(SU(6)),
+    g_MXi = 1.875 g_MXi(SU(6))" -- omega and phi, per multiplet, with rho left
+    at SU(6). Their Table 1 lists the result (R_omegaLambda = 1,
+    R_omegaXi = 0.62, R_phiXi = -1.77), which is where these factors are taken
+    from rather than from the arithmetic 1.5 x 2/3 = 1 coming out round.
+
+    **y_phi multiplies a NEGATIVE ratio** (-sqrt(2)/3 for Lambda and Sigma,
+    -2 sqrt(2)/3 for Xi), so y_phi > 1 makes g_phiY MORE negative, not more
+    repulsive-looking; the phi repulsion in matter goes as g_phiY^2 either
+    way. `y_phi = 0` in every multiplet is a set with no hidden-strange
+    sector at all -- which is what SFHo_2fam is.
+    """
+    su6 = SU6_RATIOS[_SU6_KEY[multiplet]]
+    return (su6['omega'] * y_omega, su6['rho'] * y_rho, su6['phi'] * y_phi)
+
 # =============================================================================
 # PARAMETER DATACLASS
 # =============================================================================
@@ -153,11 +192,51 @@ class Parameters:
     b_coeffs: np.ndarray = field(default_factory=lambda: np.zeros(4))
 
     # ---------------------------------------------------------
-    # 7. Coupling Ratios for Hyperons/Deltas
+    # 7. Couplings for Hyperons/Deltas
     # ---------------------------------------------------------
-    # couplings_map[particle_name][meson] = absolute coupling value
-    # Populated by factory functions
+    # couplings_map[particle_name][meson] = absolute coupling value, and it
+    # holds only what is FITTED: for a hyperon that is the scalar coupling
+    # alone, g_sigmaH, fixed by the potential depth U_H below. The three
+    # vector couplings are derived from SU(6) times the nine factors, by
+    # `get_coupling`, so a factor has one place to be changed. Deltas carry
+    # all four entries: their scalar has no measured depth in this model.
+    # An entry's PRESENCE is what declares the sector (see species.py).
     couplings_map: Dict[str, Dict[str, float]] = field(default_factory=dict)
+
+    #: Hyperon single-particle potentials in SNM at saturation [MeV], the
+    #: measurement the scalar couplings above are inverted from
+    #: (`nmp.from_potential_depths`). Fortin, Oertel & Providencia 2018 take
+    #: -30 / +30 / -14 for SFHoY and SFHoY*.
+    U_Lambda: float = -30.0
+    U_Sigma: float = 30.0
+    U_Xi: float = -14.0
+
+    #: SU(6)-breaking factors for the hyperon VECTOR couplings, one per
+    #: (meson, multiplet) pair: x_MY = y_M_Y * SU(6). y = 1 everywhere IS
+    #: SU(6), which is SFHoY*. Nine, not three, because SFHoY scales omega
+    #: AND phi by 1.5 / 1.5 / 1.875 while leaving rho at SU(6) -- a per-meson
+    #: factor could not express that, and nor could a per-multiplet one for a
+    #: set that broke omega and phi differently. `y_phi_*` multiplies a
+    #: NEGATIVE ratio; `y_phi_* = 0` is a set with no phi sector, which is
+    #: SFHo_2fam. See `vector_ratios`.
+    y_omega_Lambda: float = 1.0
+    y_omega_Sigma: float = 1.0
+    y_omega_Xi: float = 1.0
+    y_rho_Lambda: float = 1.0
+    y_rho_Sigma: float = 1.0
+    y_rho_Xi: float = 1.0
+    y_phi_Lambda: float = 1.0
+    y_phi_Sigma: float = 1.0
+    y_phi_Xi: float = 1.0
+
+    @property
+    def su6_breaking(self):
+        """{multiplet: (y_omega, y_rho, y_phi)} — the nine factors as a table."""
+        return {
+            'Lambda': (self.y_omega_Lambda, self.y_rho_Lambda, self.y_phi_Lambda),
+            'Sigma': (self.y_omega_Sigma, self.y_rho_Sigma, self.y_phi_Sigma),
+            'Xi': (self.y_omega_Xi, self.y_rho_Xi, self.y_phi_Xi),
+        }
 
     def get_coupling(self, particle_name: str, meson: str) -> float:
         """
@@ -169,14 +248,35 @@ class Parameters:
             
         Returns:
             Coupling constant (dimensionless)
+
+        A hyperon's three VECTOR couplings are not stored: they are SU(6)
+        times the breaking factor of that (meson, multiplet) pair, evaluated
+        here, so changing a factor moves the coupling with nothing else to
+        update. Changing a `y_omega_*` at fixed g_sigmaH MOVES the potential
+        depth, because U_H = -g_sigmaH sigma + g_omegaH omega holds both; to
+        hold the depth instead, re-run `nmp.from_potential_depths` on the
+        rescaled par. Which of the two is held is the caller's physics
+        (`nmp.invert_nmp`'s `hold_hyperons` argument).
         """
         p_name = particle_name.lower()
-        
-        # Check explicit coupling map first
+
+        # The coupling map holds what is fitted; the SU(6) table supplies the
+        # hyperon vector couplings around it.
         if p_name in self.couplings_map:
             if meson in self.couplings_map[p_name]:
                 return self.couplings_map[p_name][meson]
-        
+            if p_name in MULTIPLET:
+                mult = MULTIPLET[p_name]
+                x_omega, x_rho, x_phi = vector_ratios(
+                    mult, *self.su6_breaking[mult])
+                if meson == 'omega':
+                    return x_omega * self.g_omega_N
+                if meson == 'rho':
+                    return x_rho * self.g_rho_N
+                if meson == 'phi':
+                    return x_phi * self.g_omega_N
+            return 0.0
+
         # Handle nucleons
         if p_name in ['n', 'p', 'neutron', 'proton']:
             if meson == 'sigma':
@@ -388,165 +488,102 @@ def _nucleonic() -> Parameters:
 def _sfhoy_fortin() -> Parameters:
     """
     SFHoY parametrization from Fortin et al. 2017 (PASA 35, e044).
-    
+
     Features:
-    - Scaled vector couplings with y=1.5 enhancement for hyperons
-    - Scalar couplings computed from hyperon potential depths
+    - SU(6) vector couplings broken by y = 1.5 (Λ, Σ) and 1.875 (Ξ) on the
+      ω and φ vertices, ρ left at SU(6) — §2.2 of the reference
+    - Scalar couplings fitted to the hyperon potential depths
     - Supports M_max ≈ 2.0 M_sun for cold NS
-    
+
     Hyperon potential depths at saturation (SNM, n_sat = 0.158 fm⁻³):
     - U_Λ^(N) = -30 MeV
     - U_Σ^(N) = +30 MeV
     - U_Ξ^(N) = -14 MeV
-    
-    Vector coupling enhancement (y = 1.5):
-    - R_ωΛ = 1.5 × (2/3) = 1.0
-    - R_ωΣ = 1.5 × (2/3) = 1.0
-    - R_ωΞ = 1.875 × (1/3) = 0.625
+
+    The factors give the reference's Table 1 back:
+    - R_ωΛ = 1.5 × (2/3) = 1.0,  R_φΛ = 1.5 × (-√2/3) = -0.71
+    - R_ωΣ = 1.5 × (2/3) = 1.0,  R_φΣ = -0.71
+    - R_ωΞ = 1.875 × (1/3) = 0.625, R_φΞ = 1.875 × (-2√2/3) = -1.77
     """
     p = _get_base_sfho()
     p.name = "SFHoY_Fortin"
-    
-    # Lambda (uds)
-    # U_Λ = -30 MeV → R_σ = 0.8542, R_ω = 1.0 (y=1.5)
-    p.couplings_map['lambda'] = {
-        'sigma': 0.854315 * p.g_sigma_N,
-        'omega': 1.0 * p.g_omega_N,
-        'phi': (-SQRT2/3.0) * 1.5 * p.g_omega_N,  # y=1.5
-        'rho': 0.0,
-    }
-    
-    # Sigma (uus, uds, dds)
-    # U_Σ = +30 MeV → R_σ = 0.5861, R_ω = 1.0 (y=1.5)
-    sigma_couplings = {
-        'sigma': 0.586611 * p.g_sigma_N,
-        'omega': 1.0 * p.g_omega_N,
-        'phi': (-SQRT2/3.0) * 1.5 * p.g_omega_N,  # y=1.5
-        'rho': 2.0 * p.g_rho_N,
-    }
+    p.U_Lambda, p.U_Sigma, p.U_Xi = -30.0, 30.0, -14.0
+
+    # SU(6) broken on ω and φ, per multiplet (Fortin et al. 2018 §2.2).
+    p.y_omega_Lambda = p.y_phi_Lambda = 1.5
+    p.y_omega_Sigma = p.y_phi_Sigma = 1.5
+    p.y_omega_Xi = p.y_phi_Xi = 1.875
+
+    # The scalar couplings are the published fit to the depths above; the
+    # vector ones follow from the factors and are not stored.
+    p.couplings_map['lambda'] = {'sigma': 0.854315 * p.g_sigma_N}
     for name in ['sigma+', 'sigma0', 'sigma-']:
-        p.couplings_map[name] = sigma_couplings.copy()
-    
-    # Xi (uss, dss)
-    # U_Ξ = -14 MeV → R_σ = 0.5127, R_ω = 0.625 (y=1.875)
-    xi_couplings = {
-        'sigma': 0.512754 * p.g_sigma_N,
-        'omega': 0.625 * p.g_omega_N,
-        'phi': (-2.0*SQRT2/3.0) * 1.875 * p.g_omega_N,  # y=1.875
-        'rho': 1.0 * p.g_rho_N,
-    }
+        p.couplings_map[name] = {'sigma': 0.586611 * p.g_sigma_N}
     for name in ['xi0', 'xi-']:
-        p.couplings_map[name] = xi_couplings.copy()
-    
+        p.couplings_map[name] = {'sigma': 0.512754 * p.g_sigma_N}
+
     return p
 
 
 def _sfhoy_star_fortin() -> Parameters:
     """
     SFHoY* parametrization from Fortin et al. 2017.
-    
+
     Hyperon potential depths at saturation (SNM, n_sat = 0.158 fm⁻³):
     - U_Λ^(N) = -30 MeV
     - U_Σ^(N) = +30 MeV
     - U_Ξ^(N) = -14 MeV
-    
+
     Features:
-    - SU(6) vector couplings: R_ωΛ = R_ωΣ = 2/3, R_ωΞ = 1/3
+    - SU(6) vector couplings: every breaking factor is 1, so R_ωΛ = R_ωΣ =
+      2/3, R_ωΞ = 1/3
     - Scalar couplings from potential depths:
       - R_σΛ = 0.6142, R_σΣ = 0.3461, R_σΞ = 0.3026
     - Does NOT satisfy 2 M_sun constraint (M_max ≈ 1.75 M_sun)
     """
     p = _get_base_sfho()
     p.name = "SFHoY*_Fortin"
-    
-    # Lambda (uds) - SU(6) vectors
-    # U_Λ = -30 MeV → R_σ = 0.6142
-    p.couplings_map['lambda'] = {
-        'sigma': 0.614161 * p.g_sigma_N,
-        'omega': (2.0/3.0) * p.g_omega_N,
-        'phi': (-SQRT2/3.0) * p.g_omega_N,
-        'rho': 0.0,
-    }
-    
-    # Sigma - SU(6) vectors
-    # U_Σ = +30 MeV → R_σ = 0.3461
-    sigma_couplings = {
-        'sigma': 0.346456 * p.g_sigma_N,
-        'omega': (2.0/3.0) * p.g_omega_N,
-        'phi': (-SQRT2/3.0) * p.g_omega_N,
-        'rho': 2.0 * p.g_rho_N,
-    }
+    p.U_Lambda, p.U_Sigma, p.U_Xi = -30.0, 30.0, -14.0
+
+    p.couplings_map['lambda'] = {'sigma': 0.614161 * p.g_sigma_N}
     for name in ['sigma+', 'sigma0', 'sigma-']:
-        p.couplings_map[name] = sigma_couplings.copy()
-    
-    # Xi - SU(6) vectors
-    # U_Ξ = -14 MeV → R_σ = 0.3026
-    xi_couplings = {
-        'sigma': 0.302619 * p.g_sigma_N,
-        'omega': (1.0/3.0) * p.g_omega_N,
-        'phi': (-2.0*SQRT2/3.0) * p.g_omega_N,
-        'rho': 1.0 * p.g_rho_N,
-    }
+        p.couplings_map[name] = {'sigma': 0.346456 * p.g_sigma_N}
     for name in ['xi0', 'xi-']:
-        p.couplings_map[name] = xi_couplings.copy()
-    
+        p.couplings_map[name] = {'sigma': 0.302619 * p.g_sigma_N}
+
     return p
 
 
 def _two_family_phi() -> Parameters:
     """
     SFHoYD: SFHo with Hyperons and Deltas - includes phi meson coupling.
-    
+
     Hyperon potential depths at saturation (SNM, n_sat = 0.158 fm⁻³):
     - U_Λ^(N) = -28 MeV (different from SFHoY* which uses -30)
     - U_Σ^(N) = +30 MeV
     - U_Ξ^(N) = -18 MeV (different from SFHoY* which uses -14)
-    
+
     Features:
-    - SU(6) vector couplings: R_ωΛ = R_ωΣ = 2/3, R_ωΞ = 1/3
+    - SU(6) vector couplings: every breaking factor is 1, so R_ωΛ = R_ωΣ =
+      2/3, R_ωΞ = 1/3
     - Scalar couplings from potential depths:
       - R_σΛ = 0.6052, R_σΣ = 0.3461, R_σΞ = 0.3205
     - Delta couplings: R_σ = 1.15, R_ω = 1, R_ρ = 1, R_φ = 0
     - Hyperons couple to phi meson (hidden strangeness)
-    
+
     This is the SFHoYD parametrization used in Mathematica.
     """
     p = _get_base_sfho()
     p.name = "SFHo_2fam_phi"
-    
-    # Lambda (uds) - SU(6) vectors
-    # U_Λ = -28 MeV → R_σ = 0.6052
-    p.couplings_map['lambda'] = {
-        'sigma': 0.605237 * p.g_sigma_N,
-        'omega': (2.0/3.0) * p.g_omega_N,
-        'phi': (-SQRT2/3.0) * p.g_omega_N,
-        'rho': 0.0,
-    }
-    
-    # Sigma - SU(6) vectors
-    # U_Σ = +30 MeV → R_σ = 0.3461
-    sigma_couplings = {
-        'sigma': 0.346456 * p.g_sigma_N,
-        'omega': (2.0/3.0) * p.g_omega_N,
-        'phi': (-SQRT2/3.0) * p.g_omega_N,
-        'rho': 2.0 * p.g_rho_N,
-    }
+    p.U_Lambda, p.U_Sigma, p.U_Xi = -28.0, 30.0, -18.0
+
+    p.couplings_map['lambda'] = {'sigma': 0.605237 * p.g_sigma_N}
     for name in ['sigma+', 'sigma0', 'sigma-']:
-        p.couplings_map[name] = sigma_couplings.copy()
-    
-    # Xi - SU(6) vectors
-    # U_Ξ = -18 MeV → R_σ = 0.3205
-    xi_couplings = {
-        'sigma': 0.320466 * p.g_sigma_N,
-        'omega': (1.0/3.0) * p.g_omega_N,
-        'phi': (-2.0*SQRT2/3.0) * p.g_omega_N,
-        'rho': 1.0 * p.g_rho_N,
-    }
+        p.couplings_map[name] = {'sigma': 0.346456 * p.g_sigma_N}
     for name in ['xi0', 'xi-']:
-        p.couplings_map[name] = xi_couplings.copy()
-    
-    # Add Delta couplings
-    # R_σ = 1.15, R_ω = 1.0, R_φ = 0, R_ρ = 1.0
+        p.couplings_map[name] = {'sigma': 0.320466 * p.g_sigma_N}
+
+    # Deltas: no measured depth in this model, so all four are stored.
     delta_couplings = {
         'sigma': 1.15 * p.g_sigma_N,
         'omega': 1.0 * p.g_omega_N,
@@ -555,121 +592,25 @@ def _two_family_phi() -> Parameters:
     }
     for name in ['delta++', 'delta+', 'delta0', 'delta-']:
         p.couplings_map[name] = delta_couplings.copy()
-    
+
     return p
 
 
 def _two_family() -> Parameters:
     """
     SFHo with Hyperons and Deltas - NO phi meson coupling (2-family without phi).
-    
+
     Features:
-    - SFHoY scalar couplings for hyperons
-    - SFHoY vector couplings (omega, rho) for hyperons
-    - g_phi = 0 for ALL hyperons (no hidden strangeness coupling)
+    - SFHo_2fam_phi scalar couplings for hyperons
+    - SU(6) ω and ρ couplings for hyperons
+    - g_phi = 0 for ALL hyperons: the three y_phi factors are zero, which is
+      the statement that the hidden-strange sector is absent (CLAUDE.md §4 —
+      the sector is controlled by its coupling, and there is no flag)
     - Delta couplings: R_σ = 1.15, R_ω = 1, R_ρ = 1, R_φ = 0
-    
-    This is the same as 2fam_phi but with phi meson couplings set to zero
-    for all strange baryons.
     """
     p = _two_family_phi()
     p.name = "SFHo_2fam"
-    
-    # Set phi coupling to zero for all hyperons
-    for particle in ['lambda', 'sigma+', 'sigma0', 'sigma-', 'xi0', 'xi-']:
-        if particle in p.couplings_map:
-            p.couplings_map[particle]['phi'] = 0.0
-    
-    return p
-
-
-
-
-def from_coupling_ratios(
-    x_sigma_lambda: float = 0.85,
-    x_sigma_sigma: float = 0.58,
-    x_sigma_xi: float = 0.51,
-    x_sigma_delta: float = 1.15,
-    x_omega_delta: float = 1.0,
-    x_rho_delta: float = 1.0,
-    use_scaled_vectors: bool = True,
-    name: str = "SFHo_General"
-) -> Parameters:
-    """
-    General SFHo parametrization with customizable couplings.
-    
-    Scalar couplings (x_sigma_*) are free parameters.
-    Vector couplings for hyperons use either:
-    - Scaled values (use_scaled_vectors=True, like SFHoY)
-    - SU(6) values (use_scaled_vectors=False, like SFHoY*)
-    
-    Delta vector couplings are also customizable.
-    
-    Args:
-        x_sigma_lambda: R_σΛ = g_σΛ/g_σN
-        x_sigma_sigma: R_σΣ = g_σΣ/g_σN  
-        x_sigma_xi: R_σΞ = g_σΞ/g_σN
-        x_sigma_delta: R_σΔ = g_σΔ/g_σN
-        x_omega_delta: R_ωΔ = g_ωΔ/g_ωN
-        x_rho_delta: R_ρΔ = g_ρΔ/g_ρN
-        use_scaled_vectors: If True, use SFHoY vectors; else SU(6)
-        name: Identifier for the parametrization
-        
-    Returns:
-        Parameters with specified couplings
-    """
-    p = _get_base_sfho()
-    p.name = name
-    
-    if use_scaled_vectors:
-        # Scaled vector ratios (SFHoY-like)
-        vec_lambda = {'omega': 1.0, 'phi': -0.71, 'rho': 0.0}
-        vec_sigma = {'omega': 1.0, 'phi': -0.71, 'rho': 2.0}
-        vec_xi = {'omega': 0.62, 'phi': -1.77, 'rho': 1.0}
-    else:
-        # SU(6) vector ratios
-        vec_lambda = SU6_RATIOS['lambda'].copy()
-        vec_sigma = SU6_RATIOS['sigma'].copy()
-        vec_xi = SU6_RATIOS['xi'].copy()
-    
-    # Lambda
-    p.couplings_map['lambda'] = {
-        'sigma': x_sigma_lambda * p.g_sigma_N,
-        'omega': vec_lambda['omega'] * p.g_omega_N,
-        'phi': vec_lambda['phi'] * p.g_omega_N,
-        'rho': vec_lambda['rho'] * p.g_rho_N if vec_lambda['rho'] != 0 else 0.0,
-    }
-    
-    # Sigma
-    sigma_couplings = {
-        'sigma': x_sigma_sigma * p.g_sigma_N,
-        'omega': vec_sigma['omega'] * p.g_omega_N,
-        'phi': vec_sigma['phi'] * p.g_omega_N,
-        'rho': vec_sigma['rho'] * p.g_rho_N,
-    }
-    for name_s in ['sigma+', 'sigma0', 'sigma-']:
-        p.couplings_map[name_s] = sigma_couplings.copy()
-    
-    # Xi
-    xi_couplings = {
-        'sigma': x_sigma_xi * p.g_sigma_N,
-        'omega': vec_xi['omega'] * p.g_omega_N,
-        'phi': vec_xi['phi'] * p.g_omega_N,
-        'rho': vec_xi['rho'] * p.g_rho_N,
-    }
-    for name_x in ['xi0', 'xi-']:
-        p.couplings_map[name_x] = xi_couplings.copy()
-    
-    # Delta
-    delta_couplings = {
-        'sigma': x_sigma_delta * p.g_sigma_N,
-        'omega': x_omega_delta * p.g_omega_N,
-        'phi': 0.0,  # No strangeness
-        'rho': x_rho_delta * p.g_rho_N,
-    }
-    for name_d in ['delta++', 'delta+', 'delta0', 'delta-']:
-        p.couplings_map[name_d] = delta_couplings.copy()
-    
+    p.y_phi_Lambda = p.y_phi_Sigma = p.y_phi_Xi = 0.0
     return p
 
 
@@ -694,12 +635,12 @@ def print_params_summary(params: Parameters) -> None:
     print(f"  c4 = {params.c4:.4e}")
     
     if params.couplings_map:
-        print("\nHyperon/Delta coupling ratios (R = g_MH / g_MN):")
-        for particle, couplings in params.couplings_map.items():
-            Rs = couplings['sigma'] / params.g_sigma_N
-            Rw = couplings['omega'] / params.g_omega_N
-            Rr = couplings['rho'] / params.g_rho_N if couplings['rho'] != 0 else 0
-            Rp = couplings['phi'] / params.g_omega_N if couplings['phi'] != 0 else 0
+        print("\nHyperon/Delta coupling ratios (R = g_MH / g_MN, φ over g_ωN):")
+        for particle in params.couplings_map:
+            Rs = params.get_coupling(particle, 'sigma') / params.g_sigma_N
+            Rw = params.get_coupling(particle, 'omega') / params.g_omega_N
+            Rr = params.get_coupling(particle, 'rho') / params.g_rho_N
+            Rp = params.get_coupling(particle, 'phi') / params.g_omega_N
             print(f"  {particle:10s}: R_σ={Rs:.3f}, R_ω={Rw:.3f}, R_ρ={Rr:.3f}, R_φ={Rp:.3f}")
 
 
@@ -709,12 +650,14 @@ def print_params_summary(params: Parameters) -> None:
 #: (CLAUDE.md section 6). Reach them through `Parameters.named(...)`.
 #:
 #:   SFHo_Nucleonic   nucleons only, the CompOSE SFHo table; `default()`.
-#:   SFHoY_Fortin     + hyperons, scaled vector couplings (y = 1.5), scalar
-#:                    couplings from U_Y (Fortin et al. 2017).
-#:   SFHoY*_Fortin    + hyperons, SU(6) vector couplings (same reference).
+#:   SFHoY_Fortin     + hyperons, SU(6) omega and phi broken by y = 1.5 (Λ, Σ)
+#:                    and 1.875 (Ξ), scalar couplings from U_Y (Fortin 2017).
+#:   SFHoY*_Fortin    + hyperons, every breaking factor 1, i.e. SU(6) vector
+#:                    couplings (same reference).
 #:   SFHo_2fam_phi    + hyperons and Deltas, SU(6) vectors, hyperons coupled
 #:                    to phi.
-#:   SFHo_2fam        as SFHo_2fam_phi with g_phi = 0 for every strange baryon.
+#:   SFHo_2fam        as SFHo_2fam_phi with y_phi = 0 in every multiplet, so
+#:                    g_phi = 0 for every strange baryon.
 PUBLISHED_SETS = {
     'SFHo_Nucleonic': _nucleonic,
     'SFHoY_Fortin': _sfhoy_fortin,
@@ -735,18 +678,6 @@ if __name__ == "__main__":
     for name in PUBLISHED_SETS:
         print(f"\n{'='*70}")
         print_params_summary(Parameters.named(name))
-    
-    # Test general parametrization
-    print(f"\n{'='*70}")
-    p_general = from_coupling_ratios(
-        x_sigma_lambda=0.7,
-        x_sigma_sigma=0.5,
-        x_sigma_xi=0.4,
-        x_sigma_delta=1.2,
-        use_scaled_vectors=True,
-        name="Custom_Test"
-    )
-    print_params_summary(p_general)
     
     # Verify coupling retrieval
     print("\n" + "=" * 70)

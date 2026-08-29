@@ -37,7 +37,7 @@ from eos.zl import (
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
     thermo_from_mu_n,
 )
-from eos.zl.nmp import compute_nmp
+from eos.zl.nmp import compute_nmp, PUBLISHED_NMP
 
 #: The sectors this suite solves at. `photons=True` throughout, because
 #: `_matter_only` below subtracts exactly one photon gas off every state: the
@@ -299,10 +299,11 @@ def _check_no_strangeness(par):
 def _check_nmp(par):
     """The forward NMP map reproduces the published Constantinou et al. set.
 
-    n_sat = 0.15951 fm^-3, E_sat = -16.00, K_sat = 250.2, E_sym = 30.85,
-    L_sym = 41.26 MeV. These are quoted in `parameters.py` and in `zl.tex`;
-    until `nmp.py` existed nothing in the repository reproduced them, so they
-    were provenance rather than a check.
+    The quote is `nmp.PUBLISHED_NMP` -- n_sat = 0.15951 fm^-3, E_sat = -16.00,
+    K_sat = 250.2, E_sym = 30.85, L_sym = 41.26 MeV -- read from there rather
+    than restated, so the numbers cannot drift apart. It is also quoted in
+    `parameters.py` and in `zl.tex`; until `nmp.py` existed nothing in the
+    repository reproduced it, so it was provenance rather than a check.
 
     Every one is a PREDICTION -- ZL imposes no saturation condition, so n_sat
     is found from P = 0 rather than declared. The tolerances are the published
@@ -313,14 +314,14 @@ def _check_nmp(par):
     published set, and a check cannot assert a number nobody published.
     """
     got = compute_nmp(par)
-    want = {"n_sat": (0.15951, 5e-5), "E_sat": (-16.00, 5e-3),
-            "K_sat": (250.2, 5e-2), "E_sym": (30.85, 5e-3),
-            "L_sym": (41.26, 2e-2)}
+    tol = {"n_sat": 5e-5, "E_sat": 5e-3, "K_sat": 5e-2,
+           "E_sym": 5e-3, "L_sym": 2e-2}
     worst, failed = 0.0, []
-    for name, (target, tol) in want.items():
+    for name, target in PUBLISHED_NMP.items():
+        tol_name = tol[name]
         delta = abs(got[name] - target)
-        worst = max(worst, delta / tol)
-        if delta > tol:
+        worst = max(worst, delta / tol_name)
+        if delta > tol_name:
             failed.append(f"{name}={got[name]:.5f} vs {target} (|d|={delta:.2e})")
     passed = not failed
     return CheckResult("nuclear-matter parameters", passed, worst,

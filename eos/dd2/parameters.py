@@ -24,7 +24,8 @@ from dataclasses import dataclass
 from eos.general.physics_constants import hc3
 from eos.dd2.couplings import (
     rational_f, rational_df, exponential_f, derived_a, derived_d,
-    SU6_HYPERON, DD2Y_HYPERON, _POTENTIAL_KEY, scalar_ratio_from_potential,
+    SU6_HYPERON, DD2Y_HYPERON, MULTIPLET, vector_ratios,
+    _POTENTIAL_KEY, scalar_ratio_from_potential,
 )
 
 #: Ingest-identity tolerance: the published table obeys the internal
@@ -58,12 +59,30 @@ class Parameters:
     U_Lambda: float = -30.0
     U_Sigma: float = 30.0
     U_Xi: float = -18.0          # DD2Y (Marques 2017); -14 is SFHoY
-    #: Per-hyperon coupling data, hashable tuple of rows
-    #: (name, mass [MeV], x_sigma, x_omega, x_rho, x_phi); empty for
-    #: nucleon-only params. All x_i are ratios g_iY/g_iN inheriting the nucleon
-    #: density dependence f_i(x); x_phi = g_phiY/g_omegaN inherits f_omega, so
-    #: Gamma_phiY(n_B) = x_phi * Gamma_omegaN(n_B) (DD2Y: density-dependent φ).
+    #: Per-hyperon SCALAR coupling data, hashable tuple of rows
+    #: (name, mass [MeV], x_sigma); empty for nucleon-only params. x_sigma =
+    #: g_sigmaY/g_sigmaN is the one hyperon ratio fitted to a measurement --
+    #: the single-particle potential U_Y above -- and so the one that is
+    #: stored. The VECTOR ratios are not stored: they are SU(6) times the nine
+    #: factors below, read through `hyperon_coupling_map`.
     hyperon_couplings: tuple = ()
+    #: SU(6)-breaking factors for the hyperon VECTOR couplings, one per
+    #: (meson, multiplet) pair: x_MY = y_M_Y * SU(6). y = 1 everywhere IS
+    #: SU(6), which is DD2Y. Nine, not three, because a published set may
+    #: break omega and phi differently from rho -- SFHoY leaves rho at SU(6)
+    #: while scaling omega and phi (Fortin, Oertel & Providencia 2018 §2.2).
+    #: `y_phi_*` multiplies a NEGATIVE ratio, so a factor above one makes
+    #: g_phiY more negative; `y_phi_* = 0` is a set with no phi sector at all.
+    #: See `couplings.vector_ratios`.
+    y_omega_Lambda: float = 1.0
+    y_omega_Sigma: float = 1.0
+    y_omega_Xi: float = 1.0
+    y_rho_Lambda: float = 1.0
+    y_rho_Sigma: float = 1.0
+    y_rho_Xi: float = 1.0
+    y_phi_Lambda: float = 1.0
+    y_phi_Sigma: float = 1.0
+    y_phi_Xi: float = 1.0
     #: Δ-isobar coupling ratios x_iΔ = Γ_iΔ/Γ_iN (; free params,
     #: literature x_Δσ~1.0–1.3, x_Δω~1.0). Δ has S=0, so no φ coupling.
     #: Inert unless SpeciesFlags.deltas is on. Defaults: Δ couples like the
@@ -120,9 +139,37 @@ class Parameters:
         return 0.5 * (self.m_n + self.m_p)
 
     @property
+    def su6_breaking(self):
+        """{multiplet: (y_omega, y_rho, y_phi)} — the nine factors as a table."""
+        return {
+            "Lambda": (self.y_omega_Lambda, self.y_rho_Lambda, self.y_phi_Lambda),
+            "Sigma": (self.y_omega_Sigma, self.y_rho_Sigma, self.y_phi_Sigma),
+            "Xi": (self.y_omega_Xi, self.y_rho_Xi, self.y_phi_Xi),
+        }
+
+    @property
     def hyperon_coupling_map(self):
-        """{name: (mass, x_sigma, x_omega, x_rho, x_phi)} from the tuple."""
-        return {row[0]: row[1:] for row in self.hyperon_couplings}
+        """{name: (mass, x_sigma, x_omega, x_rho, x_phi)}.
+
+        x_sigma comes from the stored row; the three vector ratios are
+        derived, SU(6) times the breaking factor of that (meson, multiplet)
+        pair, so changing a factor moves the coupling with no second place to
+        update. x_phi = g_phiY/g_omegaN inherits f_omega, so
+        Gamma_phiY(n_B) = x_phi * Gamma_omegaN(n_B) (DD2Y: density-dependent φ).
+
+        Changing a `y_omega_*` at fixed x_sigma MOVES the potential depth U_Y,
+        because U_Y = -Gamma_sigmaY σ + Gamma_omegaY ω0 + Σ^R holds both
+        couplings. Re-run `nmp.from_hyperon_potentials` on the rescaled par to
+        hold the depths instead; which of the two is held is the caller's
+        physics, and is that function's `hold` argument.
+        """
+        y = self.su6_breaking
+        out = {}
+        for name, mass, x_sigma in self.hyperon_couplings:
+            y_omega, y_rho, y_phi = y[MULTIPLET[name]]
+            x_omega, x_rho, x_phi = vector_ratios(name, y_omega, y_rho, y_phi)
+            out[name] = (mass, x_sigma, x_omega, x_rho, x_phi)
+        return out
 
     @property
     def has_phi_coupling(self):
@@ -130,11 +177,13 @@ class Parameters:
         True when some hyperon carries a nonzero hidden-strange ratio
         x_phi = g_phiY/g_omegaN. This is what turns the phi field on: the
         sector is carried by its coupling, not by a separate boolean, so
-        `x_phi = 0` in every row IS the statement that there is no phi
-        (`nmp.from_hyperon_potentials(x_phi=0.0)` builds such a set). Nucleons
-        do not couple to the phi, so a par with no hyperon rows has none.
+        `y_phi_Lambda = y_phi_Sigma = y_phi_Xi = 0` IS the statement that
+        there is no phi sector, since x_phiY = y_phi * SU(6) and the SU(6)
+        column has no zero in it. Nucleons do not couple to the phi, so a par
+        with no hyperon rows has none.
         """
-        return any(row[5] != 0.0 for row in self.hyperon_couplings)
+        return any(row[4] != 0.0
+                   for row in self.hyperon_coupling_map.values())
 
     # ------------------------------------------------------------- couplings
     def couplings_at(self, n_B):
@@ -247,13 +296,9 @@ class Parameters:
         For non-DD2Y potentials, use `eos.dd2.nmp.from_hyperon_potentials`.
         """
         from dataclasses import replace
-        rows = []
-        for name, su6 in SU6_HYPERON.items():
-            dd2y = DD2Y_HYPERON[name]
-            rows.append((name, dd2y["mass"], dd2y["R_sigma"],
-                         su6["x_omega"], su6["x_rho"], su6["phi_over_omegaN"]))
-        return replace(cls.default(),
-                       hyperon_couplings=tuple(rows))
+        rows = [(name, DD2Y_HYPERON[name]["mass"], DD2Y_HYPERON[name]["R_sigma"])
+                for name in SU6_HYPERON]
+        return replace(cls.default(), hyperon_couplings=tuple(rows))
 
 
 def _check_dd2_defaults():

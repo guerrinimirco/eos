@@ -40,6 +40,7 @@ from eos.zl.api import (
 from eos.zl.nmp import (
     compute_nmp, energy_per_baryon, from_nmp, invert_nmp, nuclear_matter,
     pressure, saturation_density, symmetry_energy,
+    PUBLISHED_NMP, PUBLISHED_NMP_EXACT,
 )
 
 __all__ = [
@@ -56,6 +57,7 @@ __all__ = [
     "nucleon_row", "solve_at", "TableSettings", "compute_table",
     "save_results",
     "compute_nmp", "invert_nmp", "from_nmp", "nuclear_matter",
+    "PUBLISHED_NMP", "PUBLISHED_NMP_EXACT",
     "energy_per_baryon", "pressure", "saturation_density", "symmetry_energy",
     "eos_point", "eos_table", "eos_response", "PointResult",
     "RESPONSE_FREEZES",

@@ -262,8 +262,9 @@ both for Xi, with rho left at SU(6) (`sfho/parameters.py:391-410`), which
 neither a per-meson nor a per-multiplet factor can express. **The Delta sector
 takes no factors**: `x_Delta_sigma`, `x_Delta_omega`, `x_Delta_rho` are free
 variables directly. Carried to
-[ticket 112](112-su6-vector-ratios-as-parameters.md), which unblocks
-[ticket 106](106-su6-breaking-rescaling.md).
+[ticket 112](112-su6-vector-ratios-as-parameters.md), which shipped it on
+2026-08-29 and folded [ticket 106](106-su6-breaking-rescaling.md) in, closing
+that one as superseded rather than unblocking it.
 
 ### Q8 -- `E_sym` means the CompOSE definition, checked at the source
 
@@ -311,7 +312,8 @@ sector as a separate closure, and the section-6 boundary sentence.
 Code changes were out of scope by the ticket's own last line. Raised:
 
 - [112](112-su6-vector-ratios-as-parameters.md) SU(6) factors as parameters,
-  Delta ratios free -- unblocks [106](106-su6-breaking-rescaling.md)
+  Delta ratios free -- shipped 2026-08-29, subsuming
+  [106](106-su6-breaking-rescaling.md)
 - [113](113-did-parameter-provenance.md) DID parameter provenance
 - [114](114-nmp-api-conformance.md) dd2's `from_nmp` raises; full-precision
   published quotes in all three

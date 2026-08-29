@@ -1282,15 +1282,17 @@ decision that cannot be made before the tables exist.
   value from 0.051 to 0.0063. That is a statement about what saturation
   constrains, not about numerics, so no derivative work reopens it.
 
-  The hyperon and Delta sectors are NOT refitted by the inversion. Their
-  couplings are stored as absolute values derived from ratios against the
-  NUCLEON couplings, which the inversion has just changed, so a parameter set
-  inverted from a base carrying hyperons keeps hyperon couplings that no
-  longer correspond to the potential depths they were built from.
-  `from_potential_depths` has to be re-run on the result to hold
-  U_Lambda, U_Sigma, U_Xi. The docstring says so; folding it in automatically
-  would mean deciding whether the depths or the ratios are the thing held,
-  and that is the caller's physics.
+  The hyperon sector's refit is now an ARGUMENT rather than a gap (ticket
+  112, 2026-08-29). Hyperon couplings are stored as absolute values derived
+  from ratios against the NUCLEON couplings, which the inversion changes, so
+  the depths and the ratios cannot both survive it. `invert_nmp` therefore
+  REFUSES to run on a base carrying hyperons unless told which to hold:
+  `hold_hyperons='ratios'` keeps g_sigma_H/g_sigma_N and lets U_Y move,
+  `hold_hyperons='depths'` keeps U_Lambda/U_Sigma/U_Xi and re-inverts the
+  scalar couplings through `from_potential_depths` on the new nucleon sector.
+  A nucleonic base has no such question and needs no answer. What is NOT
+  deferred any more is the choice; what remains a modelling statement is that
+  neither is a default.
 
   The closure has a second branch, and it is refused rather than returned.
   E_sym's potential term is n g_rho^2 / [8 (m_rho^2 + 2A)] with A = g_rho^2 f,

@@ -139,15 +139,44 @@ $a_6$ & $\phantom{-}4.05497\times 10^{-10}$ & MeV$^{-4}$ & & & \\
 \end{table}
 
 Non-nucleonic baryons carry their own constant couplings, stored as ratios of
-the nucleon ones. The vector sector is SU(6) with an optional overall
-enhancement $y$ (the SFHoY choice of Ref.~\cite{Fortin2017}, $y = 1.5$ for
-$\Lambda, \Sigma$ and $1.875$ for $\Xi$):
-$g_{\omega Y}/g_{\omega N} = y \times \{2/3,\, 2/3,\, 1/3\}$ and
-$g_{\phi Y}/g_{\omega N} = y \times \{-\sqrt2/3,\, -\sqrt2/3,\, -2\sqrt2/3\}$
-for $\{\Lambda, \Sigma, \Xi\}$, with
-$g_{\rho Y}/g_{\rho N} = \{0,\, 2,\, 1\}$. The scalar ratios are either the
-published SFHoY values or inverted from the hyperon single-particle potentials
-in symmetric matter at saturation,
+the nucleon ones. The vector ratios are SU(6) times a free factor, one per
+(meson, multiplet) pair,
+%
+\begin{equation}
+x_{M Y} = y_{M Y}\, x_{M Y}^{\mathrm{SU(6)}},
+\qquad M \in \{\omega, \rho, \phi\},\quad
+Y \in \{\Lambda, \Sigma, \Xi\},
+\label{eq:su6break}
+\end{equation}
+%
+with $x^{\mathrm{SU(6)}}_{\omega Y} = g_{\omega Y}/g_{\omega N}
+ = \{2/3,\, 2/3,\, 1/3\}$,
+$x^{\mathrm{SU(6)}}_{\rho Y} = g_{\rho Y}/g_{\rho N} = \{0,\, 2,\, 1\}$ and
+$x^{\mathrm{SU(6)}}_{\phi Y} = g_{\phi Y}/g_{\omega N}
+ = \{-\sqrt2/3,\, -\sqrt2/3,\, -2\sqrt2/3\}$ for $\{\Lambda, \Sigma, \Xi\}$.
+
+The nine $y_{M Y}$ are ordinary parameters, each defaulting to $1$, which is
+SU(6) exactly and is SFHoY$^*$; SU(6) spin-flavour symmetry with ideal
+$\omega$--$\phi$ mixing is a quark-model assumption rather than a measurement,
+so an inference run must be able to vary them. SFHoY is
+$y_{\omega\Lambda} = y_{\phi\Lambda} = y_{\omega\Sigma} = y_{\phi\Sigma}
+ = 1.5$ and $y_{\omega\Xi} = y_{\phi\Xi} = 1.875$ with every $y_{\rho Y} = 1$:
+Ref.~\cite{Fortin2017} \S2.2 rescales the $\omega$ and $\phi$ hyperon
+couplings as $g_{M\Lambda} = 1.5\, g_{M\Lambda}^{\mathrm{SU(6)}}$,
+$g_{M\Sigma} = 1.5\, g_{M\Sigma}^{\mathrm{SU(6)}}$,
+$g_{M\Xi} = 1.875\, g_{M\Xi}^{\mathrm{SU(6)}}$, and its Table~1 lists the
+result ($R_{\omega\Lambda} = 1$, $R_{\omega\Xi} = 0.62$,
+$R_{\phi\Xi} = -1.77$). That set is why nine factors are needed and not three:
+$\rho$ is untouched while $\omega$ and $\phi$ are not, which neither a
+per-meson nor a per-multiplet factor can express. Note that $y_{\phi Y}$
+multiplies a \emph{negative} ratio, so $y_{\phi Y} > 1$ makes $g_{\phi Y}$
+more negative; $y_{\phi\Lambda} = y_{\phi\Sigma} = y_{\phi\Xi} = 0$ is a
+parametrization with no hidden-strange sector at all, which is
+\texttt{SFHo\_2fam} and is how that sector is switched off, there being no
+flag for it.
+
+The scalar ratios are either the published SFHoY values or inverted from the
+hyperon single-particle potentials in symmetric matter at saturation,
 %
 \begin{equation}
 U_Y(\nsat) = -g_{\sigma Y}\, \bar\sigma + g_{\omega Y}\, \bar\omega
@@ -157,9 +186,19 @@ U_Y(\nsat) = -g_{\sigma Y}\, \bar\sigma + g_{\omega Y}\, \bar\omega
 \end{equation}
 %
 one linear equation per hyperon --- and, unlike DD2, with no $\Sigma^R$ in it.
-The $\Delta$ quartet has no canonical SFHo coupling table: the default is
-universal vector coupling ($g_{\Delta i} = g_{Ni}$), or $g_{\sigma\Delta}$ is
-fixed by the same inversion from a chosen $U_\Delta$.
+Equation~\eqref{eq:UY} contains $g_{\omega Y}$, so the scalar coupling that
+reproduces a given depth depends on the vector one: the inversion is run
+\emph{after} Eq.~\eqref{eq:su6break}, and rescaling a $y_{\omega Y}$ on a set
+whose scalar couplings are already fixed moves $U_Y$ instead. Which of the two
+is held --- the depths or the ratios --- is the caller's physics and is an
+explicit argument, never a default; it is also what an inversion of the
+nucleon sector has to be told, since the hyperon couplings are stored
+absolutely and are defined against nucleon couplings such an inversion moves.
+
+The $\Delta$ quartet has no canonical SFHo coupling table and takes no SU(6)
+factors: its three ratios $x_{\Delta\sigma}$, $x_{\Delta\omega}$,
+$x_{\Delta\rho}$ are free variables directly, defaulting to $1.15$, $1$ and
+$1$.
 
 \section{Mean fields and thermodynamics}
 \label{sec:fields}

@@ -30,6 +30,7 @@ from eos.general.table_io import save_table, load_table, export_csv
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp import snm_derivatives
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
+from eos.dd2.nmp import PUBLISHED_NMP, PUBLISHED_NMP_EXACT
 from eos.dd2.nmp import from_hyperon_potentials, from_delta_potential
 from eos.dd2.nmp import build_parametrization, SECTOR_KEYS
 from eos.dd2.responses import (
@@ -52,6 +53,7 @@ __all__ = [
     "Parameters", "SpeciesFlags", "active_baryons",
     "hadronic_qn", "hadronic_charges",
     "invert_nmp", "from_nmp", "InversionStatus",
+    "PUBLISHED_NMP", "PUBLISHED_NMP_EXACT",
     "from_hyperon_potentials", "from_delta_potential",
     "build_parametrization", "SECTOR_KEYS",
     "EoSPoint", "nucleon_warm_start", "warm_start",

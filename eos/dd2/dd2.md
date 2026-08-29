@@ -91,11 +91,21 @@ is the term §11 forbids naming without defining. Every assembled state is
 checked against the Hugenholtz–Van Hove identity
 `eps + P - T s = sum_i mu_i n_i` at 1e-8.
 
-**Extensions.** Hyperons: SU(6) vector ratios; scalar ratios either the
-published DD2Y values (Marques et al. 2017; Fortin et al. 2017) or inverted
-from the potentials U_Lambda, U_Sigma, U_Xi in saturated symmetric matter.
-The phi inherits the omega density dependence. Deltas: ratio couplings,
-default universal, or x_Delta_sigma from U_Delta. Thermal pi/K (and
+**Extensions.** Hyperons: the vector ratios are SU(6) times a free factor,
+`x_MY = y_MY * SU(6)`, nine of them over M = omega, rho, phi and
+Y = Lambda, Sigma, Xi, each an ordinary parameter defaulting to 1 (= SU(6),
+which is DD2Y). Nine and not three because a published set may break omega and
+phi while leaving rho alone — SFHoY does exactly that — and `y_phi_*`
+multiplies a NEGATIVE ratio, so a factor above one makes g_phiY more negative;
+`y_phi_* = 0` in every multiplet is a set with no phi sector, which is how that
+sector is switched off. Scalar ratios are either the published DD2Y values
+(Marques et al. 2017; Fortin et al. 2017) or inverted from the potentials
+U_Lambda, U_Sigma, U_Xi in saturated symmetric matter — and that inversion runs
+AFTER the rescaling, since U_Y holds the scalar and vector couplings together,
+so a rescaled x_omegaY changes the x_sigmaY that reproduces the same depth.
+The phi inherits the omega density dependence. Deltas take no SU(6) factors:
+x_Delta_sigma, x_Delta_omega, x_Delta_rho are free variables directly,
+defaulting to universal coupling, or x_Delta_sigma comes from U_Delta. Thermal pi/K (and
 optionally the vector nonet) as Bose gases whose effective potentials are
 shifted by the same vector mean fields (Lavagno 2010; arXiv:1210.0400); the
 gas contributes charge and strangeness to the equilibrium constraints, no

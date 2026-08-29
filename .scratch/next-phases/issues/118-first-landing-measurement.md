@@ -1,7 +1,7 @@
 # The landing measurement has never actually been taken
 
 Type: task
-Status: open
+Status: in progress (claimed 2026-08-29)
 Blocked by: -   (117 ruled the gate; this is the first run under it)
 Parent: ../map.md
 

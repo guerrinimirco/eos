@@ -1159,11 +1159,11 @@ if RETIRED_FILE.exists():
     # The retired flag names for the meson sectors are this repository's
     # `thermal_mesons` and `thermal_vectors`; the rest carry over unchanged.
     # `flags.phi_field` has no flag to carry over to: the phi sector is now
-    # controlled by the x_phi = g_phiY/g_omegaN column of the hyperon rows, so
-    # a retired run that had it off is rebuilt by zeroing that column.
+    # controlled by its coupling, x_phiY = y_phi_Y * SU(6), so a retired run
+    # that had it off is rebuilt by zeroing the three y_phi factors.
     if entries["flags.phi_field"] != "True":
-        retired_par = dataclasses.replace(retired_par, hyperon_couplings=tuple(
-            row[:5] + (0.0,) for row in retired_par.hyperon_couplings))
+        retired_par = dataclasses.replace(
+            retired_par, y_phi_Lambda=0.0, y_phi_Sigma=0.0, y_phi_Xi=0.0)
     retired_flags = DD2Flags(
         hyperons=entries["flags.hyperons"] == "True",
         deltas=entries["flags.deltas"] == "True",

@@ -244,7 +244,7 @@ from scipy.optimize import brentq, root
 
 from eos.general.physics_constants import hc3
 from eos.dd2.couplings import (
-    SU6_HYPERON, DD2Y_HYPERON, _POTENTIAL_KEY,
+    SU6_HYPERON, DD2Y_HYPERON, MULTIPLET, vector_ratios, _POTENTIAL_KEY,
     scalar_ratio_from_potential,
     rational_f, rational_df, rational_d2f, rational_d3f,
 )
@@ -847,19 +847,65 @@ def from_nmp(nmp, m_sigma=546.212459, return_status=False):
     accident. Returns the `Parameters`, or (Parameters, InversionStatus) when
     `return_status`.
 
-    **`Parameters` is None when the inversion did not converge**, since a soft
-    failure is a return value and not an exception (CLAUDE.md section 6). Pass
-    `return_status=True` and test `status.ok` before using the result: without
-    it a failed inversion is indistinguishable from a successful one until the
-    None reaches a solver. `build_parametrization` below does that test for
-    the caller and reports the stage instead.
+    **Raises when the inversion did not converge**, since a caller asking only
+    for parameters has nowhere to put a failure. `invert_nmp` is the CLAUDE.md
+    section 6 boundary and returns `(Parameters, InversionStatus)`; this is the
+    face for a caller that has declared it will not score failures, so use
+    `invert_nmp` directly to score a target instead of raising on it. Returning
+    `None` here was the third answer among the three models with an inversion,
+    and the one that carried a failure two layers down: the None travelled
+    until `solver.py` raised `'NoneType' object has no attribute
+    'kernel_masses'`.
 
     The hyperon and Delta sectors attach on top of the result through
     `from_hyperon_potentials` / `from_delta_potential` below, once the
     nucleon sector is set; they are not folded in here.
     """
     par, status = invert_nmp(nmp, m_sigma=m_sigma)
+    if not status.ok:
+        raise RuntimeError(f"NMP inversion failed: {status.message}")
     return (par, status) if return_status else par
+
+
+# ==========================================================================
+# THE PUBLISHED NUCLEAR-MATTER PARAMETERS, TWICE
+# ==========================================================================
+# Two dicts, because they answer two different questions. A reader checking
+# this model against the paper's table needs the digits the paper prints; a
+# caller starting an inference "around" the published set needs the numbers
+# the published COUPLINGS actually produce, which the printed digits are a
+# rounding of. Neither is a gate.
+
+#: The nuclear-matter parameters as PRINTED by Typel, Roepke, Klaehn,
+#: Blaschke & Wolter, Phys. Rev. C 81, 015803 (2010) -- the DD2 paper -- for
+#: the DD2 parametrization. Four to six significant figures.
+PUBLISHED_NMP = {
+    "n_sat": 0.149065, "E_sat": -16.02, "m_eff_ratio": 0.5625,
+    "K_sat": 242.7, "E_sym": 31.67, "L_sym": 55.04,
+}
+
+#: The same six at full precision: `compute_nmp(Parameters.default())` on the
+#: published couplings, frozen here so that reading them costs no saturation
+#: solve. Regenerate with that call.
+#:
+#: What the paper's rounding costs, measured as the worst relative distance
+#: between the couplings `invert_nmp` returns and the published ones, over
+#: the eight free couplings (Gamma_sigma, b_sigma, c_sigma, Gamma_omega,
+#: b_omega, c_omega, Gamma_rho, a_rho):
+#:
+#:     from PUBLISHED_NMP         8.5e-05
+#:     from PUBLISHED_NMP_EXACT   7.6e-05
+#:
+#: i.e. nothing measurable. Both sit at the isoscalar solve's own convergence
+#: floor, because DD2 prints enough digits that its rounding is below it. The
+#: same measurement costs SFHo a factor of 25 (see `eos/sfho/nmp.py`), on one
+#: two-digit entry, which is why the twin is shipped for every model rather
+#: than for the one where it happened to matter.
+PUBLISHED_NMP_EXACT = {
+    "n_sat": 0.1490767283263872, "E_sat": -16.022620282213552,
+    "m_eff_ratio": 0.5625212010574624, "K_sat": 242.72401473229172,
+    "E_sym": 31.67006103137942, "L_sym": 55.033666576106114,
+}
 
 
 # ==========================================================================
@@ -872,43 +918,55 @@ def from_nmp(nmp, m_sigma=546.212459, return_status=False):
 # `parameters.py` is its bottom (CLAUDE.md section 5).
 
 def from_hyperon_potentials(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
-                            base=None, x_phi=None):
+                            base=None):
     """
-    Nucleon + hyperon octet with SU(6) vector couplings and scalar couplings
-    *inverted* from the hyperon potentials U_Y in SNM at saturation (report
-    §2.4b). This is the mechanism that regenerates the DD2Y R_sigma table
-    (U_Xi = -18) and the route for non-DD2Y potentials. Hyperon masses
-    default to the DD2Y (Marques) values.
+    Nucleon + hyperon octet whose scalar couplings are *inverted* from the
+    hyperon potentials U_Y in SNM at saturation (report §2.4b), on top of the
+    vector couplings `base` declares. This is the mechanism that regenerates
+    the DD2Y R_sigma table (U_Xi = -18) and the route for non-DD2Y potentials.
+    Hyperon masses default to the DD2Y (Marques) values.
 
     base: an existing Parameters to attach the hyperon sector to (e.g.
     an NMP-inverted nucleon par, so NMP + hyperons compose); defaults to
     nucleonic DD2. The scalar inversion re-solves SNM on ``base``, so it
     adapts to that par's nucleon couplings automatically.
 
-    x_phi: override the SU(6) hidden-strange column x_phiY = g_phiY/g_omegaN.
-    None keeps the SU(6) value per hyperon; a float replaces it in every row.
-    `x_phi = 0.0` is how a hyperonic set is built with no phi sector at all --
-    the coupling carries that statement, there is no flag for it.
+    **The vector sector comes from `base`'s nine SU(6)-breaking factors, and
+    the inversion runs AFTER them**, which is the whole reason this is one
+    call rather than two. U_Y = -Gamma_sigmaY sigma + Gamma_omegaY omega0 +
+    Sigma^R holds the scalar and vector couplings TOGETHER, so a rescaled
+    x_omegaY changes the x_sigmaY that reproduces the same depth; inverting
+    first and rescaling after would silently move U_Y. To break SU(6), set the
+    factors on the base and let this function close the depths on them:
+
+        base = replace(Parameters.default(), y_omega_Lambda=1.5,
+                       y_phi_Lambda=1.5, ...)
+        par  = from_hyperon_potentials(U_Xi=-14.0, base=base)
+
+    `y_phi_Lambda = y_phi_Sigma = y_phi_Xi = 0.0` on the base is how a
+    hyperonic set is built with no phi sector at all -- the coupling carries
+    that statement, there is no flag for it.
     """
     base = replace(base if base is not None else Parameters.default(),
                    U_Lambda=U_Lambda, U_Sigma=U_Sigma, U_Xi=U_Xi)
     sat = solve_snm(base, base.n_sat)
     Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
     U_map = {"U_Lambda": U_Lambda, "U_Sigma": U_Sigma, "U_Xi": U_Xi}
+    y = base.su6_breaking
 
     rows = []
-    for name, su6 in SU6_HYPERON.items():
+    for name in SU6_HYPERON:
+        x_omega, _, _ = vector_ratios(name, *y[MULTIPLET[name]])
         x_sigma = scalar_ratio_from_potential(
-            U_map[_POTENTIAL_KEY[name]], su6["x_omega"], Gs_sat, Gw_sat,
+            U_map[_POTENTIAL_KEY[name]], x_omega, Gs_sat, Gw_sat,
             sat.matter.fields["sigma"], sat.matter.fields["omega0"],
             sat.matter.Sigma_R)
-        rows.append((name, DD2Y_HYPERON[name]["mass"], x_sigma,
-                     su6["x_omega"], su6["x_rho"],
-                     su6["phi_over_omegaN"] if x_phi is None else float(x_phi)))
+        rows.append((name, DD2Y_HYPERON[name]["mass"], x_sigma))
     return replace(base, hyperon_couplings=tuple(rows))
 
 
-def from_delta_potential(U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
+def from_delta_potential(U_Delta=-50.0, x_Delta_omega=1.0,
+                         x_Delta_rho=1.0, base=None):
     """
     Δ-isobar couplings from the Δ single-particle potential in SNM at
     saturation (report v11 §2.4). There is no canonical DD2Δ coupling
@@ -918,8 +976,10 @@ def from_delta_potential(U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
         U_Δ = -x_Δσ Γ_σN σ̄ + x_Δω Γ_ωN ω0 + Σ^R      (all at n_sat)
 
     for a chosen Δ potential (literature U_Δ ∈ [-100, -50] MeV, default -50)
-    and vector ratios x_wD, x_rD. base: an existing Parameters to attach
-    the Δ sector to (e.g. a DD2Y octet); defaults to nucleonic DD2.
+    and vector ratios x_Delta_omega, x_Delta_rho -- the free variables of
+    this sector, carrying the same names as the `Parameters` fields they set.
+    base: an existing Parameters to attach the Δ sector to (e.g. a DD2Y
+    octet); defaults to nucleonic DD2.
     """
     if not (-100.0 <= U_Delta <= -50.0):
         raise ValueError(
@@ -929,10 +989,10 @@ def from_delta_potential(U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
     sat = solve_snm(base, base.n_sat)
     Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
     x_Delta_sigma = scalar_ratio_from_potential(
-        U_Delta, x_wD, Gs_sat, Gw_sat, sat.matter.fields["sigma"],
+        U_Delta, x_Delta_omega, Gs_sat, Gw_sat, sat.matter.fields["sigma"],
         sat.matter.fields["omega0"], sat.matter.Sigma_R)
     return replace(base, x_Delta_sigma=x_Delta_sigma,
-                   x_Delta_omega=x_wD, x_Delta_rho=x_rD)
+                   x_Delta_omega=x_Delta_omega, x_Delta_rho=x_Delta_rho)
 
 
 # ==========================================================================
@@ -941,10 +1001,11 @@ def from_delta_potential(U_Delta=-50.0, x_wD=1.0, x_rD=1.0, base=None):
 
 #: Hadronic-sector coupling knobs that may be carried *inside* an NMP sample
 #: dict, alongside the nuclear-matter parameters themselves, so that one
-#: sample describes the whole hadronic parametrization. `x_wD`/`x_rD` are the
-#: Delta vector coupling ratios x_omegaDelta / x_rhoDelta; x_sigmaDelta is not
-#: free, being fixed by inverting U_Delta.
-SECTOR_KEYS = ("U_Lambda", "U_Sigma", "U_Xi", "U_Delta", "x_wD", "x_rD")
+#: sample describes the whole hadronic parametrization. `x_Delta_omega` and
+#: `x_Delta_rho` are the Delta vector coupling ratios; `x_Delta_sigma` is not
+#: among them, being fixed by inverting U_Delta.
+SECTOR_KEYS = ("U_Lambda", "U_Sigma", "U_Xi", "U_Delta",
+               "x_Delta_omega", "x_Delta_rho")
 
 
 def _split_sample(sample, hyperon_potentials=None, U_Delta=-50.0):
@@ -964,8 +1025,8 @@ def _split_sample(sample, hyperon_potentials=None, U_Delta=-50.0):
                  if k in sample})
     sector = {"hyperon_potentials": pots,
               "U_Delta": float(sample.get("U_Delta", U_Delta)),
-              "x_wD": float(sample.get("x_wD", 1.0)),
-              "x_rD": float(sample.get("x_rD", 1.0))}
+              "x_Delta_omega": float(sample.get("x_Delta_omega", 1.0)),
+              "x_Delta_rho": float(sample.get("x_Delta_rho", 1.0))}
     return nmp, sector
 
 
@@ -974,7 +1035,7 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     """Nuclear-matter parameters to a `Parameters` with the strange and
     resonant sectors attached, as `flags` requires.
 
-    `from_nmp` inverts the NUCLEON sector only -- it carries no hyperon
+    `invert_nmp` inverts the NUCLEON sector only -- it carries no hyperon
     couplings, so `SpeciesFlags(hyperons=True)` on its output would fail deep
     in a coupling lookup. The hyperon and Delta sectors are attached on top
     here, each by inverting its single-particle potential in symmetric matter
@@ -982,7 +1043,8 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     couplings rather than assuming DD2's.
 
     `nmp` may also carry any of the `SECTOR_KEYS` (U_Lambda, U_Sigma, U_Xi,
-    U_Delta, x_wD, x_rD); those take precedence over the keyword arguments, so
+    U_Delta, x_Delta_omega, x_Delta_rho); those take precedence over the
+    keyword arguments, so
     a single dict can put nuclear-matter parameters and sector potentials on
     axes together.
 
@@ -993,7 +1055,7 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     reported separately. `par` is None unless `stage` is 'ok'.
     """
     nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta)
-    par, status = from_nmp(nmp, return_status=True)
+    par, status = invert_nmp(nmp)       # not from_nmp: this scores failures
     if not status.ok:
         return None, "inversion_failed", status.message
     try:
@@ -1002,8 +1064,8 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
                 base=par, **sector["hyperon_potentials"])
         if flags.deltas:
             par = from_delta_potential(
-                U_Delta=sector["U_Delta"], x_wD=sector["x_wD"],
-                x_rD=sector["x_rD"], base=par)
+                U_Delta=sector["U_Delta"], x_Delta_omega=sector["x_Delta_omega"],
+                x_Delta_rho=sector["x_Delta_rho"], base=par)
     except Exception as exc:
         return None, "sectors_failed", f"{type(exc).__name__}: {exc}"
     return par, "ok", ""

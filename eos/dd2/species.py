@@ -19,11 +19,11 @@ Also wired, as dd2's own physics: trapped neutrinos. The hidden-strange
 scalar sigma* is not.
 
 The hidden-strange VECTOR phi has no flag, because dd2 already carries its
-coupling: the x_phi = g_phiY/g_omegaN column of `par.hyperon_couplings`. The
-sector is on exactly when hyperons are present and that column is nonzero
-(`par.has_phi_coupling`), so `x_phi = 0.0` -- which
-`nmp.from_hyperon_potentials(x_phi=0.0)` builds -- is the whole statement that
-there is no phi, made where every other model number is made. A boolean beside
+coupling: x_phiY = g_phiY/g_omegaN is SU(6) times the free factor y_phi_Y, one
+per multiplet. The sector is on exactly when hyperons are present and some
+x_phiY is nonzero (`par.has_phi_coupling`), and the SU(6) column has no zero in
+it, so `y_phi_Lambda = y_phi_Sigma = y_phi_Xi = 0.0` is the whole statement
+that there is no phi, made where every other model number is made. A boolean beside
 it would have been a second way to say the same thing, and not one an
 inference sampler could vary.
 
