@@ -647,14 +647,22 @@ def check_backend_parity(par):
                            "makes both optional")
     vac = vacuum_solution(par)
     worst, where = 0.0, ""
+    # THE GAPS ARE SWEPT TOO, and not only for coverage: 'fast' selects the
+    # blocked BdG of `eos.general.pairing` as well as the jitted medium
+    # integrals, and with Delta = 0 the pairing block short-circuits and that
+    # half of the backend is never reached. The four patterns below are the
+    # enumerated ones -- unpaired, 2SC, an asymmetric state, CFL.
+    gaps = (np.zeros(3), np.array([0.0, 0.0, 80.0]),
+            np.array([30.0, 55.0, 80.0]), np.array([70.0, 70.0, 70.0]))
     for T in (0.0, 5.0, 20.0, 50.0):
         for mu_B in (900.0, 1100.0, 1400.0, 1800.0):
             for mu_C in (-150.0, -40.0, 0.0):
-                for M in ((350.0, 350.0, 540.0), (60.0, 55.0, 400.0),
-                          (9.0, 9.0, 250.0)):
-                    kw = dict(par=par, M=np.array(M), Delta=np.zeros(3),
+                for M, Delta in zip(((350.0, 350.0, 540.0), (60.0, 55.0, 400.0),
+                                     (9.0, 9.0, 250.0), (9.0, 9.0, 250.0)),
+                                    gaps):
+                    kw = dict(par=par, M=np.array(M), Delta=Delta,
                               Sigma_V=0.0, mu_B=mu_B, mu_C=mu_C, mu_S=0.0,
-                              mu_3=0.0, mu_8=0.0, T=T, vac=vac)
+                              mu_3=0.0, mu_8=-20.0, T=T, vac=vac)
                     ref = state_at(**kw, backend="reference")
                     fast = state_at(**kw, backend="fast")
                     # Everything is judged against eps, the largest quantity a
@@ -720,5 +728,9 @@ def run_all(par=None, include_csc=True, include_sound=True):
 if __name__ == "__main__":
     import sys
 
-    print(run_all(include_csc="--no-csc" not in sys.argv,
-                  include_sound="--no-sound" not in sys.argv))
+    report = run_all(include_csc="--no-csc" not in sys.argv,
+                     include_sound="--no-sound" not in sys.argv)
+    print(report)
+    # A gate that cannot fail a shell is not a gate: this printed FAIL and
+    # exited 0, so nothing outside the terminal could ever notice.
+    sys.exit(0 if report.all_passed else 1)

@@ -35,6 +35,7 @@ B_g in MeV^4, G_D in MeV^-2, n_c in fm^-3 (a density a reader holds in fm).
 `ccdm.tex` writes out every equation these enter.
 """
 from dataclasses import dataclass
+from functools import lru_cache
 import math
 
 _SQRT2 = math.sqrt(2.0)
@@ -181,7 +182,17 @@ class Parameters:
         lambda = 16.387, v = 86.527 MeV, lambda_zeta = 31.414,
         v_zeta^2 = -4039.3 MeV^2, C_0 = 2.4352e9 MeV^4, phi_0 = 56.25 MeV --
         the specification's section 8 numbers to every digit it quotes.
+
+        MEMOIZED: this is a pure function of a frozen, hashable `Parameters`,
+        and the residual reads it several times per evaluation -- 137.8 times
+        per solved point unpaired, 2665 paired. `Derived` is itself frozen and
+        holds only floats, so the shared object cannot be written through.
         """
+        return _derived(self)
+
+    @property
+    def _derived_uncached(self):
+        """The closed forms themselves; `derived` is the memoized entry."""
         sigma_0 = self.f_pi
         zeta_0 = _SQRT2 * self.f_K - self.f_pi / _SQRT2
         eps_sigma = self.f_pi * self.m_pi ** 2
@@ -239,6 +250,16 @@ class Parameters:
             raise KeyError(f"unknown CCDM parameter set {name!r}; published: "
                            f"{sorted(PUBLISHED_SETS)}")
         return cls(**PUBLISHED_SETS[name])
+
+
+@lru_cache(maxsize=32)
+def _derived(par):
+    """`Parameters.derived`, memoized on the frozen parameter object.
+
+    The bound is what keeps an inference run -- which varies `par` every call
+    and therefore misses every time -- from growing a cache it never reads.
+    """
+    return par._derived_uncached
 
 
 #: The published parameter points.

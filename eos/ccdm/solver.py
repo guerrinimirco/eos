@@ -312,13 +312,14 @@ def thermal_sectors(T, flags, trapped):
 # =============================================================================
 # THE RESIDUAL
 # =============================================================================
-def _state(x, par, spec, branch, pattern, T, two_flavour=False):
+def _state(x, par, spec, branch, pattern, T, two_flavour=False,
+           backend="reference"):
     """The `CCDMState` an unknown vector describes."""
     (Phi, sigma, zeta, Sigma_V, Delta, mu_3, mu_8,
      mu_B, mu_C, mu_S, _) = _unpack(x, par, spec, pattern)
     return state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S,
                     mu_3, mu_8, T, branch=branch, pattern=pattern,
-                    two_flavour=two_flavour)
+                    two_flavour=two_flavour, backend=backend)
 
 
 def _charge_rows(x, par, flags, spec, pattern, st, T):
@@ -330,23 +331,30 @@ def _charge_rows(x, par, flags, spec, pattern, st, T):
     feel no field the matter feels and nothing about them feeds back.
     """
     *_, mu_C, _, mu_nue = _unpack(x, par, spec, pattern)
+
+    # ONE lepton block serves both rows below. The neutrality row asks these
+    # leptons for their charge and the Y_Le row asks the SAME ones for their
+    # lepton number, and the trapped mode carries both -- so solving them
+    # twice is one Fermi integral per residual spent to learn nothing.
+    n_charged = n_Le = 0.0
+    if not spec.is_fixed("C") or spec.is_fixed("L_e"):
+        _, n_charged, n_Le = lepton_block(
+            electron_potential(mu_C, mu_nue), mu_nue, T, flags)
+
     rows = []
     if spec.is_fixed("C"):
         rows.append(st.n_C - spec.targets["Y_C"] * st.n_B)
     else:
-        _, n_charged, _ = lepton_block(
-            electron_potential(mu_C, mu_nue), mu_nue, T, flags)
         rows.append(st.n_C - n_charged)
     if spec.is_fixed("S"):
         rows.append(st.n_S - spec.targets["Y_S"] * st.n_B)
     if spec.is_fixed("L_e"):
-        _, _, n_Le = lepton_block(
-            electron_potential(mu_C, mu_nue), mu_nue, T, flags)
         rows.append(n_Le - spec.targets["Y_Le"] * st.n_B)
     return rows
 
 
-def residual(x, par, flags, spec, branch, pattern, n_B, T):
+def residual(x, par, flags, spec, branch, pattern, n_B, T,
+             backend="reference"):
     """The equations of one mode in one candidate, in assembly order.
 
     `flags.two_flavour` reaches the state and nothing else: the rows are the
@@ -354,7 +362,7 @@ def residual(x, par, flags, spec, branch, pattern, n_B, T):
     sigma and zeta are still solved, with their medium terms gone -- because
     they are condensates of the model's vacuum rather than a population.
     """
-    st = _state(x, par, spec, branch, pattern, T, flags.two_flavour)
+    st = _state(x, par, spec, branch, pattern, T, flags.two_flavour, backend)
     mask = pattern_mask(pattern)
 
     rows = list(st.field_residual[:3])
@@ -590,7 +598,7 @@ def _refuse_fixed_YS(flags, spec, model):
 
 
 def solve_candidate(par, mode, n_B, T, flags, branch, pattern, spec=None,
-                    x0=None, **fractions):
+                    x0=None, backend="reference", **fractions):
     """One mode in ONE declared branch and ONE declared pattern.
 
     Neither is chosen here: this is the solve an enumeration calls, and the
@@ -619,7 +627,7 @@ def solve_candidate(par, mode, n_B, T, flags, branch, pattern, spec=None,
         drive every row to the gate rather than whichever one happens to be
         largest.
         """
-        raw = residual(x, par, flags, spec, branch, pattern, n_B, T)
+        raw = residual(x, par, flags, spec, branch, pattern, n_B, T, backend)
         return [r / s for r, s in zip(raw, scales_at(x))]
 
     def scales_at(x):
@@ -640,7 +648,7 @@ def solve_candidate(par, mode, n_B, T, flags, branch, pattern, spec=None,
         if err_cold < err:
             x, err, ok = x_cold, err_cold, ok_cold
 
-    st = _state(x, par, spec, branch, pattern, T, flags.two_flavour)
+    st = _state(x, par, spec, branch, pattern, T, flags.two_flavour, backend)
     return point_from_state(st, par, flags, spec, mode, x,
                             bool(ok and st.valid), err, T)
 
@@ -681,7 +689,7 @@ def candidates_for(flags, branches=None, patterns=None):
 
 
 def solve(par, mode, n_B, T=0.0, flags=None, x0=None, branches=None,
-          patterns=None, **fractions):
+          patterns=None, backend="reference", **fractions):
     """One mode at (n_B, T), with the branch and the pattern chosen by free
     energy.
 
@@ -730,7 +738,8 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, branches=None,
             seed = seed_from(reference, par, spec, branch, pattern)
         try:
             point = solve_candidate(par, mode, n_B, T, flags, branch,
-                                    pattern, spec=spec, x0=seed)
+                                    pattern, spec=spec, x0=seed,
+                                    backend=backend)
         except (ValueError, RuntimeError, np.linalg.LinAlgError):
             continue
         solved.append(point)
@@ -743,7 +752,7 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, branches=None,
     if solved:
         return solved[0]
     return solve_candidate(par, mode, n_B, T, flags, wanted[0][0],
-                           wanted[0][1], spec=spec)
+                           wanted[0][1], spec=spec, backend=backend)
 
 
 def solve_beta_eq_neutrinoless(par, n_B, T=0.0, flags=None, x0=None,

@@ -85,7 +85,10 @@ from eos.ccdm.couplings import (
     vector_self_energy,
 )
 from eos.ccdm.species import pattern_mask
-from eos.general.fermi_integrals import kinetic_thermo, unbounded_k_max
+from eos.general.fermi_integrals import (
+    DEGENERACY, NODES_PER_PANEL, _gauss_legendre, kinetic_thermo,
+    unbounded_k_max,
+)
 from eos.general.fermi_integrals import ABSENT
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
@@ -94,7 +97,22 @@ from eos.general.pairing import (
 from eos.general.physics_constants import hc3
 from eos.general.solve import solve_system
 
+# `backends/` is optional: CLAUDE.md section 5 defines it by the property that
+# deleting it changes no number, only the time they take. With it gone, or
+# with numba absent, `backend="fast"` raises and the reference path below is
+# the whole story.
+try:
+    from eos.ccdm.backends.kernel_numba import NUMBA_OK, modes_thermo
+except ImportError:                       # pragma: no cover - backends/ removed
+    NUMBA_OK = False
+    modes_thermo = None
+
 _PI2 = math.pi ** 2
+
+#: The reference Gauss-Legendre rule handed to the jitted backend. Memoized in
+#: `eos.general.fermi_integrals`, so the two flavours quadrature on the same
+#: nodes and cannot drift apart in the rule itself.
+_GAUSS_X, _GAUSS_W = _gauss_legendre(NODES_PER_PANEL)
 
 #: The dilaton solve variable is confined to [PHI_FLOOR, PHI_CEIL].
 #:
@@ -252,7 +270,7 @@ def mode_thermo(mu_star, M_star, T):
     is e^-1e13.
     """
     if T > 0.0 and M_star - abs(mu_star) > ABSENT_WIDTHS * T:
-        return kinetic_thermo(0.0, M_star, 0.0, 1.0)      # the absent block
+        return ABSENT           # the zero block, declared rather than integrated
     k_max = unbounded_k_max(mu_star, M_star, T)
     return kinetic_thermo(mu_star, M_star, T, k_max)
 
@@ -369,7 +387,7 @@ class CCDMState:
 
 def state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S, mu_3,
              mu_8, T, branch="restored", pattern="unpaired",
-             two_flavour=False):
+             two_flavour=False, backend="reference"):
     """One state, evaluated. No equilibrium condition is imposed here.
 
     The assembly, in the order it is written:
@@ -427,19 +445,52 @@ def state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S, mu_3,
     # quark matter is an empty s Fermi sea, not a two-flavour Lagrangian, and
     # dropping zeta from the field equations instead would move the whole
     # vacuum and with it every mass in the model.
-    modes = [(ABSENT if two_flavour and FLAVOUR_OF_MODE[j] == 2
-              else mode_thermo(mu_star[j], M_mode[j], T))
-             for j in range(N_MODES)]
-    n_med = np.array([m.n for m in modes])
-    P_med = sum(m.P for m in modes)
-    eps_med = sum(m.eps for m in modes)
-    s_med = sum(m.s for m in modes)
-    rho_s_med = np.array([sum(modes[j].rho_s for j in range(N_MODES)
-                              if FLAVOUR_OF_MODE[j] == i) for i in range(3)])
+    if backend == "fast":
+        # The SAME nine integrals, compiled: `backends/kernel_numba` writes out
+        # the quadrature `kinetic_thermo` performs, and verify/ checks the two
+        # against each other. It is opt-in rather than the default because the
+        # two flavours sum the modes in different orders and so agree to
+        # round-off rather than bit for bit, and this model selects its branch
+        # AND its pairing pattern by comparing free energies -- a comparison
+        # that is knife-edge wherever two candidates cross, which is exactly
+        # where a transition is. That is a property of the physics at a
+        # near-degenerate boundary, not of either flavour, and it is why
+        # `test/baseline` is frozen against the reference (CLAUDE.md section 9:
+        # the reference is what correctness is judged against and is never
+        # bypassed).
+        if not NUMBA_OK:
+            raise NotImplementedError(
+                "eos.ccdm backend='fast' needs eos/ccdm/backends/kernel_numba "
+                "and numba; neither is required for the model, and "
+                "backend='reference' computes the same numbers more slowly")
+        absent = np.array([bool(two_flavour and FLAVOUR_OF_MODE[j] == 2)
+                           for j in range(N_MODES)])
+        block = modes_thermo(mu_star, M_mode, T, DEGENERACY,
+                             _GAUSS_X, _GAUSS_W, absent)
+        n_med = block[:, 0]
+        P_med = float(np.sum(block[:, 3]))
+        eps_med = float(np.sum(block[:, 2]))
+        s_med = float(np.sum(block[:, 4]))
+        rho_s_med = np.array([float(np.sum(block[FLAVOUR_OF_MODE == i, 1]))
+                              for i in range(3)])
+    elif backend != "reference":
+        raise ValueError(f"unknown backend {backend!r}; eos.ccdm has "
+                         f"'reference' and 'fast'")
+    else:
+        modes = [(ABSENT if two_flavour and FLAVOUR_OF_MODE[j] == 2
+                  else mode_thermo(mu_star[j], M_mode[j], T))
+                 for j in range(N_MODES)]
+        n_med = np.array([m.n for m in modes])
+        P_med = sum(m.P for m in modes)
+        eps_med = sum(m.eps for m in modes)
+        s_med = sum(m.s for m in modes)
+        rho_s_med = np.array([sum(modes[j].rho_s for j in range(N_MODES)
+                                  if FLAVOUR_OF_MODE[j] == i) for i in range(3)])
 
     # --- the pairing correction -------------------------------------------
     G_D = diquark_coupling(par, chi)
-    block = pair_block(M_star, mu_star, Delta, T, par.Lambda)
+    block = pair_block(M_star, mu_star, Delta, T, par.Lambda,
+                       backend=backend)
     n_modes = n_med + block.delta_n
     rho_s = rho_s_med + block.delta_rho_s
     s = s_med + block.delta_s
@@ -600,7 +651,8 @@ def default_internal_guess(par, branch, pattern, mu_B, T, gap_scale=None):
 
 
 def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, branch="restored",
-                   pattern="unpaired", x0=None, return_state=False):
+                   pattern="unpaired", x0=None, return_state=False,
+                   backend="reference"):
     """The state at given conserved-charge potentials, self-consistently.
 
     Closes the model's own internal system -- the four fields, the gaps and
@@ -629,7 +681,8 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, branch="restored",
         Phi, sigma, zeta, Sigma_V, Delta, mu_3, mu_8 = unpack_internal(
             x, par, pattern)
         st = state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S,
-                      mu_3, mu_8, T, branch=branch, pattern=pattern)
+                      mu_3, mu_8, T, branch=branch, pattern=pattern,
+                      backend=backend)
         return [r / s for r, s in zip(internal_rows(st, par, pattern), scales)]
 
     def unit_scales(x):
@@ -641,7 +694,8 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, branch="restored",
     Phi, sigma, zeta, Sigma_V, Delta, mu_3, mu_8 = unpack_internal(x, par,
                                                                    pattern)
     st = state_at(par, Phi, sigma, zeta, Sigma_V, Delta, mu_B, mu_C, mu_S,
-                  mu_3, mu_8, T, branch=branch, pattern=pattern)
+                  mu_3, mu_8, T, branch=branch, pattern=pattern,
+                  backend=backend)
     ok = bool(ok and st.valid)
     if return_state:
         return st, ok, err, x

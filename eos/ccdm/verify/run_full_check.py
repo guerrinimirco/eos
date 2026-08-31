@@ -93,8 +93,8 @@ from eos.ccdm.solver import solve_beta_eq_neutrinoless, solve_fixed_yc
 from eos.ccdm.api import zero_pressure_point
 from eos.ccdm.species import SpeciesFlags
 from eos.ccdm.thermodynamics import (
-    PHI_CEIL, bag_constant, chiral_potential, glue_potential, mode_thermo,
-    state_at, thermo_from_mu,
+    NUMBA_OK, PHI_CEIL, bag_constant, chiral_potential, glue_potential,
+    mode_thermo, state_at, thermo_from_mu,
 )
 from eos.general.basis import quark_charges
 from eos.general.pairing import pair_block
@@ -399,14 +399,91 @@ def check_reduction_chain(par, tol=0.0):
     zero_gap = state_at(par, *args, 0.0, np.zeros(3), 1450.0, -30.0, 0.0, 0.0,
                         0.0, 20.0, pattern="CFL")
     mode_by_mode = float(np.max(np.abs(zero_gap.n_modes - unpaired.n_modes)))
+    # BOTH SIDES IN NATURAL UNITS. `P` is the fm-based property of section 5's
+    # boundary and `P_nat` its MeV^4 twin, so mixing them here compares two
+    # numbers a factor hc^3 = 7.68e6 apart and reports the pressure itself as
+    # the error -- which is what this check did, against a tol of exactly 0.
     l3 = max(mode_by_mode, abs(zero_gap.delta_omega), abs(zero_gap.pair_cost),
-             abs(zero_gap.P - unpaired.P_nat))
+             abs(zero_gap.P_nat - unpaired.P_nat))
 
     worst = max(l0, l3)
     return CheckResult(
         "reduction chain", worst <= tol, worst,
         f"gbar_omega -> 0 gives omega_0 = Sigma_R = 0 exactly; Delta = 0 "
         f"reproduces the unpaired state over all nine modes to {mode_by_mode:g}")
+
+
+def check_backend_parity(par):
+    """backend='fast' against backend='reference', state by state.
+
+    CLAUDE.md section 9: the jitted flavour is validated against the reference,
+    which is what correctness is judged against. `backends/kernel_numba` writes
+    out the same quadrature `eos.general.fermi_integrals.kinetic_thermo`
+    performs, so the two must agree to round-off -- they sum the nine modes in
+    different orders and so are not bit-identical, which is exactly why this
+    check states a tolerance instead of an equality.
+
+    THE DILATON IS SWEPT, and that is what makes this check ccdm's rather than
+    a copy of njl's. Each mode carries its OWN upper limit here (the model is
+    unregularised, so `unbounded_k_max` is recomputed per mode from that mode's
+    potential and effective mass) and its own absence test, so a Phi near the
+    ceiling -- where the dielectric closes, M* runs to 1e15 MeV and every mode
+    leaves the medium -- exercises code njl's cut theory never reaches.
+
+    Skipped, not failed, where `backends/` or numba is absent: section 5 makes
+    the directory deletable, and a check that fails on its absence would make
+    it mandatory.
+    """
+    if not NUMBA_OK:
+        return CheckResult("backend parity", True, 0.0,
+                           "skipped: backends/ or numba absent, and section 5 "
+                           "makes both optional")
+    worst, where = 0.0, ""
+    # THE GAPS ARE SWEPT TOO, and not only for coverage: 'fast' selects the
+    # blocked BdG of `eos.general.pairing` as well as the jitted medium
+    # integrals, and with Delta = 0 the pairing block short-circuits and that
+    # half of the backend is never reached.
+    gaps = (np.zeros(3), np.array([0.0, 0.0, 80.0]),
+            np.array([30.0, 55.0, 80.0]), np.array([70.0, 70.0, 70.0]))
+    for T in (0.0, 5.0, 20.0, 50.0):
+        for Phi in (0.4 ** 4, 0.7 ** 4, PHI_CEIL):
+            # A GAPPED CONFINED STATE IS NOT A STATE THIS MODEL HAS, and is
+            # excluded here rather than absorbed by a wider tolerance. At the
+            # ceiling the dielectric has closed and M* reaches 2.1e15 MeV, so
+            # a BdG problem carrying an 80 MeV gap has an eigenvalue-to-gap
+            # ratio of 2.7e13: the pairing correction is then a difference of
+            # numbers 1e15 apart and neither flavour can resolve it (the dense
+            # path leaves ||H V - V E|| = 2.0 MeV there, the blocked one 0.69).
+            # Nor is it reachable -- `DENSITY_BRANCHES` excludes `confined`,
+            # and at fixed potential the confined branch carries no quarks to
+            # pair and exactly zero pressure. The ceiling is still swept, at
+            # Delta = 0, which is its actual physical content.
+            gap_set = (np.zeros(3),) if Phi == PHI_CEIL else gaps
+            for Delta in gap_set:
+                for sigma, zeta in ((5.0, 40.0), (60.0, 80.0)):
+                    for mu_B in (1100.0, 1450.0, 1800.0):
+                        kw = dict(par=par, Phi=Phi, sigma=sigma, zeta=zeta,
+                                  Sigma_V=0.0, Delta=Delta, mu_B=mu_B,
+                                  mu_C=-30.0, mu_S=0.0, mu_3=0.0, mu_8=-20.0,
+                                  T=T)
+                        ref = state_at(**kw, backend="reference")
+                        fast = state_at(**kw, backend="fast")
+                        # Everything is judged against eps, the largest
+                        # quantity a state carries: a relative error on a
+                        # strangeness density that is 1e-12 of the state is a
+                        # cancellation, not a disagreement between the two.
+                        scale = max(abs(ref.eps_nat), 1.0)
+                        for key in ("P_nat", "eps_nat", "s_nat", "n_B_nat",
+                                    "n_C_nat", "n_S_nat", "mu_dot_n"):
+                            err = abs(getattr(ref, key)
+                                      - getattr(fast, key)) / scale
+                            if err > worst:
+                                worst, where = err, (f"{key} at T={T}, "
+                                                     f"Phi={Phi:g}, "
+                                                     f"mu_B={mu_B}")
+    tol = 1.0e-12
+    return CheckResult("backend parity", worst < tol, worst,
+                       f"worst {where}" if where else "")
 
 
 # =============================================================================
@@ -743,6 +820,7 @@ def run_all(par=None, include_csc=True, include_onset=False):
         check_residual_gate(par, states),
         check_causality(par),
         _check_zero_pressure(par),
+        check_backend_parity(par),
     ]
     if include_csc:
         report.results += [
@@ -759,5 +837,9 @@ def run_all(par=None, include_csc=True, include_onset=False):
 if __name__ == "__main__":
     import sys
 
-    print(run_all(include_csc="--no-csc" not in sys.argv,
-                  include_onset="--onset" in sys.argv))
+    report = run_all(include_csc="--no-csc" not in sys.argv,
+                     include_onset="--onset" in sys.argv)
+    print(report)
+    # A gate that cannot fail a shell is not a gate: this printed FAIL and
+    # exited 0, so nothing outside the terminal could ever notice.
+    sys.exit(0 if report.all_passed else 1)

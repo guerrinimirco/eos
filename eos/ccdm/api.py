@@ -93,7 +93,7 @@ def _check(mode, conditions):
 
 def eos_point(par, mode, species=None, n_B=None,
               T=None, SnB=None, leptons=None, x0=None, branches=None,
-              patterns=None, **conditions):
+              patterns=None, backend="reference", **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -136,7 +136,8 @@ def eos_point(par, mode, species=None, n_B=None,
     if SnB is not None:
         def entropy_at(temp):
             p = solve(par, mode, n_B, temp, species, x0, branches=branches,
-                      patterns=patterns, leptons=leptons, **conditions)
+                      patterns=patterns, leptons=leptons, backend=backend,
+                      **conditions)
             return p.s / p.n_B if p.n_B else 0.0
         try:
             T = temperature_at_entropy(entropy_at, SnB)
@@ -147,7 +148,8 @@ def eos_point(par, mode, species=None, n_B=None,
             return PointResult(False, str(err))
 
     point = solve(par, mode, n_B, T, species, x0, branches=branches,
-                  patterns=patterns, leptons=leptons, **conditions)
+                  patterns=patterns, leptons=leptons, backend=backend,
+                  **conditions)
     if point.converged:
         return PointResult(
             True, f"converged in branch {point.branch!r}, pattern "
@@ -161,7 +163,7 @@ def eos_point(par, mode, species=None, n_B=None,
 
 def eos_table(par, mode, species=None, axes=None,
               fixed=None, leptons=None, skip_errors=True, rows=False,
-              progress=None, verbose=False):
+              progress=None, verbose=False, backend="reference"):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
     A thin wrapper over `eos.ccdm.table.build_table`: axes and fixed follow
@@ -180,7 +182,7 @@ def eos_table(par, mode, species=None, axes=None,
     species = species if species is not None else SpeciesFlags()
     spec = TableSpec(par=par, mode=mode, axes=dict(axes or {}),
                      include=species, fixed=dict(fixed or {}),
-                     leptons=leptons)
+                     leptons=leptons, backend=backend)
     return build_table(spec, skip_errors=skip_errors, rows=rows,
                        progress=progress, verbose=verbose)
 
@@ -196,7 +198,7 @@ RESPONSE_FREEZES = ("equilibrium",)
 def eos_response(par, mode, species=None,
                  frozen="equilibrium", n_B=None, T=0.0, leptons=None,
                  rel_dn=1e-3, dT=0.05, branches=None, patterns=None,
-                 **conditions):
+                 backend="reference", **conditions):
     """Second-derivative quantities at one state.
 
     frozen='equilibrium' -- nothing is held: the composition re-equilibrates
@@ -242,7 +244,7 @@ def eos_response(par, mode, species=None,
             f"equations (see docs/DEFERRED.md)")
 
     kwargs = dict(branches=branches, patterns=patterns, leptons=leptons,
-                  **conditions)
+                  backend=backend, **conditions)
     names = ("cs2_isothermal", "cs2_adiabatic", "branch_changed")
     if T > 0.0:
         names += ("C_V", "C_P", "Gamma_th")

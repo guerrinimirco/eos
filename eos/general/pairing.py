@@ -177,6 +177,50 @@ def _basis_matrices():
 B_ETA = _basis_matrices()
 
 
+def _bdg_blocks():
+    """The mode index sets the gap matrix never couples across.
+
+    `(B_eta)_((f a),(g b)) = eps^(a b eta) eps_(f g eta)` vanishes unless the
+    two modes differ in BOTH flavour and colour by the same epsilon, which
+    partitions the nine modes into four groups that no gap connects:
+
+        (ur, dg, sb)   the three colour-flavour-diagonal modes
+        (ug, dr)  (ub, sr)  (db, sg)   three pairs
+
+    The partition is a property of the BASIS matrices, not of the gaps, so it
+    is the same for every pattern and for every value of Delta -- it is taken
+    from the union of the three B_eta, which is the coarsest (and therefore
+    always safe) grouping. `diag(xi)` is diagonal and so preserves it, and the
+    18x18 BdG matrix is therefore exactly block-diagonal in one 6x6 and three
+    4x4 blocks, in the doubled basis (modes, modes + 9).
+
+    That is 6^3 + 3*4^3 = 408 flops against 18^3 = 5832, a factor 14.3, and it
+    is EXACT rather than an approximation: `bdg_eigh(backend='fast')`
+    reproduces the dense spectrum to round-off.
+    """
+    coupled = np.any(np.abs(B_ETA) > 0.0, axis=0)
+    seen, blocks = set(), []
+    for start in range(N_MODES):
+        if start in seen:
+            continue
+        stack, group = [start], []
+        while stack:
+            j = stack.pop()
+            if j in seen:
+                continue
+            seen.add(j)
+            group.append(j)
+            for k in range(N_MODES):
+                if coupled[j, k] and k not in seen:
+                    stack.append(k)
+        blocks.append(np.array(sorted(group)))
+    return tuple(blocks)
+
+
+#: The four index sets of `_bdg_blocks`, assembled once at import.
+BDG_BLOCKS = _bdg_blocks()
+
+
 def gap_matrix(Delta):
     """The 9x9 gap matrix G = sum_eta Delta_eta B_eta [MeV].
 
@@ -219,7 +263,7 @@ def bdg_matrix(xi, G):
     return H
 
 
-def bdg_eigh(xi, G):
+def bdg_eigh(xi, G, backend="reference"):
     """(E, V): the nine quasiparticle energies and their eigenvectors.
 
     `E` is the NON-NEGATIVE HALF OF THE SIGNED SPECTRUM, `sort(eigvalsh)[9:]`
@@ -234,9 +278,57 @@ def bdg_eigh(xi, G):
     `V[..., :, a]` is the eigenvector of `E[..., a]`, in the doubled
     (particle, hole) basis: the top nine components are the particle
     amplitudes, the bottom nine the hole amplitudes.
+
+    backend='fast' diagonalises the four `BDG_BLOCKS` separately instead of
+    the whole 18x18 at once. The decomposition is exact, so this is the same
+    spectrum -- but the branches come back GROUPED BY BLOCK rather than sorted
+    across all nine, and within a degenerate subspace the eigenvectors are a
+    different orthonormal basis. Every consumer in `pair_block` contracts over
+    the branch index, so neither difference reaches a result; nothing else may
+    assume `E` is sorted.
     """
+    if backend == "fast":
+        return _bdg_eigh_blocked(xi, G)
+    if backend != "reference":
+        raise ValueError(f"unknown backend {backend!r}; eos.general.pairing "
+                         f"has 'reference' and 'fast'")
     w, v = np.linalg.eigh(bdg_matrix(xi, G))
     return w[..., N_MODES:], v[..., :, N_MODES:]
+
+
+def _bdg_eigh_blocked(xi, G):
+    """`bdg_eigh` on the four `BDG_BLOCKS`, which is 14.3x fewer flops.
+
+    Each block of `n` modes contributes a 2n x 2n BdG problem whose upper half
+    of the spectrum is `n` branches; the four blocks supply 3 + 2 + 2 + 2 = 9
+    between them. The eigenvectors are written back into the full doubled
+    basis, so `V` has the same 18-row shape the dense path returns and a
+    caller cannot tell which path produced it except by the branch ORDER.
+    """
+    xi = np.asarray(xi, dtype=float)
+    lead = xi.shape[:-1]
+    E = np.empty(lead + (N_MODES,))
+    V = np.zeros(lead + (2 * N_MODES, N_MODES))
+
+    filled = 0
+    for idx in BDG_BLOCKS:
+        n = idx.size
+        sub = np.zeros(lead + (2 * n, 2 * n))
+        rows = np.arange(n)
+        sub[..., rows, rows] = xi[..., idx]
+        sub[..., rows + n, rows + n] = -xi[..., idx]
+        block_G = G[np.ix_(idx, idx)]
+        sub[..., :n, n:] = block_G
+        sub[..., n:, :n] = block_G
+
+        w, v = np.linalg.eigh(sub)
+        E[..., filled:filled + n] = w[..., n:]
+        # back into the full basis: the block's particle rows are `idx` and
+        # its hole rows are `idx + N_MODES`.
+        V[..., idx, filled:filled + n] = v[..., :n, n:]
+        V[..., idx + N_MODES, filled:filled + n] = v[..., n:, n:]
+        filled += n
+    return E, V
 
 
 def bdg_energies(xi, G):
@@ -377,7 +469,8 @@ def _dphi_dT(x, T):
 
 
 def pair_block(M_star, mu_star, Delta, T, k_max,
-               nodes_per_panel=NODES_PER_PANEL, quadrature=None):
+               nodes_per_panel=NODES_PER_PANEL, quadrature=None,
+               backend="reference"):
     """The pairing correction to Omega, n_j, rho_s,f, s and the gap equations.
 
     One quadrature pass, one batched diagonalisation, five results: computing
@@ -397,6 +490,10 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
     quadrature : an explicit (k, w) rule, if the caller is holding one; by
         default `pair_nodes` builds it from the CURRENT masses and potentials,
         which move as an outer solve converges
+    backend : 'reference' (default) or 'fast', which selects how the BdG
+        problem at each node is diagonalised -- see `bdg_eigh`. The two are the
+        same spectrum computed two ways and agree to round-off, so the choice
+        belongs to the caller that already declared one (CLAUDE.md section 9)
 
     Both the particle branches (xi = E - mu*) and the ANTIPARTICLE branches
     (xi = E + mu*) are summed. The antiparticle piece is not a small
@@ -431,7 +528,7 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
 
     for r in (+1.0, -1.0):                     # particles, then antiparticles
         xi = E_mode - r * mu_star[None, :]
-        E, V = bdg_eigh(xi, G)                 # (nk, 9), (nk, 18, 9)
+        E, V = bdg_eigh(xi, G, backend)        # (nk, 9), (nk, 18, 9)
         top, bot = V[:, :N_MODES, :], V[:, N_MODES:, :]
         occ_top, occ_bot = top ** 2, bot ** 2  # the BdG matrix is real
 

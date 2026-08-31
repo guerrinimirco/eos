@@ -50,6 +50,7 @@ densities in MeV^3, Omega, P and eps in MeV^4. The fm-based public boundary is
 `eos.njl.api`.
 """
 from dataclasses import dataclass
+from functools import lru_cache
 import math
 
 import numpy as np
@@ -223,6 +224,25 @@ def vacuum_solution(par, M0=(350.0, 350.0, 550.0)):
     M_u = 367.648 (published 367.7), M_s = 549.479 (549.5),
     (-phi_u)^(1/3) = 241.946 (241.9), (-phi_s)^(1/3) = 257.688 (257.7) and
     f_pi = 92.391 MeV (92.4).
+
+    MEMOIZED on (par, M0). The vacuum is a pure function of the parameters --
+    no medium, no mode, no temperature -- but `solve` asks for it once per
+    solved point, and at 1.475 ms it is 4.5 times one `state_at` and 12.8% of
+    an unpaired table. `Parameters` is frozen and hashable, so this is the
+    read-only cache keyed by immutable parameters that CLAUDE.md section 6
+    allows, and it returns the SAME object rather than an equal one: the
+    arrays are therefore made read-only, as `_gauss_legendre` does with its
+    rule, so no caller can poison a vacuum every later point will read.
+    """
+    return _vacuum_solution(par, tuple(float(m) for m in M0))
+
+
+@lru_cache(maxsize=32)
+def _vacuum_solution(par, M0):
+    """`vacuum_solution`'s cached core; `M0` is a tuple so it can be a key.
+
+    The bound is what keeps an inference run -- which varies `par` every call
+    and therefore misses every time -- from growing a cache it never reads.
     """
     M = np.array(M0, dtype=float)
     for _ in range(MAX_VACUUM_ITER):
@@ -240,6 +260,11 @@ def vacuum_solution(par, M0=(350.0, 350.0, 550.0)):
     sea = sum(sea_energy(M[i], par.Lambda) for i in range(3))
     C = condensate_energy(par, phi)
     Omega = -sea + C
+    # The cache hands the SAME object to every caller, so the arrays are
+    # sealed: an in-place write would otherwise reach every point solved after
+    # it. Same protection, and same reason, as `_gauss_legendre`'s rule.
+    M.flags.writeable = False
+    phi.flags.writeable = False
     return Vacuum(M=M, phi=phi, Omega=Omega, eps=Omega, f_pi=f_pi(M[0], par.Lambda))
 
 
@@ -472,7 +497,8 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
     # --- the pairing correction ------------------------------------------
     kwargs = ({} if pair_nodes_per_panel is None
               else {"nodes_per_panel": pair_nodes_per_panel})
-    block = pair_block(M, mu_star, Delta, T, par.Lambda_medium, **kwargs)
+    block = pair_block(M, mu_star, Delta, T, par.Lambda_medium,
+                       backend=backend, **kwargs)
     n_modes = n_med + block.delta_n
     rho_s = rho_s_med + block.delta_rho_s
     s = s_med + block.delta_s
@@ -594,7 +620,8 @@ def _unpack_internal(x, par, pattern):
     return M, Delta, mu_3, mu_8, Sigma_V
 
 
-def internal_residual(x, par, mu_B, mu_C, mu_S, T, vac, pattern):
+def internal_residual(x, par, mu_B, mu_C, mu_S, T, vac, pattern,
+                      backend="reference"):
     """The rows `thermo_from_mu` drives to zero, in the order it assembles them.
 
         three gap equations         M_f - [m_f - 4 G_S phi_f + 2 K phi_g phi_h]
@@ -604,7 +631,7 @@ def internal_residual(x, par, mu_B, mu_C, mu_S, T, vac, pattern):
     """
     M, Delta, mu_3, mu_8, Sigma_V = _unpack_internal(x, par, pattern)
     st = state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
-                  vac=vac, pattern=pattern)
+                  vac=vac, pattern=pattern, backend=backend)
     mask = pattern_mask(pattern)
     rows = list(st.mass_residual)
     rows += [st.gap_residual[eta] for eta in range(3) if mask[eta]]
@@ -616,7 +643,8 @@ def internal_residual(x, par, mu_B, mu_C, mu_S, T, vac, pattern):
 
 
 def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, pattern="unpaired",
-                   x0=None, vac=None, return_state=False):
+                   x0=None, vac=None, return_state=False,
+                   backend="reference"):
     """The state at given conserved-charge potentials, self-consistently.
 
     Closes the model's own internal system -- masses, gaps, colour neutrality
@@ -637,7 +665,8 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, pattern="unpaired",
 
     def residual(x):
         """The rows ALREADY DIVIDED by their scales; see `internal_scales`."""
-        raw = internal_residual(x, par, mu_B, mu_C, mu_S, T, vac, pattern)
+        raw = internal_residual(x, par, mu_B, mu_C, mu_S, T, vac, pattern,
+                                backend=backend)
         return [r / s for r, s in zip(raw, internal_scales(x, par, pattern,
                                                            mu_B))]
 
@@ -649,7 +678,7 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, pattern="unpaired",
 
     M, Delta, mu_3, mu_8, Sigma_V = _unpack_internal(x, par, pattern)
     st = state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
-                  vac=vac, pattern=pattern)
+                  vac=vac, pattern=pattern, backend=backend)
     if return_state:
         return st, ok, err, x
     return st, ok, err

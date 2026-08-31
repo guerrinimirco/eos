@@ -46,7 +46,8 @@ from eos.njl.species import SpeciesFlags
 MAX_BISECT = 6
 
 
-def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None):
+def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None,
+             backend="reference"):
     """One point of a table: the mode's solve at this density and line.
 
     `conditions` carries the line's temperature (`T`) or entropy per baryon
@@ -59,12 +60,13 @@ def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None):
     if "SnB" in conditions:
         def entropy_at(T):
             point = solve(par, mode, n_B, T, flags, x0, leptons=leptons,
-                          **fractions)
+                          backend=backend, **fractions)
             return point.s / point.n_B if point.n_B else 0.0
         T = temperature_at_entropy(entropy_at, conditions["SnB"])
     else:
         T = conditions["T"]
-    return solve(par, mode, n_B, T, flags, x0, leptons=leptons, **fractions)
+    return solve(par, mode, n_B, T, flags, x0, leptons=leptons,
+                 backend=backend, **fractions)
 
 
 def quark_row(point):
@@ -110,6 +112,11 @@ class TableSpec:
             beta-equilibrium modes the leptons are constitutive, so True is
             redundant and ignored and False raises -- here rather than inside
             the sweep, where skip_errors would swallow it.
+    backend: which flavour of the medium integrals to use, 'reference' or
+            'fast' (CLAUDE.md section 9). The default is the reference path,
+            so a table is the same table it has always been; 'fast' is the
+            jitted kernel of `eos.njl.backends`, which agrees to round-off
+            rather than bit for bit.
     """
     par: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
@@ -117,6 +124,7 @@ class TableSpec:
     include: SpeciesFlags = field(default_factory=SpeciesFlags)
     fixed: dict = field(default_factory=dict)
     leptons: bool = None
+    backend: str = "reference"
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -180,7 +188,7 @@ def build_table(spec, skip_errors=True, rows=False, progress=None,
 
     def solve_one(n_B, conditions, x0):
         point = solve_at(spec.par, spec.mode, n_B, conditions, spec.include,
-                         leptons=spec.leptons, x0=x0)
+                         leptons=spec.leptons, x0=x0, backend=spec.backend)
         if point is not None and point.converged:
             last["point"] = point
         return point
