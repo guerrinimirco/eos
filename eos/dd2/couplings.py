@@ -154,3 +154,20 @@ def scalar_ratio_from_potential(U_Y, x_omega, Gs_N_sat, Gw_N_sat,
     Gamma_sigmaY = (x_omega * Gw_N_sat * omega0_sat + SigmaR_sat - U_Y) / sigma_sat
     return Gamma_sigmaY / Gs_N_sat
 
+
+def potential_from_scalar_ratio(x_sigma, x_omega, Gs_N_sat, Gw_N_sat,
+                                sigma_sat, omega0_sat, SigmaR_sat):
+    """
+    The single-particle potential in SNM at saturation of a baryon whose
+    coupling ratios are (x_sigma, x_omega). The same equation as
+    `scalar_ratio_from_potential`, read the other way:
+
+        U_Y = -x_sigma Gamma_sigmaN sigma + x_omega Gamma_omegaN omega0 + Sigma^R
+
+    A ratio can be chosen directly instead of inverted from a depth, and then
+    this is what says which depth was chosen with it. The two directions are
+    exact inverses of one another, which is what `verify/` checks.
+    """
+    return (-x_sigma * Gs_N_sat * sigma_sat
+            + x_omega * Gw_N_sat * omega0_sat + SigmaR_sat)
+

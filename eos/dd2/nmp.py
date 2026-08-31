@@ -245,7 +245,7 @@ from scipy.optimize import brentq, root
 from eos.general.physics_constants import hc3
 from eos.dd2.couplings import (
     SU6_HYPERON, DD2Y_HYPERON, MULTIPLET, vector_ratios, _POTENTIAL_KEY,
-    scalar_ratio_from_potential,
+    scalar_ratio_from_potential, potential_from_scalar_ratio,
     rational_f, rational_df, rational_d2f, rational_d3f,
 )
 from eos.dd2.parameters import Parameters
@@ -966,7 +966,7 @@ def from_hyperon_potentials(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0,
 
 
 def from_delta_potential(U_Delta=-50.0, x_Delta_omega=1.0,
-                         x_Delta_rho=1.0, base=None):
+                         x_Delta_rho=1.0, base=None, x_Delta_sigma=None):
     """
     Δ-isobar couplings from the Δ single-particle potential in SNM at
     saturation (report v11 §2.4). There is no canonical DD2Δ coupling
@@ -980,58 +980,154 @@ def from_delta_potential(U_Delta=-50.0, x_Delta_omega=1.0,
     this sector, carrying the same names as the `Parameters` fields they set.
     base: an existing Parameters to attach the Δ sector to (e.g. a DD2Y
     octet); defaults to nucleonic DD2.
+
+    x_Delta_sigma may be given INSTEAD, in which case it is taken as it stands
+    and `U_Delta` is ignored: the ratio is the parameter and needs no solve,
+    the depth is the constrained quantity and does. Whichever is given, the
+    other follows -- `delta_potential` reads back the depth of a par whose
+    ratio was chosen, and it is the literature range above that says whether
+    the choice landed anywhere physical.
     """
-    if not (-100.0 <= U_Delta <= -50.0):
-        raise ValueError(
-            f"U_Delta = {U_Delta} MeV outside the literature range "
-            f"[-100, -50]; pass an explicit value in range or widen it")
     base = base or Parameters.default()
-    sat = solve_snm(base, base.n_sat)
-    Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
-    x_Delta_sigma = scalar_ratio_from_potential(
-        U_Delta, x_Delta_omega, Gs_sat, Gw_sat, sat.matter.fields["sigma"],
-        sat.matter.fields["omega0"], sat.matter.Sigma_R)
+    if x_Delta_sigma is None:
+        if not (-100.0 <= U_Delta <= -50.0):
+            raise ValueError(
+                f"U_Delta = {U_Delta} MeV outside the literature range "
+                f"[-100, -50]; pass an explicit value in range or widen it")
+        sat = solve_snm(base, base.n_sat)
+        Gs_sat, Gw_sat, _, _, _, _ = base.couplings_at(base.n_sat)
+        x_Delta_sigma = scalar_ratio_from_potential(
+            U_Delta, x_Delta_omega, Gs_sat, Gw_sat, sat.matter.fields["sigma"],
+            sat.matter.fields["omega0"], sat.matter.Sigma_R)
     return replace(base, x_Delta_sigma=x_Delta_sigma,
                    x_Delta_omega=x_Delta_omega, x_Delta_rho=x_Delta_rho)
 
+
+# --------------------------------------------------------------------------
+# THE OTHER DIRECTION: a parametrization reports its own depths
+# --------------------------------------------------------------------------
+# The two constructors above impose a potential and solve for a coupling
+# ratio. These read a finished `Parameters` and report the potentials its
+# ratios amount to -- the forward half of the same one-line map, and what
+# says whether a directly chosen ratio landed anywhere the literature knows.
+# Both re-solve SNM at saturation on the par they are given, because that is
+# where a single-particle potential is defined and an inverted or rescaled
+# par does not saturate where nucleonic DD2 does.
+
+def _saturation_terms(par):
+    """(Gamma_sigmaN, Gamma_omegaN, sigma, omega0, Sigma^R) at n_sat, in SNM."""
+    sat = solve_snm(par, par.n_sat)
+    Gs_sat, Gw_sat, _, _, _, _ = par.couplings_at(par.n_sat)
+    return (Gs_sat, Gw_sat, sat.matter.fields["sigma"],
+            sat.matter.fields["omega0"], sat.matter.Sigma_R)
+
+
+def delta_potential(par):
+    """U_Delta (MeV) of `par`'s Delta sector: the inverse of
+    `from_delta_potential`, and the way to read the depth of a par whose
+    x_Delta_sigma was chosen rather than inverted."""
+    Gs, Gw, sigma, omega0, SigmaR = _saturation_terms(par)
+    return potential_from_scalar_ratio(par.x_Delta_sigma, par.x_Delta_omega,
+                                       Gs, Gw, sigma, omega0, SigmaR)
+
+
+def hyperon_potentials(par):
+    """{U_Lambda, U_Sigma, U_Xi} (MeV) of `par`'s hyperon sector.
+
+    The inverse of `from_hyperon_potentials`, and the check that a change to
+    the nine SU(6)-breaking factors did what was asked: the factors move the
+    VECTOR couplings, so at fixed x_sigma they move these depths, and after a
+    re-inversion on the rescaled base they come back to what was imposed. One
+    entry per multiplet, read off its first member -- the three charge states
+    of a multiplet share a scalar coupling and hence a depth.
+    """
+    if not par.hyperon_couplings:
+        return {}
+    Gs, Gw, sigma, omega0, SigmaR = _saturation_terms(par)
+    y = par.su6_breaking
+    out = {}
+    for name, _mass, x_sigma in par.hyperon_couplings:
+        key = _POTENTIAL_KEY[name]
+        if key in out:
+            continue
+        x_omega, _, _ = vector_ratios(name, *y[MULTIPLET[name]])
+        out[key] = potential_from_scalar_ratio(x_sigma, x_omega, Gs, Gw,
+                                               sigma, omega0, SigmaR)
+    return out
 
 # ==========================================================================
 # NMPs + SECTOR POTENTIALS -> ONE PARAMETRIZATION
 # ==========================================================================
 
+#: The nine SU(6)-breaking factors, one per (vector meson, multiplet) pair.
+#: They scale the hyperon VECTOR couplings (`couplings.vector_ratios`), so
+#: they are applied to the inverted base BEFORE the hyperon depths are closed
+#: on it -- at fixed depth they move x_sigma, at fixed x_sigma they move the
+#: depth, and only the first order is a re-fit rather than a redefinition.
+SU6_FACTOR_KEYS = ("y_omega_Lambda", "y_omega_Sigma", "y_omega_Xi",
+                   "y_rho_Lambda", "y_rho_Sigma", "y_rho_Xi",
+                   "y_phi_Lambda", "y_phi_Sigma", "y_phi_Xi")
+
 #: Hadronic-sector coupling knobs that may be carried *inside* an NMP sample
 #: dict, alongside the nuclear-matter parameters themselves, so that one
 #: sample describes the whole hadronic parametrization. `x_Delta_omega` and
-#: `x_Delta_rho` are the Delta vector coupling ratios; `x_Delta_sigma` is not
-#: among them, being fixed by inverting U_Delta.
-SECTOR_KEYS = ("U_Lambda", "U_Sigma", "U_Xi", "U_Delta",
-               "x_Delta_omega", "x_Delta_rho")
+#: `x_Delta_rho` are the Delta vector coupling ratios; the scalar one may be
+#: named either way round -- `U_Delta` inverts a depth into `x_Delta_sigma`,
+#: `x_Delta_sigma` takes the ratio as it stands, and giving both is an error
+#: rather than a precedence rule, because they are two names for one number.
+SECTOR_KEYS = (("U_Lambda", "U_Sigma", "U_Xi",
+                "U_Delta", "x_Delta_sigma", "x_Delta_omega", "x_Delta_rho")
+               + SU6_FACTOR_KEYS)
+
+#: The Delta depth `from_delta_potential` publishes, used when a sample names
+#: neither side of the scalar pair.
+DEFAULT_U_DELTA = -50.0
 
 
-def _split_sample(sample, hyperon_potentials=None, U_Delta=-50.0):
+def _split_sample(sample, hyperon_potentials=None, U_Delta=None):
     """Separate a sample dict into (nmp, sector kwargs).
 
     A sample may carry any of the `SECTOR_KEYS` next to the nuclear-matter
     parameters; those override the corresponding keyword arguments. This is
-    what lets one dict put L_sym, U_Xi and U_Delta on axes together -- they
-    are all "hadronic parameters" to the caller even though the inversion
-    treats them in separate stages. Keys absent from both the sample and the
-    keyword arguments are left out, so the sector constructors below apply
-    their own published defaults.
+    what lets one dict put L_sym, U_Xi, y_omega_Xi and U_Delta on axes
+    together -- they are all "hadronic parameters" to the caller even though
+    the inversion treats them in separate stages. Keys absent from both the
+    sample and the keyword arguments are left out, so the sector constructors
+    below apply their own published defaults.
+
+    The Delta scalar sector is named ONCE: `U_Delta` (a depth, inverted) or
+    `x_Delta_sigma` (a ratio, taken as it stands). Both together raise --
+    there is no reading of two different values of one number that is not a
+    caller's mistake.
     """
     nmp = {k: v for k, v in sample.items() if k not in SECTOR_KEYS}
     pots = dict(hyperon_potentials or {})
     pots.update({k: float(sample[k]) for k in ("U_Lambda", "U_Sigma", "U_Xi")
                  if k in sample})
+
+    depth = sample.get("U_Delta", U_Delta)
+    ratio = sample.get("x_Delta_sigma")
+    if depth is not None and ratio is not None:
+        raise ValueError(
+            "the Delta scalar sector is given twice: U_Delta = "
+            f"{depth} MeV and x_Delta_sigma = {ratio}. Name one -- the depth "
+            "to invert it, the ratio to set it -- and read the other back "
+            "with `delta_potential`.")
+    if depth is None and ratio is None:
+        depth = DEFAULT_U_DELTA
+
     sector = {"hyperon_potentials": pots,
-              "U_Delta": float(sample.get("U_Delta", U_Delta)),
+              "su6": {k: float(sample[k]) for k in SU6_FACTOR_KEYS
+                      if k in sample},
+              "U_Delta": None if depth is None else float(depth),
+              "x_Delta_sigma": None if ratio is None else float(ratio),
               "x_Delta_omega": float(sample.get("x_Delta_omega", 1.0)),
               "x_Delta_rho": float(sample.get("x_Delta_rho", 1.0))}
     return nmp, sector
 
 
 def build_parametrization(nmp, flags, hyperon_potentials=None,
-                          U_Delta=-50.0):
+                          U_Delta=None):
     """Nuclear-matter parameters to a `Parameters` with the strange and
     resonant sectors attached, as `flags` requires.
 
@@ -1042,29 +1138,48 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     at saturation *on the inverted base*, so they adapt to that base's nucleon
     couplings rather than assuming DD2's.
 
-    `nmp` may also carry any of the `SECTOR_KEYS` (U_Lambda, U_Sigma, U_Xi,
-    U_Delta, x_Delta_omega, x_Delta_rho); those take precedence over the
-    keyword arguments, so
-    a single dict can put nuclear-matter parameters and sector potentials on
-    axes together.
+    `nmp` may also carry any of the `SECTOR_KEYS` -- the hyperon depths
+    U_Lambda, U_Sigma, U_Xi; the Delta sector as either U_Delta or
+    x_Delta_sigma, with x_Delta_omega and x_Delta_rho beside it; and the nine
+    SU(6)-breaking factors `SU6_FACTOR_KEYS`. Those take precedence over the
+    keyword arguments, so a single dict can put nuclear-matter parameters,
+    sector potentials and coupling ratios on axes together.
+
+    **The SU(6) factors are applied between the two stages**, on the inverted
+    nucleon base and before the hyperon depths are closed on it. That order is
+    the whole point of them being here rather than in a `replace` on the
+    result: the factors scale the VECTOR couplings, so imposing them first
+    re-inverts x_sigma and HOLDS the depths at what was asked, while applying
+    them afterwards leaves x_sigma alone and moves the depths instead. Both
+    are legitimate physics and only the first is a re-fit at fixed U_Y; a
+    caller who wants the second does it on the returned par and reads the new
+    depths back with `hyperon_potentials`.
 
     Returns `(par, stage, message)`. `stage` is 'ok', 'inversion_failed' when
     the NMPs have no DD-RMF realisation at all, or 'sectors_failed' when they
     do but the hyperon/Delta scalar inversion does not converge on them -- the
     second can happen even when the first succeeded, which is why they are
-    reported separately. `par` is None unless `stage` is 'ok'.
+    reported separately. `par` is None unless `stage` is 'ok'. A sample that
+    names the Delta scalar sector twice RAISES instead of being scored: that
+    is a malformed call rather than a point of parameter space, and no
+    sampler reaches it without a bug in how its axes were declared.
     """
     nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta)
     par, status = invert_nmp(nmp)       # not from_nmp: this scores failures
     if not status.ok:
         return None, "inversion_failed", status.message
     try:
+        if sector["su6"]:
+            par = replace(par, **sector["su6"])
         if flags.hyperons:
             par = from_hyperon_potentials(
                 base=par, **sector["hyperon_potentials"])
         if flags.deltas:
             par = from_delta_potential(
-                U_Delta=sector["U_Delta"], x_Delta_omega=sector["x_Delta_omega"],
+                U_Delta=sector["U_Delta"] if sector["U_Delta"] is not None
+                else DEFAULT_U_DELTA,
+                x_Delta_sigma=sector["x_Delta_sigma"],
+                x_Delta_omega=sector["x_Delta_omega"],
                 x_Delta_rho=sector["x_Delta_rho"], base=par)
     except Exception as exc:
         return None, "sectors_failed", f"{type(exc).__name__}: {exc}"

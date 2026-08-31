@@ -16,6 +16,7 @@
 # %%
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -127,7 +128,7 @@ n_B_read = np.linspace(0.1, 1.2, 60)
 table = dd2.eos_table(par, "beta_eq_neutrinoless", species,
                       {"nB": n_B_read, "T": np.array([0.0, 20.0])})
 
-print("nB axis      ", table.nB[:3], "...", table.nB[-1])
+print("nB axis      ", table.nB[:3], "...", tab)
 print("temp_key     ", table.temp_key)
 print("temp_values  ", table.temp_values)
 print("combos       ", table.combos)
@@ -158,6 +159,9 @@ print("columns:", sorted(rows[0]))
 # species its colour and the linestyle of its multiplet — nucleons solid,
 # hyperons dashed, Deltas dash-dot, leptons dotted — so a composition panel
 # reads in black and white too.
+
+# %%
+rows
 
 # %%
 cold = [row for row in rows if row["T"] == 0.0]
@@ -225,14 +229,24 @@ plt.show()
 # The two models do not spell step 2 the same way, and the difference is
 # physics, not style:
 #
-# * **dd2** has `build_parametrization`, one call that runs `invert_nmp`,
-#   `from_hyperon_potentials` and `from_delta_potential` in that order. Its
-#   Delta sector is given as a DEPTH, `U_Delta`, which the model inverts into
-#   x_Delta_sigma; x_Delta_omega and x_Delta_rho stay ratios.
-# * **sfho** has no such wrapper, so the two calls are written out:
-#   `invert_nmp` for the nucleons, then `from_potential_depths` for the
-#   hyperon depths, which also takes the three Delta ratios. This model
-#   inverts no Delta depth, so x_Delta_sigma is named directly.
+# * **dd2** has `build_parametrization`, one call that runs `invert_nmp`, the
+#   SU(6) rescaling, `from_hyperon_potentials` and `from_delta_potential` in
+#   that order. Its Delta sector may be given either way round -- as a DEPTH,
+#   `U_Delta`, which the model inverts into x_Delta_sigma, or as the ratio
+#   x_Delta_sigma itself, which needs no solve. `delta_potential` reads the
+#   other one back. x_Delta_omega and x_Delta_rho stay ratios either way.
+# * **sfho** has no such wrapper, so the stages are written out: `invert_nmp`
+#   for the nucleons, `replace` for the SU(6) factors, then
+#   `from_potential_depths` for the hyperon depths, which also takes the three
+#   Delta ratios. This model inverts no Delta depth, so x_Delta_sigma is
+#   named directly and there is no depth form to choose.
+#
+# The nine SU(6)-breaking factors go in BEFORE the hyperon depths are closed,
+# in both models and for the same reason: they scale the vector couplings, and
+# the scalar couplings are inverted from the depths on top of them. Set them
+# first and the depths stay what was asked while x_sigma re-fits; set them on
+# the finished parametrization and x_sigma stays put while the depths move.
+# Both are legitimate and only the first is a re-fit at fixed U_Y.
 #
 # The nuclear-matter parameters are CHOSEN, in `NMP` below, not looked up: both
 # models are asked for the same six numbers, so the two curves at the end differ
@@ -252,13 +266,16 @@ plt.show()
 # this closure does not impose and therefore PREDICTS.
 
 # %%
+target
+
+# %%
 # Where both models leave their results, for the figures at the end.
 STARS = {}
 
-N_B_TOV = np.geomspace(0.05, 1.6, 150)    # fm^-3, the core table. High
+N_B_TOV = np.linspace(0.05, 1.6, 150)    # fm^-3, the core table. High
 #   enough that both sequences turn over: a table that stops below the
 #   maximum-mass central density gives a lower bound on M_max, not M_max.
-N_STARS = 25                              # central densities per sequence
+N_STARS = 50                              # central densities per sequence
 
 # --- 1. the particles ------------------------------------------------------
 start = time.perf_counter()
@@ -268,25 +285,55 @@ species_s = time.perf_counter() - start
 # --- 2. the parameters -----------------------------------------------------
 # The six nuclear-matter parameters, chosen here and read by BOTH cells.
 NMP = dict(n_sat=0.153,          # fm^-3
-           E_sat=-16.1,          # MeV
+           E_sat=-16.0,          # MeV
            m_eff_ratio=0.70,     # m*/m at saturation
-           K_sat=242.0,          # MeV, incompressibility
-           E_sym=31.6,           # MeV
-           L_sym=50.0)           # MeV, slope of the symmetry energy
+           K_sat=222.0,          # MeV, incompressibility
+           E_sym=30.0,           # MeV
+           L_sym=45.0)           # MeV, slope of the symmetry energy
 
 # The hyperon depths at saturation in symmetric matter, MeV. Also read by both.
-U_HYPERON = dict(U_Lambda=-30.0, U_Sigma=30.0, U_Xi=-18.0)
+U_HYPERON = dict(U_Lambda=-27.0, U_Sigma=20.0, U_Xi=-15.0)
 
-# dd2 takes the Delta sector as a DEPTH and inverts it into x_Delta_sigma; the
-# other two ratios ride in the same dict as the NMPs, because a sampler puts
-# nuclear-matter parameters and sector keys on axes together.
-target = dict(NMP, x_Delta_omega=1.0, x_Delta_rho=1.0)
+# The nine SU(6)-breaking factors, one per (vector meson, multiplet) pair, in
+# both models under the same names. y = 1 is SU(6) exactly, which is DD2Y; the
+# set below is the SFHoY breaking of Fortin, Oertel & Providencia, PASA 35
+# (2018) e044 §2.2 -- omega and phi scaled by 1.5 for Lambda and Sigma and by
+# 1.875 for Xi, rho left alone. y_phi = 0 in all three would be a set with no
+# hidden-strange sector at all: the coupling IS that statement, there is no
+# flag for it.
+#
+# ORDER MATTERS. These scale the VECTOR couplings, and the hyperon scalar
+# couplings are inverted from the depths AFTER them, so the depths above stay
+# what was asked and x_sigma moves instead. Setting them on the finished
+# parametrization would do the opposite -- leave x_sigma alone and move U_Y --
+# which is why they go in `target` and not into a `replace` afterwards. Both
+# models take them the same way and for the same reason.
+SU6 = dict(y_omega_Lambda=1.5, y_rho_Lambda=1.0, y_phi_Lambda=1.5,
+           y_omega_Sigma=1.5,  y_rho_Sigma=1.0,  y_phi_Sigma=1.5,
+           y_omega_Xi=1.875,   y_rho_Xi=1.0,     y_phi_Xi=1.875)
+
+# The Delta scalar sector, named ONCE and in one of two ways. `U_Delta` is a
+# DEPTH in SNM at saturation, which dd2 inverts into x_Delta_sigma and which
+# carries the literature range [-100, -50] MeV as a guard; `x_Delta_sigma` is
+# the RATIO itself, taken as it stands with no solve and no range. Whichever
+# is given, `dd2_nmp.delta_potential` reads the other back. Naming both raises
+# -- they are two names for one number.
+DELTA = dict(U_Delta=-100.0)
+# DELTA = dict(x_Delta_sigma=1.15)     # the other way round; U_Delta follows
+
+# The Delta VECTOR ratios are free in both models either way.
+DELTA_VECTOR = dict(x_Delta_omega=1.0, x_Delta_rho=1.0)
+
+# One dict carries the lot: nuclear-matter parameters, SU(6) factors and the
+# Delta sector on axes together, because that is how a sampler declares them.
+# The hyperon depths stay a keyword here only because they read the same in
+# both cells; they could equally ride in `target`.
+target = dict(NMP, **SU6, **DELTA, **DELTA_VECTOR)
 
 start = time.perf_counter()
 par, stage, message = dd2_nmp.build_parametrization(
     target, flags,
-    hyperon_potentials=U_HYPERON,
-    U_Delta=-50.0)
+    hyperon_potentials=U_HYPERON)
 parameters_s = time.perf_counter() - start
 
 print("=== dd2 ===")
@@ -297,8 +344,17 @@ print(f"  2. parameters  {1e3 * parameters_s:8.1f} ms   stage={stage} {message}"
 # 'sectors_failed' (they do, but the hyperon/Delta scalar inversion does not
 # converge on them). Two different statements, so they are reported apart.
 if stage == "ok":
-    print(f"     x_Delta_sigma inverted from U_Delta = -50 MeV: "
-          f"{par.x_Delta_sigma:.4f}")
+    # Both directions of the Delta scalar map, whichever way round it was
+    # given: the ratio the parametrization carries, and the depth it amounts
+    # to. `delta_potential` is the forward map, so this line reads the same
+    # under either form of `DELTA` above.
+    print(f"     x_Delta_sigma {par.x_Delta_sigma:.4f}"
+          f"   <->   U_Delta {dd2_nmp.delta_potential(par):9.4f} MeV")
+    # And the hyperon depths read back off the SU(6)-broken couplings: the
+    # check that breaking the vector sector re-fitted x_sigma rather than
+    # moving the depths.
+    for key, U in dd2_nmp.hyperon_potentials(par).items():
+        print(f"     {key:12s} asked {U_HYPERON[key]:9.4f}   got {U:9.4f}")
     # The forward map on what the inverse map returned: did it hit the target?
     # Q_sat and K_sym are not imposed by the closure, so they are predictions.
     achieved = dd2_nmp.compute_nmp(par)
@@ -348,13 +404,21 @@ species_s = time.perf_counter() - start
 start = time.perf_counter()
 base, status = sfho_nmp.invert_nmp(**NMP)
 if status.ok:
+    # The SU(6) factors go on the base, BEFORE the depths are closed on it --
+    # the same order dd2 uses, and here it has to be written out because sfho
+    # has no wrapper with a seam in the middle. `from_potential_depths` reads
+    # the nine factors off `base` and inverts x_sigma after them.
+    base = replace(base, **SU6)
     # The hyperon depths and the three Delta ratios, closed on the base the
-    # line above just inverted. sfho inverts no Delta depth, so the scalar
-    # sector of the quartet is named as a ratio like the other two.
+    # lines above just inverted and rescaled. sfho inverts no Delta depth, so
+    # the scalar sector of the quartet is named as a ratio like the other two:
+    # where `DELTA` names a depth this model cannot take it, and the two
+    # quartets then differ by more than the functional does. That asymmetry is
+    # the models', not the notebook's.
     par = sfho_nmp.from_potential_depths(
         U_Lambda_N=U_HYPERON["U_Lambda"], U_Sigma_N=U_HYPERON["U_Sigma"],
         U_Xi_N=U_HYPERON["U_Xi"], base=base,
-        x_Delta_sigma=1.15, x_Delta_omega=1.0, x_Delta_rho=1.0)
+        x_Delta_sigma=DELTA.get("x_Delta_sigma", 1.15), **DELTA_VECTOR)
 parameters_s = time.perf_counter() - start
 
 print("=== sfho ===")

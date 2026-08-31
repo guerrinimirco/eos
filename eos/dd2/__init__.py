@@ -32,7 +32,8 @@ from eos.dd2.nmp import snm_derivatives
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
 from eos.dd2.nmp import PUBLISHED_NMP, PUBLISHED_NMP_EXACT
 from eos.dd2.nmp import from_hyperon_potentials, from_delta_potential
-from eos.dd2.nmp import build_parametrization, SECTOR_KEYS
+from eos.dd2.nmp import hyperon_potentials, delta_potential
+from eos.dd2.nmp import build_parametrization, SECTOR_KEYS, SU6_FACTOR_KEYS
 from eos.dd2.responses import (
     sound_speed_eq, sound_speed_isothermal_frozen,
     sound_speed_adiabatic_frozen, adiabatic_index, thermal_index,
@@ -55,7 +56,8 @@ __all__ = [
     "invert_nmp", "from_nmp", "InversionStatus",
     "PUBLISHED_NMP", "PUBLISHED_NMP_EXACT",
     "from_hyperon_potentials", "from_delta_potential",
-    "build_parametrization", "SECTOR_KEYS",
+    "hyperon_potentials", "delta_potential",
+    "build_parametrization", "SECTOR_KEYS", "SU6_FACTOR_KEYS",
     "EoSPoint", "nucleon_warm_start", "warm_start",
     "solve_beta_eq", "solve_beta_eq_t0",
     "solve", "solve_beta_eq_neutrinoless", "solve_fixed_yc",

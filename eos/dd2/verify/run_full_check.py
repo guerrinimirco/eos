@@ -416,6 +416,54 @@ def _check_hyperon_depths(par):
         f"{su6_exact:.1e}")
 
 
+def _check_potential_round_trip(par):
+    """A depth and a coupling ratio are one number named two ways.
+
+    Each sector may be given either way round -- `from_delta_potential` takes
+    U_Delta and inverts it, or takes x_Delta_sigma and does not -- so the two
+    directions have to be exact inverses or the choice would change the
+    physics. Three legs: impose a depth and read it back, impose a ratio and
+    re-invert the depth it reports, and the same for the hyperon octet, where
+    the readers are what says a rescaled vector sector still reproduces the
+    depths that were asked for.
+    """
+    from eos.dd2.couplings import (potential_from_scalar_ratio,
+                                   scalar_ratio_from_potential)
+    from eos.dd2.nmp import (from_delta_potential, from_hyperon_potentials,
+                             delta_potential, hyperon_potentials,
+                             _saturation_terms)
+
+    err = 0.0
+    for U in (-50.0, -70.0, -100.0):
+        d = from_delta_potential(U_Delta=U, base=par)
+        err = max(err, abs(delta_potential(d) - U))
+
+    # The other direction on the algebra rather than on the constructor: a
+    # ratio chosen freely can report a depth outside the literature window
+    # `from_delta_potential` guards, and that refusal is the guard working,
+    # not the map failing.
+    terms = _saturation_terms(par)
+    for x in (0.8, 1.0, 1.15):
+        d = from_delta_potential(x_Delta_sigma=x, base=par)
+        U = delta_potential(d)
+        err = max(err, abs(U - potential_from_scalar_ratio(x, 1.0, *terms)))
+        err = max(err, abs(scalar_ratio_from_potential(U, 1.0, *terms) - x))
+
+    depths = dict(U_Lambda=-27.0, U_Sigma=20.0, U_Xi=-15.0)
+    broken = from_hyperon_potentials(
+        base=replace(par, y_omega_Lambda=1.5, y_phi_Lambda=1.5,
+                     y_omega_Sigma=1.5, y_phi_Sigma=1.5,
+                     y_omega_Xi=1.875, y_phi_Xi=1.875), **depths)
+    read = hyperon_potentials(broken)
+    hyp_err = max(abs(read[key] - U) for key, U in depths.items())
+
+    worst = max(err, hyp_err)
+    return CheckResult(
+        "potential <-> ratio round trip", worst < 1e-8, worst,
+        f"Delta both directions to {err:.1e}, hyperon depths on an "
+        f"SU(6)-broken base to {hyp_err:.1e} MeV")
+
+
 def run_full_check(par=None, flags=None, grid=None):
     """
     Run the DD2 verification suite. Returns a FullCheckReport (structured
@@ -444,6 +492,7 @@ def run_full_check(par=None, flags=None, grid=None):
     report.results.append(_check_restarts_extend_the_basin(par))
     report.results.append(_check_compose(par))
     report.results.append(_check_hyperon_depths(par))
+    report.results.append(_check_potential_round_trip(par))
     return report
 
 
