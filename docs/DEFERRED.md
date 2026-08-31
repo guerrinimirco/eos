@@ -1078,6 +1078,57 @@ standardised names, and WHICH of those tables are worth publishing is a curation
 decision that cannot be made before the tables exist.
 
 
+### The solve loop is Python around a jitted core, and that is what a point costs
+
+**Models:** dd2, sfho, did (measured); every model with a warm-started sweep.
+
+A warm point is dominated by the interpreter between the iterations, not by
+the physics in them. Measured on CPython 3.9 / anaconda, DD2Y with the octet
+and the Delta quartet, beta_eq_neutrinoless at T = 0, 300 densities from
+0.016 to 1.6 fm^-3:
+
+- one full Newton iteration through `dd2/backends/kernel_numba` -- residual,
+  analytic Jacobian and the 6x6 linear solve, no Python in the loop --
+  costs **4.2 us**;
+- `scipy.optimize.root` called FROM the converged solution, so that it does
+  no real work, costs **19-26 us** in trampoline alone;
+- the Fermi integrals are 16-24% of a line in sfho and did, and less in dd2.
+
+So the shipped path spends most of a point outside the equations. The
+per-point breakdown of a warm dd2 solve was 0.064 ms in `assemble`, 0.019 ms
+in `root` (iterations included), 0.021 ms building the context and the kernel
+arrays, against 0.152 ms for the solve as a whole.
+
+**What closing it would take.** The loop that scipy runs in Python -- guess,
+residual, Jacobian, step, convergence test -- written once inside numba and
+handed the whole density grid, so a line is one call rather than 300; plus a
+jitted `assemble`, which is the other half of the per-point cost. dd2 already
+has both kernels (`residual_t0_jit`, `jacobian_t0_jit`), so it is the model to
+do first and the one that says whether the estimate holds; sfho and did would
+each need their residual and Jacobian jitted before the same loop could drive
+them. A prototype sweep over dd2's kernels ran at 0.11 ms/pt against 1.6 ms/pt
+for the shipped path in the same process, which is where the estimate of about
+an order of magnitude comes from -- but it held the density-dependent
+couplings fixed, so it is a timing harness and not the DD2 solve.
+
+This is section 9's fast flavour and takes section 9's terms: it lives in the
+model's `backends/`, the NumPy reference path stays the oracle, and a
+backend-parity check in `verify/` is part of the work rather than a follow-up.
+It is deferred rather than declined because the reference path is what a
+physicist reads and the cheap hoists came first: sharing F_M(x) and w(x,beta)
+across did's twenty vertices, lifting sfho's per-species couplings out of the
+residual, and ending a dd2 line at the branch instead of cold-starting 104
+densities past it are together about 1.3-2.5x per model, each verified
+bit-identical, and none of them costs any readability.
+
+One further hoist was measured and NOT taken: caching `did.Parameters`'s
+`strengths()` and `shapes()`, which are pure functions of a frozen dataclass,
+is another 8%. Section 6 permits a read-only cache keyed by immutable
+parameters, but an unbounded one keyed by parameter OBJECTS grows without
+bound under exactly the inference sweep section 6 is written for, and 8% does
+not pay for getting the bound right.
+
+
 ## Per model
 
 ### dd2

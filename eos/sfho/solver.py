@@ -70,7 +70,8 @@ from eos.general.modes import (
 from eos.sfho.parameters import Parameters
 from eos.sfho.species import SpeciesFlags, active_baryons, check_couplings
 from eos.sfho.thermodynamics import (
-    baryon_thermo, field_residuals, thermal_meson_thermo, thermo_from_fields,
+    baryon_thermo, field_residuals, species_constants, thermal_meson_thermo,
+    thermo_from_fields,
 )
 from eos.general.thermodynamics_leptons import (
     electron_thermo, photon_thermo, neutrino_thermo, electron_thermo_from_density
@@ -306,6 +307,12 @@ class System(NamedTuple):
     #: rather than a faster root. The finite-difference path stays the
     #: reference, and the two agree to solver tolerance.
     analytic_jac: bool = False
+    #: The `species_constants` table of (particles, params). It is part of the
+    #: system rather than looked up inside the residual because it does not
+    #: move while the system is being solved. `_system` fills it in; None
+    #: leaves `baryon_thermo` to build its own, which is what a System
+    #: assembled by hand gets.
+    constants: Optional[tuple] = None
 
     @property
     def isentropic(self):
@@ -412,7 +419,8 @@ def residual(x, sys: System):
     # and assembling the full state on every iteration would be work thrown
     # away. `assemble` below builds it once, from the converged vector.
     hadron = baryon_thermo(
-        T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, sys.particles, par)
+        T, mu_B, mu_C, mu_S, sigma, omega, rho, phi, sys.particles, par,
+        sys.constants)
     n_C = hadron.n_C
     n_S = hadron.n_S
     s_matter = hadron.s_hadrons
@@ -779,11 +787,13 @@ def _system(par, flags, spec, n_B, T=None, SnB=None):
     the sectors the flags switched on (CLAUDE.md §4; see species.py).
     """
     check_couplings(par, flags)
+    particles = active_baryons(flags)
     return System(
-        params=par, particles=active_baryons(flags), spec=spec,
+        params=par, particles=particles, spec=spec,
         n_B=n_B, T=T, SnB=SnB,
         thermal_mesons=flags.thermal_mesons, photons=flags.photons,
         thermal_neutrinos=flags.thermal_neutrinos,
+        constants=species_constants(particles, par),
     )
 
 

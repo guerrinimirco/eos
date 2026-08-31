@@ -98,6 +98,11 @@ strings below. `species` is that model's `SpeciesFlags`. The conditions are
 named exactly `n_B`, `T` (or `SnB`), `Y_C`, `Y_S`, `Y_Le`, `Y_Lmu` — whichever
 the mode makes independent.
 
+**The complete argument-by-argument reference is `docs/API.md`** — every
+option of these three calls and of the mixed engine, the TOV driver and the
+shared infrastructure, with what each returns. This section is the tour; that
+document is the manual.
+
 `Parameters.default()` returns the published parameter set of every model;
 where a model has more than one (`dd2`, `sfho`, `did`, `enjl`, `njl`, `ccdm`),
 `Parameters.named(key)` selects it, and `Parameters.named("__")` lists the keys
@@ -444,7 +449,9 @@ eos/
   astro/
     tov/       TOV, tidal deformability, crust attachment, rotating (RNS)
     gmode/     composition g-modes
-docs/          eos.bib and the deferred-gaps ledger
+docs/          API.md (the full API reference), STRUCTURE.md (where each
+               quantity is computed), DEFERRED.md (the per-model gaps ledger),
+               and eos.bib
 output/        generated tables and figures
 ```
 

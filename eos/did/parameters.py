@@ -40,8 +40,8 @@ from dataclasses import dataclass, replace
 from typing import Mapping
 
 from eos.did.couplings import (
-    ALPHA_IDEAL, TAN_THETA_IDEAL, coupling, g8_from_aggregate,
-    su3_vector_ratios,
+    ALPHA_IDEAL, TAN_THETA_IDEAL, blend, dblend_dbeta, dblend_dx, dshape_dx,
+    g8_from_aggregate, shape, su3_vector_ratios,
 )
 
 #: The multiplets a coupling is declared for. Every active baryon belongs to
@@ -237,10 +237,27 @@ class Parameters:
         separately: computing g without them is never what the model needs.
         """
         x = n_B / self.n_0
-        shapes = self.shapes()
+
+        # F_M(x) belongs to the MESON and w(x, beta) to the state, so both are
+        # evaluated once here rather than once per vertex inside `coupling`:
+        # the twenty vertices share four shapes and one blend between them.
+        # The arithmetic below is `couplings.coupling` written out with those
+        # five numbers already in hand, and returns the same doubles.
+        shape_of = {}
+        for meson, (a, b, c, d) in self.shapes().items():
+            shape_of[meson] = (shape(x, a, b, c, d), dshape_dx(x, a, b, c, d))
+        w = blend(x, beta)
+        dw_dx = dblend_dx(x, beta)
+        dw_dbeta = dblend_dbeta(x, beta)
+
         out = {}
         for (meson, multiplet), (g_S, g_N) in self.strengths().items():
-            g, dg_dx, dg_dbeta = coupling(g_S, g_N, x, beta, *shapes[meson])
+            F, dF_dx = shape_of[meson]
+            mixed = (1.0 - w) * g_S + w * g_N
+            branch_gap = g_N - g_S
+            g = mixed * F
+            dg_dx = mixed * dF_dx + branch_gap * dw_dx * F
+            dg_dbeta = branch_gap * dw_dbeta * F
             out[(meson, multiplet)] = (g, dg_dx / self.n_0, dg_dbeta)
         return out
 

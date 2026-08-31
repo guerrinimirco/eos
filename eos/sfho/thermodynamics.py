@@ -97,12 +97,35 @@ class HadronThermoResult:
 # =============================================================================
 
 
+def species_constants(particles, params):
+    """(g_sigma, g_omega, g_rho, g_phi, m) per baryon, in `particles` order.
+
+    Parameter data, not state: none of these five numbers moves while a solve
+    iterates, so the residual reads them from here instead of re-deriving them
+    from the string-keyed coupling map at every evaluation. The mass is the
+    parametrization's where it has one and the Particle's where it does not.
+    """
+    table = []
+    for p in particles:
+        m_baryon = params.get_baryon_mass(p.name)
+        if m_baryon == 0.0:
+            # Fall back to Particle mass if not in parametrization
+            m_baryon = p.mass
+        table.append((params.get_coupling(p.name, 'sigma'),
+                      params.get_coupling(p.name, 'omega'),
+                      params.get_coupling(p.name, 'rho'),
+                      params.get_coupling(p.name, 'phi'),
+                      m_baryon))
+    return tuple(table)
+
+
 def baryon_thermo(
     T: float,
     mu_B: float, mu_C: float, mu_S: float,
     sigma: float, omega: float, rho: float, phi: float,
     particles: List[Particle],
-    params: Parameters
+    params: Parameters,
+    constants=None
 ) -> HadronThermoResult:
     """
     Compute thermodynamic quantities for all hadron species.
@@ -125,6 +148,8 @@ def baryon_thermo(
         phi: φ-meson field (MeV)
         particles: List of Particle objects to include
         params: Parameters with model parameters
+        constants: the `species_constants` table for (particles, params),
+            built here when not supplied
         
     Returns:
         HadronThermoResult with all thermodynamic quantities
@@ -145,19 +170,12 @@ def baryon_thermo(
     src_rho = 0.0
     src_phi = 0.0
     
-    for p in particles:
-        # 1. Get meson-baryon couplings
-        g_s = params.get_coupling(p.name, 'sigma')
-        g_w = params.get_coupling(p.name, 'omega')
-        g_r = params.get_coupling(p.name, 'rho')
-        g_p = params.get_coupling(p.name, 'phi')
-        
-        # 2. Get baryon mass from parametrization (not from Particle object)
-        # This allows for different mass values in different parametrizations
-        m_baryon = params.get_baryon_mass(p.name)
-        if m_baryon == 0.0:
-            # Fall back to Particle mass if not in parametrization
-            m_baryon = p.mass
+    if constants is None:
+        constants = species_constants(particles, params)
+
+    for p, (g_s, g_w, g_r, g_p, m_baryon) in zip(particles, constants):
+        # 1, 2. The couplings and the parametrization's mass, both constant
+        # through a solve, come from the table rather than from a lookup here.
         
         # 3. Effective mass: M* = m - g_σ × σ
         m_eff = m_baryon - g_s * sigma

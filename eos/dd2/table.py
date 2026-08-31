@@ -154,6 +154,12 @@ def _print_progress(info):
           f"in {info['elapsed_s']:.1f}s")
 
 
+#: Consecutive missed densities that end a line rather than punch a hole in
+#: it. The value `solver.sweep` uses for the same judgement, kept the same
+#: here so the two paths through `build_table` end a line at the same place.
+MAX_SKIP = 3
+
+
 def build_table(spec, skip_errors=False, rows=False, progress=None,
                 verbose=False):
     """
@@ -225,15 +231,26 @@ def build_table(spec, skip_errors=False, rows=False, progress=None,
                                    T=float(tv), **mode_kw)
             else:
                 # Tolerant / entropy path: per-point, warm-started, may skip.
-                line, x0 = [], None
+                # A RUN of misses is the end of the branch, not a hole in it:
+                # past scalar collapse every remaining density fails, and each
+                # one costs a cold `default_guess` -- an un-jitted beta-eq
+                # solve -- before it does. `solver.sweep` separates the two
+                # cases with the same counter and the same MAX_SKIP, and for
+                # the same reason; a line that ends early reports it through
+                # `n_solved` in the progress dict.
+                line, x0, misses = [], None, 0
                 for n in nB:
                     try:
                         p = solve_at(n, x0)
                     except RuntimeError:
                         if not skip_errors:
                             raise
+                        misses += 1
+                        if line and misses > MAX_SKIP:
+                            break
                         x0 = None      # reset the warm start past the gap
                         continue
+                    misses = 0
                     line.append(p)
                     x0 = warm_start(p, has_phi, has_muS, has_muL)
             points.append(line)
