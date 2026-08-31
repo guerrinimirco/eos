@@ -31,6 +31,31 @@ RESIDUAL_TOL = 1.0e-10
 #: mu_B = 0 cannot divide by zero. Physical dense matter has mu_B ~ 10^3 MeV.
 MU_SCALE_FLOOR = 1.0
 
+#: Evaluation budget for the Levenberg-Marquardt rescue attempt.
+#:
+#: `solve_system` follows a missed gate with LM, which exists for the solve
+#: that very nearly worked: MINPACK's own termination leaves the residual
+#: around 1e-9, above the gate, and one more attempt polishes it to machine
+#: precision. LM cannot manufacture a root that is not there, and when the
+#: conditions have none -- a density below a model's deconfinement onset, a
+#: parameter point a sampler proposed outside the physical region -- it grinds
+#: to scipy's default limit and reports the same failure far more slowly.
+#:
+#: So the budget bounds what a rescue may SPEND rather than guessing whether
+#: one is possible, which is the distinction that matters: a residual-size
+#: gate looks reasonable and is wrong, because a rescue's starting residual
+#: says nothing about whether it will succeed. Measured over test/did,
+#: test/ccdm, test/njl, test/zl, test/vmit and test/alphabag, the 127 LM calls
+#: that reached the gate used at most 238 evaluations and started from
+#: residuals as high as 1.4; `eos.ccdm` below its deconfinement onset, where
+#: there is no root at all, spent 1404 per call. This clears every observed
+#: rescue by 1.7x and cuts the doomed ones by 3.5x.
+#:
+#: A rescue that genuinely needed more comes back as non-convergence, which is
+#: a return value the caller can score (CLAUDE.md section 6) -- never a wrong
+#: answer, and never a hang.
+LM_MAX_EVALUATIONS = 400
+
 
 def scaled_residual_max(residuals, scales):
     """The largest residual once each is divided by its own scale.
@@ -57,6 +82,12 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
     parameter scan must always get an answer back, and every attempt is
     bounded internally.
 
+    The Levenberg-Marquardt attempt is capped at `LM_MAX_EVALUATIONS`, which
+    clears every rescue measured here and stops a system with no root from
+    grinding to scipy's own limit. That is what keeps a point with no root
+    cheap, which matters because a sampler and a density sweep both meet those
+    constantly.
+
     `scales_at(x)` returns the per-equation scales at the point x, so the
     residual is judged in dimensionless terms (see `scaled_residual_max`).
 
@@ -75,7 +106,8 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
 
     best_x, best_err = np.asarray(x0, dtype=float), np.inf
     for method, guess in attempts:
-        sol = root(residual, guess, method=method, tol=tol)
+        options = ({'maxiter': LM_MAX_EVALUATIONS} if method == 'lm' else None)
+        sol = root(residual, guess, method=method, tol=tol, options=options)
         err = scaled_residual_max(residual(sol.x), scales_at(sol.x))
         if err < best_err:
             best_x, best_err = sol.x, err

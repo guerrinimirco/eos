@@ -60,7 +60,7 @@ Units:
 """
 import copy
 import numpy as np
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass, field as dataclass_field, replace
 from typing import Optional, Tuple, Dict
 from scipy.optimize import brentq, root
 
@@ -958,6 +958,121 @@ def invert_nmp(par_base=None, seed=None, n_restarts=N_RESTARTS,
         ok=True, message=message,
         isoscalar_residual=iso_res, isovector_residual=isov_res,
         predictions=predictions)
+
+
+#: The nine SU(6)-breaking factors, one per (vector meson, multiplet) pair.
+#: The same names dd2 carries, because it is the same job: they scale the
+#: hyperon VECTOR couplings, so they go on the base BEFORE the depths are
+#: inverted on it (see `from_potential_depths`).
+SU6_FACTOR_KEYS = ("y_omega_Lambda", "y_omega_Sigma", "y_omega_Xi",
+                   "y_rho_Lambda", "y_rho_Sigma", "y_rho_Xi",
+                   "y_phi_Lambda", "y_phi_Sigma", "y_phi_Xi")
+
+#: The scalar couplings the NMP closure does NOT fit. `invert_nmp` fits six
+#: numbers -- g_sigma_N, g_omega_N, g_rho_N, g2, g3 and b_coeffs[1] -- and
+#: EVERYTHING else in the parametrization is inherited from `par_base`. These
+#: seven are the continuous ones a sampler is most likely to want on an axis;
+#: the shape arrays `a_coeffs` and `b_coeffs[2:]`, the baryon masses and the
+#: hyperon sector stay reachable through `par_base` itself, which is the
+#: general hook and is why this model needs no `pinned` mechanism of its own
+#: beyond a name for it.
+#:
+#: They are not decoration. Re-inverting the SAME six NMPs on a rescaled base
+#: reproduces them to ~1e-11 while moving the star: over +-30% `m_omega` moves
+#: M_max by ~0.21 M_sun, and switching `g_phi_N` from its published 0 to 6
+#: moves R_1.4 by ~2.2 km. Those are directions a nuclear-matter likelihood
+#: cannot see at all.
+PINNED_DEFAULT = ("m_sigma", "m_omega", "m_rho", "m_phi", "g_phi_N",
+                  "c3", "c4")
+
+#: Hadronic-sector knobs that may be carried INSIDE the NMP sample dict, so
+#: that one dict describes the whole parametrization the way an inference
+#: sample does. `x_Delta_sigma` appears and `U_Delta` does not: this model
+#: inverts no Delta depth, so the quartet's scalar sector is a ratio and there
+#: is no depth form to choose (contrast `eos.dd2.nmp`).
+SECTOR_KEYS = (("U_Lambda", "U_Sigma", "U_Xi",
+                "x_Delta_sigma", "x_Delta_omega", "x_Delta_rho")
+               + SU6_FACTOR_KEYS + PINNED_DEFAULT)
+
+
+def _split_sample(sample, hyperon_potentials=None, pinned=None):
+    """Separate a sample dict into (nmp, sector kwargs).
+
+    A sample may carry any of the `SECTOR_KEYS` next to the nuclear-matter
+    parameters; those override the corresponding keyword arguments key by key,
+    so naming one held coupling in the sample does not discard the others.
+    """
+    nmp = {k: v for k, v in sample.items() if k not in SECTOR_KEYS}
+    pots = dict(hyperon_potentials or {})
+    pots.update({k: float(sample[k]) for k in ("U_Lambda", "U_Sigma", "U_Xi")
+                 if k in sample})
+    return nmp, {
+        "hyperon_potentials": pots,
+        "su6": {k: float(sample[k]) for k in SU6_FACTOR_KEYS if k in sample},
+        "pinned": {**{k: float(v) for k, v in (pinned or {}).items()},
+                   **{k: float(sample[k]) for k in PINNED_DEFAULT
+                      if k in sample}},
+        "delta": {k: float(sample[k]) for k in
+                  ("x_Delta_sigma", "x_Delta_omega", "x_Delta_rho")
+                  if k in sample},
+    }
+
+
+def build_parametrization(nmp, flags, hyperon_potentials=None, pinned=None,
+                          delta_ratios=None, par_base=None,
+                          hold_hyperons=None):
+    """Nuclear-matter parameters to a `Parameters` with the strange and
+    resonant sectors attached, as `flags` requires.
+
+    The same entry point `eos.dd2.nmp` carries, taking the same six
+    nuclear-matter parameters, so one sample dict drives either model. It runs
+    the stages this model spells out separately -- the held couplings onto the
+    base, `invert_nmp` for the nucleons, the SU(6) factors, then
+    `from_potential_depths` for the hyperon depths and the Delta ratios -- in
+    the one order that is correct: the SU(6) factors scale the VECTOR
+    couplings and the hyperon scalar couplings are inverted from the depths
+    AFTER them, so imposing them first holds the depths at what was asked and
+    re-fits x_sigma. Applying them to the finished parametrization does the
+    opposite and moves the depths instead.
+
+    `nmp` may also carry any of the `SECTOR_KEYS` -- the hyperon depths, the
+    three Delta ratios, the nine SU(6) factors and the seven held couplings of
+    `PINNED_DEFAULT`. Those take precedence over the keyword arguments, key by
+    key, so a single dict can put L_sym, U_Xi, y_omega_Xi and m_omega on axes
+    together.
+
+    `par_base` is the parametrization everything unnamed is inherited from,
+    defaulting to published SFHo. It is the general form of `pinned`: the
+    shape arrays and the baryon masses have no sample key and are moved by
+    passing a base that carries them. `hold_hyperons` is forwarded to
+    `invert_nmp` and is required only when that base already carries a strange
+    sector.
+
+    Returns `(par, stage, message)`. `stage` is 'ok', 'inversion_failed' when
+    the NMPs have no SFHo-form realisation, or 'sectors_failed' when they do
+    but the hyperon closure does not converge on them. `par` is None unless
+    `stage` is 'ok'. Non-convergence is a RETURN VALUE (CLAUDE.md section 6).
+    """
+    nmp, sector = _split_sample(dict(nmp), hyperon_potentials, pinned)
+    base = replace(par_base or Parameters.default(), **sector["pinned"])
+
+    par, status = invert_nmp(par_base=base, hold_hyperons=hold_hyperons, **nmp)
+    if not status.ok:
+        return None, "inversion_failed", status.message
+    try:
+        if flags.hyperons or flags.deltas:
+            par = replace(par, **sector["su6"])
+            ratios = dict(delta_ratios or {})
+            ratios.update(sector["delta"])
+            par = from_potential_depths(base=par, **{
+                f"U_{name}_N": sector["hyperon_potentials"][f"U_{name}"]
+                for name in ("Lambda", "Sigma", "Xi")
+                if f"U_{name}" in sector["hyperon_potentials"]}, **ratios)
+        elif sector["su6"]:
+            par = replace(par, **sector["su6"])
+    except Exception as exc:
+        return None, "sectors_failed", f"{type(exc).__name__}: {exc}"
+    return par, "ok", ""
 
 
 def from_nmp(par_base=None, return_status=False, **nmp):

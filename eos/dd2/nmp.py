@@ -1130,11 +1130,13 @@ SECTOR_KEYS = (("U_Lambda", "U_Sigma", "U_Xi",
 DEFAULT_U_DELTA = -50.0
 
 
-def _split_sample(sample, hyperon_potentials=None, U_Delta=None):
+def _split_sample(sample, hyperon_potentials=None, U_Delta=None, pinned=None):
     """Separate a sample dict into (nmp, sector kwargs).
 
     A sample may carry any of the `SECTOR_KEYS` next to the nuclear-matter
-    parameters; those override the corresponding keyword arguments. This is
+    parameters; those override the corresponding keyword arguments, key by key
+    rather than dict by dict, so naming one held coefficient in the sample
+    does not discard the other from `pinned`. This is
     what lets one dict put L_sym, U_Xi, y_omega_Xi and U_Delta on axes
     together -- they are all "hadronic parameters" to the caller even though
     the inversion treats them in separate stages. Keys absent from both the
@@ -1165,8 +1167,9 @@ def _split_sample(sample, hyperon_potentials=None, U_Delta=None):
     sector = {"hyperon_potentials": pots,
               "su6": {k: float(sample[k]) for k in SU6_FACTOR_KEYS
                       if k in sample},
-              "pinned": {k: float(sample[k]) for k in PINNED_DEFAULT
-                         if k in sample},
+              "pinned": {**{k: float(v) for k, v in (pinned or {}).items()},
+                         **{k: float(sample[k]) for k in PINNED_DEFAULT
+                            if k in sample}},
               "U_Delta": None if depth is None else float(depth),
               "x_Delta_sigma": None if ratio is None else float(ratio),
               "x_Delta_omega": float(sample.get("x_Delta_omega", 1.0)),
@@ -1175,7 +1178,7 @@ def _split_sample(sample, hyperon_potentials=None, U_Delta=None):
 
 
 def build_parametrization(nmp, flags, hyperon_potentials=None,
-                          U_Delta=None, impose_Q_sat=False):
+                          U_Delta=None, pinned=None, impose_Q_sat=False):
     """Nuclear-matter parameters to a `Parameters` with the strange and
     resonant sectors attached, as `flags` requires.
 
@@ -1204,8 +1207,10 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     depths back with `hyperon_potentials`.
 
     The shape coefficients the closure HOLDS rather than fits -- `b_sigma` and
-    `c_omega`, `PINNED_DEFAULT` -- may ride in the sample like any other
-    coupling knob, and default to the published DD2 values. They are worth an
+    `c_omega`, `PINNED_DEFAULT` -- are the `pinned` argument, and may equally
+    ride in the sample like any other coupling knob; the sample wins per key,
+    the same precedence `hyperon_potentials` follows. Both default to the
+    published DD2 values. They are worth an
     axis: the six NMPs come back to ~1e-12 whatever `b_sigma` is, so an NMP
     likelihood cannot see it, while over +-30% it moves M_max by ~0.18 M_sun.
     `c_omega` over the same range moves it by ~0.02, which is why one of them
@@ -1226,7 +1231,7 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     is a malformed call rather than a point of parameter space, and no
     sampler reaches it without a bug in how its axes were declared.
     """
-    nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta)
+    nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta, pinned)
     # not from_nmp: this scores failures. impose_Q_sat selects the isoscalar
     # closure and is the caller's, not an inference from the sample carrying a
     # Q_sat key -- see `invert_nmp`, which says why that inference was wrong.

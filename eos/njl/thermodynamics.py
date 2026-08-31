@@ -55,7 +55,8 @@ import math
 import numpy as np
 
 from eos.general.fermi_integrals import (
-    ABSENT, ModeThermo, kinetic_thermo, surface_term,
+    ABSENT, DEGENERACY, NODES_PER_PANEL, ModeThermo, _gauss_legendre,
+    kinetic_thermo, surface_term,
 )
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
@@ -66,7 +67,22 @@ from eos.general.solve import solve_system
 from eos.njl.couplings import vector_energy, vector_self_energy
 from eos.njl.species import DEGENERACY_SEA
 
+# `backends/` is optional: CLAUDE.md section 5 defines it by the property that
+# deleting it changes no number, only the time they take. With it gone, or
+# with numba absent, `backend="fast"` raises and the reference path below is
+# the whole story.
+try:
+    from eos.njl.backends.kernel_numba import NUMBA_OK, modes_thermo
+except ImportError:                       # pragma: no cover - backends/ removed
+    NUMBA_OK = False
+    modes_thermo = None
+
 _PI2 = math.pi ** 2
+
+#: The reference Gauss-Legendre rule handed to the jitted backend. Memoized in
+#: `eos.general.fermi_integrals`, so the two flavours quadrature on the same
+#: nodes and cannot drift apart in the rule itself.
+_GAUSS_X, _GAUSS_W = _gauss_legendre(NODES_PER_PANEL)
 
 #: Damping of the fixed-point iteration on the masses. A root finder on the
 #: condensates diverges here -- during development it returned masses that
@@ -345,7 +361,7 @@ class NJLState:
 
 def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
              vac=None, pattern="unpaired", pair_nodes_per_panel=None,
-             two_flavour=False):
+             two_flavour=False, backend="reference"):
     """One state, evaluated. No equilibrium condition is imposed here.
 
     The assembly, in the order it is written (section 6.1 of the
@@ -408,16 +424,50 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
     # `masses_from_condensates`. Dropping phi_s from the 't Hooft determinant
     # instead would move M_u and M_d and the subtracted vacuum constant, which
     # would change the MODEL rather than the matter content it is asked about.
-    modes = [(ABSENT if two_flavour and FLAVOUR_OF_MODE[j] == 2
-              else kinetic_thermo(mu_star[j], M_mode[j], T, par.Lambda_medium))
-             for j in range(N_MODES)]
-    n_med = np.array([m.n for m in modes])
-    P_med = sum(m.P for m in modes)
-    eps_med = sum(m.eps for m in modes)
-    s_med = sum(m.s for m in modes)
-    rho_s_med = np.array([sum(modes[j].rho_s
-                              for j in range(N_MODES) if FLAVOUR_OF_MODE[j] == i)
-                          for i in range(3)])
+    if backend == "fast":
+        # The SAME nine integrals, compiled: `backends/kernel_numba` writes out
+        # the quadrature `kinetic_thermo` performs, and verify/ checks the two
+        # against each other. It is opt-in rather than the default because the
+        # two flavours sum the modes in different orders and so agree to
+        # round-off rather than bit for bit, and a pattern enumeration decided
+        # by a free-energy comparison can be knife-edge: at n_B = 1.2 fm^-3 the
+        # CFL and 2SC candidates are close enough that a 1e-16 difference
+        # selects the other one. That is a property of the physics at a
+        # near-degenerate boundary, not of either flavour, and it is why
+        # `test/baseline` is frozen against the reference (CLAUDE.md section 9:
+        # the reference is what correctness is judged against and is never
+        # bypassed).
+        if not NUMBA_OK:
+            raise NotImplementedError(
+                "eos.njl backend='fast' needs eos/njl/backends/kernel_numba "
+                "and numba; neither is required for the model, and "
+                "backend='reference' computes the same numbers more slowly")
+        absent = np.array([bool(two_flavour and FLAVOUR_OF_MODE[j] == 2)
+                           for j in range(N_MODES)])
+        block = modes_thermo(mu_star, M_mode, T, par.Lambda_medium,
+                             DEGENERACY, _GAUSS_X, _GAUSS_W, absent)
+        n_med = block[:, 0]
+        P_med = float(np.sum(block[:, 3]))
+        eps_med = float(np.sum(block[:, 2]))
+        s_med = float(np.sum(block[:, 4]))
+        rho_s_med = np.array([float(np.sum(block[FLAVOUR_OF_MODE == i, 1]))
+                              for i in range(3)])
+    elif backend != "reference":
+        raise ValueError(f"unknown backend {backend!r}; eos.njl has "
+                         f"'reference' and 'fast'")
+    else:
+        modes = [(ABSENT if two_flavour and FLAVOUR_OF_MODE[j] == 2
+                  else kinetic_thermo(mu_star[j], M_mode[j], T,
+                                      par.Lambda_medium))
+                 for j in range(N_MODES)]
+        n_med = np.array([m.n for m in modes])
+        P_med = sum(m.P for m in modes)
+        eps_med = sum(m.eps for m in modes)
+        s_med = sum(m.s for m in modes)
+        rho_s_med = np.array([sum(modes[j].rho_s
+                                  for j in range(N_MODES)
+                                  if FLAVOUR_OF_MODE[j] == i)
+                              for i in range(3)])
 
     # --- the pairing correction ------------------------------------------
     kwargs = ({} if pair_nodes_per_panel is None

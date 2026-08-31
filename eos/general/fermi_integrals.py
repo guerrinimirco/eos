@@ -27,6 +27,7 @@ functions are grouped under their own banner and every one of them says so.
 Divide by `hc3` to cross into the units the rest of this module returns.
 """
 from dataclasses import dataclass
+from functools import lru_cache
 import math
 
 import numpy as np
@@ -697,6 +698,28 @@ THERMAL_COLLAR = 25.0
 _BREAK_TOL = 1.0e-9
 
 
+@lru_cache(maxsize=None)
+def _gauss_legendre(nodes_per_panel):
+    """(x, w) of the reference Gauss-Legendre rule on [-1, 1], memoized.
+
+    The rule is a function of the node COUNT and of nothing else, while
+    `panel_nodes` is called once per mode per residual evaluation -- nine
+    times per NJL state, tens of thousands of times per table. Recomputing it
+    each time (a companion-matrix eigendecomposition plus a Newton polish)
+    was 58% of the run time of an njl or ccdm table and 76% of it counting the
+    affine map onto the panels.
+
+    The arrays are handed out read-only, because a cached value shared between
+    every caller must not be mutable: `panel_nodes` only broadcasts them into
+    new arrays, and a future caller that tried to write would silently poison
+    every later quadrature in the process.
+    """
+    x, w = np.polynomial.legendre.leggauss(nodes_per_panel)
+    x.flags.writeable = False
+    w.flags.writeable = False
+    return x, w
+
+
 def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL):
     """(k, w): a panel-split Gauss-Legendre rule on [0, k_max] [MeV].
 
@@ -716,7 +739,7 @@ def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL):
     edges = np.unique(np.clip(np.asarray(breaks, dtype=float), 0.0, k_max))
     edges = edges[np.concatenate(([True], np.diff(edges) > _BREAK_TOL * k_max))]
 
-    x, wx = np.polynomial.legendre.leggauss(nodes_per_panel)
+    x, wx = _gauss_legendre(nodes_per_panel)
     lo, hi = edges[:-1, None], edges[1:, None]
     half = 0.5 * (hi - lo)
     k = (0.5 * (lo + hi) + half * x[None, :]).ravel()

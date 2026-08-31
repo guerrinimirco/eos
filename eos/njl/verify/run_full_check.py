@@ -90,6 +90,7 @@ from eos.njl import (
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
     state_at, surface_term, vacuum_solution,
 )
+from eos.njl.thermodynamics import NUMBA_OK
 
 #: The published vacuum outputs of the RKH fit (Rehberg, Klevansky, Huefner,
 #: Phys. Rev. C 53, 410 (1996)), as reproduced in section 4 of
@@ -626,6 +627,51 @@ def _check_zero_pressure(par):
                        "; ".join(detail))
 
 
+def check_backend_parity(par):
+    """backend='fast' against backend='reference', state by state.
+
+    CLAUDE.md section 9: the jitted flavour is validated against the reference,
+    which is what correctness is judged against. `backends/kernel_numba` writes
+    out the same quadrature `eos.general.fermi_integrals.kinetic_thermo`
+    performs, so the two must agree to round-off -- they sum the nine modes in
+    different orders and so are not bit-identical, which is exactly why this
+    check states a tolerance instead of an equality.
+
+    Skipped, not failed, where `backends/` or numba is absent: section 5 makes
+    the directory deletable, and a check that fails on its absence would make
+    it mandatory.
+    """
+    if not NUMBA_OK:
+        return CheckResult("backend parity", True, 0.0,
+                           "skipped: backends/ or numba absent, and section 5 "
+                           "makes both optional")
+    vac = vacuum_solution(par)
+    worst, where = 0.0, ""
+    for T in (0.0, 5.0, 20.0, 50.0):
+        for mu_B in (900.0, 1100.0, 1400.0, 1800.0):
+            for mu_C in (-150.0, -40.0, 0.0):
+                for M in ((350.0, 350.0, 540.0), (60.0, 55.0, 400.0),
+                          (9.0, 9.0, 250.0)):
+                    kw = dict(par=par, M=np.array(M), Delta=np.zeros(3),
+                              Sigma_V=0.0, mu_B=mu_B, mu_C=mu_C, mu_S=0.0,
+                              mu_3=0.0, mu_8=0.0, T=T, vac=vac)
+                    ref = state_at(**kw, backend="reference")
+                    fast = state_at(**kw, backend="fast")
+                    # Everything is judged against eps, the largest quantity a
+                    # state carries: a relative error on a strangeness density
+                    # that is 1e-12 of the state is a cancellation, not a
+                    # disagreement between the two flavours.
+                    scale = max(abs(ref.eps_nat), 1.0)
+                    for key in ("P_nat", "eps_nat", "s_nat", "n_B_nat",
+                                "n_C_nat", "n_S_nat", "mu_dot_n"):
+                        err = abs(getattr(ref, key) - getattr(fast, key)) / scale
+                        if err > worst:
+                            worst, where = err, f"{key} at T={T}, mu_B={mu_B}"
+    tol = 1.0e-12
+    return CheckResult("backend parity", worst < tol, worst,
+                       f"worst {where}" if where else "")
+
+
 def run_all(par=None, include_csc=True, include_sound=True):
     """Run every check and return the report.
 
@@ -655,6 +701,7 @@ def run_all(par=None, include_csc=True, include_sound=True):
         check_charge_basis(par, states),
         check_residual_gate(par, states),
         _check_zero_pressure(par),
+        check_backend_parity(par),
     ]
     if include_csc:
         report.results += [
