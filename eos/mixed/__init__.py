@@ -116,6 +116,7 @@ from eos.mixed.hybrid import (
     EoSTable, build_hybrid_table, mass_radius_mixed,
 )
 from eos.general.table_io import save_table, load_table, export_csv
+from eos.general.table_io import columns, matrix_from_rows
 
 # --- the uniform model API, the same three entry points every model has -----
 from eos.mixed.api import (
@@ -161,6 +162,7 @@ __all__ = [
     "TableSpec", "build_table", "composition_row",
     "EoSTable", "build_hybrid_table", "mass_radius_mixed",
     "save_table", "load_table", "export_csv",
+    "columns", "matrix_from_rows",
     # the uniform model API
     "eos_point", "eos_table", "eos_response", "PointResult",
     "hybrid_table", "HybridResult", "RESPONSE_FREEZES",

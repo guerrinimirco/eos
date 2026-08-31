@@ -35,6 +35,7 @@ from eos.vmit.api import (
     eos_point, eos_table, eos_response, zero_pressure_point, PointResult, RESPONSE_FREEZES,
 )
 from eos.general.table_io import save_table, load_table, export_csv
+from eos.general.table_io import columns, matrix_from_rows
 
 __all__ = [
     "Parameters", "SpeciesFlags",
@@ -55,4 +56,5 @@ __all__ = [
     "zero_pressure_point", "PointResult",
     "RESPONSE_FREEZES",
     "save_table", "load_table", "export_csv",
+    "columns", "matrix_from_rows",
 ]

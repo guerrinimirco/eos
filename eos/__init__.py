@@ -39,6 +39,7 @@ from eos.general.modes import (
 )
 from eos.general.state import EOSTable_for_TOV
 from eos.general.table_io import save_table, load_table, export_csv
+from eos.general.table_io import columns, matrix_from_rows
 
 #: The model subpackages: one physics model each, importing only `general/`.
 MODELS = ("dd2", "sfho", "zl", "did", "vmit",
@@ -133,5 +134,6 @@ __all__ = [
     "beta_eq_neutrinoless", "beta_eq_neutrino_trapped",
     "fixed_YC", "fixed_YC_YS",
     "EOSTable_for_TOV", "save_table", "load_table", "export_csv",
+    "columns", "matrix_from_rows",
     *MODELS, *ENGINES, "general", "astro",
 ]

@@ -161,9 +161,6 @@ print("columns:", sorted(rows[0]))
 # reads in black and white too.
 
 # %%
-rows
-
-# %%
 cold = [row for row in rows if row["T"] == 0.0]
 n_B = np.array([row["n_B"] for row in cold])
 P = np.array([row["P"] for row in cold])
@@ -264,111 +261,112 @@ plt.show()
 # this closure does not impose and therefore PREDICTS.
 
 # %%
-target
-
-# %%
 STARS = {}
-
-N_B_TOV = np.linspace(0.05, 1.6, 150)     # baryon density grid
+NBgrid = 200
+N_B_TOV = np.linspace(0.05, 1.6, NBgrid)     # baryon density grid
 N_STARS = 50                              # central densities per sequence
 
-# Start time
-start = time.perf_counter()
-
+# --- 1. parameters and particles -----------------------------------------------------
 flags = dd2.SpeciesFlags(hyperons=True, deltas=True)
 
-# --- 1. the parameters -----------------------------------------------------
-# The six nuclear-matter parameters, chosen here and read by BOTH cells.
 NMP = dict(n_sat=0.153,          # fm^-3
            E_sat=-16.0,          # MeV
            m_eff_ratio=0.70,     # m*/m at saturation
            K_sat=222.0,          # MeV, incompressibility
-           E_sym=30.0,           # MeV
+           E_sym=30.0,           # MeV, symmetry energy
            L_sym=45.0)           # MeV, slope of the symmetry energy
 
 # The hyperon depths at saturation in symmetric matter, MeV. Also read by both.
 U_HYPERON = dict(U_Lambda=-27.0, U_Sigma=20.0, U_Xi=-15.0)
 
-# The nine SU(6)-breaking factors, same names in both models. y = 1 is SU(6)
-# exactly (DD2Y); below is the SFHoY breaking of Fortin, Oertel & Providencia,
-# PASA 35 (2018) e044 §2.2. y_phi = 0 in all three is a set with no
-# hidden-strange sector at all.
-#
-# ORDER MATTERS: they scale the VECTOR couplings and the hyperon scalar
-# couplings are inverted from the depths AFTER them, so U_HYPERON stays what
-# was asked and x_sigma moves. Set on the finished par it is the other way
-# round. That is why they go in `target`, not into a later `replace`.
+# SU(6)-breaking factors [y = 1 is SU(6)]
 SU6 = dict(y_omega_Lambda=1.5, y_rho_Lambda=1.0, y_phi_Lambda=1.5,
            y_omega_Sigma=1.5,  y_rho_Sigma=1.0,  y_phi_Sigma=1.5,
            y_omega_Xi=1.875,   y_rho_Xi=1.0,     y_phi_Xi=1.875)
 
-# The Delta scalar sector, named ONCE, either way round. `U_Delta` is a DEPTH
-# that dd2 inverts, guarded to the literature range [-100, -50] MeV;
-# `x_Delta_sigma` is the RATIO, taken as it stands with no solve and no range.
-# `dd2_nmp.delta_potential` reads back whichever was not given. Both raises.
-DELTA = dict(U_Delta=-100.0)
-# DELTA = dict(x_Delta_sigma=1.15)     # the other way round; U_Delta follows
+# The Delta scalar sector `U_Delta` is a DEPTH
 
-DELTA_VECTOR = dict(x_Delta_omega=1.0, x_Delta_rho=1.0)
+#DELTA = dict(x_Delta_sigma=1.15)     # DELTA = dict(U_Delta=-100.0) # the other way round
+#DELTA_VECTOR = dict(U_Delta=-90., x_Delta_omega=1.0, x_Delta_rho=1.0)
+DELTA_VECTOR = dict(x_Delta_sigma=1.0879, x_Delta_omega=1.0, x_Delta_rho=1.0)
 
 # One dict carries NMPs, SU(6) factors and the Delta sector together, because
 # that is how a sampler declares them.
-target = dict(NMP, **SU6, **DELTA, **DELTA_VECTOR)
+target = dict(NMP, **SU6, **U_HYPERON, **DELTA_VECTOR)
 
 start = time.perf_counter()
-par, stage, message = dd2_nmp.build_parametrization(
-    target, flags,
-    hyperon_potentials=U_HYPERON)
-parameters_s = time.perf_counter() - start
+
+par, stage, message = dd2_nmp.build_parametrization(target, flags)
+
+time_parametrization = time.perf_counter() - start
 
 print("=== dd2 ===")
-print(f"  1. particles   {1e6 * species_s:8.1f} us   {flags}")
-print(f"  2. parameters  {1e3 * parameters_s:8.1f} ms   stage={stage} {message}")
+print(f"  1. parameters  {1e3 * time_parametrization:8.1f} ms   stage={stage} {message}")
+print(par)
 
-# `stage` is 'ok', 'inversion_failed' (the NMPs have no DD-RMF realisation) or
-# 'sectors_failed' (they do, but the hyperon/Delta scalar inversion does not
-# converge on them). Two different statements, so they are reported apart.
+
 if stage == "ok":
-    # Both directions of the Delta scalar map, whichever way round it was
-    # given, and the hyperon depths read back off the SU(6)-broken couplings.
-    print(f"     x_Delta_sigma {par.x_Delta_sigma:.4f}"
-          f"   <->   U_Delta {dd2_nmp.delta_potential(par):9.4f} MeV")
-    for key, U in dd2_nmp.hyperon_potentials(par).items():
-        print(f"     {key:12s} asked {U_HYPERON[key]:9.4f}   got {U:9.4f}")
-    # The forward map on what the inverse map returned: did it hit the target?
-    # Q_sat and K_sym are not imposed by the closure, so they are predictions.
+    # --- the couplings the inversion produced ------------------------------
+    Gs, Gw, Gr, _, _, _ = par.couplings_at(par.n_sat)
+    sat = solve_snm(par, par.n_sat)          
+    print(f"  couplings at n_sat = {par.n_sat:.6f} fm^-3, SNM:")
+    print(f"     Gamma_sigmaN {Gs:8.4f}   Gamma_omegaN {Gw:8.4f}   "
+          f"Gamma_rhoN {Gr:8.4f}")
+    print(f"     sigma {sat.matter.fields['sigma']:8.4f}   "
+          f"omega0 {sat.matter.fields['omega0']:8.4f}   "
+          f"Sigma^R {sat.matter.Sigma_R:8.4f}  [MeV]")
+
+    # Hyperons: the stored scalar ratio and the three vector ratios SU(6) x y.
+    print(f"     {'species':10s} {'m [MeV]':>9s} {'x_sigma':>9s} {'x_omega':>9s}"
+          f" {'x_rho':>9s} {'x_phi':>9s}")
+    for name, (mass, x_s, x_w, x_r, x_p) in par.hyperon_coupling_map.items():
+        print(f"     {name:10s} {mass:9.2f} {x_s:9.4f} {x_w:9.4f}"
+              f" {x_r:9.4f} {x_p:9.4f}")
+    print(f"     {'Delta':10s} {1232.00:9.2f} {par.x_Delta_sigma:9.4f}"
+          f" {par.x_Delta_omega:9.4f} {par.x_Delta_rho:9.4f} {0.0:9.4f}")
+
+    # --- and the forward maps, read back off those couplings ---------------
     achieved = dd2_nmp.compute_nmp(par)
     for key, wanted in NMP.items():
         print(f"     {key:12s} asked {wanted:9.4f}   got {achieved[key]:9.4f}")
-    for key in ("Q_sat", "K_sym"):
+    for key in ("Q_sat", "K_sym"):          # not imposed: predictions
         print(f"     {key:12s} {'predicted':>9s}   {achieved[key]:9.4f}")
+    for key, U in dd2_nmp.hyperon_potentials(par).items():
+        print(f"     {key:12s} asked {U_HYPERON[key]:9.4f}   got {U:9.4f}")
+    print(f"     {'U_Delta':12s} {'':9s}   {dd2_nmp.delta_potential(par):9.4f}"
+          f"   (x_Delta_sigma {par.x_Delta_sigma:.4f})")
 
-    # --- 3. the star -------------------------------------------------------
+    # --- 2. eos table -------------------------------------------------------
     start = time.perf_counter()
-    table = dd2.eos_table(par, "beta_eq_neutrinoless", flags,
-                          {"nB": N_B_TOV, "T": np.array([0.0])})
+
+    table = dd2.eos_table(par, "beta_eq_neutrinoless", flags, {"nB": N_B_TOV, "T": np.array([0.0])})
+
+    time_eostable = time.perf_counter() - start
+
+    print(f"  2. table eos: tot {1e3 * time_eostable:8.1f} ms, per point {1e3 * time_eostable/NBgrid:8.1f} ms ")
+
+    # --- 3.tov -------------------------------------------------------
+    start = time.perf_counter()
+
     rows = dd2.rows_from_result(table)
     core = EOSTable_for_TOV(P=np.array([row["P"] for row in rows]),
                             epsilon=np.array([row["eps"] for row in rows]),
                             nB=np.array([row["n_B"] for row in rows]))
-    e_c = np.geomspace(250.0, 0.95 * float(core.epsilon.max()), N_STARS)
-    sequence = compute_tov_sequence(core, e_c, add_crust_table="BPS",
-                                    n_transition=0.08, verbose=False,
-                                    backend="fast")
-    index, _, m_max = find_mmax_precise(sequence)
-    star_s = time.perf_counter() - start
 
-    # Everything past the maximum-mass star is unstable and belongs on no plane.
-    STARS["dd2"] = dict(core=core, sequence=sequence[:index + 1])
-    print(f"  3. star        {star_s:8.2f} s    {len(rows)}/{len(N_B_TOV)} EoS "
-          f"points, M_max = {m_max:.3f} M_sun at R = {sequence[index, 3]:.2f} km")
-    # A maximum is only a maximum if the sequence turned over. When the heaviest
-    # star is the last one computed, the table ran out before the star did and
-    # the number is a LOWER BOUND on M_max, not M_max.
-    turned_over = index + 1 < len(sequence)
-    print("     maximum found: the sequence turned over" if turned_over else
-          "     TABLE-LIMITED: the heaviest star is the last one computed, "
-          "so M_max is a lower bound")
+    e_c = np.geomspace(250.0, 1 * float(core.epsilon.max()), N_STARS)
+    sequence = compute_tov_sequence(core, e_c, add_crust_table="BPS",
+                                    n_transition=0.08, 
+                                    add_crust_mode='interpolate',delta_n=0.01,
+                                    verbose=False,
+                                    backend="fast", 
+                                    compute_tidal=True, compute_baryonic_mass=False)
+    index, ec_max, m_max = find_mmax_precise(sequence)
+    STARS["dd2"] = dict(core=core, sequence=sequence[:index + 1]) #why +1?
+    time_tov = time.perf_counter() - start
+
+    print(f"  3. tov    {time_tov:8.2f} s "
+          f"M_max = {m_max:.3f} M_sun at R = {sequence[index, 3]:.2f} km ; --  {sequence[index]}")
+  
 
 # %%
 # --- 1. the particles ------------------------------------------------------
@@ -384,14 +382,12 @@ species_s = time.perf_counter() - start
 start = time.perf_counter()
 base, status = sfho_nmp.invert_nmp(**NMP)
 if status.ok:
+    # The hyperon depths and the three Delta ratios, closed on the base the
+    # line above just inverted. sfho inverts no Delta depth, so the scalar
+    # sector of the quartet is named as a ratio like the other two.
     # The SU(6) factors go on the base BEFORE the depths are closed on it --
     # dd2 does the same, one stage inside its wrapper.
     base = replace(base, **SU6)
-    # The hyperon depths and the three Delta ratios, closed on the base the
-    # lines above inverted and rescaled. sfho inverts no Delta depth, so the
-    # scalar sector of the quartet is named as a ratio like the other two:
-    # where `DELTA` names a depth this model cannot take it, and the two
-    # quartets then differ by more than the functional does.
     par = sfho_nmp.from_potential_depths(
         U_Lambda_N=U_HYPERON["U_Lambda"], U_Sigma_N=U_HYPERON["U_Sigma"],
         U_Xi_N=U_HYPERON["U_Xi"], base=base,

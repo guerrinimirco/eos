@@ -55,7 +55,7 @@ def _flatten_meta(meta):
     return flat
 
 
-def _columns(rows):
+def columns(rows):
     """Long-format rows -> {name: array}, union of all keys, nan where absent.
 
     Different modes and different eta values populate different columns (a
@@ -78,6 +78,66 @@ def _columns(rows):
     return cols
 
 
+def matrix_from_rows(rows, nB=None, temps=None, temp_key="T"):
+    """Long-format rows -> ({name: array[i_temp, i_nB]}, axes), nan where the
+    solver returned no point at that grid node.
+
+    `columns` above gives one flat array per quantity, in the order the rows
+    happen to be in; this gives the same quantities laid out on the GRID they
+    were asked for, so `matrix["P"][i]` is the whole isotherm at
+    `axes[temp_key][i]` and `matrix["P"][i][j]` is one number. `axes` is
+    {"nB": ..., temp_key: ...}, the two 1-D axes the matrix is indexed by.
+
+    The gaps are the point. A line is shorter than `nB` wherever the solver
+    reached no solution -- past a scalar-collapse boundary, inside a
+    liquid-gas spinodal -- and a different line at a different temperature
+    stops somewhere else, so the grid is RAGGED. Every row carries the density
+    it was solved at, and that density is one of the requested ones, so each
+    point has a slot; the slots nothing landed in are nan. That is a statement
+    about the model, not padding, and `np.isnan(matrix["P"])` is where to read
+    it. Long format stays the shape for I/O, where a nan row would be a lie.
+
+    nB and temps default to the sorted unique values PRESENT in the rows,
+    which is not the same as the grid that was requested -- a density where no
+    temperature converged is absent rather than all-nan, and two runs can then
+    come back different shapes. Pass `result.nB` and `result.temp_values` to
+    get the grid as asked for. A row whose n_B or temperature is not on the
+    given axes raises rather than being dropped.
+    """
+    cols = columns(rows)
+    if not rows:
+        return {}, {"nB": np.asarray([], float), temp_key: np.asarray([], float)}
+    if temp_key not in cols:
+        raise KeyError(
+            f"rows carry no {temp_key!r} column; an entropy-axis table has "
+            f"temp_key='SnB'. Columns present: {sorted(cols)}")
+
+    nB = np.unique(cols["n_B"]) if nB is None else np.asarray(nB, dtype=float)
+    temps = (np.unique(cols[temp_key]) if temps is None
+             else np.asarray(temps, dtype=float))
+    i_nB = {float(v): i for i, v in enumerate(nB)}
+    i_temp = {float(v): i for i, v in enumerate(temps)}
+
+    rows_i = np.empty(len(rows), dtype=int)
+    cols_j = np.empty(len(rows), dtype=int)
+    for k, (t, n) in enumerate(zip(cols[temp_key], cols["n_B"])):
+        if float(t) not in i_temp or float(n) not in i_nB:
+            raise ValueError(
+                f"row {k} sits at ({temp_key}={t!r}, n_B={n!r}), which is not "
+                f"on the axes given; pass the axes the table was solved on")
+        rows_i[k] = i_temp[float(t)]
+        cols_j[k] = i_nB[float(n)]
+
+    matrix = {}
+    for name, values in cols.items():
+        if values.dtype == object:      # a string column has no matrix form
+            continue
+        grid = np.full((len(temps), len(nB)), np.nan)
+        grid[rows_i, cols_j] = values
+        matrix[name] = grid
+    return matrix, {"nB": nB, temp_key: temps}
+
+
 def save_table(rows, path, meta=None, windows=None):
     """Write long-format `rows` to an HDF5 file at `path`.
 
@@ -89,7 +149,7 @@ def save_table(rows, path, meta=None, windows=None):
     """
     import h5py
 
-    cols = _columns(rows)
+    cols = columns(rows)
     with h5py.File(path, "w") as f:
         grp = f.create_group("table")
         for name, arr in cols.items():
@@ -147,7 +207,7 @@ def export_csv(rows, path, meta=None):
 
     Column order follows first appearance; missing values are written as nan.
     """
-    cols = _columns(rows)
+    cols = columns(rows)
     names = list(cols)
     with open(path, "w") as f:
         for key, value in sorted(_flatten_meta(meta or {}).items()):

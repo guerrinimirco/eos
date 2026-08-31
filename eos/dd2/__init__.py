@@ -27,12 +27,13 @@ from eos.dd2.table import (
     hadronic_row, rows_from_result,
 )
 from eos.general.table_io import save_table, load_table, export_csv
+from eos.general.table_io import columns, matrix_from_rows
 from eos.dd2.nmp import compute_nmp, energy_per_baryon, esym
 from eos.dd2.nmp import snm_derivatives
 from eos.dd2.nmp import invert_nmp, from_nmp, InversionStatus
 from eos.dd2.nmp import PUBLISHED_NMP, PUBLISHED_NMP_EXACT
 from eos.dd2.nmp import from_hyperon_potentials, from_delta_potential
-from eos.dd2.nmp import hyperon_potentials, delta_potential
+from eos.dd2.nmp import hyperon_potentials, delta_potential, forward_maps
 from eos.dd2.nmp import build_parametrization, SECTOR_KEYS, SU6_FACTOR_KEYS
 from eos.dd2.responses import (
     sound_speed_eq, sound_speed_isothermal_frozen,
@@ -56,7 +57,7 @@ __all__ = [
     "invert_nmp", "from_nmp", "InversionStatus",
     "PUBLISHED_NMP", "PUBLISHED_NMP_EXACT",
     "from_hyperon_potentials", "from_delta_potential",
-    "hyperon_potentials", "delta_potential",
+    "hyperon_potentials", "delta_potential", "forward_maps",
     "build_parametrization", "SECTOR_KEYS", "SU6_FACTOR_KEYS",
     "EoSPoint", "nucleon_warm_start", "warm_start",
     "solve_beta_eq", "solve_beta_eq_t0",
@@ -67,6 +68,7 @@ __all__ = [
     "TableSpec", "TableResult", "build_table", "solve_at_entropy",
     "MODES", "MODE_FRACTIONS", "hadronic_row", "rows_from_result",
     "save_table", "load_table", "export_csv",
+    "columns", "matrix_from_rows",
     "compute_nmp", "energy_per_baryon", "esym", "snm_derivatives",
     "sound_speed_eq", "sound_speed_isothermal_frozen",
     "sound_speed_adiabatic_frozen", "adiabatic_index",

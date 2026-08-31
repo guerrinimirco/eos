@@ -561,6 +561,11 @@ def _stalled(x, seed, res):
 PINNED_DEFAULT = ("b_sigma", "c_omega")
 PINNED_WITH_Q_SAT = ("c_omega",)
 
+#: Every shape coefficient either closure ever holds, which is what separates
+#: "this closure fits that one" from "that is not a shape coefficient at all"
+#: in the error `invert_nmp` raises.
+_SHAPE_COEFFICIENTS = frozenset(PINNED_DEFAULT) | frozenset(PINNED_WITH_Q_SAT)
+
 
 @dataclass
 class InversionStatus:
@@ -648,7 +653,7 @@ def _restart_loop(iso_residual, seed, first, n_restarts, gate=ISO_GATE):
 
 
 def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
-               impose_Q_sat=False):
+               impose_Q_sat=False, pinned=None):
     """Recover DD2 couplings from a target NMP dict.
 
     nmp needs {n_sat, E_sat, m_eff_ratio, K_sat, E_sym, L_sym}; "Q_sat" is
@@ -685,6 +690,17 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
     Either way the recovered couplings' Q_sat and K_sym are computed forward
     (same stencils as nmp.compute_nmp) and reported in status.predictions.
 
+    `pinned` sets the HELD shape coefficients -- {"b_sigma": ..., "c_omega":
+    ...} for the default closure, {"c_omega": ...} when Q_sat is imposed --
+    and defaults to the published DD2 values. They are held rather than fitted
+    because the default rows carry shape information only through P and K_sat,
+    so pinning them is a CHOICE the caller is entitled to make differently.
+    It is not a cosmetic one: the six NMPs are reproduced to ~1e-12 whatever
+    b_sigma is, because the shape acts above saturation and the imposed rows
+    do not, so it is a direction an NMP likelihood cannot see and a stellar
+    one can. Naming a coefficient this closure FITS raises: pinning and
+    fitting the same number are two different requests.
+
     `n_restarts` perturbed seeds are tried when the first isoscalar solve
     misses ISO_GATE. This is not a refinement: it is what separates "these
     NMPs have no DD-RMF realisation" from "this seed could not find it" —
@@ -701,8 +717,17 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=N_RESTARTS,
             f"physical (0.35, 0.95) window (scalar collapse / no DD2-form fit)")
 
     ref = Parameters.default()
-    pinned = PINNED_WITH_Q_SAT if impose_Q_sat else PINNED_DEFAULT
-    held = {name: getattr(ref, name) for name in pinned}
+    names = PINNED_WITH_Q_SAT if impose_Q_sat else PINNED_DEFAULT
+    held = {name: getattr(ref, name) for name in names}
+    for name, value in (pinned or {}).items():
+        if name not in names:
+            fitted = "fits" if name in _SHAPE_COEFFICIENTS else "does not carry"
+            raise ValueError(
+                f"pinned={{{name!r}: ...}}: this closure {fitted} "
+                f"{name!r}; it holds {names}. With impose_Q_sat="
+                f"{impose_Q_sat} b_sigma is "
+                f"{'fitted' if impose_Q_sat else 'held'}.")
+        held[name] = float(value)
 
     if impose_Q_sat:
         if seed is None:
@@ -1055,6 +1080,27 @@ def hyperon_potentials(par):
                                                sigma, omega0, SigmaR)
     return out
 
+def forward_maps(par):
+    """Everything `build_parametrization` takes, computed back off `par`.
+
+    The three forward maps in one call -- `compute_nmp` for the nuclear-matter
+    parameters, `hyperon_potentials` and `delta_potential` for the depths --
+    keyed in the SAME vocabulary a sample uses, so the result can be handed
+    straight back to `build_parametrization` and should reproduce the
+    couplings it came from. That round trip is what the function is for; the
+    three pieces are separately available when only one is wanted.
+
+    Sectors the par does not carry are simply absent: a nucleonic set gets no
+    U_Y keys, and one with no Delta quartet no U_Delta. Q_sat and K_sym come
+    along from `compute_nmp` as predictions and are NOT part of the round trip
+    unless the caller also sets impose_Q_sat.
+    """
+    out = dict(compute_nmp(par))
+    out.update(hyperon_potentials(par))
+    if par.x_Delta_sigma is not None:
+        out["U_Delta"] = delta_potential(par)
+    return out
+
 # ==========================================================================
 # NMPs + SECTOR POTENTIALS -> ONE PARAMETRIZATION
 # ==========================================================================
@@ -1077,7 +1123,7 @@ SU6_FACTOR_KEYS = ("y_omega_Lambda", "y_omega_Sigma", "y_omega_Xi",
 #: rather than a precedence rule, because they are two names for one number.
 SECTOR_KEYS = (("U_Lambda", "U_Sigma", "U_Xi",
                 "U_Delta", "x_Delta_sigma", "x_Delta_omega", "x_Delta_rho")
-               + SU6_FACTOR_KEYS)
+               + SU6_FACTOR_KEYS + PINNED_DEFAULT)
 
 #: The Delta depth `from_delta_potential` publishes, used when a sample names
 #: neither side of the scalar pair.
@@ -1119,6 +1165,8 @@ def _split_sample(sample, hyperon_potentials=None, U_Delta=None):
     sector = {"hyperon_potentials": pots,
               "su6": {k: float(sample[k]) for k in SU6_FACTOR_KEYS
                       if k in sample},
+              "pinned": {k: float(sample[k]) for k in PINNED_DEFAULT
+                         if k in sample},
               "U_Delta": None if depth is None else float(depth),
               "x_Delta_sigma": None if ratio is None else float(ratio),
               "x_Delta_omega": float(sample.get("x_Delta_omega", 1.0)),
@@ -1127,7 +1175,7 @@ def _split_sample(sample, hyperon_potentials=None, U_Delta=None):
 
 
 def build_parametrization(nmp, flags, hyperon_potentials=None,
-                          U_Delta=None):
+                          U_Delta=None, impose_Q_sat=False):
     """Nuclear-matter parameters to a `Parameters` with the strange and
     resonant sectors attached, as `flags` requires.
 
@@ -1155,6 +1203,20 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     caller who wants the second does it on the returned par and reads the new
     depths back with `hyperon_potentials`.
 
+    The shape coefficients the closure HOLDS rather than fits -- `b_sigma` and
+    `c_omega`, `PINNED_DEFAULT` -- may ride in the sample like any other
+    coupling knob, and default to the published DD2 values. They are worth an
+    axis: the six NMPs come back to ~1e-12 whatever `b_sigma` is, so an NMP
+    likelihood cannot see it, while over +-30% it moves M_max by ~0.18 M_sun.
+    `c_omega` over the same range moves it by ~0.02, which is why one of them
+    is a real free direction and the other is very nearly not.
+
+    `impose_Q_sat` is passed straight to `invert_nmp` and picks the isoscalar
+    closure: False (the default) predicts Q_sat and pins `PINNED_DEFAULT`,
+    True imposes it, pins only `PINNED_WITH_Q_SAT` and needs "Q_sat" in the
+    sample. Read `invert_nmp` before using True -- the Q_sat row is a third
+    finite difference and the closure amplifies its noise floor by ~259.
+
     Returns `(par, stage, message)`. `stage` is 'ok', 'inversion_failed' when
     the NMPs have no DD-RMF realisation at all, or 'sectors_failed' when they
     do but the hyperon/Delta scalar inversion does not converge on them -- the
@@ -1165,7 +1227,11 @@ def build_parametrization(nmp, flags, hyperon_potentials=None,
     sampler reaches it without a bug in how its axes were declared.
     """
     nmp, sector = _split_sample(dict(nmp), hyperon_potentials, U_Delta)
-    par, status = invert_nmp(nmp)       # not from_nmp: this scores failures
+    # not from_nmp: this scores failures. impose_Q_sat selects the isoscalar
+    # closure and is the caller's, not an inference from the sample carrying a
+    # Q_sat key -- see `invert_nmp`, which says why that inference was wrong.
+    par, status = invert_nmp(nmp, impose_Q_sat=impose_Q_sat,
+                             pinned=sector["pinned"])
     if not status.ok:
         return None, "inversion_failed", status.message
     try:

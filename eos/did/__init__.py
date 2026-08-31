@@ -46,6 +46,7 @@ from eos.did.api import (
     PointResult, RESPONSE_FREEZES, eos_point, eos_response, eos_table,
 )
 from eos.general.table_io import export_csv, load_table, save_table
+from eos.general.table_io import columns, matrix_from_rows
 
 __all__ = [
     "Parameters", "MULTIPLETS", "MULTIPLET_OF", "tau3",
@@ -69,4 +70,5 @@ __all__ = [
     "eos_point", "eos_table", "eos_response", "PointResult",
     "RESPONSE_FREEZES",
     "save_table", "load_table", "export_csv",
+    "columns", "matrix_from_rows",
 ]
