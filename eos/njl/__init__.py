@@ -64,9 +64,10 @@ from eos.njl.species import (
 )
 from eos.njl.thermodynamics import (
     ModeThermo, NJLState, Vacuum, bag_constant, condensates,
-    condensate_energy, f_pi, kinetic_thermo, masses_from_condensates,
-    has_vector, sea_energy, sea_scalar_density, state_at, surface_term,
-    thermo_from_mu, vacuum_solution,
+    condensate_energy, counterterm, counterterm_shape, f_pi, gap_seed_scale,
+    kinetic_thermo, masses_from_condensates,
+    has_vector, rg_pair_block, sea_energy, sea_scalar_density, state_at,
+    surface_term, thermo_from_mu, vacuum_solution,
 )
 from eos.njl.solver import (
     EoSPoint, MODE_FRACTIONS, default_guess, mode_spec, residual, solve,
@@ -86,7 +87,7 @@ __all__ = [
     "SpeciesFlags", "PATTERNS", "DEFAULT_PATTERNS", "MODE_NAMES",
     "pattern_mask", "pattern_seed",
     "ModeThermo", "NJLState", "Vacuum", "kinetic_thermo", "surface_term",
-    "sea_energy", "sea_scalar_density", "condensates", "condensate_energy",
+    "sea_energy", "sea_scalar_density", "condensates", "condensate_energy", "rg_pair_block", "gap_seed_scale", "counterterm_shape", "counterterm",
     "masses_from_condensates", "f_pi", "vacuum_solution", "bag_constant",
     "state_at", "thermo_from_mu", "has_vector",
     "EoSPoint", "MODE_FRACTIONS", "mode_spec", "default_guess", "warm_start",

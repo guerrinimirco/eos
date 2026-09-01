@@ -70,11 +70,12 @@ Colour generators:
     (T_8)_(r,g,b) = (1/3, 1/3, -2/3) = lambda_8/sqrt(3)
 
 **Three normalisations of T_8 are in circulation** and mixing them corrupts
-`mu_8` by factors of 1.15 to 1.7. Rüster et al., Pagliara & Schaffner-Bielich
-and Kunkel et al. use the halved Gell-Mann form
+`mu_8` by factors of 1.15 to 1.7. Rüster et al. and Pagliara &
+Schaffner-Bielich use the halved Gell-Mann form
 `sqrt(3) T_8 = diag(1/2, 1/2, -1)`, for which
-`mu_8^theirs = (2/sqrt3) mu_8^ours = 1.1547 mu_8^ours`; Buballa and Steiner,
-Reddy & Prakash use the full `lambda_8`, for which
+`mu_8^theirs = (2/sqrt3) mu_8^ours = 1.1547 mu_8^ours`; Buballa, Steiner,
+Reddy & Prakash and the RG-consistent papers this model follows (Gholami et
+al. Eq. 14, and Kunkel et al. through it) use the full `lambda_8`, for which
 `mu_8^ours = sqrt(3) mu_8^theirs`. As a worked consequence, the CFL result
 `mu_8 = -(1/2 sqrt3) m_s^2/mu` of Steiner et al. reads `mu_8 = -(1/2) m_s^2/mu`
 here: at `m_s = 300`, `mu = 450` MeV that is -57.7 MeV in their convention and
@@ -123,7 +124,7 @@ number in them:
     vector form  "constant"     one of constant / power_law / gluon_exchange
     alpha        2/3            the power-law exponent, power_law only
     n_ref        0.48 fm^-3     that form's reference QUARK density, i.e. n_B = n_sat
-    lambda       1              = Lambda_UV/Lambda; anything else RAISES
+    lambda       10             = Lambda_UV/Lambda; 1 is the sharp cutoff
 
 The lepton content is structural in the same sense and is carried by the
 species flags: `csc` (the pairing sector — with it off there are no gaps, no
@@ -149,16 +150,19 @@ is an effective coupling and a paper using it should say so.
 **Published sets.**
 
     rkh              nothing changed — the shipped default, and the set every
-                     number below was produced at
-    kunkel           eta_D = 1.45, eta_V = 0.7
+                     sharp-cutoff number below was produced at
+    rg_njl1          eta_D = 1.45, eta_V = 0.7
+    kunkel           an alias of rg_njl1
     gluon_exchange   the gluon_exchange form, G_V0/G_S = 0.5, M_g = 500 MeV
 
-The `kunkel` *couplings* are those of Kunkel, Rather et al.
-[arXiv:2607.11537]; the regularization is not. Their calculation is
-RG-consistent at `lambda ~ 10` and this one is at `lambda = 1`, because the
-counterterm that makes `lambda > 1` finite is not implemented. The two are not
-independent — RG-consistent gaps run almost 90% above sharp-cutoff ones — so
-use it as a strong-coupling point, not as a reproduction of that paper.
+`rg_njl1` is Gholami et al.'s "parameter set 1" — the soft one of their three
+— and the set Kunkel, Rather et al. [arXiv:2607.11537] use for their
+proto-neutron-star study. With the default `lambda = 10` the couplings AND the
+regularization are theirs, which is what makes this a reproduction of that
+model rather than a borrowing of its numbers: the two were never independent,
+since RG-consistent gaps run well above sharp-cutoff ones at the same
+coupling. `kunkel` is kept as an alias because that is what the set was called
+before the regularization caught up with it.
 
 **The constants the shared sectors carry**, not fitted here:
 `m_e = 0.510999` MeV and `m_mu = 105.6584` MeV with `g_e = g_mu = 2`;
@@ -180,7 +184,12 @@ instead.
 ## The cut medium integrals
 
 One mode of mass `M` at effective potential `mu*` and temperature `T`,
-integrated to the cutoff, with `E = sqrt(k^2 + M^2)`,
+integrated to the cutoff, with `E = sqrt(k^2 + M^2)`. **`Lambda` below is the
+cutoff on the MEDIUM integral, which is `Lambda_UV` and not the vacuum's
+`Lambda`** whenever `lambda > 1` — see "Regularization: the vacuum at Lambda,
+the medium at Lambda_UV". At `T = 0` and unpaired the distinction is invisible:
+the `min` below makes these integrals self-limiting at `k_F` and they are
+independent of the cutoff to the last bit.
 `f^+- = [1 + exp((E -+ mu*)/T)]^-1` and `x_+- = E -+ mu*`:
 
     n     = (g/2 pi^2) int_0^Lambda dk k^2       (f^+ - f^-)
@@ -415,6 +424,132 @@ mismatch and `(32.4, 92.71)`, `(52.5, 92.71)`, `(59.9, 92.71)` at
 `dmu = 50, 60, 65` MeV; the free-energy crossover sits at `dmu_c = 63.59` MeV,
 a fraction 0.970 of the weak-coupling Clogston–Chandrasekhar value
 `Delta_0/sqrt(2)`, the 3% deficit being the finite cutoff.
+
+## Regularization: the vacuum at Lambda, the medium at Lambda_UV
+
+A sharp cutoff on EVERY momentum integral is what the model was fitted with,
+and it is unusable at the densities this model is applied to. With `Lambda` =
+602.3 MeV and quark potentials of 400-500 MeV the medium reaches the cutoff:
+the 2SC gap peaks at `mu* = 0.83 Lambda` and is identically zero by
+`mu* = 1.13 Lambda`, where the loop contributions are cut off entirely and the
+model silently returns a free gas. Measured here at `eta_D = 1`:
+
+    mu*/Lambda   0.664    0.830    0.996    1.129    1.328    1.494
+    Delta_3      141.06   149.48   113.33     0.00     0.00     0.00
+
+The fix is renormalization-group consistency (Gholami, Hofmann and Buballa,
+Phys. Rev. D 111, 014021 (2025)): require that the answer not depend on the
+scale the theory is initialized at,
+
+    lim_{Lambda_UV -> infinity}  Lambda_UV d(Gamma)/d(Lambda_UV)  =  0
+
+The vacuum keeps the cutoff it was FITTED at and only the medium runs:
+
+    Omega = V(chi)
+          - (1/2 pi^2) [ int_0^Lambda    dp p^2 A_vac(chi)
+                       + int_0^Lambda_UV dp p^2 ( A(mu, T, chi) - A_vac(chi) ) ]
+
+with `A_vac(chi) = A(mu = 0, T = 0, chi)` the vacuum integrand AT THE SAME
+CONDENSATES -- gaps included, which is the half that is easy to drop. The
+Delta-dependent Dirac sea is a vacuum quantity and keeps `Lambda`; leaving it
+in the medium remainder makes that remainder diverge QUADRATICALLY in
+`Lambda_UV` instead of logarithmically, and no counterterm of the form below
+can cancel that.
+
+`lambda = Lambda_UV/Lambda` is the one parameter that says which scheme is in
+use. It is 10 by default and `lambda = 1` is the conventional sharp-cutoff
+model, exactly and not approximately -- see the counterterm's `lambda = 1`
+limit below.
+
+### The medium divergence, and the counterterm that removes it
+
+In an UNPAIRED phase the medium remainder converges and nothing more is
+needed: at `T = 0` the occupations are step functions cut at `k_F` and the
+cutoff never binds, so the unpaired numbers are independent of `lambda` to the
+last bit. With a gap the cancellation of the potentials that makes
+`f_vac = 2 sqrt(M^2 + p^2)` no longer happens, and the remainder carries a
+logarithm. Summing the six Cooper pairs `(i, j)` with mean potential
+`mubar_ij = (mu*_i + mu*_j)/2`,
+
+    Omega_med  ~  -(1/pi^2) sum_(ij) mubar_ij^2 Delta_eta^2 ln Lambda_UV
+
+The counterterm is the massless scheme of Gholami et al. (their Eq. C7), which
+sets `M = 0` in the renormalization factors -- and is therefore the scheme with
+a closed form, the one Kunkel et al. [arXiv:2607.11537] use, and the one
+implemented here:
+
+    dOmega_ct = (1/pi^2) sum_(ij) mubar_ij^2 Delta_eta^2 g(Delta_eta)
+
+    g(Delta) = Lambda / sqrt(Lambda^2 + Delta^2)
+             - Lambda_UV / sqrt(Lambda_UV^2 + Delta^2)
+             + ln[ (Lambda_UV + sqrt(Lambda_UV^2 + Delta^2))
+                 / (Lambda    + sqrt(Lambda^2    + Delta^2)) ]
+
+The six pairs are the two colour choices per gap, `Delta_1` pairing `d` with
+`s`, `Delta_2` pairing `u` with `s` and `Delta_3` pairing `u` with `d`:
+
+    Delta_1   (d_g, s_b), (d_b, s_g)
+    Delta_2   (u_r, s_b), (u_b, s_r)
+    Delta_3   (u_r, d_g), (u_g, d_r)
+
+Within a pair the colour potential `mu_3` cancels, so the two pairs of one gap
+share a `mubar` and the sum may equally be written over the three gaps with a
+coefficient `2/pi^2`, which is how Eq. C7 states it.
+
+**Two limits.** `g -> ln(Lambda_UV/Lambda)` for large `Lambda_UV`, which is the
+logarithm the divergence needs cancelled; and `g = 0` IDENTICALLY at
+`Lambda_UV = Lambda`. The second is why one parameter carries the scheme and
+no boolean stands beside it (CLAUDE.md section 4): at `lambda = 1` the
+counterterm is not small, it is zero, and the sharp-cutoff model is recovered
+bit for bit.
+
+**It is not only a term in Omega.** `dOmega_ct` depends on the potentials, so
+it carries a density, and on the gaps, so it enters the gap equations:
+
+    dn_j    = - d(dOmega_ct)/d(mu*_j)
+            = - (1/pi^2) sum_(ij ni j) mubar_ij Delta_eta^2 g(Delta_eta)
+
+    d/dDelta [ Delta^2 g ]
+            = 3 Delta ( Lambda/A - Lambda_UV/B )
+            + 2 Delta ln[ (Lambda_UV + B) / (Lambda + A) ]
+            + Delta^3 ( Lambda_UV/B^3 - Lambda/A^3 )
+
+    with A = sqrt(Lambda^2 + Delta^2),  B = sqrt(Lambda_UV^2 + Delta^2)
+
+so the gap row of the residual is
+`Delta_eta/(2 G_D) - kernel_eta + d(dOmega_ct)/d(Delta_eta)`. Adding the
+counterterm to `Omega` alone leaves Euler violated and the gaps solving the
+wrong equation, and both failures look like a plausible equation of state. It
+carries no explicit `T` and no mass, so it contributes to neither `s` nor the
+scalar density.
+
+### What it costs, and one numerical trap
+
+Three quadrature passes instead of one -- the medium at `Lambda_UV`, and the
+vacuum block at `Lambda_UV` and at `Lambda` -- over a momentum range ten times
+wider. At `lambda = 1` the two vacuum blocks are the same integral and the
+single pass is taken directly.
+
+**The panels have to follow the cutoff.** The pairing quadrature breaks at each
+Fermi momentum, which at `lambda = 1` covers the whole interval; at
+`lambda = 10` it leaves everything between the highest `k_F` and 6023 MeV in
+ONE panel, across which no number of Gauss nodes resolves a `1/p` tail. That
+mis-integrates the pairing potential by 4.0e-7 relative -- small enough to look
+like round-off and large enough to make a warm-started table and a cold point
+solve disagree past their convergence gate. Geometric panels at
+`Lambda_UV/2, Lambda_UV/4, ...` down to the highest Fermi momentum bring it to
+2.9e-13 at the same node count.
+
+### What it buys
+
+The gaps rise monotonically instead of collapsing -- at `eta_D = 1` the table
+above becomes 166.71, 214.51, 251.50, 276.16, 306.85, 327.65 MeV -- and the
+density ceiling `Lambda^3/pi^2 = 2.881 fm^-3`, which is a regularization
+artifact rather than physics, moves to `Lambda_UV^3/pi^2` and stops binding.
+The residual `lambda`-dependence is the `O(1/p^3)` tail the asymptotic
+expansion drops: doubling `lambda` from 10 to 20 moves `Omega` and the gaps by
+1.4e-3 (2SC) and 1.9e-3 (CFL).
+
 
 ## The vector sector
 
@@ -846,11 +981,7 @@ pairing machinery.
 
 ## Not implemented (see docs/DEFERRED.md)
 
-RG-consistent regularization at `lambda > 1` — the parameter exists and any
-value but 1 raises rather than returning a divergent number, since the
-counterterm cancelling the medium's logarithmic divergence
-`-(2/pi^2) mubar^2 Delta^2 ln Lambda_UV` is not written; the 't Hooft–diquark
-cross-term `K'`; the trapped muon lepton family as a conserved charge; the
+The 't Hooft–diquark cross-term `K'`; the trapped muon lepton family as a conserved charge; the
 composition and gap freezes of `eos_response`, and the susceptibility matrix;
 and the dilaton/colour-dielectric graft, which the specification marks as
 unverified for transition order, pairing coexistence and finite temperature.

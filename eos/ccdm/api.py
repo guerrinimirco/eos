@@ -38,7 +38,8 @@ programming error a sampler would otherwise re-make a million times.
 """
 from dataclasses import dataclass
 
-from eos.ccdm.solver import EoSPoint, MODE_FRACTIONS, solve
+from eos.ccdm.solver import (EoSPoint, MODE_FRACTIONS, solve,
+                             warm_start)
 from eos.general.basis import quark_charges
 from eos.general.zero_pressure import (
     N_HI_DEFAULT, N_LO_DEFAULT, N_SCAN_DEFAULT, locate_zero_pressure,
@@ -322,11 +323,37 @@ def zero_pressure_point(par, species=None, n_lo=N_LO_DEFAULT,
     """
     flags = SpeciesFlags() if species is None else species
 
+    # THE SCAN IS WARM-STARTED, which for this model is not an optimisation.
+    # A cold scan reaches far fewer densities here than the model actually
+    # has, and the ones it misses are not scattered: they are the run between
+    # the two arms of the first-order transition, so the root find is handed a
+    # bracket with an unreachable hole in it and fails inside. Measured at
+    # B_g^(1/4) = 165 MeV, gbar_omega = 2, p = 2: 25 of 60 scan densities
+    # converge cold against 49 warm, and the bracket tightens from
+    # 0.371-0.998 fm^-3 to the adjacent pair 0.973-0.998.
+    #
+    # The seed is kept PER DENSITY and the nearest one is used, rather than
+    # the last one solved. `locate_zero_pressure` walks its grid upward and
+    # then refines by bisection, so by the time the root find probes inside
+    # the bracket the last-solved point is the top of the whole scan; a seed
+    # from there is worse than none. The nearest converged density is the
+    # previous grid point during the scan and a bracket edge during the
+    # refinement, which is the right seed in both phases.
+    #
+    # It cannot bias the answer: `warm_start` is keyed by the (branch,
+    # pattern) candidate and the other candidates still start cold, so the
+    # enumeration stays free to displace the one being carried.
+    seeds = {}
+
     def point_at(n_B):
-        result = eos_point(par, "beta_eq_neutrinoless", flags, n_B=n_B, T=0.0)
+        x0 = (seeds[min(seeds, key=lambda n: abs(n - n_B))] if seeds
+              else None)
+        result = eos_point(par, "beta_eq_neutrinoless", flags, n_B=n_B, T=0.0,
+                           x0=x0)
         if not result.ok:
             return None
         p = result.point
+        seeds[float(n_B)] = warm_start(p)
         # n_B and n_S from the SOLVED flavour densities through the shared
         # conserved-charge map, not from the requested density and not from a
         # cached field: eps was computed at these densities, so this is the

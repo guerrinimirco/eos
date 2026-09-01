@@ -33,9 +33,11 @@ quietly:
     integrals of this repository have (CLAUDE.md section 7);
   * the medium integral is not a spectator. At T = 0 unpaired it is
     self-limiting at k_F, but at T > 0, and in ANY paired phase, the Fermi
-    surface is smeared and the cutoff enters. That is why lambda = Lambda_UV/
-    Lambda exists as a parameter, and why lambda != 1 raises here rather than
-    returning a divergent number (docs/DEFERRED.md);
+    surface is smeared and the cutoff enters. That is what lambda = Lambda_UV/
+    Lambda answers: the Dirac sea keeps Lambda, the medium runs to Lambda_UV,
+    and `counterterm` cancels the logarithm a paired medium picks up on the
+    way. lambda = 1 makes that counterterm identically zero and is the
+    conventional sharp-cutoff model;
   * the paired densities, scalar densities and entropy are NOT the unpaired
     Fermi integrals. Those corrections come from `eos.general.pairing`.
 
@@ -49,7 +51,7 @@ Units are natural inside this module: momenta, masses and potentials in MeV,
 densities in MeV^3, Omega, P and eps in MeV^4. The fm-based public boundary is
 `eos.njl.api`.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 import math
 
@@ -61,7 +63,7 @@ from eos.general.fermi_integrals import (
 )
 from eos.general.pairing import (
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
-    mode_potentials, pair_block, pattern_mask,
+    mode_potentials, pair_block, pair_nodes, pattern_mask,
 )
 from eos.general.physics_constants import hc3
 from eos.general.solve import solve_system
@@ -191,6 +193,183 @@ def condensate_energy(par, phi):
     """
     return (2.0 * par.G_S * float(np.sum(np.asarray(phi) ** 2))
             - 4.0 * par.K * float(phi[0] * phi[1] * phi[2]))
+
+
+# =============================================================================
+# THE RG-CONSISTENT COUNTERTERM
+# =============================================================================
+# Taking the medium integral to Lambda_UV >> Lambda is what removes the cutoff
+# artifacts (Gholami, Hofmann and Buballa, Phys. Rev. D 111, 014021 (2025),
+# arXiv:2408.06704), but the medium part of a PAIRED phase does not converge
+# there: it carries a logarithmic divergence
+#
+#     Omega_med  ~  -(1/pi^2) sum_pairs mubar_ij^2 Delta_eta^2 ln Lambda_UV
+#
+# which exists only when mu != 0 AND Delta != 0 and does not scale with the
+# quark masses. The counterterm below cancels it exactly. Three schemes are
+# published; this is the MASSLESS one (their Eq. C7), which sets the quark
+# masses to zero in the renormalization factors and is therefore the one with a
+# closed form -- and the one Kunkel et al., arXiv:2607.11537, use throughout.
+# The massive scheme is rejected by its own authors (it inverts the gap
+# ordering to Delta_3 < Delta_1 = Delta_2 and so predicts the wrong melting
+# pattern), so there is one scheme here and no scheme argument.
+
+#: The six Cooper pairs, as (eta, mode_i, mode_j) in the flavour-major mode
+#: index j = 3 i_f + i_a. Delta_1 pairs d with s, Delta_2 pairs u with s and
+#: Delta_3 pairs u with d; each gap has TWO pairs, the two ways of choosing the
+#: colours epsilon leaves. This is Table I of Ruester et al., PRD 72, 034004
+#: (2005), and it is the same partition `eos.general.pairing` block-diagonalises
+#: the BdG matrix by -- (u_r, d_g, s_b) supply one member each to three pairs,
+#: (u_g, d_r), (u_b, s_r) and (d_b, s_g) are the other three.
+PAIRS = ((0, 4, 8), (0, 5, 7),      # Delta_1: (d_g, s_b), (d_b, s_g)
+         (1, 0, 8), (1, 2, 6),      # Delta_2: (u_r, s_b), (u_b, s_r)
+         (2, 0, 4), (2, 1, 3))      # Delta_3: (u_r, d_g), (u_g, d_r)
+
+#: Geometric refinement of the pairing panels above the Fermi momenta, used
+#: only at lambda > 1 where the cutoff is a decade clear of them. Halving is
+#: enough: it already reaches round-off, and a finer ratio only buys nodes.
+RG_PANEL_RATIO = 2.0
+
+
+def counterterm_shape(Delta, Lambda, Lambda_UV):
+    """g(Delta), the dimensionless shape of the massless counterterm.
+
+        g = Lambda / sqrt(Lambda^2 + Delta^2)
+          - Lambda_UV / sqrt(Lambda_UV^2 + Delta^2)
+          + ln[ (Lambda_UV + sqrt(Lambda_UV^2 + Delta^2))
+              / (Lambda    + sqrt(Lambda^2    + Delta^2)) ]
+
+    Two limits carry the whole design. `g -> ln(Lambda_UV/Lambda)` for large
+    Lambda_UV, which is the logarithm the medium divergence needs cancelled;
+    and **g = 0 identically at Lambda_UV = Lambda**, so lambda = 1 recovers
+    conventional sharp-cutoff regularization with no counterterm and no branch
+    to select it. That is why `lambda_UV` is the regularization switch and
+    there is no second flag beside it.
+    """
+    hi = math.hypot(Lambda_UV, Delta)
+    lo = math.hypot(Lambda, Delta)
+    return Lambda / lo - Lambda_UV / hi + math.log((Lambda_UV + hi)
+                                                   / (Lambda + lo))
+
+
+def counterterm(par, Delta, mu_star):
+    """The counterterm block: (omega, n, gap).
+
+    `omega` [MeV^4] is its contribution to Omega,
+
+        omega = (1/pi^2) sum_pairs mubar_ij^2 Delta_eta^2 g(Delta_eta)
+
+    with `mubar_ij = (mu*_i + mu*_j)/2` the mean EFFECTIVE potential of the
+    pair -- effective because it is the potential that appears in the
+    dispersion relations the counterterm was derived from.
+
+    `n` [MeV^3] is the density it carries, n_j = -dOmega/dmu*_j, which every
+    conserved charge and both neutrality conditions are then built from; and
+    `gap` [MeV^3] is d(omega)/d(Delta_eta), which the gap equation needs. A
+    counterterm added to Omega alone would leave Euler violated and the gaps
+    solving the wrong equation, and both failures look like a plausible EoS.
+
+    It carries no explicit T and no mass -- the massless scheme sets M = 0 --
+    so it contributes to neither the entropy nor the scalar density.
+    """
+    omega = 0.0
+    n = np.zeros(N_MODES)
+    gap = np.zeros(3)
+    if not np.any(Delta):
+        return omega, n, gap
+
+    for eta, i, j in PAIRS:
+        D = float(Delta[eta])
+        if D == 0.0:
+            continue
+        mubar = 0.5 * (mu_star[i] + mu_star[j])
+        g = counterterm_shape(D, par.Lambda, par.Lambda_medium)
+
+        omega += mubar ** 2 * D ** 2 * g / math.pi ** 2
+        # -d/dmu*_i and -d/dmu*_j, with d(mubar)/d(mu*) = 1/2 on each
+        share = mubar * D ** 2 * g / math.pi ** 2
+        n[i] -= share
+        n[j] -= share
+        gap[eta] += mubar ** 2 * _shape_gap_derivative(
+            D, par.Lambda, par.Lambda_medium) / math.pi ** 2
+    return omega, n, gap
+
+
+def rg_pair_block(par, M, mu_star, Delta, T,
+                  nodes_per_panel=NODES_PER_PANEL, **kwargs):
+    """The pairing block under the RG-consistent split.
+
+    Eq. (42) of Gholami et al. regularizes the VACUUM at Lambda and the medium
+    remainder `A - A_vac` at Lambda_UV -- and `A_vac(chi)` is the vacuum at the
+    SAME condensates, gaps included. The Delta-dependent Dirac sea is therefore
+    a vacuum quantity and keeps the vacuum cutoff; only what is left of the
+    pairing correction runs to Lambda_UV:
+
+        block = hot(Lambda_UV) - [ vac(Lambda_UV) - vac(Lambda) ]
+
+    where `vac` is the same block at mu* = 0, T = 0. Omitting it does not cost
+    accuracy, it costs the scheme: the remainder then diverges QUADRATICALLY in
+    Lambda_UV rather than logarithmically, and no counterterm of the published
+    form can cancel that. Measured at (M_s, Delta_3) = (250, 100) MeV, the
+    subtraction turns a drift of -5.9e11 MeV^4 between lambda = 5 and 40 into a
+    logarithm whose slope agrees with `counterterm` to 0.1%.
+
+    The bracket is a difference of two cut integrals over NESTED intervals, so
+    it is the integral over the shell between them and is taken as one pass on
+    [Lambda, Lambda_UV]. Two passes instead of three, and 96 nodes instead of
+    384 for the vacuum part.
+
+    At lambda = 1 the shell is empty and the whole expression collapses to
+    `hot(Lambda)`, which is returned directly -- so conventional sharp-cutoff
+    regularization costs exactly one quadrature pass and reproduces its numbers
+    bit for bit.
+    """
+    if par.lambda_UV == 1.0 or not np.any(Delta):
+        return pair_block(M, mu_star, Delta, T, par.Lambda_medium,
+                          nodes_per_panel=nodes_per_panel, **kwargs)
+
+    # Lambda_UV sits a decade above every Fermi momentum, so the default panel
+    # layout leaves the whole tail in ONE panel and mis-integrates its 1/p
+    # decay by 4e-7 relative -- enough to make a warm-started table and a cold
+    # point solve disagree past their convergence gate. The geometric panels
+    # cost the same node count and bring it to 3e-13.
+    rule = dict(nodes_per_panel=nodes_per_panel,
+                max_panel_ratio=RG_PANEL_RATIO)
+    hot = pair_block(M, mu_star, Delta, T, par.Lambda_medium, **kwargs,
+                     quadrature=pair_nodes(M, mu_star, T,
+                                           par.Lambda_medium, **rule))
+    # The vacuum correction is `vac(Lambda_UV) - vac(Lambda)`, and the
+    # difference of two cut integrals over nested intervals IS the integral
+    # over the shell between them. Taking it as one pass over
+    # [Lambda, Lambda_UV] rather than two from zero is exact -- measured
+    # identical to the last bit -- and costs 96 nodes where the two passes
+    # cost 384.
+    zero = np.zeros_like(np.asarray(mu_star, dtype=float))
+    shell = pair_block(M, zero, Delta, 0.0, par.Lambda_medium, **kwargs,
+                       quadrature=pair_nodes(M, zero, 0.0, par.Lambda_medium,
+                                             k_min=par.Lambda, **rule))
+    return replace(
+        hot,
+        delta_omega=hot.delta_omega - shell.delta_omega,
+        delta_n=hot.delta_n - shell.delta_n,
+        delta_rho_s=hot.delta_rho_s - shell.delta_rho_s,
+        delta_s=hot.delta_s - shell.delta_s,
+        gap_kernel=hot.gap_kernel - shell.gap_kernel,
+    )
+
+
+def _shape_gap_derivative(Delta, Lambda, Lambda_UV):
+    """d/dDelta [ Delta^2 g(Delta) ] [MeV], for the gap equation.
+
+    Written out rather than differenced because the gap equation is solved by
+    Newton and a noisy row costs more than the algebra does; `test/njl`
+    checks it against a central difference of `counterterm_shape`.
+    """
+    hi = math.hypot(Lambda_UV, Delta)
+    lo = math.hypot(Lambda, Delta)
+    return (3.0 * Delta * (Lambda / lo - Lambda_UV / hi)
+            + 2.0 * Delta * math.log((Lambda_UV + hi) / (Lambda + lo))
+            + Delta ** 3 * (Lambda_UV / hi ** 3 - Lambda / lo ** 3))
 
 
 # =============================================================================
@@ -411,15 +590,13 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
     enough to pass for quadrature); and s_pair dropped, which fails only at
     T > 0.
     """
-    if par.lambda_UV != 1.0:
-        raise NotImplementedError(
-            f"eos.njl runs at lambda = Lambda_UV/Lambda = 1 (conventional "
-            f"sharp-cutoff regularization); got lambda = {par.lambda_UV}. "
-            f"lambda > 1 needs the RG-consistent counterterm that cancels the "
-            f"medium's logarithmic divergence -(2/pi^2) mubar^2 Delta^2 "
-            f"ln Lambda_UV, which is not implemented -- see docs/DEFERRED.md. "
-            f"Returning a lambda-dependent answer instead would be worse than "
-            f"this exception")
+    if par.lambda_UV < 1.0:
+        raise ValueError(
+            f"eos.njl needs lambda = Lambda_UV/Lambda >= 1; got "
+            f"{par.lambda_UV}. The medium is integrated to Lambda_UV and the "
+            f"Dirac sea to Lambda, so lambda < 1 would cut the medium BELOW "
+            f"the vacuum -- not a regularization anyone has defined. "
+            f"lambda = 1 is conventional sharp-cutoff regularization")
 
     M = np.asarray(M, dtype=float)
     Delta = np.asarray(Delta, dtype=float)
@@ -497,9 +674,10 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
     # --- the pairing correction ------------------------------------------
     kwargs = ({} if pair_nodes_per_panel is None
               else {"nodes_per_panel": pair_nodes_per_panel})
-    block = pair_block(M, mu_star, Delta, T, par.Lambda_medium,
-                       backend=backend, **kwargs)
-    n_modes = n_med + block.delta_n
+    block = rg_pair_block(par, M, mu_star, Delta, T,
+                          backend=backend, **kwargs)
+    ct_omega, ct_n, ct_gap = counterterm(par, Delta, mu_star)
+    n_modes = n_med + block.delta_n + ct_n
     rho_s = rho_s_med + block.delta_rho_s
     s = s_med + block.delta_s
 
@@ -517,9 +695,15 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
 
     eps_pair = (block.delta_omega + D + T * block.delta_s
                 + float(np.dot(mu_star, block.delta_n)))
+    # The counterterm enters eps by the same route as the pairing block --
+    # eps = Omega + T s + sum_i mu*_i n_i, term by term -- but with no T of
+    # its own, so it brings its Omega and the density it carries and nothing
+    # else. Dropping either half leaves Euler violated at the 1e-3 level,
+    # which is small enough to read as quadrature error.
+    eps_ct = ct_omega + float(np.dot(mu_star, ct_n))
     Omega = (-P_med - sea + C - (Sigma_V * n_q - W)
-             + block.delta_omega + D - vac.Omega)
-    eps = eps_med - sea + C + W + eps_pair - vac.eps
+             + block.delta_omega + D + ct_omega - vac.Omega)
+    eps = eps_med - sea + C + W + eps_pair + eps_ct - vac.eps
 
     n_3, n_8 = colour_densities(n_modes)
     return NJLState(
@@ -532,7 +716,7 @@ def state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
         Omega=Omega, P_nat=-Omega, eps_nat=eps, s_nat=s,
         mu_dot_n=float(np.dot(mu_modes, n_modes)),
         mass_residual=M - masses_from_condensates(par, phi),
-        gap_residual=Delta / (2.0 * par.G_D) - block.gap_kernel,
+        gap_residual=Delta / (2.0 * par.G_D) - block.gap_kernel + ct_gap,
         vector_residual=Sigma_V - Sigma_V_new,
         pattern=pattern, gapless=block.gapless,
         delta_omega=block.delta_omega, pair_cost=D)
@@ -571,6 +755,27 @@ def has_vector(par):
     return par.eta_V != 0.0
 
 
+def gap_seed_scale(mu_q):
+    """The cold-start size of a diquark gap [MeV], from the quark potential.
+
+        gap_scale = max(0.35 mu_q, 50)
+
+    One rule, read by every cold start in the model, because a seed is only
+    ever wrong in one direction here: the gap equation has a trivial root at
+    Delta = 0 as well as the physical one, the residual between them is nearly
+    FLAT, and a Newton step off a flat residual overshoots and falls back onto
+    zero. A gap that is silently zero reads as an unpaired phase rather than as
+    a failure, so the seed is set above the physical gap rather than below it.
+
+    0.35 was measured, not chosen: over eta_D in (0.75, 1.0, 1.45), lambda in
+    (1, 10), mu_B in (1100, 1400, 1800) MeV and both the 2SC and CFL patterns,
+    the old 0.1 mu_q collapsed or failed on 20 of 36 cold starts and 0.35 mu_q
+    on 3. RG-consistent gaps run well above sharp-cutoff ones -- 199 MeV
+    against 151 at eta_D = 1, mu_B = 1400 -- which is what moved the rule.
+    """
+    return max(0.35 * mu_q, 50.0)
+
+
 def default_internal_guess(par, pattern, mu_B, T, vac=None, gap_scale=None):
     """A cold start for `thermo_from_mu`: masses from the vacuum, gaps seeded
     by the pattern.
@@ -578,9 +783,8 @@ def default_internal_guess(par, pattern, mu_B, T, vac=None, gap_scale=None):
     The mass seed interpolates from the broken vacuum towards the current
     masses as mu_B rises, which is the direction the physics moves; the gap
     seed is the pattern's own (see `eos.njl.species.PATTERNS`), scaled by
-    `gap_scale`, whose default is a tenth of the baryon potential -- the order
-    of magnitude a strongly-coupled gap has, and comfortably above the barrier
-    root the gap equation also carries.
+    `gap_scale`, whose default is `gap_seed_scale` -- the one rule every cold
+    start in this model takes its gaps from.
     """
     from eos.njl.species import pattern_seed
     if vac is None:
@@ -589,7 +793,7 @@ def default_internal_guess(par, pattern, mu_B, T, vac=None, gap_scale=None):
     m = np.array(par.current_masses, dtype=float)
     M = vac.M * (1.0 - x) + m * x
     if gap_scale is None:
-        gap_scale = max(0.1 * mu_B / 3.0, 20.0)
+        gap_scale = gap_seed_scale(mu_B / 3.0)
 
     guess = list(M)
     mask = pattern_mask(pattern)

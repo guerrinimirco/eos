@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.4
+#       jupytext_version: 1.19.5
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -485,7 +485,8 @@ print("=== njl published sets, beta_eq_neutrinoless, T = 0, unpaired ===")
 for name in NJL_SETS:
     par = njl.Parameters.named(name)
     table = njl.eos_table(par, "beta_eq_neutrinoless", NJL_FLAGS,
-                          {"nB": NJL_NB, "T": np.array([0.0])})
+                          {"nB": NJL_NB, "T": np.array([0.0])},
+                          backend="fast")
     rows = njl_rows_from_result(table)
     njl_lines[name] = (par, rows)
     print(f"  [{name:15s}] {len(rows):3d}/{len(NJL_NB)} points   "
@@ -572,511 +573,7 @@ njl_style_legend(ax, list(FLAVOUR_LS.items()) + [("e", ":")],
 plt.show()
 
 # %% [markdown]
-# ### njl — the vector self-energy
-#
-# The one field-like quantity NJL carries. `n_q` is the QUARK density in
-# natural units, three times n_B converted through hc^3; `vector_self_energy`
-# is a coupling evaluated on the state rather than a stored number, so it is
-# recomputed here instead of read from a column.
-
-# %%
-fig, ax = njl_figure()
-for (name, (par, rows)), colour, width in zip(njl_lines.items(), OKAB_CAT,
-                                              NJL_WIDTHS):
-    n_B = njl_matrix[name][1]["nB"]
-    sigma_V = np.array([vector_self_energy(par, 3.0 * float(n) * hc3)
-                        for n in n_B])
-    ax.plot(n_B, sigma_V, color=colour, lw=width, label=name)
-ax.set_xlabel(LABELS["nB"])
-ax.set_ylabel(r"$\Sigma_V$ [MeV]")
-ax.legend(loc="upper left", fontsize="x-small")
-plt.show()
-
-# %% [markdown]
-# ## The ccdm parametrizations, side by side
-#
-# `eos.ccdm.PUBLISHED_SETS` ships four, and unlike njl's they are not one knob
-# seen three ways — each moves a different part of the functional:
-#
-# * **baseline** — the specification's own set, `B_g^(1/4) = 150 MeV`,
-#   `m_sigma = 550 MeV`, `g_q = 3.0`. The shipped default.
-# * **novector** — the same with `gbar_omega = 0`: the L1 -> L0 reduction, the
-#   vector meson switched off at its coupling rather than by a flag (CLAUDE.md
-#   section 4 — a sector the model already carries a coupling for gets no
-#   flag).
-# * **dressed** — `q = 1`, which dresses the DIQUARK coupling,
-#   `G_D -> G_D/chi^q`. With `csc=False` there is no diquark condensate, so
-#   `G_D` never enters and this set is **bit-identical to baseline here** —
-#   every column agrees to exactly 0.0. That is not a defect and not a
-#   duplicate entry: it is the same structural fact as `njl`'s `eta_D`, and it
-#   means an unpaired comparison of "all four sets" is really a comparison of
-#   three. Turn `csc=True` and it separates.
-# * **stiff** — `B_g^(1/4) = 190 MeV`, a larger gluon-condensate bag. A bigger
-#   bag costs more to open, so this set's **deconfinement onset moves up** and
-#   its line starts well inside the axis. That is the model speaking, not a
-#   solver failure, and the counts printed below say where each one begins.
-#
-# `novector` separates from `baseline` in P, `omega_0` and `Sigma_R` and in
-# NOTHING else — the masses, every Y_i and the two confining fields agree to
-# 1e-12. The vector field is flavour-blind, so it cancels out of the
-# beta-equilibrium condition that fixes the composition, and at fixed n_B the
-# scalar sector is already determined. Only `stiff`, which moves the bag
-# itself, changes the composition and the fields.
-#
-# **This model does have mean fields**, which is the difference from njl, and
-# they are columns of the table rather than something to recompute:
-#
-# * `sigma`, `zeta` [MeV] — the non-strange and strange scalar condensates.
-#   `M*_(u,d) = (g_q sigma + m_q)/chi` and `M*_s = (g_s zeta + m_s)/chi`, so
-#   those two and the dielectric together ARE the effective-mass figure.
-# * `omega_0` [MeV] — the vector field, and `Sigma_R` [MeV] the rearrangement
-#   self-energy that rides with it (it enters mu and P, never eps — section 8).
-# * `phi_bar` — the confining scalar, dimensionless.
-# * `chi_diel` = (1 - phi_bar^4)^p — the dielectric function. It is named with
-#   a suffix because `chi` is already the shared column name for the
-#   mixed-phase quark volume fraction, which here is identically 1.
-#
-# `branch` is reported per point: the enumeration chooses between the
-# `restored` and `partial` chiral branches by free energy, and a set can change
-# branch part-way up the density axis.
-
-# %%
-CCDM_SETS = ("baseline", "novector", "dressed", "stiff")
-CCDM_NB = np.linspace(0.8, 2.0, 40)      # starts below every onset, so the
-                                         # onsets themselves are in the figures
-CCDM_FLAGS = ccdm.SpeciesFlags(csc=False)
-
-ccdm_lines = {}
-print("=== ccdm published sets, beta_eq_neutrinoless, T = 0, unpaired ===")
-for name in CCDM_SETS:
-    par = ccdm.Parameters.named(name)
-    table = ccdm.eos_table(par, "beta_eq_neutrinoless", CCDM_FLAGS,
-                           {"nB": CCDM_NB, "T": np.array([0.0])})
-    rows = ccdm_rows_from_result(table)
-    ccdm_lines[name] = (par, rows)
-    if rows:
-        branches = sorted({row["branch"] for row in rows})
-        print(f"  [{name:9s}] {len(rows):3d}/{len(CCDM_NB)} points, onset at "
-              f"n_B = {rows[0]['n_B']:.3f} fm^-3   branches: {branches}")
-    else:
-        # A set with no deconfined phase anywhere on this axis is a statement
-        # about the set, and is printed rather than silently absent.
-        print(f"  [{name:9s}]   0/{len(CCDM_NB)} points: no deconfined phase "
-              f"on this density axis")
-
-ccdm_matrix = {name: matrix_from_rows(rows)
-               for name, (par, rows) in ccdm_lines.items() if rows}
-
-# Thick to thin, so a set lying exactly on another is VISIBLE as a coincidence:
-# `dressed` sits on `baseline` everywhere, `novector` on it in all but the
-# pressure and vector figures.
-CCDM_WIDTHS = (3.2, 2.2, 1.4, 0.8)
-
-
-def ccdm_figure():
-    fig, axes = paper_grid("1x1", mode="single", placeholder=False, aspect=1.25)
-    return fig, axes.ravel()[0]
-
-
-def ccdm_curves():
-    """(name, matrix, n_B, colour, width) for every set that solved."""
-    for (name, (matrix, axs)), colour, width in zip(ccdm_matrix.items(),
-                                                    OKAB_CAT, CCDM_WIDTHS):
-        yield name, matrix, axs["nB"], colour, width
-
-
-# %% [markdown]
 # ### ccdm — pressure
-
-# %%
-fig, ax = ccdm_figure()
-for name, matrix, n_B, colour, width in ccdm_curves():
-    ax.plot(n_B, matrix["P"][0], color=colour, lw=width, label=name)
-ax.set_xlabel(LABELS["nB"])
-ax.set_ylabel(LABELS["P"])
-ax.legend(loc="upper left", fontsize="x-small")
-plt.show()
-
-# %% [markdown]
-# ### ccdm — effective masses
-
-# %%
-fig, ax = ccdm_figure()
-for name, matrix, n_B, colour, width in ccdm_curves():
-    for flavour, style in FLAVOUR_LS.items():
-        ax.plot(n_B, matrix[f"M_{flavour}"][0], color=colour, ls=style, lw=width)
-ax.set_xlabel(LABELS["nB"])
-ax.set_ylabel(r"$M^*_i$ [MeV]")
-ax.set_yscale("log")
-log_decades(ax, axis="y")
-njl_style_legend(ax, FLAVOUR_LS.items(), loc="lower left", ncol=3,
-                 fontsize="x-small")
-plt.show()
-
-# %% [markdown]
-# ### ccdm — composition
-
-# %%
-fig, ax = ccdm_figure()
-for name, matrix, n_B, colour, width in ccdm_curves():
-    for flavour, style in FLAVOUR_LS.items():
-        ax.plot(n_B, matrix[f"Y_{flavour}"][0], color=colour, ls=style, lw=width)
-    ax.plot(n_B, matrix["Y_e"][0], color=colour, ls=":", lw=width)
-ax.set_xlabel(LABELS["nB"])
-ax.set_ylabel(LABELS["Y_i"])
-ax.set_yscale("log")
-ax.set_ylim(1e-5, 3.0)
-log_decades(ax, axis="y")
-njl_style_legend(ax, list(FLAVOUR_LS.items()) + [("e", ":")],
-                 loc="lower left", ncol=4, fontsize="x-small")
-plt.show()
-
-# %% [markdown]
-# ### ccdm — the confining fields
-#
-# `phi_bar` is the confining scalar and `chi = (1 - phi_bar^4)^p` the
-# dielectric it drives. Both are dimensionless, which is why they share a
-# figure: chi -> 0 is the confined end, where a quark's effective mass diverges.
-
-# %%
-fig, ax = ccdm_figure()
-for name, matrix, n_B, colour, width in ccdm_curves():
-    ax.plot(n_B, matrix["phi_bar"][0], color=colour, ls="-", lw=width, label=name)
-    ax.plot(n_B, matrix["chi_diel"][0], color=colour, ls="--", lw=width)
-ax.set_xlabel(LABELS["nB"])
-ax.set_ylabel(r"$\bar{\Phi}$,  $\chi$")
-njl_style_legend(ax, [(r"$\bar{\Phi}$", "-"), (r"$\chi$", "--")],
-                 loc="center left", fontsize="x-small")
-plt.show()
-
-# %% [markdown]
-# ### ccdm — the scalar fields
-
-# %%
-fig, ax = ccdm_figure()
-for name, matrix, n_B, colour, width in ccdm_curves():
-    ax.plot(n_B, matrix["sigma"][0], color=colour, ls="-", lw=width, label=name)
-    ax.plot(n_B, matrix["zeta"][0], color=colour, ls="--", lw=width)
-ax.set_xlabel(LABELS["nB"])
-ax.set_ylabel(r"$\sigma$,  $\zeta$ [MeV]")
-njl_style_legend(ax, [(r"$\sigma$", "-"), (r"$\zeta$", "--")],
-                 loc="center left", fontsize="x-small")
-plt.show()
-
-# %% [markdown]
-# ### ccdm — the vector field and its rearrangement
-
-# %%
-fig, ax = ccdm_figure()
-for name, matrix, n_B, colour, width in ccdm_curves():
-    ax.plot(n_B, matrix["omega_0"][0], color=colour, ls="-", lw=width, label=name)
-    ax.plot(n_B, matrix["Sigma_R"][0], color=colour, ls="--", lw=width)
-ax.set_xlabel(LABELS["nB"])
-ax.set_ylabel(r"$\omega_0$,  $\Sigma_R$ [MeV]")
-njl_style_legend(ax, [(r"$\omega_0$", "-"), (r"$\Sigma_R$", "--")],
-                 loc="center left", fontsize="x-small")
-plt.show()
-
-# %% [markdown]
-# ### Why switching the vector OFF makes ccdm stiffer
-#
-# The pressure figure looks backwards: `novector` sits several hundred
-# MeV/fm^3 ABOVE `baseline`, so removing a repulsive vector meson appears to
-# stiffen the matter. It does, and the reason is the rearrangement term rather
-# than the field.
-#
-# `eos.ccdm.couplings` makes the vector coupling a FUNCTION of the density,
-#
-#     g_omega(n_B) = gbar_omega / [1 + (n_B/n_c)^2] ,
-#
-# a repulsion that dies off at high density — which is what keeps the sound
-# speed off the causal limit without a hand-placed ceiling. With `n_c = 1`
-# fm^-3 it falls steeply: g_omega = 3.20 at n_B = 0.5 and 0.80 at 2.0. A
-# coupling that FALLS has `dg_omega/dn_B < 0`, and the rearrangement
-# self-energy is built from exactly that derivative,
-#
-#     Sigma_R = (dg_omega/dn_B) omega_0 n_B  <  0 .
-#
-# So the vector sector contributes to the two thermodynamic quantities
-# differently, which is the whole content of "Sigma_R enters mu and P, never
-# eps" (CLAUDE.md section 8):
-#
-#     eps :  + W                    with W = (1/2) m_omega^2 omega_0^2
-#     P   :  + W  +  n_q Sigma_R
-#
-# and at these densities the rearrangement piece is about 2.5x the field
-# energy and negative, so the sector's NET contribution to the pressure is
-# negative. Deleting it therefore raises P. The cell below checks that
-# arithmetic against the two solved tables rather than asserting it: the
-# predicted differences reproduce the observed ones to the last printed digit.
-#
-# None of this is a consistency failure — `eos/ccdm/verify` finds Euler at
-# 7e-16 and n = dP/dmu_B at 1.5e-5 on these same states. It is what a strongly
-# density-dependent coupling does, and it is why `novector` is the reduction
-# the verify suite uses: the two differ by a term that is easy to get wrong and
-# whose sign is not the one intuition supplies.
-
-# %%
-BASE = ccdm.Parameters.named("baseline")
-
-print(f"g_omega(n_B) = {BASE.gbar_omega} / [1 + (n_B/{BASE.n_c})^2],  "
-      f"m_omega = {BASE.m_omega} MeV\n")
-print(f"{'n_B':>5} {'g_omega':>8} {'W':>9} {'n_q*Sig_R':>10} "
-      f"{'dP obs':>9} {'dP pred':>9} {'deps obs':>9} {'deps pred':>10}")
-
-base_rows = {round(row["n_B"], 6): row for row in ccdm_lines["baseline"][1]}
-novec_rows = {round(row["n_B"], 6): row for row in ccdm_lines["novector"][1]}
-
-for key in sorted(base_rows):
-    if key not in novec_rows:
-        continue
-    base, novec = base_rows[key], novec_rows[key]
-    # W is the vector field energy, which eps and P both carry; n_q Sigma_R is
-    # the rearrangement, which only P carries. Removing the sector removes W
-    # from eps, and W + n_q Sigma_R from P.
-    W = 0.5 * BASE.m_omega ** 2 * base["omega_0"] ** 2 / hc3
-    rearrangement = 3.0 * key * base["Sigma_R"]
-    if abs(key - round(key, 1)) > 1e-9:      # print a readable subset
-        continue
-    print(f"{key:5.2f} {vector_coupling(BASE, key * hc3):8.4f} {W:9.2f} "
-          f"{rearrangement:10.2f} {novec['P'] - base['P']:9.2f} "
-          f"{-(W + rearrangement):9.2f} {novec['eps'] - base['eps']:9.2f} "
-          f"{-W:10.2f}")
-
-# %% [markdown]
-# ## The two transitions, seen at fixed mu_B
-#
-# Everything above this point was solved at fixed **density**, and a
-# fixed-density sweep cannot show a first-order transition: it walks straight
-# through the region where the branch exists but is not the favoured state,
-# which is why `ccdm`'s table reports an "onset" near 1 fm^-3 that is not where
-# quark matter actually takes over. A transition is a statement about which
-# branch has the LOWER free energy, and at T = 0 that is a comparison of
-# pressures at equal potentials — so it has to be made at fixed mu_B.
-#
-# `eos.ccdm.thermodynamics.thermo_from_mu` is the surface for it. It closes the
-# model's internal system (the four fields, the gaps, colour neutrality) at
-# declared potentials in ONE declared branch, and the branch list at fixed
-# potential carries one entry the density list cannot:
-#
-#     POTENTIAL_BRANCHES = ("confined", "restored", "partial")
-#     DENSITY_BRANCHES   =             ("restored", "partial")
-#
-# `confined` is absent from the density list on purpose — with the dielectric
-# closed the quarks are not in the medium at all, so n_B = 0 identically and no
-# nonzero-density row can be met. At fixed mu_B it is exactly the branch that
-# describes the vacuum, and without it there is no transition to see.
-#
-# **The two order parameters.**
-#
-# * **chiral** — `sigma`, the non-strange scalar condensate. It sits at its
-#   vacuum value sigma_0 = f_pi = 93 MeV in the broken phase and falls to
-#   ~0 when chiral symmetry is restored. `zeta` is its strange partner and does
-#   NOT restore, which is the 't Hooft-like statement that the strange
-#   condensate survives: it moves from 94.0 to ~64 MeV over the whole scan.
-# * **deconfinement** — the dilaton. `Phi = phi_bar^4` is the gluon condensate
-#   in units of its vacuum value and `chi = (1 - Phi)^p` is the dielectric, the
-#   medium's transparency to colour. Confined is `phi_bar = 1`, `chi = 0`,
-#   where `M*_i = (g sigma + m)/chi` diverges and no quark is in the medium;
-#   deconfined is `phi_bar < 1`, `chi -> 1`.
-#
-# The slice is **mu_C = 0**, T = 0, unpaired. That is the standard plane for a
-# chiral/deconfinement phase diagram and it is NOT beta equilibrium, which is
-# why the transition density here differs from the beta-equilibrium onset the
-# tables above report: `thermo_from_mu` takes mu_C as an input rather than
-# solving for it, so imposing neutrality would be an outer solve on top.
-
-# %%
-MU_B = np.arange(1300.0, 1701.0, 5.0)       # MeV, across the transition
-MU_C = 0.0                                   # the slice; NOT beta equilibrium
-PAR_TRANSITION = ccdm.Parameters.default()
-
-
-def transition_record(mu, state):
-    return dict(mu_B=float(mu), P=state.P, n_B=state.n_B,
-                sigma=state.sigma, zeta=state.zeta,
-                phi_bar=state.Phi ** 0.25, chi=state.chi)
-
-
-# One record per branch per potential. Non-convergence is a return value, so a
-# branch that has no solution at this mu_B is simply absent from its list --
-# below the transition the deconfined branch genuinely does not exist.
-#
-# The two branches are traced differently, and the difference is not cosmetic.
-# `confined` is cold-seeded at every potential: it is the vacuum, and it
-# converges everywhere. `restored` is walked DOWNWARDS from the top of the
-# range with the previous solution as the seed, because a cold seed finds it at
-# only 30 of 71 potentials on this slice and the ones it finds below the
-# transition are the barrier root (n_B ~ 0.06 fm^-3, sigma ~ 47 MeV) rather
-# than the minimum. Following one seed down is what makes the curve a BRANCH:
-# it then ends where the branch ends, and the non-convergence there is the
-# physics -- no deconfined state exists at that potential -- rather than a
-# solver setting.
-transition_scan = {"confined": [], "restored": []}
-mu_branch_end = None
-
-for mu in MU_B:
-    state, ok, err = thermo_from_mu(PAR_TRANSITION, float(mu), MU_C, 0.0, 0.0,
-                                    branch="confined")
-    if ok:
-        transition_scan["confined"].append(transition_record(mu, state))
-
-seed = None
-for mu in MU_B[::-1]:
-    state, ok, err, x = thermo_from_mu(PAR_TRANSITION, float(mu), MU_C, 0.0,
-                                       0.0, branch="restored", x0=seed,
-                                       return_state=True)
-    if not ok:
-        mu_branch_end = float(mu)
-        break
-    seed = x
-    transition_scan["restored"].append(transition_record(mu, state))
-transition_scan["restored"].reverse()
-
-# The transition is where the deconfined pressure overtakes the confined one.
-# Both are read from the scan rather than assumed: the confined branch is the
-# vacuum and its pressure is zero, but saying so is the check, not the input.
-#
-# On this slice the overtaking happens at the deconfined branch's own lower
-# ENDPOINT rather than at a crossing of two curves that both continue: the
-# branch ceases to exist while its pressure is still comfortably positive, so
-# the first potential at which it exists is already the first at which it wins.
-# That is the fixed-density back-bending seen from the other side -- mu_B has a
-# minimum along the deconfined branch, so below that minimum there is no
-# deconfined root at all.
-confined = {r["mu_B"]: r for r in transition_scan["confined"]}
-deconfined = {r["mu_B"]: r for r in transition_scan["restored"]}
-mu_transition = None
-for mu in sorted(deconfined):
-    if mu in confined and deconfined[mu]["P"] > confined[mu]["P"]:
-        mu_transition = mu
-        break
-
-print(f"=== ccdm at mu_C = {MU_C} MeV, T = 0, unpaired ===")
-print(f"confined branch solved at {len(confined)}/{len(MU_B)} potentials, "
-      f"deconfined at {len(deconfined)}/{len(MU_B)}")
-if mu_branch_end is not None:
-    print(f"  deconfined branch ends at mu_B = {mu_branch_end:.0f} MeV, "
-          f"still at P = {deconfined[min(deconfined)]['P']:.1f} MeV/fm^3")
-if mu_transition is None:
-    print("  no crossing on this mu_B range")
-else:
-    lo = confined[mu_transition]
-    hi = deconfined[mu_transition]
-    print(f"  transition at mu_B = {mu_transition:.0f} MeV")
-    print(f"    n_B      {lo['n_B']:8.4f} -> {hi['n_B']:8.4f} fm^-3   "
-          f"({hi['n_B'] / 0.16:.2f} n_sat)")
-    print(f"    sigma    {lo['sigma']:8.3f} -> {hi['sigma']:8.3f} MeV   "
-          f"(chiral)")
-    print(f"    zeta     {lo['zeta']:8.3f} -> {hi['zeta']:8.3f} MeV   "
-          f"(strange, does NOT restore)")
-    print(f"    phi_bar  {lo['phi_bar']:8.4f} -> {hi['phi_bar']:8.4f}       "
-          f"(deconfinement)")
-    print(f"    chi      {lo['chi']:8.4f} -> {hi['chi']:8.4f}")
-    print("  both order parameters jump at the SAME mu_B: in this model "
-          "chiral restoration\n  and deconfinement are one first-order "
-          "transition, not two.")
-
-
-def transition_axes(ylabel):
-    """One panel with the transition marked, shared by the two figures."""
-    fig, axes = paper_grid("1x1", mode="single", placeholder=False, aspect=1.25)
-    ax = axes.ravel()[0]
-    if mu_transition is not None:
-        ax.axvline(mu_transition, color="0.6", lw=0.8, ls=":", zorder=0)
-    ax.set_xlabel(r"$\mu_B$ [MeV]")
-    ax.set_ylabel(ylabel)
-    return fig, ax
-
-
-def branch_curve(branch, key):
-    rows = transition_scan[branch]
-    return (np.array([r["mu_B"] for r in rows]),
-            np.array([r[key] for r in rows]))
-
-
-# %% [markdown]
-# ### The chiral order parameter
-#
-# `sigma` holds at f_pi = 93 MeV on the confined branch and collapses to below
-# 1 MeV the moment the deconfined branch takes over — a jump, not a crossover.
-# `zeta` drops but stays large: the strange condensate does not restore here.
-
-# %%
-fig, ax = transition_axes(r"$\sigma$,  $\zeta$ [MeV]")
-for branch, style, width in (("confined", "-", 2.4), ("restored", "-", 2.4)):
-    mu, sigma = branch_curve(branch, "sigma")
-    mu, zeta = branch_curve(branch, "zeta")
-    ax.plot(mu, sigma, color=OKAB_CAT[0], ls=style, lw=width)
-    ax.plot(mu, zeta, color=OKAB_CAT[2], ls="--", lw=width)
-ax.set_ylim(0.0, 105.0)
-njl_style_legend(ax, [(r"$\sigma$", "-"), (r"$\zeta$", "--")],
-                 loc="center left", fontsize="x-small")
-panel_label(ax, "chiral")
-plt.show()
-
-# %% [markdown]
-# ### The deconfinement order parameter
-#
-# The dilaton `phi_bar` sits at 1 on the confined branch — the medium is opaque,
-# `chi = 0`, and `M*_i` diverges, which is what "no quark in the medium" means
-# here — and drops to below 0.5 across the transition, taking `chi` from 0 to
-# ~0.96. The two curves are one statement seen twice, since `chi = 1 -
-# phi_bar^4`; both are drawn because it is `phi_bar` that the field equations
-# solve for and `chi` that the masses divide by.
-
-# %%
-fig, ax = transition_axes(r"$\bar{\phi}$,  $\chi$")
-for branch in ("confined", "restored"):
-    mu, phi = branch_curve(branch, "phi_bar")
-    mu, chi = branch_curve(branch, "chi")
-    ax.plot(mu, phi, color=OKAB_CAT[3], ls="-", lw=2.4)
-    ax.plot(mu, chi, color=OKAB_CAT[1], ls="--", lw=2.4)
-ax.set_ylim(-0.05, 1.15)
-njl_style_legend(ax, [(r"$\bar{\phi}$", "-"), (r"$\chi$", "--")],
-                 loc="center left", fontsize="x-small")
-panel_label(ax, "deconfinement")
-plt.show()
-
-# %% [markdown]
-# ### The pressure crossing, and the density jump
-#
-# The two panels above show WHAT changes across the transition; these two show
-# why it is one, and what it costs. At fixed potential the favoured branch is
-# the one with the LARGER pressure, so `P(mu_B)` is where the decision is made,
-# and the confined branch's flat zero is the scan's own output rather than an
-# assumption: with the dielectric closed there is no quark in the medium, so
-# `Omega` reduces to `U(1) + V(sigma_0, zeta_0)`, which the vacuum
-# normalisation sets to zero.
-#
-# `n_B(mu_B)` is the same statement in the variable a table is built in. The
-# confined branch carries `n_B = 0` at EVERY potential -- it is the vacuum, not
-# a dilute phase -- so the density does not rise into the transition, it jumps
-# across it, from 0 to over 1 fm^-3 in one step. Nothing in between is a state
-# of this model, which is why a hybrid star built with `ccdm` takes its low
-# density half from a hadronic model through `eos.mixed` and never from the
-# confined branch.
-
-# %%
-fig, ax = transition_axes(LABELS["P"])
-for branch, label, colour in (("confined", "confined (vacuum)", OKAB_CAT[1]),
-                              ("restored", "deconfined", OKAB_CAT[0])):
-    mu, P = branch_curve(branch, "P")
-    ax.plot(mu, P, color=colour, lw=2.4, label=label)
-ax.axhline(0.0, color="0.6", lw=0.8, zorder=0)
-ax.legend(loc="center left", fontsize="x-small")
-panel_label(ax, "pressure")
-plt.show()
-
-# %%
-fig, ax = transition_axes(LABELS["nB"])
-for branch, label, colour in (("confined", "confined (vacuum)", OKAB_CAT[1]),
-                              ("restored", "deconfined", OKAB_CAT[0])):
-    mu, n_B = branch_curve(branch, "n_B")
-    ax.plot(mu, n_B, color=colour, lw=2.4, label=label)
-ax.legend(loc="center left", fontsize="x-small")
-panel_label(ax, "density")
-plt.show()
 
 # %% [markdown]
 # ## A parameter scan you drive
@@ -1151,17 +648,17 @@ plt.show()
 CCDM_SETS = ("baseline", "novector", "dressed", "stiff")
 
 # %%
-SWEEP = ("n_c", (0, 2, 4, 6, 8))
+SWEEP = ("p", (1, 2, 4, 6, 8))
 
-HELD = dict(B_g_quarter = 170.,
+HELD = dict(B_g_quarter = 165.,
             g_q=3.0,          # pinned by the specification's section 10 table
             g_s=3.0,          # flavour-symmetric choice, prior 3-8
             m_sigma=550.0,    # held throughout
             gbar_omega=2.0,   # 0-10 in the later scan
-            #n_c=float("inf")
+            n_c=float("inf")
             )          # 3.0 for that scan, then 1-3-10-20
 
-SCAN_NB = np.linspace(0.60, 2.60, 41)
+SCAN_NB = np.linspace(0.3, 2.60, 41)
 SCAN_FLAGS = ccdm.SpeciesFlags(csc=False)
 
 scan_name, scan_values = SWEEP
@@ -1178,7 +675,7 @@ for value in scan_values:
     par = replace(ccdm.Parameters.default(), **held, **{scan_name: value})
     rows = ccdm_rows_from_result(ccdm.eos_table(
         par, "beta_eq_neutrinoless", SCAN_FLAGS,
-        {"nB": SCAN_NB, "T": np.array([0.0])}))
+        {"nB": SCAN_NB, "T": np.array([0.0])}, backend="fast"))
     label = f"{scan_name} = {value:g}"
     if not rows:
         print(f"  [{label:22s}]   0/{len(SCAN_NB)} points: no deconfined "
@@ -1207,9 +704,28 @@ def scan_curves():
 # ### Pressure
 
 # %%
+# The two bag models on the same axis, at a parametrization set here rather
+# than taken from `Parameters.default()`: black, so the coloured curves stay
+# the CCDM scan.
+BAG_SETS = {
+    r"vMIT  $B^{1/4}$=165, $a$=0.2": (
+        vmit, replace(vmit.Parameters.default(), B4=165.0, a=0.2),
+        vmit.SpeciesFlags(), "--"),
+    r"$\alpha$Bag  $B^{1/4}$=165, $\alpha_s$=0.5": (
+        alphabag, replace(alphabag.Parameters.default(), B4=165.0, alpha=0.5),
+        alphabag.SpeciesFlags(), ":"),
+}
+
 fig, ax = scan_figure(LABELS["P"])
 for label, par, matrix, n_B, colour in scan_curves():
     ax.plot(n_B, matrix["P"][0], color=colour, label=label)
+for label, (module, par, species, style) in BAG_SETS.items():
+    rows = module.rows_from_result(module.eos_table(
+        par, "beta_eq_neutrinoless", species,
+        {"nB": SCAN_NB, "T": np.array([0.0])}))
+    matrix, axs = matrix_from_rows(rows)
+    ax.plot(axs["nB"], matrix["P"][0], color="k", ls=style, lw=1.0,
+            label=label)
 ax.legend(loc="upper left", fontsize="xx-small")
 plt.show()
 
@@ -1240,264 +756,102 @@ njl_style_legend(ax, [(r"$\sigma$", "-"), (r"$\zeta$", "--")],
                  loc="center left", fontsize="xx-small")
 plt.show()
 
-# %% [markdown]
-# ### The dilaton
-#
-# `phi_bar` is the gluon condensate in units of its vacuum value, to the fourth
-# root: `Phi = phi_bar^4` and `chi = (1 - Phi)^p`. `phi_bar = 1` is the confined
-# vacuum and `phi_bar -> 0` the perturbative limit, so a curve falling with
-# density is the medium becoming transparent to colour.
+
 
 # %% [markdown]
-# ### The scalar condensates
+# ## Colour superconductivity at T = 0
 #
-# `sigma` is the non-strange condensate, near zero across this whole range —
-# the light sector is already chirally restored wherever a deconfined solution
-# exists. `zeta` is its strange partner and stays large: it does not restore.
-
-# %% [markdown]
-# ### The dilaton effective potential, one curve per density
+# `csc=True` makes the three gaps unknowns, adds the pairing correction to
+# `Omega`, `eps`, `s` and every density, and solves `mu_3` and `mu_8` from
+# colour neutrality within the pattern. `eta = 1,2,3` pair `(ds)`, `(us)`,
+# `(ud)`, so CFL is `Delta_1 = Delta_2 ~ Delta_3` and 2SC is `Delta_3` alone
+# with the other two zero. Which pattern holds is enumerated and compared, not
+# declared: `patterns=("unpaired", "2SC", "CFL")` is the documented
+# restriction, an explicit statement that uSC/dSC-like states are not being
+# hunted here.
 #
-# **The bare glue potential is the wrong thing to plot against density.**
+# The pairing sector is calibrated at the shipped set — `G_D = 5e-6` MeV^-2 and
+# `Lambda = 600` MeV put the gap inside the 20-150 MeV window at
+# `mu_q ~ 450` MeV — so this cell drives `Parameters.default()` rather than the
+# swept `HELD` above, where the gap would move with `B_g` and mean something
+# else at every point.
 #
-#     U(Phi) = B_g [ Phi (ln Phi - 1) + 1 ] ,   Phi = phi_bar^4
-#
-# has no density in it at all — it is `B_g` times a fixed shape, zero at the
-# vacuum `Phi = 1` and equal to `B_g` at `Phi = 0`. One curve per n_B of *that*
-# would be one curve drawn five times.
-#
-# What does depend on the density is the CONSTRAINED EFFECTIVE POTENTIAL: the
-# thermodynamic potential with the dilaton HELD at a chosen value and every
-# other field re-solved at it. Its stationary points are the model's solutions,
-# because the dilaton row of the internal system is exactly its derivative,
-#
-#     R_1 = dOmega/dPhi = B_g ln Phi + p sum_f M*_f rho_s,f/(1 - Phi) = 0 ,
-#
-# and its shape is what a first-order transition looks like: two minima that
-# exchange depth. That is the curve with a dot on it.
-#
-# The other fields must be re-solved rather than frozen. Holding `sigma`,
-# `zeta` and `Sigma_V` at their solved values while moving `Phi` breaks
-# stationarity — `Sigma_V` is a function of the quark density, which `Phi`
-# changes — and the resulting curve has its minimum in the wrong place. Solving
-# rows R_2, R_3 and R_4 at each `Phi` is what makes the dot land on the
-# minimum, and where it does NOT land there the state is metastable, which is
-# a result rather than a defect.
-#
-# **Read the dots.** At the low densities the solved state sits in the
-# SHALLOWER well: its mu_B is below the transition potential, so deconfined
-# matter exists there but is not the favoured phase — which is exactly why the
-# fixed-density "onset" reported by the tables above is not a transition. At
-# the higher densities the dot is the global minimum and the state is stable.
-# Omega is offset by its own value at the dot, so the dot sits at zero and any
-# part of a curve dipping BELOW zero is a deeper phase the solver did not take.
-#
-# **What the deeper state at the confining end is, and what it is not.** The
-# open circle at `phi_bar = 1` is the confined vacuum, drawn from the exact
-# value `Omega = 0` rather than walked to: it lies at `-Omega_sol`, so the test
-# is one line of arithmetic — **the solved state is metastable iff its matter
-# pressure is negative**, since the vacuum's is zero. Below it the curve is not
-# drawn at all in the closing region, because the constrained solve stops
-# converging there and, worse, converges onto a DIFFERENT root once it does:
-# the vector row is a fixed-point equation in `Sigma_V`, and its second
-# solution here holds `Sigma_V` at +129 MeV and `n_B` at 0.319 fm^-3 for every
-# held dilaton, some 80 MeV/fm^3 below this branch. Earlier drafts of this cell
-# swept the whole grid and drew that family as a deep second well; it is not a
-# phase, it is a different family at a different density. `state.valid` does
-# not catch it — that flag is `M*_f > 0`, which it satisfies — so the curve is
-# traced OUTWARD from the solution and stopped where the branch ends.
-#
-# **So should the solver "jump to the deeper minimum"?** At fixed density it
-# cannot, and the question is the wrong way round. The deeper state is the
-# vacuum, `n_B = 0`; there is no such thing as 1.2 fm^-3 of vacuum, which is
-# why `DENSITY_BRANCHES` excludes `confined` in the first place. Among the
-# branches that DO exist at a given density the solver already takes the
-# global minimum — `eos.ccdm.solver.solve` ranks every converged candidate by
-# `f = eps - T s`, the right potential at fixed density. A metastable segment
-# is real physics and is removed by a CONSTRUCTION against the phase that
-# replaces the vacuum in a star — Maxwell, Gibbs, or the eta-mixed phase of
-# `eos.mixed` — not by picking a different root here.
+# **The condensation energy is read off `eps`, not `P`.** At fixed density the
+# winner is the smallest `f = eps - T s`, which at T = 0 is `eps` itself; at
+# fixed POTENTIAL it is the largest `P`. Both are in the model and each is
+# right in its own place, so the paired branch sits below the unpaired one in
+# energy at every density while its pressure sits BELOW at low density and
+# above it higher up. A `dP < 0` row is the wrong potential being read, not a
+# solve that went wrong.
 
 # %%
-POT_NB = (1.2, 1.6, 2.0, 2.4)          # densities to draw a curve for
-PHI_GRID = np.linspace(0.05, 0.97, 60)  # the held dilaton values
+CSC_NB = np.linspace(1.0, 2.0, 11)
+CSC_PAR = ccdm.Parameters.default()
+CSC_PATTERNS = ("unpaired", "2SC", "CFL")
+
+csc_rows = {}
+print("=== ccdm, csc on/off, beta_eq_neutrinoless, T = 0, backend='fast' ===")
+for label, csc in (("unpaired", False), ("paired", True)):
+    # `patterns` restricts the pairing enumeration and is meaningful only once
+    # `csc` is on; at csc=False the enumeration is `unpaired` and nothing else.
+    kwargs = {"patterns": CSC_PATTERNS} if csc else {}
+    start = time.perf_counter()
+    csc_rows[label] = ccdm_rows_from_result(ccdm.eos_table(
+        CSC_PAR, "beta_eq_neutrinoless", ccdm.SpeciesFlags(csc=csc),
+        {"nB": CSC_NB, "T": np.array([0.0])}, backend="fast", **kwargs))
+    print(f"  [{label:8s}] {len(csc_rows[label]):2d}/{len(CSC_NB)} points in "
+          f"{time.perf_counter() - start:5.1f} s")
+
+# The two tables are joined on density rather than laid on a common grid with
+# `matrix_from_rows`: solved densities carry float noise off the requested
+# axis, and that function matches exactly and raises. The key is rounded, which
+# is enough because the noise is round-off and the grid spacing is 0.1 fm^-3.
+unpaired = {round(row["n_B"], 6): row for row in csc_rows["unpaired"]}
+
+print(f"\n{'n_B':>6} {'pattern':>9} {'D_1=D_2':>8} {'D_3':>8} {'mu_3':>7} "
+      f"{'mu_8':>8} {'dP':>9} {'d(eps)':>9}  gapless")
+for row in csc_rows["paired"]:
+    plain = unpaired[round(row["n_B"], 6)]
+    print(f"{row['n_B']:6.2f} {row['pattern']:>9} {row['Delta_1']:8.2f} "
+          f"{row['Delta_3']:8.2f} {row['mu_3']:7.2f} {row['mu_8']:8.2f} "
+          f"{row['P'] - plain['P']:9.2f} {row['eps'] - plain['eps']:9.2f}"
+          f"  {row['gapless']}")
 
 
-def omega_at_phi(par, phi_bar, mu_B, mu_C, seed):
-    """Omega with the dilaton HELD at phi_bar and the other fields solved.
+# %% [markdown]
+# ### The gaps and what they buy
+#
+# Panel (a) is the three gaps; an open marker is a point the solver flagged
+# `gapless`, where the pattern's name no longer implies a fully gapped
+# spectrum. Panel (b) is the condensation energy at fixed density,
+# `eps_paired - eps_unpaired`, which is negative wherever pairing wins.
 
-    Returns (Omega [MeV^4], the solved (sigma, zeta, Sigma_V), M*_u, and
-    whether it converged) so the caller can warm-start the next point, test
-    that it is still on the branch, AND discard the ones that did not solve.
-    Rows R_2, R_3 and R_4 of
-    `eos.ccdm.thermodynamics.internal_rows`, each divided by the scale
-    `internal_scales` gives it.
+# %%
+n_B_csc = np.array([row["n_B"] for row in csc_rows["paired"]])
+d_eps = np.array([row["eps"] - unpaired[round(row["n_B"], 6)]["eps"]
+                  for row in csc_rows["paired"]])
 
-    CONVERGENCE HAS TO BE TESTED HERE. Towards phi_bar -> 1 the dielectric
-    closes, M*_f diverges as 1/(1 - Phi), and the sub-solve stops converging;
-    the Omega it then returns is a numerical artefact that looks exactly like
-    a second minimum. Reporting those as metastability would invent a phase.
+fig, axes = paper_grid("1x2", mode="double", placeholder=False, aspect=1.25)
+ax_gap, ax_cond = axes.ravel()
 
-    CONVERGENCE IS NOT ENOUGH BY ITSELF, and the caller has to walk outward
-    from the solved dilaton rather than sweep a grid. Past the point where the
-    branch ends this solve does not simply fail: it converges onto ANOTHER root
-    of the same rows. Row R_4, Sigma_V = g_omega(n_B) 3 n_B/m_omega^2 + Sigma_R
-    with n_B itself a function of Sigma_V through mu* = mu - Sigma_V, is a
-    fixed-point equation with more than one solution, and the second one here
-    sits at Sigma_V = +129 MeV with n_B pinned at 0.319 fm^-3 for EVERY held
-    dilaton -- a different family, at a different density, whose Omega runs
-    some 80 MeV/fm^3 below the branch. Drawn on the same curve it looks exactly
-    like a deep second well. It is not one. `state.valid` does not catch it
-    either: that flag is M*_f > 0, which this family satisfies.
-    """
-    d = par.derived
-    scales = (abs(d.eps_sigma), abs(d.eps_zeta), max(abs(mu_B) / 3.0, 1.0))
+for key, style, label in (("Delta_1", "-",  r"$\Delta_1$  ($ds$)"),
+                          ("Delta_2", "--", r"$\Delta_2$  ($us$)"),
+                          ("Delta_3", "-.", r"$\Delta_3$  ($ud$)")):
+    ax_gap.plot(n_B_csc, [row[key] for row in csc_rows["paired"]],
+                color=OKAB_CAT[0], ls=style, label=label)
+for row, n in zip(csc_rows["paired"], n_B_csc):
+    if row["gapless"]:
+        ax_gap.plot(n, row["Delta_3"], "o", ms=3, mfc="none",
+                    color=OKAB_CAT[1])
+ax_gap.set_xlabel(LABELS["nB"])
+ax_gap.set_ylabel(r"$\Delta_\eta$ [MeV]")
+ax_gap.legend(loc="lower right", fontsize="xx-small")
+panel_label(ax_gap, "(a)")
 
-    def residual(y):
-        state = state_at(par, float(phi_bar) ** 4, y[0], y[1], y[2],
-                         np.zeros(3), mu_B, mu_C, 0.0, 0.0, 0.0, 0.0,
-                         branch="restored", pattern="unpaired")
-        return [state.field_residual[i + 1] / scales[i] for i in range(3)]
-
-    solution = root(residual, seed, method="hybr")
-    state = state_at(par, float(phi_bar) ** 4, solution.x[0], solution.x[1],
-                     solution.x[2], np.zeros(3), mu_B, mu_C, 0.0, 0.0, 0.0, 0.0,
-                     branch="restored", pattern="unpaired")
-    converged = bool(np.max(np.abs(residual(solution.x))) < 1.0e-8)
-    return state.Omega, solution.x, float(state.M_star[0]), converged
-
-
-n_panels = len(scan)
-n_cols = min(3, n_panels)
-n_rows = int(np.ceil(n_panels / n_cols))
-fig, axes = paper_grid(f"{n_rows}x{n_cols}", mode="double", placeholder=False,
-                       aspect=1.15)
-flat = np.atleast_1d(axes).ravel()
-
-print("dilaton effective potential; 'metastable' = a deeper minimum exists")
-for panel, (label, par, matrix, n_B, colour) in zip(flat, scan_curves()):
-    span = [25.0]              # the y-range, set by the DECONFINED curves
-    for target, shade in zip(POT_NB, np.linspace(0.15, 0.75, len(POT_NB))):
-        i = int(np.argmin(np.abs(n_B - target)))
-        if abs(n_B[i] - target) > 0.06 or not np.isfinite(matrix["P"][0][i]):
-            continue                      # that density is below this onset
-        mu_B, mu_C = matrix["mu_B"][0][i], matrix["mu_C"][0][i]
-        phi_solved = matrix["phi_bar"][0][i]
-
-        # A warm start from the solved state, carried along the phi_bar grid.
-        state, ok, _ = thermo_from_mu(par, mu_B, mu_C, 0.0, 0.0,
-                                      branch="restored")
-        if not ok:
-            continue
-        seed_0 = np.array([state.sigma, state.zeta, state.Sigma_V])
-
-        def walk(grid, seed, closing=False):
-            """Trace one family along `grid`, stopping where it ends.
-
-            `closing` walks towards phi_bar = 1, and there M*_f = (g_f phi_f +
-            m_f)/chi has to RISE: that is the confinement mechanism. A step
-            that lowers it has left the branch for the cancellation family
-            below, so the walk stops rather than drawing it.
-            """
-            reached, last_mass = [], 0.0
-            for phi_bar in grid:
-                value, trial, mass, ok_sub = omega_at_phi(par, phi_bar, mu_B,
-                                                          mu_C, seed)
-                if not ok_sub or (closing and mass < last_mass):
-                    break
-                reached.append((phi_bar, value))
-                seed, last_mass = trial, mass   # only a solved point seeds on
-            return reached
-
-        # OUTWARD FROM THE SOLUTION, IN BOTH DIRECTIONS, AND STOP AT THE FIRST
-        # POINT THAT DOES NOT SOLVE. Past that the constrained solve does not
-        # merely fail: it lands on a DIFFERENT root and keeps returning values.
-        # The one reachable here is the vector row's second solution, where
-        # Sigma_V jumps from -20 to +129 MeV and n_B sticks at 0.319 fm^-3 for
-        # EVERY held dilaton. Drawn on, it makes a well some 80 MeV/fm^3 deep
-        # that is not a phase but a different family of solutions, at a
-        # different density, plotted as though it continued this curve. Walking
-        # outward and stopping is what keeps one curve one branch -- the same
-        # rule the mu_B scan above traces the deconfined branch with.
-        traced = sorted(walk(PHI_GRID[PHI_GRID < phi_solved][::-1], seed_0)
-                        + walk(PHI_GRID[PHI_GRID > phi_solved], seed_0,
-                               closing=True))
-
-        # THE CONFINING SIDE IS A DIFFERENT FAMILY AND NEEDS THE VACUUM'S
-        # SEED. Relaxing the deconfined fields at a held phi_bar near 1 does
-        # not reach it: it follows a root where sigma tunes itself towards
-        # -m_u/g_q so that the numerator of M*_u = (g_q sigma + m_u)/chi
-        # cancels the closing chi and the quarks stay LIGHT while the medium
-        # goes opaque -- the confinement mechanism defeated by a fine
-        # cancellation. Its Omega runs up to 90 MeV/fm^3 below the branch and
-        # looks exactly like a deep second well; the rising-M* test in `walk`
-        # is what keeps it off the curve. Seeded from (sigma_0, zeta_0, 0) the
-        # same rows give the confined family instead: sigma = sigma_0 = 93 MeV,
-        # no quark in the medium, n_B = 0 at every held dilaton, ending on the
-        # open circle at phi_bar = 1. THAT is the second minimum, and drawing
-        # both is what makes "two minima that exchange depth" visible rather
-        # than asserted.
-        d = par.derived
-        confined = walk(PHI_GRID[::-1], np.array([d.sigma_0, d.zeta_0, 0.0]))
-
-        # Offset by Omega at the solved dilaton, so the dot sits at zero.
-        at_dot, _, _, ok_dot = omega_at_phi(par, phi_solved, mu_B, mu_C,
-                                            seed_0)
-        if not ok_dot or not traced:
-            continue
-        phi_drawn = np.array([row[0] for row in traced])
-        curve = (np.array([row[1] for row in traced]) - at_dot) / hc3
-        panel.plot(phi_drawn, curve, color=str(shade), lw=1.1,
-                   label=f"$n_B$ = {target:g}")
-        if confined:
-            panel.plot([row[0] for row in confined],
-                       (np.array([row[1] for row in confined]) - at_dot) / hc3,
-                       color=str(shade), lw=1.1, ls="--")
-        panel.plot(phi_solved, 0.0, "o", color=colour, ms=4.0, zorder=5)
-        span.append(float(np.abs(curve).max()))
-
-        # THE CONFINED VACUUM IS AN EXACT NUMBER, not a limit of this grid. At
-        # phi_bar = 1 the dielectric is shut, no quark is in the medium, and
-        # Omega reduces to U(1) + V(sigma_0, zeta_0) = 0 by the vacuum
-        # normalisation -- so on this offset axis it sits at -Omega_sol, i.e.
-        # at the matter pressure of the solved state itself. Drawing it is
-        # better than walking the grid to the edge, where the constrained solve
-        # cannot follow (M* diverges), and it makes the test for metastability
-        # exact and one-sided: THE STATE IS METASTABLE IFF ITS PRESSURE IS
-        # NEGATIVE, because the vacuum's is zero.
-        vacuum = -at_dot / hc3                  # MeV/fm^3
-        panel.plot([PHI_GRID[-1], 1.0], [vacuum, vacuum], color=str(shade),
-                   lw=1.1, ls=":")
-        panel.plot(1.0, vacuum, "o", color=str(shade), ms=3.0,
-                   markerfacecolor="none")
-
-        if vacuum < 0.0:
-            print(f"  [{label:22s}] n_B = {target:g}: METASTABLE against the "
-                  f"vacuum by {-vacuum:.1f} MeV/fm^3 "
-                  f"(solved at phi_bar = {phi_solved:.3f})")
-        if curve.size and curve.min() < -1.0:
-            where = phi_drawn[int(np.argmin(curve))]
-            print(f"  [{label:22s}] n_B = {target:g}: a DECONFINED state "
-                  f"{-curve.min():.1f} MeV/fm^3 deeper sits at "
-                  f"phi_bar = {where:.3f}")
-        print(f"  [{label:22s}] n_B = {target:g}: branch traced over "
-              f"phi_bar = {phi_drawn[0]:.3f}-{phi_drawn[-1]:.3f} "
-              f"({len(phi_drawn)}/{len(PHI_GRID)} of the grid); it ends where "
-              f"the held-dilaton solve leaves it")
-
-    # The confined family runs to +P of the solved state, which at the high
-    # densities is several hundred MeV/fm^3 and would flatten everything else.
-    # The scale is set by the deconfined curves and the confined ones leave the
-    # top of the panel; where the vacuum matters -- when it is BELOW zero and
-    # the state is metastable -- it is a small number and stays in frame.
-    panel.set_ylim(-1.2 * max(span), 1.2 * max(span))
-    panel.axhline(0.0, color="0.85", lw=0.6, zorder=0)
-    panel.set_xlabel(r"$\bar{\phi}$")
-    panel.set_ylabel(r"$\Omega - \Omega_{\rm sol}$ [MeV fm$^{-3}$]")
-    panel.set_title(label, fontsize=7)
-    panel.legend(loc="upper left", fontsize="xx-small")
-
-for spare in flat[n_panels:]:
-    spare.set_visible(False)
-
+ax_cond.axhline(0.0, color="0.6", lw=0.6)
+ax_cond.plot(n_B_csc, d_eps, color=OKAB_CAT[2])
+ax_cond.set_xlabel(LABELS["nB"])
+ax_cond.set_ylabel(r"$\epsilon_{\rm paired}-\epsilon_{\rm unpaired}$"
+                   r"  [MeV/fm$^3$]")
+panel_label(ax_cond, "(b)")
 plt.show()

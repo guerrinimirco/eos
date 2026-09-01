@@ -1856,44 +1856,52 @@ not pay for getting the bound right.
 
 ### njl
 
-- **RG-consistent regularization is not implemented; `lambda_UV != 1` raises.**
-  The medium integral is not a spectator in this model. At T = 0 and unpaired
-  it is self-limiting at k_F and cutoff-free while k_F < Lambda, but that
-  protection disappears at finite T and in ANY colour-superconducting phase,
-  where the Fermi surface is smeared. Two consequences are measured rather
-  than argued: with everything cut at Lambda the density SATURATES at
-  n_B = Lambda^3/pi^2 = 2.881 fm^-3 and freezes (checked by
-  `verify/run_full_check.py`); and the gap dies at mu ~ 1.13 Lambda, so a
-  sharp-cutoff three-flavour CSC calculation is quantitatively safe only for
-  mu << Lambda/2, which is BELOW deconfinement onset. There is effectively no
-  window where lambda = 1 is trustworthy for CSC, and it is shipped for code
-  validation against published sharp-cutoff results, not for production.
+- **RESOLVED: RG-consistent regularization is implemented and is now the
+  default (`lambda_UV = 10`).** This entry is kept because what it recorded
+  was measured, and because the sharp-cutoff model it describes is still
+  reachable and still shipped -- at `lambda_UV = 1`, for validation against
+  published sharp-cutoff results rather than for production.
 
-  The fix is RG consistency: integrate the medium term to Lambda_UV >> Lambda,
-  keep the vacuum integral at Lambda, and subtract a counterterm cancelling
-  the medium divergence, which is logarithmic, exists only when mu != 0 AND
-  Delta != 0, and does not scale with the quark masses:
-  Gamma_med/V_4 ~= -(2/pi^2) mubar^2 Delta^2 ln Lambda_UV (the coefficient is
-  confirmed to 0.08% in docs/njl_csc_implementation.md section 7.2). The
-  parameter `lambda_UV` and `Lambda_medium` exist and are threaded through;
-  what is missing is the counterterm's closed form, which
-  docs/njl_csc_implementation.md documents as unwritten -- it says of the
-  three published schemes that the massive one is rejected by its own authors
-  and that massless and minimal both have closed forms, without stating
-  either. Writing one from Gholami, Hofmann & Buballa (arXiv:2408.06704) is
-  the work. Until then any lambda != 1 raises `NotImplementedError`, because a
-  lambda-dependent answer would be worse than an exception.
+  What was recorded, and still holds of `lambda = 1`: with everything cut at
+  Lambda the density SATURATES at n_B = Lambda^3/pi^2 = 2.881 fm^-3, and the
+  2SC gap dies at mu ~ 1.13 Lambda, so a sharp-cutoff three-flavour CSC
+  calculation is quantitatively safe only for mu << Lambda/2, which is BELOW
+  deconfinement onset.
 
-  Two things follow and are recorded here rather than worked around. The
-  published Kunkel set (`Parameters.named("kunkel")`) ships its COUPLINGS
-  (eta_D = 1.45, eta_V = 0.7) at lambda = 1 rather than their lambda ~ 10, and
-  the two are not independent -- RG-consistent CFL gaps run almost 90% above
-  sharp-cutoff ones -- so it is a strong-coupling point, not a reproduction of
-  that paper. And the conformal asymptotics of the vector sector cannot be
-  EXHIBITED at lambda = 1 at all: c_s^2 -> max(1 - alpha, 1/3) is a statement
-  about n_B -> infinity and this regularization has no densities above
-  2.881 fm^-3. `verify/check_sound_speed` therefore asserts causality and
-  monotonicity only, and says so.
+  What closed it: the massless-scheme counterterm of Gholami, Hofmann &
+  Buballa (arXiv:2408.06704, their Eq. C7), written out in `njl.md` and
+  `njl.tex` and implemented as `thermodynamics.counterterm`. Two things the
+  earlier entry did not know were needed, both found by measurement rather
+  than by reading:
+
+  * the vacuum piece of the RG split is `A_vac(chi)` at the SAME condensates,
+    gaps included. Subtracting only the Delta-independent Dirac sea leaves the
+    medium remainder diverging QUADRATICALLY rather than logarithmically, and
+    no counterterm of the published form can cancel that. With the
+    Delta-dependent vacuum block subtracted the remainder's measured
+    d/d(ln Lambda_UV) is -4.21e8 MeV^4 against the counterterm's +4.21e8, a
+    0.1% cancellation;
+  * the pairing panels have to follow the cutoff. At lambda = 10 everything
+    between the highest k_F and 6023 MeV falls in ONE panel and the pairing
+    potential is mis-integrated by 4.0e-7 relative -- enough to make a
+    warm-started table and a cold point solve disagree past their convergence
+    gate. `panel_nodes(..., max_panel_ratio=)` adds geometric panels and
+    brings it to 2.9e-13 at the same node count.
+
+  The gap seed moved with it: `gap_seed_scale` is one rule read by all three
+  cold starts, and 0.1 mu_q collapsed onto the trivial root on 20 of 36
+  measured cold starts against 3 for the 0.35 mu_q now used.
+
+  `verify/check_rg_consistency` is the acceptance test and needs no published
+  number: RG consistency IS Lambda d(Gamma)/d(Lambda) -> 0, so a wrong
+  counterterm shows up as an answer that still moves when Lambda_UV does.
+  Residual drift between lambda = 10 and 20 is 1.4e-3 (2SC) and 1.9e-3 (CFL),
+  the O(1/p^3) tail the asymptotic expansion drops.
+
+  Still open, and narrower than before: `verify/check_sound_speed` asserts
+  causality and monotonicity only. The density ceiling that made the conformal
+  asymptotics unreachable is gone, so exhibiting c_s^2 -> max(1 - alpha, 1/3)
+  is now a matter of sweeping far enough, not of the regularization.
 
 - **The paired scalar density disagrees with the specification's 2SC light
   masses, and the thermodynamic identity decides in favour of the code.**

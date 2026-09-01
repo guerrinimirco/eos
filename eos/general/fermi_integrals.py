@@ -694,6 +694,10 @@ NODES_PER_PANEL = 24
 #: T. The Fermi function has fallen to e^-25 at the edge of it.
 THERMAL_COLLAR = 25.0
 
+#: How many geometric steps `panel_nodes` takes into a tail far above every
+#: Fermi momentum, when `max_panel_ratio` asks for them.
+TAIL_STEPS = 8
+
 #: Two breakpoints closer than this fraction of the cutoff are one breakpoint.
 _BREAK_TOL = 1.0e-9
 
@@ -720,7 +724,8 @@ def _gauss_legendre(nodes_per_panel):
     return x, w
 
 
-def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL):
+def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL,
+                max_panel_ratio=None, k_min=0.0):
     """(k, w): a panel-split Gauss-Legendre rule on [0, k_max] [MeV].
 
     The general helper `pair_nodes` and the models' own medium integrals share,
@@ -728,15 +733,48 @@ def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL):
     the integrand kinks at each Fermi momentum, and one panel cannot resolve a
     kink however many nodes it is given. Breakpoints go at each momentum in
     `fermi_momenta` and, at T > 0, at +- 25 T around each.
+
+    `max_panel_ratio` adds GEOMETRIC breakpoints below k_max, for the case the
+    Fermi momenta leave uncovered: a cutoff far above every k_F, where the top
+    panel then spans a decade or more of momentum and no number of Gauss nodes
+    resolves a 1/p tail across it. Points go at k_max/r, k_max/r^2, ... down to
+    the highest Fermi breakpoint (or eight steps, whichever comes first). It is
+    off by default and changes no existing rule: a conventionally cut model has
+    k_max within a factor 2 of its Fermi momenta and would gain no point even
+    with it on. An RG-consistent one has k_max = 10 Lambda and needs it --
+    measured on the njl pairing block at Lambda_UV = 6023 MeV, r = 2 takes the
+    relative quadrature error from 4.0e-7 to 2.9e-13 at the same node count.
+
+    `k_min` moves the lower limit off zero, so the rule covers a SHELL rather
+    than a ball. A difference of two cut integrals over nested intervals is an
+    integral over the shell between them, and computing it as one is both
+    cheaper and better conditioned than differencing two larger numbers.
     """
-    breaks = [0.0, k_max]
+    breaks = [float(k_min), k_max]
     for k_F in np.atleast_1d(fermi_momenta):
         breaks.append(float(k_F))
         if T > 0.0:
             breaks.append(float(k_F) - THERMAL_COLLAR * T)
             breaks.append(float(k_F) + THERMAL_COLLAR * T)
 
-    edges = np.unique(np.clip(np.asarray(breaks, dtype=float), 0.0, k_max))
+    edges = np.unique(np.clip(np.asarray(breaks, dtype=float),
+                              float(k_min), k_max))
+
+    if max_panel_ratio is not None and max_panel_ratio > 1.0:
+        # Fill the top panel geometrically, stopping where the Fermi
+        # breakpoints already resolve things -- or after TAIL_STEPS, which is
+        # what bounds the mu* = 0 case where there are no Fermi momenta at all
+        # and the single panel is the whole interval.
+        floor = max(edges[-2] if edges.size > 1 else 0.0, float(k_min),
+                    k_max / max_panel_ratio ** TAIL_STEPS)
+        extra = []
+        cut = k_max / max_panel_ratio
+        while cut > floor:
+            extra.append(cut)
+            cut /= max_panel_ratio
+        if extra:
+            edges = np.unique(np.concatenate([edges, np.array(extra)]))
+
     edges = edges[np.concatenate(([True], np.diff(edges) > _BREAK_TOL * k_max))]
 
     x, wx = _gauss_legendre(nodes_per_panel)

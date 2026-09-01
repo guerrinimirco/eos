@@ -217,9 +217,9 @@ $\alpha$ & $2/3$
 $n_{\rm ref}$ & $0.48$ fm$^{-3}$
   & the power law's reference \emph{quark} density,
     i.e.\ $\nB = n_{\rm sat}$ \\
-$\lambda = \Lam_{\rm UV}/\Lam$ & $1$
-  & the regularization scale; $\lambda \neq 1$ \emph{raises}
-    (Sec.~\ref{sec:notimplemented}) \\
+$\lambda = \Lam_{\rm UV}/\Lam$ & $10$
+  & the regularization scheme; $\lambda = 1$ is the conventional sharp
+    cutoff (Sec.~\ref{sec:rg}) \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -268,19 +268,20 @@ name & what it changes against the tier-3 defaults \\
 \midrule
 \texttt{rkh} & nothing --- the shipped default, and the set every number in
   Sec.~\ref{sec:reproduces} was produced at \\
-\texttt{kunkel} & $\eta_D = 1.45$, $\eta_V = 0.7$ \\
+\texttt{rg\_njl1} & $\eta_D = 1.45$, $\eta_V = 0.7$ \\
+\texttt{kunkel} & an alias of \texttt{rg\_njl1} \\
 \texttt{gluon\_exchange} & the \texttt{gluon\_exchange} form,
   $\GV^0/\GS = 0.5$, $M_g = 500$ MeV \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The \texttt{kunkel} couplings are those of Ref.~\cite{Kunkel2026} and the
-regularization is \emph{not}: their calculation is RG-consistent at
-$\lambda \simeq 10$ and this one is at $\lambda = 1$, because the counterterm
-that makes $\lambda > 1$ finite is not implemented here. The two are not
-independent --- RG-consistent gaps run almost $90\%$ above sharp-cutoff ones
---- so the set is a strong-coupling point, not a reproduction of that paper.
+\texttt{rg\_njl1} is ``parameter set 1'' of the RG-NJL family --- the soft one
+of the three published sets --- and the set Ref.~\cite{Kunkel2026} uses. With the
+default $\lambda = 10$ the couplings \emph{and} the regularization are theirs,
+which is what makes this a reproduction of that model rather than a borrowing
+of its numbers: the two were never independent, since RG-consistent gaps run
+well above sharp-cutoff ones at the same coupling.
 
 \subsection{The constants the shared sectors carry}
 
@@ -311,7 +312,11 @@ instead.
 
 One mode of mass $M$ at effective potential $\mu^{*}$ and temperature $T$,
 integrated to a cutoff $\Lam$, with $E = \sqrt{k^2+M^2}$ and the Fermi
-functions $f^{\pm} = [1+e^{(E \mp \mu^{*})/T}]^{-1}$:
+functions $f^{\pm} = [1+e^{(E \mp \mu^{*})/T}]^{-1}$. The $\Lam$ of this
+section is the cutoff on the \emph{medium} integral, which is $\Lam_{\rm UV}$
+and not the vacuum's $\Lam$ whenever $\lambda > 1$ (Sec.~\ref{sec:rg}); at
+$T = 0$ and unpaired the distinction is invisible, since the $\min$ below makes
+these integrals self-limiting at $k_F$:
 \begin{align}
   n     &= \frac{g}{2\pi^2}\int_0^{\Lam}\!\! dk\, k^2 \,(f^{+}-f^{-}) ,
   &
@@ -611,6 +616,161 @@ $(59.9,\,92.71)$ at $\delta\mu = 50, 60, 65$ MeV; the free-energy crossover
 sits at $\delta\mu_c = 63.59$ MeV, a fraction $0.970$ of the weak-coupling
 Clogston--Chandrasekhar value $\Delta_0/\sqrt2$, the $3\%$ deficit being the
 finite cutoff.
+
+\section{Regularization: the vacuum at $\Lam$, the medium at $\Lam_{\rm UV}$}
+\label{sec:rg}
+
+A sharp cutoff on \emph{every} momentum integral is what the model was fitted
+with, and it is unusable at the densities the model is applied to. With
+$\Lam = 602.3$ MeV and quark potentials of $400$--$500$ MeV the medium reaches
+the cutoff: the 2SC gap peaks at $\mu^{*} = 0.83\,\Lam$ and is identically zero
+by $\mu^{*} = 1.13\,\Lam$, where the loop contributions are cut off entirely and
+the model silently returns a free gas. Measured here at $\eta_D = 1$:
+%
+\begin{center}
+\begin{tabular}{lcccccc}
+\toprule
+$\mu^{*}/\Lam$ & $0.664$ & $0.830$ & $0.996$ & $1.129$ & $1.328$ & $1.494$ \\
+\midrule
+$\Delta_3$ [MeV], $\lambda = 1$
+  & $141.06$ & $149.48$ & $113.33$ & $0.00$ & $0.00$ & $0.00$ \\
+$\Delta_3$ [MeV], $\lambda = 10$
+  & $166.71$ & $214.51$ & $251.50$ & $276.16$ & $306.85$ & $327.65$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The fix is renormalization-group consistency~\cite{Braun2018,Gholami2024}:
+require that the answer not depend on the scale the theory is initialized at,
+%
+\begin{equation}
+  \lim_{\Lam_{\rm UV}\to\infty}
+  \Lam_{\rm UV}\,\frac{\partial \Gamma}{\partial \Lam_{\rm UV}} = 0 .
+  \label{eq:rgconsistency}
+\end{equation}
+%
+The vacuum keeps the cutoff it was \emph{fitted} at and only the medium runs,
+%
+\begin{equation}
+  \Omega = \mathcal{V}(\chi)
+  - \frac{1}{2\pi^2}\left[
+      \int_0^{\Lam} \!\! dp\, p^2\, \mathcal{A}_{\rm vac}(\chi)
+    + \int_0^{\Lam_{\rm UV}} \!\! dp\, p^2
+      \big( \mathcal{A}(\mu, T, \chi) - \mathcal{A}_{\rm vac}(\chi) \big)
+    \right] ,
+  \label{eq:rgsplit}
+\end{equation}
+%
+with $\mathcal{A}_{\rm vac}(\chi) = \mathcal{A}(\mu = 0, T = 0, \chi)$ the
+vacuum integrand \emph{at the same condensates} --- gaps included, which is the
+half that is easy to drop. The $\Delta$-dependent Dirac sea is a vacuum
+quantity and keeps $\Lam$; leaving it in the medium remainder makes that
+remainder diverge \emph{quadratically} in $\Lam_{\rm UV}$ instead of
+logarithmically, and no counterterm of the form below can cancel that.
+
+$\lambda = \Lam_{\rm UV}/\Lam$ is the one parameter that says which scheme is
+in use; it is $10$ by default, and $\lambda = 1$ is the conventional
+sharp-cutoff model exactly and not approximately.
+
+\subsection{The medium divergence and its counterterm}
+
+In an unpaired phase the medium remainder converges and nothing more is needed:
+at $T = 0$ the occupations are step functions cut at $k_F$ and the cutoff never
+binds, so unpaired results are independent of $\lambda$ to the last bit. With a
+gap the cancellation that makes $f_{\rm vac} = 2\sqrt{M^2 + p^2}$ no longer
+happens and the remainder carries a logarithm. Summing the six Cooper pairs
+$(i,j)$ with mean potential $\bar\mu_{ij} = (\mu^{*}_i + \mu^{*}_j)/2$,
+%
+\begin{equation}
+  \Omega_{\rm med} \;\sim\;
+  -\frac{1}{\pi^2}\sum_{(ij)} \bar\mu_{ij}^{\,2}\,\Delta_\eta^2
+   \,\ln \Lam_{\rm UV} .
+  \label{eq:mediumdivergence}
+\end{equation}
+%
+The counterterm is the \emph{massless} scheme of Ref.~\cite{Gholami2024}
+(their Eq.~C7), which sets $M = 0$ in the renormalization factors and is
+therefore the scheme with a closed form --- and the one Ref.~\cite{Kunkel2026}
+uses throughout:
+%
+\begin{equation}
+  \delta\Omega_{\rm ct} = \frac{1}{\pi^2}
+  \sum_{(ij)} \bar\mu_{ij}^{\,2}\,\Delta_\eta^2\; g(\Delta_\eta) ,
+  \label{eq:counterterm}
+\end{equation}
+\begin{equation}
+  g(\Delta) = \frac{\Lam}{\sqrt{\Lam^2 + \Delta^2}}
+            - \frac{\Lam_{\rm UV}}{\sqrt{\Lam_{\rm UV}^2 + \Delta^2}}
+            + \ln\!\left[
+              \frac{\Lam_{\rm UV} + \sqrt{\Lam_{\rm UV}^2 + \Delta^2}}
+                   {\Lam + \sqrt{\Lam^2 + \Delta^2}} \right] .
+  \label{eq:countertermshape}
+\end{equation}
+%
+The six pairs are the two colour choices per gap, $\Delta_1$ pairing $d$ with
+$s$, $\Delta_2$ pairing $u$ with $s$ and $\Delta_3$ pairing $u$ with $d$:
+$(d_g, s_b), (d_b, s_g)$; $(u_r, s_b), (u_b, s_r)$; $(u_r, d_g), (u_g, d_r)$.
+Within a pair the colour potential $\mu_3$ cancels, so the two pairs of one gap
+share a $\bar\mu$ and the sum may equally be written over the three gaps with a
+coefficient $2/\pi^2$, which is how Eq.~C7 states it.
+
+Two limits carry the design. $g \to \ln(\Lam_{\rm UV}/\Lam)$ for large
+$\Lam_{\rm UV}$, which is the logarithm Eq.~\eqref{eq:mediumdivergence} needs
+cancelled; and $g = 0$ \emph{identically} at $\Lam_{\rm UV} = \Lam$. The second
+is why one parameter carries the scheme and no boolean stands beside it: at
+$\lambda = 1$ the counterterm is not small, it is zero.
+
+It is not only a term in $\Omega$. It depends on the potentials, so it carries
+a density, and on the gaps, so it enters the gap equations:
+%
+\begin{equation}
+  \delta n_j = -\frac{\partial\, \delta\Omega_{\rm ct}}{\partial \mu^{*}_j}
+             = -\frac{1}{\pi^2} \sum_{(ij) \ni j}
+                \bar\mu_{ij}\,\Delta_\eta^2\, g(\Delta_\eta) ,
+  \label{eq:countertermdensity}
+\end{equation}
+\begin{equation}
+  \frac{d}{d\Delta}\Big[\Delta^2 g\Big]
+  = 3\Delta\left(\frac{\Lam}{A} - \frac{\Lam_{\rm UV}}{B}\right)
+  + 2\Delta \ln\!\left[\frac{\Lam_{\rm UV} + B}{\Lam + A}\right]
+  + \Delta^3\left(\frac{\Lam_{\rm UV}}{B^3} - \frac{\Lam}{A^3}\right) ,
+  \label{eq:countertermgap}
+\end{equation}
+%
+with $A = \sqrt{\Lam^2 + \Delta^2}$ and $B = \sqrt{\Lam_{\rm UV}^2 + \Delta^2}$,
+so the gap row of the residual is
+$\Delta_\eta/(2\GD) - \mathrm{kernel}_\eta + \partial\,\delta\Omega_{\rm ct}/
+\partial\Delta_\eta$. Adding the counterterm to $\Omega$ alone would leave the
+Euler relation violated and the gaps solving the wrong equation, and both
+failures look like a plausible equation of state. It carries no explicit $T$
+and no mass, so it contributes to neither $s$ nor the scalar density.
+
+\subsection{Cost, and one numerical trap}
+
+Three quadrature passes instead of one --- the medium at $\Lam_{\rm UV}$, and
+the vacuum block at $\Lam_{\rm UV}$ and at $\Lam$ --- over a momentum range ten
+times wider. At $\lambda = 1$ the two vacuum blocks are the same integral and
+the single pass is taken directly.
+
+The panels have to follow the cutoff. The pairing quadrature breaks at each
+Fermi momentum, which at $\lambda = 1$ covers the whole interval; at
+$\lambda = 10$ it leaves everything between the highest $k_F$ and $6023$ MeV in
+\emph{one} panel, across which no number of Gauss nodes resolves a $1/p$ tail.
+That mis-integrates the pairing potential by $4.0\times10^{-7}$ relative ---
+small enough to look like round-off, large enough to make a warm-started table
+and a cold point solve disagree past their convergence gate. Geometric panels
+at $\Lam_{\rm UV}/2, \Lam_{\rm UV}/4, \dots$ down to the highest Fermi momentum
+bring it to $2.9\times10^{-13}$ at the same node count.
+
+\subsection{What it buys}
+
+The gaps rise monotonically instead of collapsing (the table above), and the
+density ceiling $\Lam^3/\pi^2 = 2.881$ fm$^{-3}$ --- a regularization artifact
+rather than physics --- moves to $\Lam_{\rm UV}^3/\pi^2$ and stops binding. The
+residual $\lambda$-dependence is the $\mathcal{O}(1/p^3)$ tail the asymptotic
+expansion of Eq.~\eqref{eq:mediumdivergence} drops: doubling $\lambda$ from
+$10$ to $20$ moves $\Omega$ and the gaps by $1.4\times10^{-3}$ (2SC) and
+$1.9\times10^{-3}$ (CFL).
 
 \section{The vector sector}
 \label{sec:vector}
@@ -1169,10 +1329,7 @@ percent and moves $M_s$, $\Delta_3$, $\mu_8$, $\muC$, $\nB$ and $P$ not at all.
 \label{sec:notimplemented}
 
 Recorded in \texttt{docs/DEFERRED.md} rather than approximated:
-the RG-consistent regularization at $\lambda = \Lam_{\rm UV}/\Lam > 1$ (the
-parameter exists and any value but $1$ raises, since the counterterm
-cancelling the medium's logarithmic divergence $-(2/\pi^2)\bar\mu^2\Delta^2
-\ln\Lam_{\rm UV}$ is not written); the 't~Hooft--diquark cross-term $K'$ of
+the 't~Hooft--diquark cross-term $K'$ of
 Sec.~\ref{sec:lagrangian}; the trapped muon lepton family as a conserved
 charge; the composition and gap freezes of \texttt{eos\_response}; and the
 dilaton/colour-dielectric graft, which the specification marks as unverified

@@ -72,7 +72,8 @@ from eos.general.thermodynamics_leptons import (
 from eos.njl.species import (
     DEFAULT_PATTERNS, PATTERNS, SpeciesFlags, pattern_mask, pattern_seed,
 )
-from eos.njl.thermodynamics import has_vector, state_at, vacuum_solution
+from eos.njl.thermodynamics import (gap_seed_scale, has_vector, state_at,
+                                    vacuum_solution)
 
 #: The four modes of CLAUDE.md section 3, and the fractions each takes beyond
 #: (n_B, T). Every one is closed here, at any temperature.
@@ -174,7 +175,7 @@ def default_guess(par, spec, pattern, n_B, T, vac=None):
     guess = list(M)
 
     mask = pattern_mask(pattern)
-    seed = pattern_seed(pattern, max(0.1 * mu_q, 20.0))
+    seed = pattern_seed(pattern, gap_seed_scale(mu_q))
     guess += [seed[eta] for eta in range(3) if mask[eta]]
     if any(mask):
         guess += [0.0, -0.02 * mu_q]
@@ -206,7 +207,7 @@ def seed_from(point, par, spec, pattern):
     """
     M, _, _, _, Sigma_V, mu_B, mu_C, mu_S, mu_nue = _unpack(
         point.x, par, spec, point.pattern)
-    gap_scale = max(0.1 * mu_B / 3.0, 20.0)
+    gap_scale = gap_seed_scale(mu_B / 3.0)
 
     guess = list(M)
     mask = pattern_mask(pattern)

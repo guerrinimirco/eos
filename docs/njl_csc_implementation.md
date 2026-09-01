@@ -1033,8 +1033,7 @@ gluon-exchange effective exponent; and all four dielectric grafts.
 
 **Not verified, and flagged as such**: the CFL neutral solve is not tightly
 converged (residual 13) and needs a better seed; the 't Hooft–diquark cross-term
-has no published coefficient and is absorbed into η_D; the RG-consistent
-counterterm is documented but not implemented; the dielectric graft is untested
+has no published coefficient and is absorbed into η_D; the dielectric graft is untested
 for transition order, pairing coexistence, and finite T. Equation and section
 numbers taken from arXiv preprints may differ from journal versions.
 
@@ -1065,11 +1064,24 @@ and the same (ds, us, ud) → (Δ₁, Δ₂, Δ₃) indexing, and the **identica
 parameter set** (Λ′ = 602.3 MeV, G_SΛ′² = 1.835, KΛ′⁵ = 12.36, m_ud = 5.5,
 m_s = 140.7 MeV).
 
-Three differences, all extensions rather than disagreements:
+Three points of comparison, none of them a disagreement any more:
 
-1. **RG-consistent regularization** (the "massless" scheme) rather than our sharp-cutoff baseline — precisely the fix §7.2 documents but does not implement. They use G_D = 1.45 G_S, G_V = 0.7 G_S.
-2. **Neutrinos and lepton-family numbers.** Their lepton sector carries ν_e, ν_μ (massless) alongside e and μ, with μ_{L_e}, μ_{L_μ} conserved under trapping. Ours has only e and μ.
-3. **T₈ differs by 2/√3** (§1.1).
+1. **RG-consistent regularization** (the "massless" scheme). IMPLEMENTED — see
+   §7.2 — and now the default at λ = 10, with their couplings shipped as
+   `Parameters.named("rg_njl1")`: G_D = 1.45 G_S, G_V = 0.7 G_S.
+2. **Neutrinos and lepton-family numbers.** Correcting what this section used
+   to say: they do NOT carry a muon lepton family. Their §II.4 includes muons
+   in the neutrino-transparent EoS but "do not include muons or muon neutrinos
+   in the neutrino-trapped beta-equilibrium EoS for simplicity", and they
+   describe the evolution in terms of fixed n_B, Y_Le and s alone. That is
+   exactly `beta_eq_neutrino_trapped(n_B, Y_Le, T)` with `muons=False`, which
+   this model has; the Y_Lmu gap in `docs/DEFERRED.md` is real but is not a
+   gap against this paper.
+3. **T₈ differs by √3, not 2/√3** (§1.1). Gholami *et al.* Eq. 14 writes
+   μ̂ = (μδ + μ_Q Q)δ_ab + [μ₃(λ₃)_ab + μ₈(λ₈)_ab]δ_αβ with the FULL Gell-Mann
+   λ₈, and Kunkel *et al.* inherit it through the shared module. With our
+   T₈ = λ₈/√3 that gives μ₈^ours = √3 μ₈^theirs. The halved λ₈/2 convention is
+   Rüster's and Pagliara–Schaffner-Bielich's, not theirs.
 
 ### 12.2 Pagliara–Schaffner-Bielich — same algebra, different bookkeeping
 

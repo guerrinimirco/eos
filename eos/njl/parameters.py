@@ -79,12 +79,21 @@ class Parameters:
     #: effective exponent reaches 2/3 by itself, with no tuning.
     G_V0_over_GS: float = 0.5
     M_g: float = 500.0               # [MeV]
-    #: lambda = Lambda_UV/Lambda, the regularization control. lambda = 1 is
-    #: conventional sharp-cutoff regularization. Anything else needs the
-    #: RG-consistent counterterm, which is NOT implemented -- see
-    #: docs/DEFERRED.md -- and raises rather than returning a divergent
-    #: answer.
-    lambda_UV: float = 1.0
+    #: lambda = Lambda_UV/Lambda, THE REGULARIZATION SWITCH. The Dirac sea is
+    #: cut at Lambda whatever lambda is; the medium runs to Lambda_UV, with the
+    #: counterterm of `thermodynamics.counterterm` cancelling the logarithmic
+    #: divergence a paired medium then carries. lambda = 1 makes that
+    #: counterterm identically zero and recovers conventional sharp-cutoff
+    #: regularization exactly, which is why the scheme needs no second field
+    #: beside this one (CLAUDE.md section 4).
+    #:
+    #: The default is RG-CONSISTENT. A sharp cutoff at Lambda = 602.3 MeV is
+    #: quantitatively safe only for mu << Lambda/2, which is below the
+    #: deconfinement onset -- the 2SC gap peaks and then collapses to zero at
+    #: mu* = 1.13 Lambda -- so lambda = 1 is for reproducing published
+    #: sharp-cutoff results, not for production. Results are lambda-independent
+    #: for lambda >~ 5; 10 is what Gholami et al. and Kunkel et al. use.
+    lambda_UV: float = 10.0
 
     # ------------------------------------------------------------ derived
     @property
@@ -122,9 +131,13 @@ class Parameters:
     def default(cls):
         """The shipped set: RKH, Fierz eta_D = 0.75, no vector coupling.
 
-        Sharp cutoff (lambda = 1). This is the set every verified number in
-        docs/njl_csc_implementation.md was produced at, and the one
-        `test/baseline` is frozen at.
+        RG-consistent regularization at lambda = 10. The scheme and the
+        couplings are separate choices and this changes only the scheme:
+        Kunkel's couplings arrive by name, through `named("rg_njl1")`.
+
+        `replace(Parameters.default(), lambda_UV=1.0)` is the sharp-cutoff
+        model every verified number in docs/njl_csc_implementation.md section 7
+        was produced at.
         """
         return cls()
 
@@ -139,26 +152,29 @@ class Parameters:
 
 #: The published parameter points.
 #:
-#:   rkh              the shipped default (see `Parameters.default`).
-#:   kunkel           the couplings of Kunkel, Rather et al.
-#:                    [arXiv:2607.11537]: a strong diquark channel and a
-#:                    substantial vector repulsion. THEIR calculation is
-#:                    RG-consistent at lambda ~ 10, and this set is at
-#:                    lambda = 1, because the counterterm that makes lambda > 1
-#:                    finite is not implemented here (docs/DEFERRED.md). The
-#:                    couplings are theirs; the regularization is not, and the
-#:                    two are not independent -- RG-consistent gaps run almost
-#:                    90% above sharp-cutoff ones. Use it as a strong-coupling
-#:                    point, not as a reproduction of that paper.
+#:   rkh              the shipped default (see `Parameters.default`): the RKH
+#:                    vacuum fit, Fierz eta_D = 0.75, no vector coupling.
+#:   rg_njl1          Gholami et al.'s "parameter set 1", eta_D = 1.45 and
+#:                    eta_V = 0.7 -- the SOFT one of the three RG-NJL sets, and
+#:                    the set Kunkel, Rather et al. [arXiv:2607.11537] use for
+#:                    their proto-neutron-star study. With the default
+#:                    lambda = 10 this reproduces that model rather than merely
+#:                    borrowing its couplings, which is what the sharp-cutoff
+#:                    version of this entry could only do.
+#:   kunkel           an alias of `rg_njl1`, kept because that is what the set
+#:                    was called before the regularization caught up with it.
 #:   gluon_exchange   the recommended vector variant: the gluon-exchange form
 #:                    of section 9.5 of the specification, whose effective
 #:                    exponent reaches the conformal 2/3 without tuning. It
 #:                    gives a sound-speed peak near n_B ~ 0.8 fm^-3 followed
 #:                    by an approach to 1/3 from above, which is the shape a
 #:                    compact-star EoS wants.
+_RG_NJL1 = dict(eta_D=1.45, eta_V=0.7)
+
 PUBLISHED_SETS = {
     "rkh": {},
-    "kunkel": dict(eta_D=1.45, eta_V=0.7),
+    "rg_njl1": _RG_NJL1,
+    "kunkel": _RG_NJL1,
     "gluon_exchange": dict(vector_form="gluon_exchange",
                            G_V0_over_GS=0.5, M_g=500.0),
 }

@@ -74,7 +74,7 @@ checked.
 
 Run as `python -m eos.njl.verify.run_full_check`.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -90,7 +90,7 @@ from eos.njl import (
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
     state_at, surface_term, vacuum_solution,
 )
-from eos.njl.thermodynamics import NUMBA_OK
+from eos.njl.thermodynamics import NUMBA_OK, thermo_from_mu
 
 #: The published vacuum outputs of the RKH fit (Rehberg, Klevansky, Huefner,
 #: Phys. Rev. C 53, 410 (1996)), as reproduced in section 4 of
@@ -365,6 +365,14 @@ def check_anchor(par, tol=1.0e-3):
             if error > worst:
                 worst, where = error, f"{label}.{name}"
 
+    # SHARP-CUTOFF golden values (CLAUDE.md section 12), so they are checked
+    # at lambda = 1 whatever the caller's scheme is. The counterterm vanishes
+    # identically there, so this is the same arithmetic that produced them.
+    # It is not a gap in the RG-consistent coverage: `check_rg_consistency`
+    # below is the check that has no published number to compare against and
+    # so tests the scheme against itself.
+    par = replace(par, lambda_UV=1.0)
+
     plain = SpeciesFlags(csc=False)
     p = solve(par, "beta_eq_neutrinoless", ANCHOR_UNPAIRED["n_B"], 0.0, plain)
     compare({"M_u": p.M[0], "M_d": p.M[1], "M_s": p.M[2], "mu_C": p.mu_C,
@@ -518,18 +526,24 @@ def check_residual_gate(par, states):
 # 16. THE CONFORMAL LIMIT
 # =============================================================================
 def check_saturation_density(par, tol=1.0e-3):
-    """The sharp cutoff saturates the density at n_B = Lambda^3/pi^2.
+    """The density ceiling is the MEDIUM cutoff, and RG consistency lifts it.
 
-    With every integral cut at Lambda the nine modes can hold no more than
-    n_q = 3 Lambda^3/pi^2, so n_B freezes at 2.881 fm^-3 for the RKH cutoff.
-    That is not a solver failure but the regularization's own ceiling, and it
-    is the reason the conformal asymptotics of section 9 CANNOT be exhibited
-    under sharp-cutoff regularization: c_s^2 -> 1/3 is a statement about
-    n_B -> infinity, and this model has no densities above 2.881 fm^-3 to
-    approach it through. Reaching them is what lambda = Lambda_UV/Lambda > 1
-    is for, and that needs the counterterm recorded in docs/DEFERRED.md.
+    With every integral cut at the same Lambda the nine modes can hold no more
+    than n_q = 3 Lambda^3/pi^2, so n_B freezes at 2.881 fm^-3 for the RKH
+    cutoff. That is not a solver failure but the regularization's own ceiling,
+    and under sharp-cutoff regularization it is the reason the conformal
+    asymptotics of section 9 cannot be exhibited at all: c_s^2 -> 1/3 is a
+    statement about n_B -> infinity and there were no densities above 2.881
+    fm^-3 to approach it through.
+
+    RG-consistently the medium runs to Lambda_UV and the ceiling goes with it
+    -- 2881 fm^-3 at lambda = 10, which is no ceiling at all. So the check has
+    two halves: the ceiling is always Lambda_medium^3/pi^2 and no solved point
+    passes it, AND at lambda > 1 the sweep must actually reach past the old
+    sharp-cutoff ceiling, since being able to is the whole point of the scheme.
     """
-    ceiling = par.Lambda ** 3 / np.pi ** 2 / hc3
+    ceiling = par.Lambda_medium ** 3 / np.pi ** 2 / hc3
+    cutoff_ceiling = par.Lambda ** 3 / np.pi ** 2 / hc3
     flags = SpeciesFlags(csc=False)
     # Warm-started: a COLD guess stops converging around 2.1 fm^-3, because it
     # comes from the massless relation, which knows nothing about a cutoff and
@@ -537,12 +551,55 @@ def check_saturation_density(par, tol=1.0e-3):
     table = eos_table(par, "beta_eq_neutrinoless", flags,
                       axes={"nB": np.linspace(1.5, 2.95, 12), "T": [0.0]})
     solved = [point.n_B for point in table.points[0]]
-    passed = (abs(ceiling - 2.881) < 1e-3 and solved
-              and max(solved) < ceiling)
+    highest = max(solved) if solved else 0.0
+    passed = bool(solved) and highest < ceiling
+    if par.lambda_UV > 1.0:
+        passed = passed and highest > cutoff_ceiling
     return CheckResult("saturation density", passed,
-                       abs(ceiling / 2.881 - 1.0),
-                       f"ceiling Lambda^3/pi^2 = {ceiling:.3f} fm^-3; "
-                       f"highest solved {max(solved) if solved else 0:.3f}")
+                       abs(cutoff_ceiling / 2.881 - 1.0),
+                       f"ceiling Lambda_medium^3/pi^2 = {ceiling:.3f} fm^-3 "
+                       f"(sharp cutoff would cap at {cutoff_ceiling:.3f}); "
+                       f"highest solved {highest:.3f}")
+
+
+def check_rg_consistency(par, tol=5.0e-3):
+    """Lambda d(Gamma)/d(Lambda) -> 0: the scheme's own acceptance test.
+
+    RG consistency is DEFINED as the answer not depending on the scale the
+    theory is initialized at, so a counterterm does not have to be recognised
+    as correct by inspection -- a wrong one leaves the result moving when
+    Lambda_UV moves. Doubling lambda from 10 to 20 must leave Omega and the
+    gaps where they are; what remains is the O(1/p^3) tail the asymptotic
+    expansion of the divergence drops, measured at 1.4e-3 (2SC) and 1.9e-3
+    (CFL) at eta_D = 1, mu_B = 1400 MeV.
+
+    Trivially satisfied at lambda = 1 in the sense that there is nothing to be
+    consistent about -- the medium is cut with the vacuum and the counterterm
+    is identically zero -- so the check reports that rather than pretending to
+    have tested a scheme that is not in use.
+    """
+    if par.lambda_UV == 1.0:
+        return CheckResult("RG consistency", True, 0.0,
+                           "sharp cutoff (lambda = 1): no medium scale to be "
+                           "independent of")
+    strong = replace(par, eta_D=1.0)
+    worst, where = 0.0, ""
+    for pattern in ("2SC", "CFL"):
+        ten, ok10, _ = thermo_from_mu(replace(strong, lambda_UV=10.0), 1400.0,
+                                      pattern=pattern)
+        twenty, ok20, _ = thermo_from_mu(replace(strong, lambda_UV=20.0),
+                                         1400.0, pattern=pattern)
+        if not (ok10 and ok20):
+            return CheckResult("RG consistency", False, 1.0,
+                               f"{pattern} did not converge")
+        for name, a, b in (("Omega", ten.Omega, twenty.Omega),
+                           ("Delta", float(np.max(np.abs(ten.Delta))),
+                            float(np.max(np.abs(twenty.Delta))))):
+            err = abs(a - b) / max(abs(a), 1.0)
+            if err > worst:
+                worst, where = err, f"{pattern}.{name}"
+    return CheckResult("RG consistency", worst < tol, worst,
+                       f"worst {where} between lambda = 10 and 20")
 
 
 def check_sound_speed(par, tol=0.05):
@@ -580,8 +637,7 @@ def check_sound_speed(par, tol=0.05):
     passed = all(0.0 <= v <= 1.0 for v in values) and values[1] > values[0]
     return CheckResult("sound speed", passed, max(values),
                        f"c_s^2 = {values[0]:.4f}, {values[-1]:.4f} "
-                       f"at n_B = 1.5, 2.0 fm^-3 (still below 1/3: the "
-                       f"conformal limit needs lambda > 1)")
+                       f"at n_B = 1.5, 2.0 fm^-3, rising towards 1/3")
 
 
 def _check_zero_pressure(par):
@@ -675,7 +731,14 @@ def check_backend_parity(par):
                         err = abs(getattr(ref, key) - getattr(fast, key)) / scale
                         if err > worst:
                             worst, where = err, f"{key} at T={T}, mu_B={mu_B}"
-    tol = 1.0e-12
+    # The RG split forms `hot - vac(Lambda_UV) + vac(Lambda)`, a difference of
+    # three quadratures each ~20x the size of their combination and each with
+    # ~(Lambda_UV/Lambda) times as many nodes. That cancellation, not any
+    # disagreement between the flavours, is what sets the floor: measured
+    # 3.3e-15 at lambda = 1, 1.4e-11 at 10 and 1.9e-10 at 20. The tolerance is
+    # scaled by the cancellation rather than raised to fit, and keeps ~50x
+    # headroom at every lambda.
+    tol = 1.0e-12 * (par.Lambda_medium / par.Lambda) ** 3
     return CheckResult("backend parity", worst < tol, worst,
                        f"worst {where}" if where else "")
 
@@ -722,6 +785,8 @@ def run_all(par=None, include_csc=True, include_sound=True):
     if include_sound:
         report.results += [check_saturation_density(par),
                            check_sound_speed(par)]
+    if include_csc:
+        report.results.append(check_rg_consistency(par))
     return report
 
 
