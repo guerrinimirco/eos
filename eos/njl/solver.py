@@ -70,7 +70,7 @@ from eos.general.thermodynamics_leptons import (
     neutrino_thermo, photon_thermo,
 )
 from eos.njl.species import (
-    DEFAULT_PATTERNS, SpeciesFlags, pattern_mask, pattern_seed,
+    DEFAULT_PATTERNS, PATTERNS, SpeciesFlags, pattern_mask, pattern_seed,
 )
 from eos.njl.thermodynamics import has_vector, state_at, vacuum_solution
 
@@ -599,29 +599,18 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
     return point_from_state(st, par, flags, spec, mode, x, ok, err, T)
 
 
-def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
-          vac=None, backend="reference", **fractions):
-    """One mode at (n_B, T), with the pairing pattern chosen by free energy.
+def patterns_for(flags, patterns=None):
+    """The pairing patterns a solve enumerates, validated against the flags.
 
-    Every enumerated pattern is solved to self-consistency and the converged
-    candidates are ranked by f = eps - T s, the right potential at fixed
-    density. A candidate that did not converge is dropped, not substituted; if
-    none converged, the best iterate of the first candidate comes back with
-    `converged = False`, which is a value a sampler can score (CLAUDE.md
-    section 6) rather than an exception it has to catch.
-
-    `x0` is either a bare vector, which seeds the first pattern tried, or a
-    {pattern: vector} mapping as `warm_start` returns, which seeds each named
-    pattern and leaves the rest cold. A seed belongs to the layout it was
-    solved in, so it cannot simply be handed to whichever pattern comes next.
+    The default enumeration is `DEFAULT_PATTERNS` with `csc` on and only
+    `unpaired` with it off; `two_flavour` removes the patterns that condense a
+    diquark containing an s quark, since with the strange sector off there is
+    nothing to pair. An EXPLICITLY requested pattern the flags forbid raises --
+    a malformed call is a programming error, not a candidate that loses on
+    free energy -- and this function is one home for that judgement, so
+    `TableSpec` can make it at construction time rather than letting
+    `skip_errors` swallow it point by point inside a sweep.
     """
-    if flags is None:
-        flags = SpeciesFlags()
-    leptons = fractions.pop("leptons", True)
-    spec = mode_spec(mode, leptons=leptons, **fractions)
-    _refuse_fixed_YS(flags, spec, 'eos.njl')
-    if vac is None:
-        vac = vacuum_solution(par)
     if patterns is None:
         patterns = DEFAULT_PATTERNS if flags.csc else ("unpaired",)
         if flags.two_flavour:
@@ -652,6 +641,37 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
             f"patterns {tuple(patterns)!r} need SpeciesFlags(csc=True): with "
             f"the colour-superconducting sector off there are no gaps to "
             f"solve for")
+    unknown = [p for p in patterns if p not in PATTERNS]
+    if unknown:
+        raise ValueError(f"unknown patterns {unknown}; eos.njl enumerates "
+                         f"{sorted(PATTERNS)}")
+    return tuple(patterns)
+
+
+def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
+          vac=None, backend="reference", **fractions):
+    """One mode at (n_B, T), with the pairing pattern chosen by free energy.
+
+    Every enumerated pattern is solved to self-consistency and the converged
+    candidates are ranked by f = eps - T s, the right potential at fixed
+    density. A candidate that did not converge is dropped, not substituted; if
+    none converged, the best iterate of the first candidate comes back with
+    `converged = False`, which is a value a sampler can score (CLAUDE.md
+    section 6) rather than an exception it has to catch.
+
+    `x0` is either a bare vector, which seeds the first pattern tried, or a
+    {pattern: vector} mapping as `warm_start` returns, which seeds each named
+    pattern and leaves the rest cold. A seed belongs to the layout it was
+    solved in, so it cannot simply be handed to whichever pattern comes next.
+    """
+    if flags is None:
+        flags = SpeciesFlags()
+    leptons = fractions.pop("leptons", True)
+    spec = mode_spec(mode, leptons=leptons, **fractions)
+    _refuse_fixed_YS(flags, spec, 'eos.njl')
+    if vac is None:
+        vac = vacuum_solution(par)
+    patterns = patterns_for(flags, patterns)
 
     seeds = ({} if x0 is None else
              dict(x0) if isinstance(x0, dict) else {patterns[0]: x0})

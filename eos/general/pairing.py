@@ -87,6 +87,25 @@ from eos.general.fermi_integrals import (
     NODES_PER_PANEL, THERMAL_COLLAR, panel_nodes,
 )
 
+# The compiled flavour of `pair_block` below follows the precedent of
+# `eos.general.fermi_integrals`: the jitted twin lives beside the reference in
+# the sector's one home, guarded so the module imports without numba. Without
+# numba, backend='fast' falls back to the blocked-numpy diagonalisation, which
+# is the same spectrum a little slower -- never a silent wrong answer.
+try:
+    from numba import njit
+    _NUMBA_OK = True
+except ImportError:                       # pragma: no cover - numba optional
+    _NUMBA_OK = False
+
+    def njit(*args, **kwargs):
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+
+        def deco(f):
+            return f
+        return deco
+
 #: The three light flavours and the three colours, in the order every array
 #: here is indexed by.
 FLAVOURS = ("u", "d", "s")
@@ -468,6 +487,337 @@ def _dphi_dT(x, T):
     return 2.0 * np.logaddexp(0.0, -z) + z * (1.0 - np.tanh(0.5 * z))
 
 
+# =============================================================================
+# THE COMPILED PASS
+# =============================================================================
+# The block structure of `_bdg_blocks`, taken one step further and written as
+# loops numba can compile. The three 4x4 blocks decouple AGAIN: the gap couples
+# the particle of one mode only to the hole of its partner, so each 4x4 is two
+# independent 2x2 Bogoliubov problems,
+#
+#     A = [[xi_i, g], [g, -xi_j]]   on (particle_i, hole_j)
+#     B = [[xi_j, g], [g, -xi_i]]   on (particle_j, hole_i)
+#
+# with closed-form eigenpairs (`twosc_dispersion` is the energy half of this
+# statement). Only the (ur, dg, sb) 6x6 needs a numerical diagonalisation, by
+# cyclic Jacobi -- robust at every degeneracy, unlike a cubic in closed form.
+#
+# ONE SELECTION RULE, stated once because it is the part that goes wrong
+# quietly: `bdg_eigh` returns the non-negative member of each +- pair of the
+# SIGNED spectrum. Within a 2x2 sub-block the pairs run ACROSS the two
+# sub-blocks -- A's eigenvalues are m +- s and B's are -m +- s, pairing
+# (m+s) with -(m+s) -- so the branch kept is |m + s| with A's upper
+# eigenvector when m + s >= 0 and B's LOWER-partner vector when it is not,
+# and likewise |m - s|. Inside a gapless window that is exactly the switch
+# that keeps the Hellmann-Feynman derivatives carrying sign(E).
+
+#: The mode index sets of the compiled pass, frozen from `BDG_BLOCKS`' own
+#: derivation: the (ur, dg, sb) triple, and the (i, j) of the three pairs.
+_BLOCK0 = np.array([0, 4, 8])
+_PAIR_I = np.array([1, 2, 5])
+_PAIR_J = np.array([3, 6, 7])
+for _arr in (_BLOCK0, _PAIR_I, _PAIR_J):
+    _arr.flags.writeable = False
+
+
+@njit(cache=True)
+def _phi_scalar(x, T):
+    """phi(x) = x + 2 T ln(1 + e^(-x/T)), overflow-safe, scalar."""
+    if T <= 0.0:
+        return x
+    z = -x / T
+    if z > 0.0:
+        log_term = z + np.log1p(np.exp(-z))
+    else:
+        log_term = np.log1p(np.exp(z))
+    return x + 2.0 * T * log_term
+
+
+@njit(cache=True)
+def _dphi_scalar(x, T):
+    """phi'(x) = tanh(x / 2T); sign(x) at T = 0."""
+    if T <= 0.0:
+        if x > 0.0:
+            return 1.0
+        if x < 0.0:
+            return -1.0
+        return 0.0
+    return np.tanh(0.5 * x / T)
+
+
+@njit(cache=True)
+def _dphi_dT_scalar(x, T):
+    """d phi / d T at fixed x; zero at T = 0."""
+    if T <= 0.0:
+        return 0.0
+    z = x / T
+    if -z > 0.0:
+        log_term = -z + np.log1p(np.exp(z))
+    else:
+        log_term = np.log1p(np.exp(-z))
+    return 2.0 * log_term + z * (1.0 - np.tanh(0.5 * z))
+
+
+@njit(cache=True)
+def _eig2_upper(a, b, c):
+    """(lambda_max, u, v) of the symmetric [[a, c], [c, b]].
+
+    c = 0 is an EXACT branch, not a small-norm fallback: a pattern with a
+    zero gap channel reaches the diagonal case at every node, and there the
+    formula vector (c, lambda - a) is (0, round-off) -- its direction is
+    noise, and the noise picked the HOLE axis for a particle branch often
+    enough to corrupt every occupation it touched. With c != 0 the vector is
+    the larger-normed of the two analytic candidates (c, lambda - a) and
+    (lambda - b, c), which is the standard conditioning trick: lambda sits
+    within round-off of ONE diagonal exactly when the other candidate is
+    order one.
+    """
+    m = 0.5 * (a + b)
+    d = 0.5 * (a - b)
+    s = np.sqrt(d * d + c * c)
+    lam = m + s
+    if c == 0.0:
+        if a >= b:
+            return lam, 1.0, 0.0
+        return lam, 0.0, 1.0
+    v1x = c
+    v1y = lam - a
+    v2x = lam - b
+    v2y = c
+    n1 = v1x * v1x + v1y * v1y
+    n2 = v2x * v2x + v2y * v2y
+    if n1 >= n2:
+        norm = np.sqrt(n1)
+        return lam, v1x / norm, v1y / norm
+    norm = np.sqrt(n2)
+    return lam, v2x / norm, v2y / norm
+
+
+@njit(cache=True)
+def _jacobi6(A, V):
+    """Cyclic Jacobi on the symmetric 6x6 `A`, vectors into `V`. In place.
+
+    Converges quadratically; a dozen sweeps is far more than the spectrum
+    ever needs, and the threshold is relative to the matrix norm so a scale
+    of 1e15 MeV (a confined effective mass) needs no special case.
+    """
+    for i in range(6):
+        for j in range(6):
+            V[i, j] = 1.0 if i == j else 0.0
+    norm = 0.0
+    for i in range(6):
+        for j in range(6):
+            norm += A[i, j] * A[i, j]
+    if norm <= 0.0:
+        return
+    for _ in range(30):
+        off = 0.0
+        for p in range(5):
+            for q in range(p + 1, 6):
+                off += A[p, q] * A[p, q]
+        if off <= 1.0e-30 * norm:
+            break
+        for p in range(5):
+            for q in range(p + 1, 6):
+                apq = A[p, q]
+                if apq == 0.0:
+                    continue
+                theta = 0.5 * (A[q, q] - A[p, p]) / apq
+                t = 1.0 / (abs(theta) + np.sqrt(theta * theta + 1.0))
+                if theta < 0.0:
+                    t = -t
+                c = 1.0 / np.sqrt(t * t + 1.0)
+                s = t * c
+                for i in range(6):
+                    aip = A[i, p]
+                    aiq = A[i, q]
+                    A[i, p] = c * aip - s * aiq
+                    A[i, q] = s * aip + c * aiq
+                for i in range(6):
+                    api = A[p, i]
+                    aqi = A[q, i]
+                    A[p, i] = c * api - s * aqi
+                    A[q, i] = s * api + c * aqi
+                for i in range(6):
+                    vip = V[i, p]
+                    viq = V[i, q]
+                    V[i, p] = c * vip - s * viq
+                    V[i, q] = s * vip + c * viq
+
+
+@njit(cache=True)
+def _pair_pass(k, w, M_mode, mu_star, G, B_eta, T):
+    """The whole of `pair_block`'s quadrature, one compiled pass.
+
+    Returns the UNSCALED accumulators in the reference path's own convention
+    -- (omega, delta_n[9], dM_per_mode[9], delta_s, kernel[3], min_energy) --
+    so the wrapper applies the same 1/(2 pi^2) factors and flavour sums to
+    both flavours and the two cannot drift apart in the bookkeeping.
+    """
+    nk = k.shape[0]
+    omega = 0.0
+    delta_n = np.zeros(9)
+    dM_mode = np.zeros(9)
+    delta_s = 0.0
+    kernel = np.zeros(3)
+    min_energy = np.inf
+
+    A66 = np.empty((6, 6))
+    V66 = np.empty((6, 6))
+    lam6 = np.empty(6)
+    order = np.empty(6, dtype=np.int64)
+    E_node = np.empty(9)
+    xi = np.empty(9)
+    E_mode = np.empty(9)
+    dxi_dM = np.empty(9)
+    top = np.empty(9)
+    bot = np.empty(9)
+
+    for node in range(nk):
+        kk = k[node]
+        weight = w[node] * kk * kk
+        for j in range(9):
+            E_mode[j] = np.sqrt(kk * kk + M_mode[j] * M_mode[j])
+            dxi_dM[j] = M_mode[j] / E_mode[j]
+
+        for r in (1.0, -1.0):
+            for j in range(9):
+                xi[j] = E_mode[j] - r * mu_star[j]
+
+            n_branch = 0
+            # --- the (ur, dg, sb) 6x6 ------------------------------------
+            for a in range(3):
+                for b in range(3):
+                    A66[a, b] = 0.0
+                    A66[3 + a, 3 + b] = 0.0
+                    A66[a, 3 + b] = G[_BLOCK0[a], _BLOCK0[b]]
+                    A66[3 + a, b] = G[_BLOCK0[a], _BLOCK0[b]]
+                A66[a, a] = xi[_BLOCK0[a]]
+                A66[3 + a, 3 + a] = -xi[_BLOCK0[a]]
+            _jacobi6(A66, V66)
+            for i in range(6):
+                lam6[i] = A66[i, i]
+                order[i] = i
+            # insertion sort, ascending: the upper half is the kept spectrum
+            for i in range(1, 6):
+                key = lam6[i]
+                key_o = order[i]
+                j6 = i - 1
+                while j6 >= 0 and lam6[j6] > key:
+                    lam6[j6 + 1] = lam6[j6]
+                    order[j6 + 1] = order[j6]
+                    j6 -= 1
+                lam6[j6 + 1] = key
+                order[j6 + 1] = key_o
+            for pick in range(3, 6):
+                E_b = lam6[pick]
+                col = order[pick]
+                for j in range(9):
+                    top[j] = 0.0
+                    bot[j] = 0.0
+                for a in range(3):
+                    top[_BLOCK0[a]] = V66[a, col]
+                    bot[_BLOCK0[a]] = V66[3 + a, col]
+                E_node[n_branch] = E_b
+                _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
+                                   B_eta, delta_n, dM_mode, kernel)
+                n_branch += 1
+
+            # --- the three pairs, each two closed-form 2x2 problems ------
+            for pair in range(3):
+                i = _PAIR_I[pair]
+                j = _PAIR_J[pair]
+                g = G[i, j]
+                lamA, uA, vA = _eig2_upper(xi[i], -xi[j], g)
+                # the +- partner structure: A's eigenvalues are m +- s and
+                # B's are -m +- s, so the non-negative member of each pair is
+                # |m + s| and |m - s|, with the vector taken from whichever
+                # sub-block carries that sign
+                lamB, uB, vB = _eig2_upper(xi[j], -xi[i], g)
+                # branch 1: |m + s| = |lamA|
+                for jj in range(9):
+                    top[jj] = 0.0
+                    bot[jj] = 0.0
+                if lamA >= 0.0:
+                    E_b = lamA
+                    top[i] = uA
+                    bot[j] = vA
+                else:
+                    # the partner -(m+s) = B's lower; its vector is the
+                    # orthogonal complement of B's upper
+                    E_b = -lamA
+                    top[j] = -vB
+                    bot[i] = uB
+                E_node[n_branch] = E_b
+                _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
+                                   B_eta, delta_n, dM_mode, kernel)
+                n_branch += 1
+                # branch 2: |m - s|; m - s is A's lower, -(m - s) is B's upper
+                for jj in range(9):
+                    top[jj] = 0.0
+                    bot[jj] = 0.0
+                lamA_lo = xi[i] - xi[j] - lamA          # trace(A) - lamA
+                if lamA_lo >= 0.0:
+                    E_b = lamA_lo
+                    top[i] = -vA
+                    bot[j] = uA
+                else:
+                    E_b = lamB
+                    top[j] = uB
+                    bot[i] = vB
+                E_node[n_branch] = E_b
+                _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
+                                   B_eta, delta_n, dM_mode, kernel)
+                n_branch += 1
+
+            # --- the per-node scalars ------------------------------------
+            for b in range(9):
+                if E_node[b] < min_energy:
+                    min_energy = E_node[b]
+                omega -= weight * _phi_scalar(E_node[b], T)
+                delta_s += weight * _dphi_dT_scalar(E_node[b], T)
+            for j in range(9):
+                a_xi = abs(xi[j])
+                omega += weight * _phi_scalar(a_xi, T)
+                delta_s -= weight * _dphi_dT_scalar(a_xi, T)
+                tanh_xi = _dphi_scalar(xi[j], T)
+                delta_n[j] += weight * r * tanh_xi
+                dM_mode[j] -= weight * dxi_dM[j] * tanh_xi
+
+    return omega, delta_n, dM_mode, delta_s, kernel, min_energy
+
+
+@njit(cache=True)
+def _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
+                       B_eta, delta_n, dM_mode, kernel):
+    """One quasiparticle branch's contributions, Hellmann-Feynman throughout.
+
+    The reference path contracts (nk, 9, 9) arrays; here the same sums run
+    over the at most three nonzero components a branch has in the blocked
+    basis. `delta_n` takes dE/dmu_j = -r (top_j^2 - bot_j^2) tanh(E/2T),
+    `dM_mode` takes dE/dM through dxi/dM, and the gap kernels take
+    2 top_i (B_eta)_ij bot_j -- the sparse handful of (i, j) pairs each
+    B_eta actually couples.
+    """
+    tanh_E = _dphi_scalar(E_b, T)
+    for j in range(9):
+        occ = top[j] * top[j] - bot[j] * bot[j]
+        if occ != 0.0:
+            delta_n[j] += weight * (-r) * tanh_E * occ
+            dM_mode[j] += weight * tanh_E * dxi_dM[j] * occ
+    for eta in range(3):
+        mix = 0.0
+        for i in range(9):
+            t_i = top[i]
+            if t_i == 0.0:
+                continue
+            for j in range(9):
+                if bot[j] != 0.0 and B_eta[eta, i, j] != 0.0:
+                    mix += t_i * B_eta[eta, i, j] * bot[j]
+        if mix != 0.0:
+            kernel[eta] += weight * tanh_E * 2.0 * mix
+
+
 def pair_block(M_star, mu_star, Delta, T, k_max,
                nodes_per_panel=NODES_PER_PANEL, quadrature=None,
                backend="reference"):
@@ -513,10 +863,35 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
     if quadrature is None:
         quadrature = pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel)
     k, w = quadrature
-    weight = w * k ** 2
 
     G = gap_matrix(Delta)
     M_mode = M_star[FLAVOUR_OF_MODE]
+
+    if backend == "fast" and _NUMBA_OK:
+        # The whole pass compiled: closed-form 2x2 sub-blocks, a Jacobi 6x6,
+        # and the contractions run over the handful of components a blocked
+        # branch actually has. Without numba, 'fast' continues below through
+        # `bdg_eigh(..., 'fast')`, the blocked-numpy diagonalisation -- the
+        # same spectrum, never a silent fallback to a different answer.
+        omega, delta_n, dM_mode, delta_s, kernel, min_energy = _pair_pass(
+            np.ascontiguousarray(k, dtype=float),
+            np.ascontiguousarray(w, dtype=float),
+            np.ascontiguousarray(M_mode, dtype=float),
+            np.ascontiguousarray(mu_star, dtype=float), G, B_ETA, float(T))
+        inv = 1.0 / (2.0 * np.pi ** 2)
+        delta_rho_s = np.array(
+            [-inv * float(np.sum(dM_mode[FLAVOUR_OF_MODE == i]))
+             for i in range(3)])
+        scale = float(np.max(np.abs(Delta)))
+        return PairBlock(delta_omega=float(omega) * inv,
+                         delta_n=delta_n * inv,
+                         delta_rho_s=delta_rho_s,
+                         delta_s=float(delta_s) * inv,
+                         gap_kernel=kernel * inv,
+                         min_energy=float(min_energy),
+                         gapless=bool(min_energy < GAPLESS_FRACTION * scale))
+
+    weight = w * k ** 2
     E_mode = np.sqrt(k[:, None] ** 2 + M_mode[None, :] ** 2)   # (nk, 9)
 
     omega = 0.0

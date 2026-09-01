@@ -88,12 +88,30 @@ def temperature_at_entropy(entropy_per_baryon_at, target, T_lo=0.2, T_hi=80.0,
     posed; T_hi is doubled up to T_cap until the target is bracketed, and if
     it still is not the target is unreachable and that is said rather than
     guessed at.
+
+    THE LOWER END IS CHECKED TOO, and for the same reason. A target already
+    exceeded at T_lo -- a low isentrope, or a fully gapped colour
+    superconductor, whose s/n_B is e^(-Delta/T)-suppressed and can sit above
+    a small target at every temperature down to the floor -- used to fall
+    through to brentq's own "f(a) and f(b) must have different signs"
+    ValueError, which a sweep's skip_errors swallows point by point: the
+    isentrope silently lost its densest points with nothing saying why. Both
+    unreachable directions now raise the same RuntimeError shape, which
+    `eos_point` converts to a non-converged status with the message on it.
     """
     from scipy.optimize import brentq
 
     def f(T):
         return entropy_per_baryon_at(T) - target
 
+    f_lo = f(T_lo)
+    if f_lo >= 0.0:
+        if f_lo == 0.0:
+            return T_lo
+        raise RuntimeError(
+            f"entropy per baryon {target} is already exceeded at the T_lo = "
+            f"{T_lo} MeV floor (s/n_B = {f_lo + target:.3f} there); the "
+            f"isentrope at this density lies below the floor temperature")
     f_hi = f(T_hi)
     while f_hi < 0.0 and T_hi < T_cap:
         T_hi = min(2.0 * T_hi, T_cap)

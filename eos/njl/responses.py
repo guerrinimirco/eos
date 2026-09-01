@@ -36,24 +36,40 @@ section 3.6.
 from eos.njl.solver import solve
 
 
-def _solve(par, flags, mode, n_B, T, patterns, fractions):
+def _solve(par, flags, mode, n_B, T, patterns, fractions,
+           backend="reference", _memo=None):
     """One converged point of the stencil, or a raise saying where it failed.
 
     An internal layer may raise (CLAUDE.md section 6); a response function
     asked for at a state the model cannot reach is a caller error, not a
     sampler's bad draw, so this is not turned into a status.
+
+    `_memo`, when a caller supplies a dict, caches converged points on
+    (n_B, T): the six response functions of one `eos_response` call evaluate
+    the SAME six stencil states eighteen times between them, and a re-solve of
+    identical arguments returns the identical point, so handing back the
+    cached one changes no number. The memo is valid only while (par, flags,
+    mode, patterns, fractions, backend) are all held fixed, which is why it is
+    created per `eos_response` call and never module state (CLAUDE.md
+    section 6: no global mutable state).
     """
-    point = solve(par, mode, n_B, T, flags, patterns=patterns, **fractions)
+    if _memo is not None and (float(n_B), float(T)) in _memo:
+        return _memo[(float(n_B), float(T))]
+    point = solve(par, mode, n_B, T, flags, patterns=patterns,
+                  backend=backend, **fractions)
     if not point.converged:
         raise RuntimeError(
             f"the response stencil needs a converged neighbour and the solve "
             f"at n_B={n_B:g} fm^-3, T={T:g} MeV did not converge "
             f"(residual {point.error:.3e})")
+    if _memo is not None:
+        _memo[(float(n_B), float(T))] = point
     return point
 
 
 def sequence_derivs(par, flags, mode, n_B, T, rel_dn=1e-3, dT=0.05,
-                    patterns=None, **fractions):
+                    patterns=None, backend="reference", _memo=None,
+                    **fractions):
     """The first derivatives every response below is built from.
 
     Central differences along the mode's own sequence, with a full re-solve at
@@ -69,7 +85,8 @@ def sequence_derivs(par, flags, mode, n_B, T, rel_dn=1e-3, dT=0.05,
     dn = rel_dn * n_B
 
     def at(n, temp):
-        return _solve(par, flags, mode, n, temp, patterns, fractions)
+        return _solve(par, flags, mode, n, temp, patterns, fractions,
+                      backend=backend, _memo=_memo)
 
     hi, lo = at(n_B + dn, T), at(n_B - dn, T)
     sigma = (lambda p: p.s / p.n_B if p.n_B else 0.0)
@@ -85,18 +102,21 @@ def sequence_derivs(par, flags, mode, n_B, T, rel_dn=1e-3, dT=0.05,
 
 
 def sound_speed_isothermal(par, flags, mode, n_B, T=0.0, rel_dn=1e-3,
-                           patterns=None, **fractions):
+                           dT=0.05, patterns=None, backend="reference",
+                           _memo=None, **fractions):
     """c_s^2 = (dP/dn_B)_T / (deps/dn_B)_T along the sequence.
 
     At T = 0 this IS the sound speed; at T > 0 it is the isothermal one, which
     is smaller than the adiabatic one by C_V/C_P.
     """
-    d = sequence_derivs(par, flags, mode, n_B, T, rel_dn=rel_dn,
-                        patterns=patterns, **fractions)
+    d = sequence_derivs(par, flags, mode, n_B, T, rel_dn=rel_dn, dT=dT,
+                        patterns=patterns, backend=backend, _memo=_memo,
+                        **fractions)
     return d["dP_dn"] / d["de_dn"]
 
 
-def heat_capacity_V(par, flags, mode, n_B, T, dT=0.05, patterns=None,
+def heat_capacity_V(par, flags, mode, n_B, T, dT=0.05, rel_dn=1e-3,
+                    patterns=None, backend="reference", _memo=None,
                     **fractions):
     """C_V = T (d(s/n_B)/dT) at fixed n_B, per baryon [dimensionless].
 
@@ -105,12 +125,14 @@ def heat_capacity_V(par, flags, mode, n_B, T, dT=0.05, patterns=None,
     not a numerical failure: it is what makes a colour superconductor cool
     differently from unpaired quark matter.
     """
-    return T * sequence_derivs(par, flags, mode, n_B, T, dT=dT,
-                               patterns=patterns, **fractions)["dsig_dT"]
+    return T * sequence_derivs(par, flags, mode, n_B, T, rel_dn=rel_dn,
+                               dT=dT, patterns=patterns, backend=backend,
+                               _memo=_memo, **fractions)["dsig_dT"]
 
 
 def heat_capacity_P(par, flags, mode, n_B, T, dT=0.05, rel_dn=1e-3,
-                    patterns=None, **fractions):
+                    patterns=None, backend="reference", _memo=None,
+                    **fractions):
     """C_P = T (d(s/n_B)/dT) at fixed PRESSURE, per baryon.
 
     The pressure is held by letting the density move with the temperature:
@@ -121,12 +143,14 @@ def heat_capacity_P(par, flags, mode, n_B, T, dT=0.05, rel_dn=1e-3,
     same re-solved sequence.
     """
     d = sequence_derivs(par, flags, mode, n_B, T, rel_dn=rel_dn, dT=dT,
-                        patterns=patterns, **fractions)
+                        patterns=patterns, backend=backend, _memo=_memo,
+                        **fractions)
     return T * (d["dsig_dT"] - d["dP_dT"] * d["dsig_dn"] / d["dP_dn"])
 
 
 def sound_speed_adiabatic(par, flags, mode, n_B, T=0.0, dT=0.05, rel_dn=1e-3,
-                          patterns=None, **fractions):
+                          patterns=None, backend="reference", _memo=None,
+                          **fractions):
     """c_s^2 at fixed entropy per baryon: the one a sound wave travels at.
 
         c_s,ad^2 = (C_P/C_V) c_s,iso^2
@@ -136,23 +160,28 @@ def sound_speed_adiabatic(par, flags, mode, n_B, T=0.0, dT=0.05, rel_dn=1e-3,
     """
     if T <= 0.0:
         return sound_speed_isothermal(par, flags, mode, n_B, T,
-                                      rel_dn=rel_dn, patterns=patterns,
+                                      rel_dn=rel_dn, dT=dT, patterns=patterns,
+                                      backend=backend, _memo=_memo,
                                       **fractions)
     d = sequence_derivs(par, flags, mode, n_B, T, rel_dn=rel_dn, dT=dT,
-                        patterns=patterns, **fractions)
+                        patterns=patterns, backend=backend, _memo=_memo,
+                        **fractions)
     C_V = T * d["dsig_dT"]
     C_P = T * (d["dsig_dT"] - d["dP_dT"] * d["dsig_dn"] / d["dP_dn"])
     return (C_P / C_V) * d["dP_dn"] / d["de_dn"]
 
 
-def thermal_index(par, flags, mode, n_B, T, patterns=None, **fractions):
+def thermal_index(par, flags, mode, n_B, T, patterns=None,
+                  backend="reference", _memo=None, **fractions):
     """Gamma_th = 1 + (P - P_cold)/(eps - eps_cold) at the same n_B.
 
     The cold reference is the same mode at T = 0, which is what a simulation's
     thermal-pressure prescription is calibrated against.
     """
-    hot = _solve(par, flags, mode, n_B, T, patterns, fractions)
-    cold = _solve(par, flags, mode, n_B, 0.0, patterns, fractions)
+    hot = _solve(par, flags, mode, n_B, T, patterns, fractions,
+                 backend=backend, _memo=_memo)
+    cold = _solve(par, flags, mode, n_B, 0.0, patterns, fractions,
+                  backend=backend, _memo=_memo)
     d_eps = hot.eps - cold.eps
     if d_eps <= 0.0:
         return float("nan")

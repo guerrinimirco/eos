@@ -9,7 +9,9 @@ Three tiers, and the split is what makes the model usable in an inference run
           couplings, the explicit-breaking terms, the dilaton scale -- so the
           scalar sector has no free normalisation left once they are chosen.
   tier 2  structural choices, declared per run rather than sampled: the
-          dielectric exponent p (locked at 1) and q, which decides whether the
+          dielectric exponent p (shipped at 1; it sets how abruptly the medium
+          opens, and with it the deconfinement onset), the vector decay
+          exponent k_omega (shipped at 2), and q, which decides whether the
           diquark coupling is dressed by the dielectric (G_D -> G_D/chi^q).
           They are fields here because they change the equations.
   tier 3  the Bayesian vector: B_g^(1/4), g_q, g_s, m_sigma, gbar_omega, n_c,
@@ -110,7 +112,21 @@ class Parameters:
     #: specification either; 4.0 is mid-prior (support 0-12). Zero switches
     #: the vector sector off entirely, which is the L1 -> L0 reduction.
     gbar_omega: float = 4.0
-    #: The density scale of the vector coupling's decay [fm^-3]. Prior 0.3-3.
+    #: The density scale of the vector coupling's decay [fm^-3], in
+    #: g_omega = gbar_omega/[1 + (n_B/n_c)^2]. Prior 0.3-3.
+    #:
+    #: `n_c = inf` IS THE CONSTANT-COUPLING MODEL, exactly and without a second
+    #: code path: g_omega = gbar_omega and the rearrangement Sigma_R =
+    #: (dg/dn_B) omega_0 n_B vanishes identically, since dg/dn_B carries n_c^2
+    #: in its denominator. That is the `constvector` published set, and it is
+    #: worth knowing because the INTERMEDIATE values are the awkward ones: at
+    #: n_c ~ 3-5 fm^-3 the coupling is still large AND still falling fast, so
+    #: Sigma_R n_q -- a NEGATIVE contribution to P, Sigma_R being negative --
+    #: grows faster than the kinetic and field terms and drives dP/dn_B below
+    #: zero (at n_c = 3, gbar_omega = 4 it reaches -3400 MeV/fm^3 by
+    #: n_B = 2.6 fm^-3 and P has been falling since the onset). Small n_c
+    #: escapes it by collapsing the coupling early, infinite n_c by removing
+    #: the term.
     n_c: float = 1.0
     #: The diquark coupling [MeV^-2], used only when SpeciesFlags(csc=True).
     #: Calibrated here rather than quoted: at this value the gap sits inside
@@ -127,10 +143,38 @@ class Parameters:
     Lambda: float = 600.0
 
     # --- tier 2: structural choices -------------------------------------
-    #: The dielectric exponent, chi = (1 - phi_bar^4)^p. LOCKED at 1: p and
-    #: the bracket are meaningful only as a pair, and squaring the bracket
-    #: silently doubles the confining-end exponent.
-    p: int = 1
+    #: The dielectric exponent, chi = (1 - phi_bar^4)^p. Shipped at 1, the
+    #: specification's value, and it is a KNOB rather than a lock: p and the
+    #: bracket are meaningful only as the pair chi^p, so p is the one number
+    #: that sets how ABRUPTLY the medium opens. The endpoints are p-independent
+    #: -- chi(0) = 1 and chi(phi_bar = 1) = 0 for every p > 0 -- and only the
+    #: approach to them moves, so a larger p keeps the dielectric shut further
+    #: from the vacuum dilaton and pushes the deconfinement onset up, while
+    #: p < 1 opens it while phi_bar is still near 1. The anomaly argument fixes
+    #: the FOURTH POWER inside the bracket (that is what the gluon condensate
+    #: is), not the power of the bracket itself. Only `dielectric` and the
+    #: dilaton residual R_1 read it, and R_1 carries it analytically
+    #: (p M* . rho_s/(1 - Phi)), so no other equation changes with it. One
+    #: caveat at p < 1: the closed dielectric at the Phi guard is
+    #: (1 - PHI_CEIL)^p = 1e-13p, so the confined branch is pinned less hard
+    #: than at p = 1 (3e-7 and M* ~ 1e9 MeV at p = 0.5) -- opaque, but the
+    #: exactness of the T = 0 threshold is a p = 1 statement.
+    p: float = 1.0
+    #: The exponent of the vector coupling's decay,
+    #: g_omega = gbar_omega/[1 + (n_B/n_c)^k]. Shipped at 2, and NOT fixed by
+    #: anything the way the 4 inside the dielectric bracket is -- there the
+    #: scale anomaly picks the power, here the form is a modelling choice.
+    #: What it selects is whether the vector sector can remove pressure at all.
+    #: Collecting the two vector terms of P gives
+    #: P_vec ~ g^2 [1/2 - k u^k/(1 + u^k)] with u = n_B/n_c, so P_vec < 0
+    #: exactly where the coupling's logarithmic slope passes -1/2, i.e. for
+    #: u > (2k - 1)^(-1/k): never for k <= 1/2, at u > 1 for k = 1, at
+    #: u > 0.577 for k = 2, at u > 0.615 for k = 4. The exponent is thus a
+    #: weak lever on WHERE (that threshold barely moves for k > 1) and a
+    #: qualitative switch at k = 1/2, below which the vector sector always
+    #: adds pressure -- at the price of never saturating the vector energy,
+    #: which is what a decaying coupling was for. `n_c` is the lever on where.
+    k_omega: float = 2.0
     #: Whether the diquark coupling is dressed by the dielectric,
     #: G_D -> G_D/chi^q. q = 1 is the exponent a gluon-exchange origin gives
     #: and the largest that leaves the pairing channel confined (the criterion
@@ -139,18 +183,25 @@ class Parameters:
     q: int = 0
 
     def __post_init__(self):
-        if self.p != 1:
-            raise NotImplementedError(
-                f"eos.ccdm locks the dielectric exponent at p = 1; got "
-                f"p = {self.p}. The specification fixes it there because chi "
-                f"and p are meaningful only as the pair chi^p, and the "
-                f"derived constants and the q <= p criterion assume it")
+        if not self.p > 0.0:
+            raise ValueError(
+                f"the dielectric exponent must be positive; got p = {self.p}. "
+                f"chi = (1 - phi_bar^4)^p with p <= 0 does not close at the "
+                f"vacuum dilaton, which is the confinement mechanism itself")
+        if not self.k_omega > 0.0:
+            raise ValueError(
+                f"the vector coupling's decay exponent must be positive; got "
+                f"k_omega = {self.k_omega}. k <= 0 makes g_omega rise with "
+                f"the density rather than fall, which is not the form")
         if self.q not in (0, 1):
             raise ValueError(
                 f"q must be 0 or 1 (bare or gluon-exchange dielectric "
-                f"dressing of G_D); got {self.q}. q > p = 1 would deconfine "
-                f"the pairing channel -- see section 10 of "
-                f"docs/ccdm_implementation.md")
+                f"dressing of G_D); got {self.q}")
+        if self.q > self.p:
+            raise ValueError(
+                f"q = {self.q} > p = {self.p} would deconfine the pairing "
+                f"channel: G_D/chi^q must not outrun the mass divergence "
+                f"chi^-p -- see section 10 of docs/ccdm_implementation.md")
 
     # ------------------------------------------------------------ derived
     @property
@@ -276,9 +327,16 @@ def _derived(par):
 #:   stiff      a heavier glue scale, B_g^(1/4) = 190 MeV, which pushes the
 #:              deconfinement onset up. Carried because the branch-enumeration
 #:              check wants a second onset density to compare against.
+#:   constvector  n_c = inf: the vector coupling STOPS depending on the
+#:              density, g_omega = gbar_omega and Sigma_R = 0 identically. The
+#:              plain-vector reference the density-dependent form is judged
+#:              against -- stiff (c_s^2 reaches 0.80 at gbar_omega = 4 over
+#:              n_B = 1.1-2.6 fm^-3) but monotonic in P, which the awkward
+#:              middle of the n_c range is not (see `n_c`).
 PUBLISHED_SETS = {
     "baseline": {},
     "novector": dict(gbar_omega=0.0),
     "dressed": dict(q=1),
     "stiff": dict(B_g_quarter=190.0),
+    "constvector": dict(n_c=float("inf")),
 }

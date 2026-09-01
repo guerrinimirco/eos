@@ -163,7 +163,8 @@ def eos_point(par, mode, species=None, n_B=None,
 
 def eos_table(par, mode, species=None, axes=None,
               fixed=None, leptons=None, skip_errors=True, rows=False,
-              progress=None, verbose=False, backend="reference"):
+              progress=None, verbose=False, backend="reference",
+              branches=None, patterns=None):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
     A thin wrapper over `eos.ccdm.table.build_table`: axes and fixed follow
@@ -182,7 +183,8 @@ def eos_table(par, mode, species=None, axes=None,
     species = species if species is not None else SpeciesFlags()
     spec = TableSpec(par=par, mode=mode, axes=dict(axes or {}),
                      include=species, fixed=dict(fixed or {}),
-                     leptons=leptons, backend=backend)
+                     leptons=leptons, backend=backend,
+                     branches=branches, patterns=patterns)
     return build_table(spec, skip_errors=skip_errors, rows=rows,
                        progress=progress, verbose=verbose)
 
@@ -243,14 +245,17 @@ def eos_response(par, mode, species=None,
             f"the gaps or the fields needs them fixed against their own "
             f"equations (see docs/DEFERRED.md)")
 
+    # One memo per call: the response functions share one 6-state stencil
+    # and previously re-solved it 20 times between them. Identical arguments
+    # re-solve to the identical point, so this changes no number.
     kwargs = dict(branches=branches, patterns=patterns, leptons=leptons,
-                  backend=backend, **conditions)
+                  backend=backend, _memo={}, **conditions)
     names = ("cs2_isothermal", "cs2_adiabatic", "branch_changed")
     if T > 0.0:
         names += ("C_V", "C_P", "Gamma_th")
     try:
         out = {"cs2_isothermal": _fd.sound_speed_isothermal(
-            par, species, mode, n_B, T=T, rel_dn=rel_dn, **kwargs)}
+            par, species, mode, n_B, T=T, rel_dn=rel_dn, dT=dT, **kwargs)}
         out["branch_changed"] = _fd.branch_changed(par, species, mode, n_B,
                                                    T=T, rel_dn=rel_dn,
                                                    **kwargs)
@@ -258,7 +263,7 @@ def eos_response(par, mode, species=None,
             out["cs2_adiabatic"] = _fd.sound_speed_adiabatic(
                 par, species, mode, n_B, T=T, dT=dT, rel_dn=rel_dn, **kwargs)
             out["C_V"] = _fd.heat_capacity_V(par, species, mode, n_B, T, dT=dT,
-                                             **kwargs)
+                                             rel_dn=rel_dn, **kwargs)
             out["C_P"] = _fd.heat_capacity_P(par, species, mode, n_B, T, dT=dT,
                                              rel_dn=rel_dn, **kwargs)
             out["Gamma_th"] = _fd.thermal_index(par, species, mode, n_B, T,

@@ -68,7 +68,7 @@ import numpy as np
 
 from eos.ccdm.couplings import has_vector
 from eos.ccdm.species import (
-    DEFAULT_PATTERNS, DENSITY_BRANCHES, SpeciesFlags, branch_seed,
+    DEFAULT_PATTERNS, DENSITY_BRANCHES, PATTERNS, SpeciesFlags, branch_seed,
     pattern_mask, pattern_seed,
 )
 from eos.ccdm.thermodynamics import state_at
@@ -663,6 +663,21 @@ def candidates_for(flags, branches=None, patterns=None):
     """
     if branches is None:
         branches = DENSITY_BRANCHES
+    else:
+        unknown = [b for b in branches if b not in DENSITY_BRANCHES]
+        if unknown:
+            # `confined` is deliberately not in the list: at fixed density the
+            # dielectric is closed there, n_B = 0 identically, so no nonzero
+            # density row can be met and the Jacobian's field columns vanish
+            # (the enumeration table in ccdm.md). It is a fixed-POTENTIAL
+            # candidate only.
+            raise ValueError(
+                f"unknown branches {unknown}; a fixed-density solve "
+                f"enumerates {sorted(DENSITY_BRANCHES)}")
+        if not branches:
+            raise ValueError("branches=() leaves nothing to enumerate; "
+                             f"the density branches are "
+                             f"{sorted(DENSITY_BRANCHES)}")
     if patterns is None:
         patterns = DEFAULT_PATTERNS if flags.csc else ("unpaired",)
         if flags.two_flavour:
@@ -685,6 +700,18 @@ def candidates_for(flags, branches=None, patterns=None):
         raise ValueError(
             "no pairing pattern survives SpeciesFlags(two_flavour=True) here; "
             "'unpaired' and '2SC' are the two-flavour patterns")
+    unknown = [p for p in patterns if p not in PATTERNS]
+    if unknown:
+        raise ValueError(f"unknown patterns {unknown}; eos.ccdm enumerates "
+                         f"{sorted(PATTERNS)}")
+    if not flags.csc and any(p != "unpaired" for p in patterns):
+        # An explicitly requested pattern the flags forbid is a malformed
+        # CALL, not a bad draw, so it raises here rather than being dropped by
+        # the enumeration's own tolerance for candidates that do not solve.
+        raise ValueError(
+            f"patterns {tuple(patterns)!r} need SpeciesFlags(csc=True): with "
+            f"the colour-superconducting sector off there are no gaps to "
+            f"solve for")
     return [(b, p) for b in branches for p in patterns]
 
 
@@ -711,16 +738,6 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, branches=None,
     leptons = fractions.pop("leptons", True)
     spec = mode_spec(mode, leptons=leptons, **fractions)
     _refuse_fixed_YS(flags, spec, "eos.ccdm")
-
-    if patterns is not None and not flags.csc and any(
-            p != "unpaired" for p in patterns):
-        # An explicitly requested pattern the flags forbid is a malformed
-        # CALL, not a bad draw, so it raises here rather than being dropped by
-        # the enumeration's own tolerance for candidates that do not solve.
-        raise ValueError(
-            f"patterns {tuple(patterns)!r} need SpeciesFlags(csc=True): with "
-            f"the colour-superconducting sector off there are no gaps to "
-            f"solve for")
 
     wanted = candidates_for(flags, branches, patterns)
     seeds = ({} if x0 is None else

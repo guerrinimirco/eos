@@ -37,7 +37,7 @@ from eos.general.tabulate import (
 )
 from eos.general.modes import resolve_leptons
 from eos.njl.parameters import Parameters
-from eos.njl.solver import MODE_FRACTIONS, solve, warm_start
+from eos.njl.solver import MODE_FRACTIONS, patterns_for, solve, warm_start
 from eos.njl.species import SpeciesFlags
 
 #: How many times a missed density step may be halved back towards the last
@@ -47,7 +47,7 @@ MAX_BISECT = 6
 
 
 def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None,
-             backend="reference"):
+             backend="reference", patterns=None):
     """One point of a table: the mode's solve at this density and line.
 
     `conditions` carries the line's temperature (`T`) or entropy per baryon
@@ -60,13 +60,13 @@ def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None,
     if "SnB" in conditions:
         def entropy_at(T):
             point = solve(par, mode, n_B, T, flags, x0, leptons=leptons,
-                          backend=backend, **fractions)
+                          backend=backend, patterns=patterns, **fractions)
             return point.s / point.n_B if point.n_B else 0.0
         T = temperature_at_entropy(entropy_at, conditions["SnB"])
     else:
         T = conditions["T"]
     return solve(par, mode, n_B, T, flags, x0, leptons=leptons,
-                 backend=backend, **fractions)
+                 backend=backend, patterns=patterns, **fractions)
 
 
 def quark_row(point):
@@ -117,6 +117,15 @@ class TableSpec:
             so a table is the same table it has always been; 'fast' is the
             jitted kernel of `eos.njl.backends`, which agrees to round-off
             rather than bit for bit.
+    patterns: restrict the pairing enumeration to these candidates, exactly as
+            `eos_point`'s argument of the same name does; None enumerates the
+            default set. ('unpaired', '2SC', 'CFL') is the recommended
+            fast restriction: the asymmetric 'free' seed exists to let a
+            CFL-layout solve fall to a state that is not CFL, and where no
+            such state exists it burns its whole retry ladder discovering so
+            -- measured at 90% of one paired point's cost. Restricting is a
+            declaration that uSC/dSC-like states are not being hunted, which
+            is a physics choice the caller makes explicitly.
     """
     par: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
@@ -125,6 +134,7 @@ class TableSpec:
     fixed: dict = field(default_factory=dict)
     leptons: bool = None
     backend: str = "reference"
+    patterns: tuple = None
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -141,6 +151,9 @@ class TableSpec:
                 raise ValueError(f"mode {self.mode!r} needs {key!r}, as an "
                                  f"axis or in fixed")
         self.leptons = resolve_leptons(self.mode, self.leptons, default=False)
+        # Validate a pattern restriction NOW: inside the sweep, skip_errors
+        # would swallow the per-point ValueError and return an empty table.
+        patterns_for(self.include, self.patterns)
 
 
 @dataclass
@@ -188,7 +201,8 @@ def build_table(spec, skip_errors=True, rows=False, progress=None,
 
     def solve_one(n_B, conditions, x0):
         point = solve_at(spec.par, spec.mode, n_B, conditions, spec.include,
-                         leptons=spec.leptons, x0=x0, backend=spec.backend)
+                         leptons=spec.leptons, x0=x0, backend=spec.backend,
+                         patterns=spec.patterns)
         if point is not None and point.converged:
             last["point"] = point
         return point

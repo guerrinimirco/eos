@@ -100,8 +100,11 @@ So
 and the medium becomes transparent to colour exactly in proportion to how much
 condensate has melted. Both endpoints are then correct by construction:
 `chi -> 0` at `phi_bar = 1` (confinement, `M* -> infinity`) and `chi -> 1` at
-`phi_bar = 0` (perturbative, `M* -> m_f`). Only `chi^p` enters `M*`, so `p` and
-the bracket are meaningful only as a pair, and the code locks `p = 1`.
+`phi_bar = 0` (perturbative, `M* -> m_f`) — for every `p > 0`, since only the
+bracket vanishes and diverges. Only `chi^p` enters `M*`, so `p` and the bracket
+are meaningful only as a pair, and `p` is therefore the knob on how abruptly
+the medium opens between those fixed endpoints. It is shipped at 1 and is not
+sampled; see [Tier 2: structural](#tier-2-structural).
 
 ### The solve variable
 
@@ -258,20 +261,54 @@ needs of each pure phase before imposing *global* neutrality.
 
 The vector coupling is a function of the state, not a parameter:
 
-    g_omega(n_B)      = gbar_omega / [1 + (n_B/n_c)^2]
-    dg_omega/dn_B     = -2 gbar_omega (n_B/n_c^2) / [1 + (n_B/n_c)^2]^2
+    u                 = n_B/n_c
+    g_omega(n_B)      = gbar_omega / [1 + u^k] ,        k = k_omega
+    dg_omega/dn_B     = -(k gbar_omega/n_c) u^(k-1) / [1 + u^k]^2
 
 with `n_c` stored in fm^-3 — a density a reader holds in fm — and converted to
 MeV^3 where `n_B` is, so a caller never has to remember which side of the
-boundary it is on.
-
-A repulsion that dies off at high density is what keeps the sound speed away
-from the causal limit without a hand-placed ceiling: the vector energy grows as
-`g_omega^2 n_q^2`, so a coupling falling as `n_B^-2` turns it into a term that
-stops growing at all. The derivative is negative everywhere, which is also why
-the innermost fixed point on `omega_0` converges monotonically.
+boundary it is on. `n_c = inf` is the constant coupling exactly, for every `k`;
 `gbar_omega = 0` switches the whole sector off exactly — no `omega_0`, no
 `Sigma_R`, and no `Sigma_V` row in the unknown vector.
+
+A repulsion that dies off at high density keeps the vector energy from growing
+without bound: that energy goes as `g_omega^2 n_q^2`, so a coupling falling
+fast enough turns it into a term that stops growing at all. The derivative is
+negative everywhere, which is also why the innermost fixed point on `omega_0`
+converges monotonically.
+
+**What the decay costs, and where.** Saturating the vector energy is the same
+statement as making the vector sector's PRESSURE turn over, because the
+rearrangement below is mandatory. Collecting the two vector terms of `P` — the
+field energy and `Sigma_R n_q` —
+
+    P_vec = (n_q^2/m_omega^2) g_omega [ g_omega/2 + n_B dg_omega/dn_B ]
+          = (n_q^2/m_omega^2) g_omega^2 [ 1/2 - k u^k/(1 + u^k) ]
+
+so the bracket, and with it the vector contribution to the pressure, turns
+NEGATIVE exactly where the coupling's logarithmic slope passes -1/2:
+
+    dln g_omega/dln n_B < -1/2      <=>      P_vec < 0
+    the threshold being u > (2k - 1)^(-1/k)
+
+— never for `k <= 1/2`, at `u > 1` for `k = 1`, at `u > 0.577` for the shipped
+`k = 2`, at `u > 0.615` for `k = 4`. And `P_vec` is already FALLING before it
+changes sign: for `k = 2` its maximum and minimum are the roots of
+`3u^4 - 8u^2 + 1 = 0`, i.e. `u = 0.363` and `u = 1.592`. So a parameter point
+whose density axis reaches past `n_B = 0.363 n_c` is one where the vector
+sector REMOVES pressure as the density rises, and where it does so faster than
+the kinetic term adds it the total `P` is non-monotonic — a mechanically
+unstable branch rather than a soft one. At `gbar_omega = 4`, `n_c = 3` fm^-3
+that is what happens: `P` falls from the onset, reaching `c_s^2 = -0.59`.
+
+**The trade is structural, not a bad choice of numbers.** `k <= 1/2` keeps the
+slope above -1/2 at every density and `P_vec` positive everywhere — but a
+coupling that gentle does not saturate the vector energy either, which is what
+the density dependence was for. `n_c = inf` is the other end: no rearrangement
+and an energy that grows forever. What a parameter point chooses is WHERE the
+turnover sits, and `n_c` is the lever: keep `0.363 n_c` above the top of the
+density axis and the sector is monotonic over it (at `n_c = 3` and a table
+reaching 2.6 fm^-3 it is not; `n_c >= 7.2` fm^-3 would be).
 
 **The source is the quark number density `n_q = 3 n_B`**, because the coupling
 in `L_vec` is to `qbar gamma^mu q`; using `n_B` understates `omega_0` by three
@@ -288,9 +325,10 @@ of the interaction energy `W = (1/2) m_omega^2 omega_0^2` with respect to the
 
 (the chain rule through `n_B = n_q/3` is what turns the naive
 `(dg/dn_q) n_q` into the `n_B` written here). **Sigma_R enters mu and P and
-never eps.** Note that `W` peaks at `n_B = n_c` and falls beyond it, so
-`Sigma_R` — and with it `Sigma_V` — changes sign there; that is a property of
-the coupling form, not of the implementation.
+never eps.** Note that `W` peaks at `n_B = n_c` for `k = 2` and falls beyond
+it, so `Sigma_V` changes sign there; that is a property of the coupling form,
+not of the implementation, and it is the same fact as the `P_vec` sign change
+above seen in the chemical potential.
 
 The diquark coupling may be dressed by the dielectric,
 
@@ -995,27 +1033,64 @@ off.
 
 ### Tier 2: structural
 
-`p = 1`, **locked** — `chi` and `p` are meaningful only as the pair `chi^p`,
-and squaring the bracket silently doubles the confining-end exponent; any other
-value raises. `q in {0,1}`, shipped at `q = 0`: the dielectric dressing
-`G_D -> G_D/chi^q`, declared per run rather than sampled, with `q = 1` the
-gluon-exchange exponent and the largest that `q <= p` admits.
+`p > 0`, shipped at `p = 1` — `chi` and `p` are meaningful only as the pair
+`chi^p`, which is why `p` and not the bracket is the knob: the anomaly argument
+above fixes the FOURTH POWER inside the bracket, because that combination is
+the gluon condensate, and says nothing about the power of the bracket itself.
+Both endpoints are `p`-independent, `chi(0) = 1` and `chi(phi_bar = 1) = 0` for
+every `p > 0`, so `p` moves only the APPROACH: a larger `p` keeps the
+dielectric shut further from the vacuum dilaton, which makes `M*` heavier at
+given `phi_bar` and pushes the deconfinement onset up, and `p < 1` opens the
+medium while `phi_bar` is still near 1.
+
+**What `p` moves is the dilaton profile, not mainly the onset.** Measured at
+the shipped `B_g^(1/4) = 150` MeV with `gbar_omega = 4`, beta equilibrium,
+`T = 0`: `phi_bar` at `n_B = 1.5` fm^-3 is 0.598, 0.405, 0.176, 0.074 for
+`p = 0.5, 1, 2, 3` — a factor of eight — while the density at which `P` crosses
+zero moves only 1.35 -> 1.40 fm^-3 between `p = 1` and `p = 3`, and the lowest
+density carrying a deconfined solution at all moves 1.00 -> 0.80. `B_g` stays
+the onset knob (150 -> 230 MeV moves that floor 1.00 -> 1.65 fm^-3); `p` is the
+knob on how fast the medium opens once it has. Below 1 it changes the character
+rather than the numbers: at `p = 0.5` the pressure is positive over the whole
+axis, so the phase is self-bound and there is no `P = 0` crossing to be an
+onset at all. It is a structural choice declared per run rather than a sampled
+one. Only
+`dielectric` and the dilaton residual `R_1` read it, and `R_1` carries it
+analytically, so nothing else in the model changes with it. `q in {0,1}`,
+shipped at `q = 0`: the dielectric dressing `G_D -> G_D/chi^q`, declared per
+run rather than sampled, with `q = 1` the gluon-exchange exponent and the
+largest that `q <= p` admits — a constraint that now binds, since `p` moves.
 
 ### Tier 3: the sampled vector, and the shipped values
 
-| symbol | shipped | prior support | status |
-|---|---|---|---|
-| `B_g^(1/4)` | 150 MeV | 120–250 MeV | the glue bag scale; sets `phi_0` and the onset |
-| `g_q` | 3.0 | 3–6 | **pinned**: the specification's section 10 table quotes `M*_(u,d) = 826` MeV at `phi_bar = 0.90` and 1531 MeV at 0.95 in the confined branch, and both invert to `g_q = 3.00` |
-| `g_s` | 3.0 | 3–8 | *not* pinned; 3.0 is the flavour-symmetric choice `g_s = g_q` |
-| `m_sigma` | 550 MeV | 450–700 MeV | fixes `lambda` and `v` |
-| `gbar_omega` | 4.0 | 0–12 | *not* pinned; mid-prior. 0 switches the vector sector off (the L1 -> L0 reduction) |
-| `n_c` | 1.0 fm^-3 | 0.3–3 fm^-3 | *not* pinned; mid-prior |
-| `G_D` | 5e-6 MeV^-2 | (with `Lambda`) | calibrated here, not quoted: at this value the gap sits inside the specification's 20–150 MeV window at `mu_q ~ 450` MeV — 30.0 MeV in 2SC and 119.4 MeV in CFL at `mu_B = 1450`, `mu_C = -30` MeV, `T = 0`. Below ~4.5e-6 the 2SC gap equation has no root but the trivial one there |
-| `Lambda` | 600 MeV | 550–800 MeV | the **pairing** cutoff only; nearly degenerate with `G_D` |
+| symbol       | shipped     | prior support   | status                                                                                                                                                                                                                                                                                |
+| ------------ | ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `B_g^(1/4)`  | 150 MeV     | 120–250 MeV     | the glue bag scale; sets `phi_0` and the onset                                                                                                                                                                                                                                        |
+| `g_q`        | 3.0         | 3–6             | **pinned**: the specification's section 10 table quotes `M*_(u,d) = 826` MeV at `phi_bar = 0.90` and 1531 MeV at 0.95 in the confined branch, and both invert to `g_q = 3.00`                                                                                                         |
+| `g_s`        | 3.0         | 3–8             | *not* pinned; 3.0 is the flavour-symmetric choice `g_s = g_q`                                                                                                                                                                                                                         |
+| `m_sigma`    | 550 MeV     | 450–700 MeV     | fixes `lambda` and `v`                                                                                                                                                                                                                                                                |
+| `gbar_omega` | 4.0         | 0–12            | *not* pinned; mid-prior. 0 switches the vector sector off (the L1 -> L0 reduction)                                                                                                                                                                                                    |
+| `n_c`        | 1.0 fm^-3   | 0.3–3 fm^-3     | *not* pinned; mid-prior. `inf` is the constant-coupling limit exactly (`constvector`); the MIDDLE of the range is the awkward part — see below                                                                                                                                          |
+| `G_D`        | 5e-6 MeV^-2 | (with `Lambda`) | calibrated here, not quoted: at this value the gap sits inside the specification's 20–150 MeV window at `mu_q ~ 450` MeV — 30.0 MeV in 2SC and 119.4 MeV in CFL at `mu_B = 1450`, `mu_C = -30` MeV, `T = 0`. Below ~4.5e-6 the 2SC gap equation has no root but the trivial one there |
+| `Lambda`     | 600 MeV     | 550–800 MeV     | the **pairing** cutoff only; nearly degenerate with `G_D`                                                                                                                                                                                                                             |
 
 Three of these eight are calibration knobs at mid-prior values rather than
 measurements, and the code says so rather than dressing them otherwise.
+**The vector sector has an awkward middle, and it is the rearrangement term.**
+`Sigma_R = (dg_omega/dn_B) omega_0 n_B` is negative wherever the coupling
+falls, and it enters `P` (never `eps`) as `+Sigma_R n_q`, so it is a NEGATIVE
+pressure that grows with both `omega_0` and `|dg/dn_B|`. At small `n_c` the
+coupling has already collapsed by the onset and both stay small; at `n_c = inf`
+the term is identically zero. In between it is neither: at `n_c = 3` fm^-3 and
+`gbar_omega = 4`, beta equilibrium, `T = 0`, `Sigma_R n_q` reaches
+-3400 MeV/fm^3 by `n_B = 2.6` fm^-3 and `dP/dn_B < 0` over the whole branch,
+which is a mechanically unstable equation of state rather than a soft one. The
+constant-coupling reference is stiff but well behaved -- `c_s^2` in
+[0.68, 0.80] over `n_B = 1.1-2.6` fm^-3 at `gbar_omega = 4` -- so the
+density-dependent form is a choice about stiffness and not a repair of a
+causality problem. A parameter scan over `n_c` should read `dP/dn_B` and not
+only the onset.
+
 `m_omega` is a normalisation convention, only `g_omega/m_omega` entering;
 `m_phi` cancels from the bulk equation of state at fixed `B_g`, pricing
 gradients and the glueball spectrum instead.
@@ -1037,6 +1112,7 @@ point.
 | `novector` | `gbar_omega = 0`: the L1 -> L0 reduction |
 | `dressed` | `q = 1`: the gluon-exchange dressing of `G_D` |
 | `stiff` | `B_g^(1/4) = 190` MeV: a heavier glue scale, later onset |
+| `constvector` | `n_c = inf`: the vector coupling stops depending on the density |
 
 The four levels the specification names are what the flags and a zero coupling
 select, not separate models: L0 quarks in the dielectric with no vector and no
@@ -1061,8 +1137,9 @@ wrong by a factor of six in energy density.
 **Three routes to a parameter set.** CLAUDE.md section 6 makes model
 parameters arguments, so all three have to exist. *By name:*
 `Parameters.default()` is the baseline set, and `Parameters.named(name)` takes
-any of the four published sets -- `'baseline'`, `'dressed'`, `'novector'`,
-`'stiff'` -- an unknown name raising `KeyError` that lists them. *A new set:*
+any of the five published sets -- `'baseline'`, `'dressed'`, `'novector'`,
+`'stiff'`, `'constvector'` -- an unknown name raising `KeyError` that lists
+them. *A new set:*
 every field carries a default, so `Parameters(g_q=..., B_g4=...)` names only
 what changes; the dataclass is frozen, so `dataclasses.replace` is how a set
 already in hand is modified. *From nuclear-matter parameters:* no route, and
