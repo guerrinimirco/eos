@@ -725,7 +725,7 @@ def _gauss_legendre(nodes_per_panel):
 
 
 def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL,
-                max_panel_ratio=None, k_min=0.0):
+                max_panel_ratio=None):
     """(k, w): a panel-split Gauss-Legendre rule on [0, k_max] [MeV].
 
     The general helper `pair_nodes` and the models' own medium integrals share,
@@ -744,28 +744,22 @@ def panel_nodes(fermi_momenta, T, k_max, nodes_per_panel=NODES_PER_PANEL,
     with it on. An RG-consistent one has k_max = 10 Lambda and needs it --
     measured on the njl pairing block at Lambda_UV = 6023 MeV, r = 2 takes the
     relative quadrature error from 4.0e-7 to 2.9e-13 at the same node count.
-
-    `k_min` moves the lower limit off zero, so the rule covers a SHELL rather
-    than a ball. A difference of two cut integrals over nested intervals is an
-    integral over the shell between them, and computing it as one is both
-    cheaper and better conditioned than differencing two larger numbers.
     """
-    breaks = [float(k_min), k_max]
+    breaks = [0.0, k_max]
     for k_F in np.atleast_1d(fermi_momenta):
         breaks.append(float(k_F))
         if T > 0.0:
             breaks.append(float(k_F) - THERMAL_COLLAR * T)
             breaks.append(float(k_F) + THERMAL_COLLAR * T)
 
-    edges = np.unique(np.clip(np.asarray(breaks, dtype=float),
-                              float(k_min), k_max))
+    edges = np.unique(np.clip(np.asarray(breaks, dtype=float), 0.0, k_max))
 
     if max_panel_ratio is not None and max_panel_ratio > 1.0:
         # Fill the top panel geometrically, stopping where the Fermi
         # breakpoints already resolve things -- or after TAIL_STEPS, which is
         # what bounds the mu* = 0 case where there are no Fermi momenta at all
         # and the single panel is the whole interval.
-        floor = max(edges[-2] if edges.size > 1 else 0.0, float(k_min),
+        floor = max(edges[-2] if edges.size > 1 else 0.0,
                     k_max / max_panel_ratio ** TAIL_STEPS)
         extra = []
         cut = k_max / max_panel_ratio

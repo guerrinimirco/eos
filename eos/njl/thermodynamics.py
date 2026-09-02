@@ -295,6 +295,34 @@ def counterterm(par, Delta, mu_star):
     return omega, n, gap
 
 
+@lru_cache(maxsize=512)
+def _vacuum_pair_block(M_bytes, Delta_bytes, k_max, nodes_per_panel, backend):
+    """The pairing block at mu* = 0, T = 0, memoized on (M, Delta).
+
+    The vacuum half of the RG split depends on the masses and the gaps and on
+    NOTHING else -- not the potentials, not mu_3 or mu_8, not Sigma_V, not T.
+    A numerically differenced Jacobian perturbs one unknown at a time, so every
+    column that moves a potential rather than a mass or a gap asks for a block
+    that has just been computed. Measured hit rate on a 250-point 2SC sweep:
+    41%, for a 1.26x speedup on the whole table.
+
+    Keyed on the arrays' bytes because a cache key must be hashable, and the
+    returned arrays are sealed read-only because the cache hands every caller
+    the same object (CLAUDE.md section 6 allows exactly this: a read-only cache
+    keyed by immutable parameters).
+    """
+    M = np.frombuffer(M_bytes, dtype=float)
+    Delta = np.frombuffer(Delta_bytes, dtype=float)
+    zero = np.zeros(N_MODES)
+    block = pair_block(M, zero, Delta, 0.0, k_max, backend=backend,
+                       quadrature=pair_nodes(M, zero, 0.0, k_max,
+                                             nodes_per_panel,
+                                             RG_PANEL_RATIO))
+    for name in ("delta_n", "delta_rho_s", "gap_kernel"):
+        getattr(block, name).flags.writeable = False
+    return block
+
+
 def rg_pair_block(par, M, mu_star, Delta, T,
                   nodes_per_panel=NODES_PER_PANEL, **kwargs):
     """The pairing block under the RG-consistent split.
@@ -305,7 +333,7 @@ def rg_pair_block(par, M, mu_star, Delta, T,
     a vacuum quantity and keeps the vacuum cutoff; only what is left of the
     pairing correction runs to Lambda_UV:
 
-        block = hot(Lambda_UV) - [ vac(Lambda_UV) - vac(Lambda) ]
+        block = [ hot(Lambda_UV) - vac(Lambda_UV) ] + vac(Lambda)
 
     where `vac` is the same block at mu* = 0, T = 0. Omitting it does not cost
     accuracy, it costs the scheme: the remainder then diverges QUADRATICALLY in
@@ -314,15 +342,20 @@ def rg_pair_block(par, M, mu_star, Delta, T,
     subtraction turns a drift of -5.9e11 MeV^4 between lambda = 5 and 40 into a
     logarithm whose slope agrees with `counterterm` to 0.1%.
 
-    The bracket is a difference of two cut integrals over NESTED intervals, so
-    it is the integral over the shell between them and is taken as one pass on
-    [Lambda, Lambda_UV]. Two passes instead of three, and 96 nodes instead of
-    384 for the vacuum part.
+    The two vacuum blocks are nested, so their difference is formally one
+    integral over the shell [Lambda, Lambda_UV] -- one pass instead of two, and
+    96 nodes instead of 384. It is NOT taken that way: measured, the shell form
+    agrees to 1.8e-16 in delta_omega and bit for bit in gap_kernel, yet leaves
+    the mu_B = 1500 MeV, eta_D = 1 2SC solve stalled at a residual of 9.0e-9
+    where the two nested passes reach 7.6e-15. The two rules have the SAME
+    delta_rho_s accuracy (1.2e-9 either way), so what the nesting buys is not
+    accuracy but a quadrature error that cancels between the two blocks, and
+    the mass residual is what notices. Three passes is the price.
 
-    At lambda = 1 the shell is empty and the whole expression collapses to
-    `hot(Lambda)`, which is returned directly -- so conventional sharp-cutoff
-    regularization costs exactly one quadrature pass and reproduces its numbers
-    bit for bit.
+    At lambda = 1 the two vacuum blocks are the same integral and the whole
+    expression collapses to `hot(Lambda)`, which is returned directly -- so
+    conventional sharp-cutoff regularization costs exactly one quadrature pass
+    and reproduces its numbers bit for bit.
     """
     if par.lambda_UV == 1.0 or not np.any(Delta):
         return pair_block(M, mu_star, Delta, T, par.Lambda_medium,
@@ -338,23 +371,20 @@ def rg_pair_block(par, M, mu_star, Delta, T,
     hot = pair_block(M, mu_star, Delta, T, par.Lambda_medium, **kwargs,
                      quadrature=pair_nodes(M, mu_star, T,
                                            par.Lambda_medium, **rule))
-    # The vacuum correction is `vac(Lambda_UV) - vac(Lambda)`, and the
-    # difference of two cut integrals over nested intervals IS the integral
-    # over the shell between them. Taking it as one pass over
-    # [Lambda, Lambda_UV] rather than two from zero is exact -- measured
-    # identical to the last bit -- and costs 96 nodes where the two passes
-    # cost 384.
-    zero = np.zeros_like(np.asarray(mu_star, dtype=float))
-    shell = pair_block(M, zero, Delta, 0.0, par.Lambda_medium, **kwargs,
-                       quadrature=pair_nodes(M, zero, 0.0, par.Lambda_medium,
-                                             k_min=par.Lambda, **rule))
+    M_bytes = np.ascontiguousarray(M, dtype=float).tobytes()
+    Delta_bytes = np.ascontiguousarray(Delta, dtype=float).tobytes()
+    backend = kwargs.get("backend", "reference")
+    hi = _vacuum_pair_block(M_bytes, Delta_bytes, par.Lambda_medium,
+                            nodes_per_panel, backend)
+    lo = _vacuum_pair_block(M_bytes, Delta_bytes, par.Lambda,
+                            nodes_per_panel, backend)
     return replace(
         hot,
-        delta_omega=hot.delta_omega - shell.delta_omega,
-        delta_n=hot.delta_n - shell.delta_n,
-        delta_rho_s=hot.delta_rho_s - shell.delta_rho_s,
-        delta_s=hot.delta_s - shell.delta_s,
-        gap_kernel=hot.gap_kernel - shell.gap_kernel,
+        delta_omega=hot.delta_omega - hi.delta_omega + lo.delta_omega,
+        delta_n=hot.delta_n - hi.delta_n + lo.delta_n,
+        delta_rho_s=hot.delta_rho_s - hi.delta_rho_s + lo.delta_rho_s,
+        delta_s=hot.delta_s - hi.delta_s + lo.delta_s,
+        gap_kernel=hot.gap_kernel - hi.gap_kernel + lo.gap_kernel,
     )
 
 

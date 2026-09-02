@@ -50,6 +50,9 @@ from eos.njl.table import rows_from_result as njl_rows_from_result
 # in their `table` module, so it is looked up here once rather than branched on
 # inside the loop.
 MODELS = {"vmit": vmit, "alphabag": alphabag, "njl": njl, "ccdm": ccdm}
+
+# The two that carry a `backends/`, and so accept `backend='fast'`.
+BACKEND_MODELS = {"njl": njl, "ccdm": ccdm}
 ROWS_FROM_RESULT = {"vmit": vmit.rows_from_result,
                     "alphabag": alphabag.rows_from_result,
                     "njl": njl_rows_from_result,
@@ -119,18 +122,31 @@ for name, module in MODELS.items():
     # library's contract working, so they are printed and skipped, never dressed
     # up as a result. `TypeError` is deliberately not caught: an unexpected
     # keyword is this notebook's own bug.
+    # `backend` exists only where the model HAS a second flavour of its
+    # integrals: `njl` and `ccdm` carry a `backends/`, the two bag models do
+    # not and would raise TypeError. Added per model for the same reason `csc`
+    # is, rather than passed to all four.
+    fast = {"backend": "fast"} if name in BACKEND_MODELS else {}
+
     try:
         species = module.SpeciesFlags(
             **SPECIES, **({"csc": CSC[name]} if name in CSC else {}))
 
+        # The first 'fast' call in a session pays numba's compile time, so
+        # the jitted models run once untimed. Without this the compile lands
+        # on the "first point" number and reads as a slow model.
+        if fast:
+            module.eos_point(par, "beta_eq_neutrinoless", species,
+                             n_B=float(N_B[0]), T=T, **fast)
+
         start = time.perf_counter()
         point = module.eos_point(par, "beta_eq_neutrinoless", species,
-                                 n_B=float(N_B[0]), T=T)
+                                 n_B=float(N_B[0]), T=T, **fast)
         first_s = time.perf_counter() - start
 
         start = time.perf_counter()
         table = module.eos_table(par, "beta_eq_neutrinoless", species,
-                                 {"nB": N_B, "T": np.array([T])})
+                                 {"nB": N_B, "T": np.array([T])}, **fast)
         line_s = time.perf_counter() - start
     except (NotImplementedError, ValueError) as err:
         print(f"  [{name}] not supported: {err}")
@@ -173,8 +189,6 @@ for name, module in MODELS.items():
 # each backend runs once untimed before the clock starts.
 
 # %%
-BACKEND_MODELS = {"njl": njl, "ccdm": ccdm}
-
 print(f"=== reference vs fast, beta_eq_neutrinoless, T = {T} MeV, "
       f"{len(N_B)} points ===")
 
@@ -854,4 +868,72 @@ ax_cond.set_xlabel(LABELS["nB"])
 ax_cond.set_ylabel(r"$\epsilon_{\rm paired}-\epsilon_{\rm unpaired}$"
                    r"  [MeV/fm$^3$]")
 panel_label(ax_cond, "(b)")
+plt.show()
+
+
+# %% [markdown]
+# ### The same quantities against mu_B
+#
+# **Against `n_B` these curves are not single branches.** At fixed density the
+# winner is the smallest `f = eps - T s`, and two branches coexist over a
+# window, so where the winner switches BOTH `P` and `mu_B` jump: at `p = 2` the
+# step from `n_B = 0.990` to 1.047 takes `P` from +3.9 to +494.8 MeV/fm^3 and
+# `mu_B` from 1713 to 1946 MeV. The tell that the sequence is not one curve is
+# the pair just above it, where `mu_B` FALLS from 1945.7 to 1937.8 MeV as the
+# density rises — `dmu_B/dn_B < 0` is impossible on a single stable branch, so
+# those two points belong to different ones.
+#
+# `mu_B` is the variable that unfolds it. At fixed potential the branches are
+# ordered by `P` and the transition is where two of them CROSS, so each branch
+# is a continuous curve and the jump becomes a crossing. A doubling-back in
+# these panels is the coexistence window drawn honestly, not a solver failure.
+#
+# Every point here converged: `rows_from_result` returns solved points only, so
+# a density the model could not reach is absent from the curve rather than
+# plotted. What the line between two points asserts is a different matter, and
+# across a branch change it asserts too much.
+
+# %%
+def scan_figure_mu(ylabel):
+    fig, axes = paper_grid("1x1", mode="single", placeholder=False, aspect=1.25)
+    ax = axes.ravel()[0]
+    ax.set_xlabel(LABELS["mu_B"])
+    ax.set_ylabel(ylabel)
+    return fig, ax
+
+
+fig, ax = scan_figure_mu(LABELS["P"])
+for label, par, matrix, n_B, colour in scan_curves():
+    ax.plot(matrix["mu_B"][0], matrix["P"][0], color=colour, marker=".",
+            ms=3, label=label)
+ax.axhline(0.0, color="0.6", lw=0.6, zorder=0)
+ax.legend(loc="upper left", fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure_mu(r"$M^*_i / m_i$")
+for label, par, matrix, n_B, colour in scan_curves():
+    for flavour, style in FLAVOUR_LS.items():
+        m_current = getattr(par, CURRENT[flavour])
+        ax.plot(matrix["mu_B"][0], matrix[f"M_{flavour}"][0] / m_current,
+                color=colour, ls=style)
+ax.set_yscale("log")
+log_decades(ax, axis="y")
+njl_style_legend(ax, FLAVOUR_LS.items(), loc="upper right", ncol=3,
+                 fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure_mu(r"$\bar{\phi}$")
+for label, par, matrix, n_B, colour in scan_curves():
+    ax.plot(matrix["mu_B"][0], matrix["phi_bar"][0], color=colour, marker=".",
+            ms=3, label=label)
+ax.legend(loc="upper right", fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure_mu(r"$\sigma$,  $\zeta$ [MeV]")
+for label, par, matrix, n_B, colour in scan_curves():
+    ax.plot(matrix["mu_B"][0], matrix["sigma"][0], color=colour, ls="-",
+            label=label)
+    ax.plot(matrix["mu_B"][0], matrix["zeta"][0], color=colour, ls="--")
+njl_style_legend(ax, [(r"$\sigma$", "-"), (r"$\zeta$", "--")],
+                 loc="center left", fontsize="xx-small")
 plt.show()

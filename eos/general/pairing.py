@@ -395,7 +395,7 @@ def twosc_dispersion(E_u, E_d, mu_u, mu_d, Delta):
 
 
 def pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel=NODES_PER_PANEL,
-               max_panel_ratio=None, k_min=0.0):
+               max_panel_ratio=None):
     """(k, w): a panel-split Gauss-Legendre rule on [0, k_max] [MeV].
 
     Breakpoints at each of the nine Fermi momenta k_F,j = sqrt(mu*_j^2 - M_f^2)
@@ -412,8 +412,7 @@ def pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel=NODES_PER_PANEL,
     mu_star = np.asarray(mu_star, dtype=float)
     inside = np.abs(mu_star) > M_star
     kF = np.sqrt(np.maximum(mu_star[inside] ** 2 - M_star[inside] ** 2, 0.0))
-    return panel_nodes(kF, T, k_max, nodes_per_panel, max_panel_ratio,
-                       k_min)
+    return panel_nodes(kF, T, k_max, nodes_per_panel, max_panel_ratio)
 
 
 # =============================================================================
