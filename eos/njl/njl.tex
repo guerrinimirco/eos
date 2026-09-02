@@ -40,7 +40,7 @@ This note states the Lagrangian, every parameter with its value and the vacuum
 observable it is fitted to, the cut medium integrals at both temperatures and
 the surface term that distinguishes the two pressure forms, the Dirac sea in
 closed form, the gap equations for masses and for gaps, the
-Bogoliubov--de~Gennes construction and the Hellmann--Feynman kernels it
+Dirac-basis quasiparticle spectrum and the Hellmann--Feynman kernels it
 supplies, the density-dependent vector coupling and the rearrangement
 self-energy it owes, the lepton and thermal gases that join the totals, the
 residual of every equilibrium mode as the solver assembles it, every quantity a
@@ -135,7 +135,7 @@ $\sum_\eta \Delta_\eta^2/(4\GD)$ --- so $\eta_D = \GD/\GS = 1$ does
 \emph{not} mean ``equally strong channels''. Second, $\sigma$ enters the
 quasiparticle diagonal while $\Delta$ is strictly off-diagonal: the gap matrix
 has identically zero diagonal, mixes particles with holes, and therefore needs
-the doubled basis of Sec.~\ref{sec:bdg}. That is also why the gap kernel
+the doubled Dirac basis of Sec.~\ref{sec:bdg}. That is also why the gap kernel
 carries branch signs where the mass equation does not.
 
 \paragraph{Mean-field masses.} Including the determinant cross-terms, which are
@@ -228,7 +228,7 @@ $\lambda = \Lam_{\rm UV}/\Lam$ & $10$
 The lepton content is structural in the same sense and is carried by the
 species flags rather than the parameter record: \texttt{csc} (the pairing
 sector of Sec.~\ref{sec:pairing}: with it off there are no gaps, no
-Bogoliubov--de~Gennes problem and $\mu_3 = \mu_8 = 0$ identically),
+quasiparticle spectrum to diagonalise and $\mu_3 = \mu_8 = 0$ identically),
 \texttt{muons} (on by default), \texttt{thermal\_neutrinos} and
 \texttt{photons} (both off by default). The three flags this model does not
 have --- \texttt{hyperons}, \texttt{deltas}, \texttt{thermal\_mesons} ---
@@ -491,54 +491,98 @@ dSC & $(\Delta_0,0,\Delta_0)$ & as uSC \\
 With independent gaps the $\pm\sqrt2\,\Delta_0$ eigenvalue generalises to
 $\pm\sqrt{\Delta_2^2+\Delta_3^2}$.
 
-\subsection{The Bogoliubov--de~Gennes problem}
+\subsection{The quasiparticle spectrum}
 \label{sec:bdg}
 
-At each momentum $k$, for particles ($r=+$) and antiparticles ($r=-$)
-separately, with $\xi^r_j = E_{f(j)} - r\,\mu^{*}_j$,
-\begin{equation}
-  H^r(k) = \begin{pmatrix}
-     \mathrm{diag}(\xi^r) & G \\ G & -\mathrm{diag}(\xi^r)
-  \end{pmatrix} \in \mathbb{R}^{18\times18} ,
-  \label{eq:bdg}
-\end{equation}
-whose spectrum comes in $\pm$ pairs. The nine quasiparticle energies are the
-\emph{non-negative half of the signed spectrum},
-$E_a = \mathrm{sort}(\mathrm{eig}\,H)[9{:}]$ --- not the nine largest in
-modulus. The two prescriptions agree in value but only the first is smooth
-through a gapless window, where a branch crosses zero and its partner crosses
-back, and that smoothness is what makes the Hellmann--Feynman derivatives below
-carry the correct branch sign with no sign bookkeeping.
+The mean-field inverse propagator is diagonalised in the \emph{full Dirac
+basis}: four components per colour--flavour mode --- two particle, two
+antiparticle --- so $36$ states at each momentum, with the gap mixing them.
+This is Appendix~A of R\"uster \emph{et al.}, Phys. Rev. D \textbf{72},
+034004 (2005), and it is what the published MUSES NJL module diagonalises.
 
-At unequal masses $[G, M] \neq 0$ --- $\|[G,M]\|_F = 7.4\times10^4$ at
-$M = (40,45,480)$ MeV against exactly zero at equal masses --- so there is no
-closed-form dispersion for a general pattern and Eq.~\eqref{eq:bdg} is
-diagonalised numerically. The 2SC pattern is the exception:
+The $36$ states block-diagonalise. Six of the nine modes pair off pairwise,
+$(d_r,u_g)$ through $\Delta_3$, $(s_r,u_b)$ through $\Delta_2$ and
+$(s_g,d_b)$ through $\Delta_1$; each such pair $(a,b)$ with gap $\Delta_\eta$
+contributes two $4\times4$ blocks, one for each sign $s = \pm1$,
+\begin{equation}
+  M^{(s)}_{ab}(k) = \begin{pmatrix}
+    -s\mu^{*}_a + sM_a & k & 0 & -\Delta_\eta \\
+    k & -s\mu^{*}_a - sM_a & \Delta_\eta & 0 \\
+    0 & \Delta_\eta & s\mu^{*}_b + sM_b & k \\
+    -\Delta_\eta & 0 & k & s\mu^{*}_b - sM_b
+  \end{pmatrix} .
+  \label{eq:block4}
+\end{equation}
+The remaining triple $(u_r, d_g, s_b)$ is coupled by all three gaps at once
+and gives one $12\times12$ block: slot $m$ (mode $j$) carries the four rows
+$4m + (0,1,2,3)$ with diagonal
+$(-\mu^{*}_j - M_j,\ -\mu^{*}_j + M_j,\ \mu^{*}_j - M_j,\ \mu^{*}_j + M_j)$
+and $k$ at $(4m,4m{+}1)$ and $(4m{+}2,4m{+}3)$, and the gap $\Delta_\eta$
+joining slots $A$ and $B$ enters at
+\begin{equation}
+  (4A{+}0,\,4B{+}3) = -\Delta_\eta, \quad
+  (4A{+}1,\,4B{+}2) = +\Delta_\eta, \quad
+  (4A{+}2,\,4B{+}1) = +\Delta_\eta, \quad
+  (4A{+}3,\,4B{+}0) = -\Delta_\eta ,
+  \label{eq:block12}
+\end{equation}
+symmetrically, with $\Delta_3$ joining slots $(0,1)$, $\Delta_2$ slots $(0,2)$
+and $\Delta_1$ slots $(1,2)$. Every matrix is real symmetric, its spectrum
+comes in $\pm$ pairs, and $\Omega$ wants the positive half --- taken as
+\emph{half the sum over all $36$ of} $|\lambda_a|$, so that a branch crossing
+zero inside a gapless window needs no bookkeeping: its partner crosses back,
+and $\partial|\lambda|/\partial x = \mathrm{sign}(\lambda)\,
+\partial\lambda/\partial x$ carries the branch sign automatically.
+
+A mode that \emph{no nonzero gap touches} is left out of the blocks
+altogether, and out of the unpaired reference of Eq.~\eqref{eq:dOmega} with
+it. Its four Dirac components are then exactly the unpaired ones and it
+contributes nothing --- but computed as a difference it would be zero minus an
+ill-conditioned number, since an ungapped branch crosses zero at its own Fermi
+surface with its partner at $-0$ in the same block. Leaving it out makes the
+zero exact; carrying it stalls the equilibrium solve at $10^{-8}$.
+
+\paragraph{Why not the on-shell reduction.} Solving the free Dirac problem
+first, fixing $E_f = \sqrt{k^2+M_f^2}$ and pairing the on-shell modes in an
+$18\times18$ Bogoliubov--de~Gennes problem
+$H^r = \big(\begin{smallmatrix} \mathrm{diag}(\xi^r) & G \\
+G & -\mathrm{diag}(\xi^r)\end{smallmatrix}\big)$, $\xi^r_j = E_{f(j)} -
+r\mu^{*}_j$, is the familiar construction and gives, for one gap,
 \begin{equation}
   E^{\pm} = \sqrt{(\bar E - \bar\mu)^2 + \Delta^2} \pm
             \Big[\tfrac12 (E_d - E_u) - \delta\mu\Big] ,
   \qquad \bar E = \tfrac12 (E_u + E_d),\ \
   \bar\mu = \tfrac12(\mu^{*}_{ur}+\mu^{*}_{dg}),\ \
-  \delta\mu = \tfrac12(\mu^{*}_{dg}-\mu^{*}_{ur}) ,
+  \delta\mu = \tfrac12(\mu^{*}_{dg}-\mu^{*}_{ur}) .
   \label{eq:twosc}
 \end{equation}
-which reproduces the numerical spectrum to $10^{-11}$ MeV over random
-configurations and serves both as a fast path and as the unit test of the
-general one. $E^{-}$ may be \emph{negative}: that is the gapless window, the
-BCS blocking region, not an error.
+It drops the particle--antiparticle mixing the gap induces, and what controls
+that is the \emph{mass mismatch of the pair}: at equal paired masses
+Eq.~\eqref{eq:twosc} reproduces the exact spectrum to $10^{-13}$ MeV whatever
+the mass is, and the two part company as the masses differ --- $3.4$ MeV at
+$M = (5.5, 300)$ MeV, $\Delta = 80$ MeV, $k = 320$ MeV. So the reduction is
+harmless for 2SC, which pairs $u$ with $d$, and it is not harmless for CFL,
+which pairs both of them with $s$: at parameter set 1 it moves the CFL
+branches by up to $11$ MeV, the pressure by $6$--$16\%$, and the
+$2\text{SC}\to\text{CFL}$ transition density by $9\%$. $E^{-}$ may be
+\emph{negative}: that is the gapless window, the BCS blocking region, not an
+error.
 
 \subsection{The pairing potential}
 \label{sec:dOmega}
 
 Written as a \emph{correction}, a difference from the unpaired spectrum:
 \begin{equation}
-  \delta\Omega_{\rm pair} = -\frac{1}{2\pi^2}\sum_{r=\pm}
-    \int_0^{\Lam}\!\! dk\, k^2 \sum_{a=1}^{9}
-    \Big[ \varphi(E^r_a) - \varphi(|\xi^r_a|) \Big] ,
+  \delta\Omega_{\rm pair} = -\frac{1}{2\pi^2}
+    \int_0^{\Lam}\!\! dk\, k^2 \left[
+    \frac12 \sum_{a=1}^{36} \varphi(|\lambda_a|)
+    - \sum_{r=\pm}\sum_{j \in \mathcal C} \varphi(|\xi^r_j|) \right] ,
   \qquad
   \varphi(x) = x + 2T \ln\!\big(1+e^{-x/T}\big) ,
   \label{eq:dOmega}
 \end{equation}
+with $\xi^r_j = E_{f(j)} - r\mu^{*}_j$ and $\mathcal C$ the modes the blocks
+cover,
 with $\varphi(x) = x$ at $T = 0$. This vanishes \emph{identically} at
 $\Delta = 0$, which is what makes the unpaired phase a clean limit of the same
 code, and in the clean weak-coupling limit it obeys the BCS logarithm,
@@ -558,38 +602,50 @@ overridable per call.
 \label{sec:kernels}
 
 Since $\varphi'(x) = \tanh(x/2T)$, differentiating Eq.~\eqref{eq:dOmega} by
-Hellmann--Feynman on Eq.~\eqref{eq:bdg} gives, with eigenvectors $|V_a\rangle$
-in the doubled basis and $P_j$ the projector on mode $j$,
+Hellmann--Feynman gives, with $|V_a\rangle$ the eigenvector of $\lambda_a$,
+$w_a = \tfrac12\,\mathrm{sign}(\lambda_a)\tanh(|\lambda_a|/2T)$, and the
+derivative matrices read off Eqs.~\eqref{eq:block4}--\eqref{eq:block12} ---
+$\partial H/\partial\mu^{*}_j$ and $\partial H/\partial M_f$ \emph{diagonal},
+carrying the row signs $s_\mu$ and $s_M$ of that mode or flavour, and
+$\partial H/\partial\Delta_\eta$ the placement pattern of the gap itself ---
 \begin{align}
   \frac{\Delta_\eta}{2\GD}
-  - \frac{1}{2\pi^2}\sum_{r}\int\!\! dk\, k^2 \sum_a
-    \Big\langle V^r_a \Big| \begin{pmatrix} 0 & B_\eta \\ B_\eta & 0\end{pmatrix}
-    \Big| V^r_a \Big\rangle \tanh\!\frac{E^r_a}{2T} &= 0 ,
+  - \frac{1}{2\pi^2}\int\!\! dk\, k^2 \sum_{a=1}^{36} w_a
+    \Big\langle V_a \Big| \frac{\partial H}{\partial \Delta_\eta}
+    \Big| V_a \Big\rangle &= 0 ,
   \label{eq:gapeq}\\
-  \delta n_j = \frac{1}{2\pi^2}\sum_{r}\int\!\! dk\, k^2
-    \left[ \sum_a \tanh\!\frac{E^r_a}{2T}
-      \frac{\partial E^r_a}{\partial \mu_j}
-      + r \tanh\!\frac{\xi^r_j}{2T}\right] ,
-  &\qquad
-  \frac{\partial H^r}{\partial \mu_j} = -r\,(P_j \oplus -P_j) ,
+  \delta n_j = \frac{1}{2\pi^2}\int\!\! dk\, k^2
+    \left[ \sum_{a} w_a
+      \Big\langle V_a \Big| \frac{\partial H}{\partial \mu^{*}_j}
+      \Big| V_a \Big\rangle
+      + \sum_{r} r \tanh\!\frac{\xi^r_j}{2T}\right] ,
   \label{eq:dn}\\
-  \delta\rho_{s,f} = -\frac{1}{2\pi^2}\sum_{r}\int\!\! dk\, k^2
-    \left[\sum_a \tanh\!\frac{E^r_a}{2T}
-      \frac{\partial E^r_a}{\partial M_f}
-      - \sum_{j \in f} \frac{M_f}{E_j}\tanh\!\frac{\xi^r_j}{2T}\right] ,
-  &\qquad
-  \frac{\partial H^r}{\partial M_f}
-    = \mathrm{diag}(d) \oplus -\mathrm{diag}(d),\ \
-    d_j = \frac{M_f}{E_j}\delta_{f(j),f} ,
+  \delta\rho_{s,f} = -\frac{1}{2\pi^2}\int\!\! dk\, k^2
+    \left[\sum_{a} w_a
+      \Big\langle V_a \Big| \frac{\partial H}{\partial M_f}
+      \Big| V_a \Big\rangle
+      - \sum_{r}\sum_{j \in f \cap\, \mathcal C}
+        \frac{M_f}{E_j}\tanh\!\frac{\xi^r_j}{2T}\right] ,
   \label{eq:drhos}\\
-  \delta s = \frac{1}{2\pi^2}\sum_{r}\int\!\! dk\, k^2 \sum_a
-    \Big[ \psi(E^r_a) - \psi(|\xi^r_a|)\Big] ,
-  &\qquad
+  \delta s = \frac{1}{2\pi^2}\int\!\! dk\, k^2
+    \left[\frac12\sum_{a} \psi(|\lambda_a|)
+    - \sum_{r}\sum_{j\in\mathcal C} \psi(|\xi^r_j|)\right] ,
+  \qquad
   \psi(x) = 2\ln\!\big(1+e^{-x/T}\big)
             + \frac{x}{T}\Big[1 - \tanh\frac{x}{2T}\Big] .
   \label{eq:ds}
 \end{align}
-All four come from \emph{one} quadrature pass and one batched diagonalisation.
+The unpaired terms are written out rather than diagonalised: they are
+analytic, they are what makes every correction vanish \emph{identically} at
+$\Delta = 0$, and computing them twice by two routes is exactly how that
+cancellation would fail.
+
+All four come from \emph{one} quadrature pass and one set of
+diagonalisations. Both flavours of that pass are shipped and agree to
+$10^{-12}$: the reference one batches \texttt{numpy.linalg.eigh} over the
+quadrature, the compiled one runs a Householder reduction and an
+implicit-shift QL iteration (EISPACK's \texttt{tred2}/\texttt{tql2}) node by
+node under numba, and is $1.8\times$ faster.
 
 Three points about Eqs.~\eqref{eq:gapeq}--\eqref{eq:ds} are the ones that
 return a plausible wrong answer if got wrong.

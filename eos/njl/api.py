@@ -85,7 +85,7 @@ def _check(mode, conditions):
 
 def eos_point(par, mode, species=None, n_B=None,
               T=None, SnB=None, leptons=None, x0=None, patterns=None,
-              backend="reference", **conditions):
+              backend="reference", pair_nodes_per_panel=None, **conditions):
     """One solved state in a named mode; non-convergence is a return value.
 
     Parameters
@@ -106,6 +106,11 @@ def eos_point(par, mode, species=None, n_B=None,
         Restrict the pairing enumeration to these candidates. The default
         enumerates unpaired, 2SC, CFL and one asymmetric free seed when the
         `csc` flag is on, and only the unpaired one when it is off.
+
+        A RESTRICTION IS NOT A GUARANTEE. A pattern declares which gaps are
+        free, and a free gap may come out zero, so `patterns=('CFL',)` can
+        return a 2SC state -- read `point.pattern_realised`, which names the
+        state, rather than `point.pattern`, which names the layout.
     leptons : bool
         For the fixed-fraction modes: whether neutralizing leptons are added,
         so the total system is electrically neutral. With leptons=False the
@@ -123,6 +128,25 @@ def eos_point(par, mode, species=None, n_B=None,
         reference one and `test/baseline` is frozen against it. An unknown
         value raises; 'fast' without numba raises rather than silently
         falling back.
+
+        WHAT IT IS WORTH, measured on a colour-superconducting solve at
+        n_B = 1.2 fm^-3 (CPython 3.14.2, numpy 2.3.5): 8.5x at T = 0 and 7.1x
+        at T = 30 MeV. Three quarters of an unaccelerated CSC solve is the
+        18x18 Bogoliubov-de Gennes diagonalisation at each quadrature node,
+        which is what the compiled pass replaces.
+    pair_nodes_per_panel : int
+        Gauss-Legendre nodes per panel of the PAIRING quadrature; None (the
+        default) keeps the shipped rule of 24. It is the third speed lever
+        after `backend` and `patterns`, and the only one that MOVES NUMBERS:
+        the diagonalisation count is linear in it. Measured on a 9-point
+        csc=True table over n_B = 1.0 to 1.4 fm^-3 at T = 0, backend='fast'
+        with patterns=('unpaired', '2SC', 'CFL'): 11.5 s at the shipped 24
+        nodes, 6.2 s at 16 and 3.6 s at 12, with P moving by 3e-10 and 4e-10
+        relative. Both are ABOVE the 1e-10 the `test/baseline` entries are
+        frozen at, and a colour-superconducting point can miss the
+        convergence gate outright at 16 -- so the default is unchanged and
+        lowering this is a deliberate act by a caller who has decided what
+        accuracy the answer needs and checks that its points converged.
     conditions :
         The fractions the mode fixes (Y_C, Y_S, Y_Le).
     """
@@ -134,7 +158,9 @@ def eos_point(par, mode, species=None, n_B=None,
     if SnB is not None:
         def entropy_at(temp):
             p = solve(par, mode, n_B, temp, species, x0, patterns=patterns,
-                      leptons=leptons, backend=backend, **conditions)
+                      leptons=leptons, backend=backend,
+                      pair_nodes_per_panel=pair_nodes_per_panel,
+                      **conditions)
             return p.s / p.n_B if p.n_B else 0.0
         try:
             T = temperature_at_entropy(entropy_at, SnB)
@@ -145,8 +171,17 @@ def eos_point(par, mode, species=None, n_B=None,
             return PointResult(False, str(err))
 
     point = solve(par, mode, n_B, T, species, x0, patterns=patterns,
-                  leptons=leptons, backend=backend, **conditions)
+                  leptons=leptons, backend=backend,
+                  pair_nodes_per_panel=pair_nodes_per_panel, **conditions)
     if point.converged:
+        # The layout solved and the state reached are two different facts, and
+        # they differ whenever a pattern's free gap comes out zero. Say both
+        # when they disagree, so a caller who restricted the enumeration is
+        # told that the restriction was not what it got.
+        if point.pattern_realised != point.pattern:
+            return PointResult(
+                True, f"converged in pattern {point.pattern!r}, which "
+                      f"realised {point.pattern_realised!r}", point)
         return PointResult(True, f"converged in pattern {point.pattern!r}",
                            point)
     return PointResult(False,
@@ -157,7 +192,7 @@ def eos_point(par, mode, species=None, n_B=None,
 def eos_table(par, mode, species=None, axes=None,
               fixed=None, leptons=None, skip_errors=True, rows=False,
               progress=None, verbose=False, backend="reference",
-              patterns=None):
+              patterns=None, pair_nodes_per_panel=None):
     """A solved grid over {n_B} x {T or SnB} [x fraction axes].
 
     A thin wrapper over `eos.njl.table.build_table`: axes and fixed follow
@@ -175,7 +210,8 @@ def eos_table(par, mode, species=None, axes=None,
     species = species if species is not None else SpeciesFlags()
     spec = TableSpec(par=par, mode=mode, axes=dict(axes or {}),
                      include=species, fixed=dict(fixed or {}),
-                     leptons=leptons, backend=backend, patterns=patterns)
+                     leptons=leptons, backend=backend, patterns=patterns,
+                     pair_nodes_per_panel=pair_nodes_per_panel)
     return build_table(spec, skip_errors=skip_errors, rows=rows,
                        progress=progress, verbose=verbose)
 

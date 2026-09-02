@@ -209,10 +209,22 @@ def condensate_energy(par, phi):
 # quark masses. The counterterm below cancels it exactly. Three schemes are
 # published; this is the MASSLESS one (their Eq. C7), which sets the quark
 # masses to zero in the renormalization factors and is therefore the one with a
-# closed form -- and the one Kunkel et al., arXiv:2607.11537, use throughout.
-# The massive scheme is rejected by its own authors (it inverts the gap
-# ordering to Delta_3 < Delta_1 = Delta_2 and so predicts the wrong melting
-# pattern), so there is one scheme here and no scheme argument.
+# closed form. It is the scheme the RG-consistent papers use: Gholami et al.,
+# arXiv:2411.04064 section II, states it in so many words ("all quark masses
+# are set to zero in the counterterm ... the massless renormalization scheme"),
+# and Kunkel et al., arXiv:2607.11537, inherit it. The massive scheme is
+# rejected by its own authors (it inverts the gap ordering to
+# Delta_3 < Delta_1 = Delta_2 and so predicts the wrong melting pattern), so
+# there is one scheme here and no scheme argument.
+#
+# The authors' own code -- the MUSES NJL module, Zenodo 10.5281/zenodo.18249033,
+# which is what those papers are computed with -- exposes FOUR spellings of it
+# under `RG_scheme`, and the closed form below is the one it calls 'analytic'.
+# Its shipped default is 'minimal', which keeps only the leading logarithm
+# g -> ln(Lambda_UV/Lambda); that agrees with the form below to 0.01% at
+# Delta = 10 MeV but is 5% off at Delta = 250 MeV, and at eta_D = 1.45 it moves
+# the 2SC window away entirely. A comparison against that module has to select
+# 'analytic', not take its default.
 
 #: The six Cooper pairs, as (eta, mode_i, mode_j) in the flavour-major mode
 #: index j = 3 i_f + i_a. Delta_1 pairs d with s, Delta_2 pairs u with s and

@@ -51,7 +51,12 @@ reports rather than prints.
                         suppressed, s_paired/s_unpaired ~ 2e-4 at T = 5 MeV.
                         A merger simulation that used the unpaired entropy in
                         a gapped phase would not be approximately wrong.
- 13. Mode closures      each mode's own conditions hold at its solution.
+ 13. Pattern labels     a pattern-restricted solve reports the state it
+                        REACHED and not the one it was asked for. A free gap
+                        may come out zero, so 'CFL' can converge on 2SC, and
+                        a warm-started sweep can carry that root across a
+                        whole density range with every point mislabelled.
+ 14. Mode closures      each mode's own conditions hold at its solution.
  14. Charge basis       n_B, n_C and n_S agree with `eos.general.basis` -- no
                         local copy of the map.
  15. Residual gate      every state solved here is inside the tolerance the
@@ -85,11 +90,12 @@ from eos.general.solve import RESIDUAL_TOL
 from eos.njl import (
     zero_pressure_point,
     Parameters, SpeciesFlags, bag_constant, condensate_energy, condensates,
-    eos_response, eos_table, f_pi, kinetic_thermo, solve,
+    eos_point, eos_response, eos_table, f_pi, kinetic_thermo, solve,
     solve_beta_eq_neutrinoless,
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
     state_at, surface_term, vacuum_solution,
 )
+from eos.njl.species import realised_pattern
 from eos.njl.thermodynamics import NUMBA_OK, thermo_from_mu
 
 #: The published vacuum outputs of the RKH fit (Rehberg, Klevansky, Huefner,
@@ -350,7 +356,11 @@ def check_anchor(par, tol=1.0e-3):
     the difference is the SIGN of the hole amplitudes in the paired scalar
     density, and the identity n_B = dP/dmu_B decides it -- it holds to the
     finite-difference floor with the sign used here and fails by 2.6e-4 with
-    the other. Everything the two agree on is gated: M_s, Delta_3, mu_8, mu_C,
+    the other. The published NJL module of Hofmann, Gholami, Pelicer & Yang
+    (Zenodo 10.5281/zenodo.18249033), built and run at this point in its
+    conventional-cutoff mode, gives (9.7004, 8.9190) -- an independent third
+    calculation agreeing with the sign used here rather than with the
+    specification. Everything the two agree on is gated: M_s, Delta_3, mu_8, mu_C,
     n_B and P. Near chiral restoration M - m is the small difference of two
     large numbers, which is why a percent-level change in one scalar density
     moves the light masses by twenty percent and moves nothing else at all.
@@ -743,6 +753,59 @@ def check_backend_parity(par):
                        f"worst {where}" if where else "")
 
 
+def check_pattern_labels(par):
+    """A restricted solve reports the state it REACHED, not the one requested.
+
+    A pattern is a declaration of which gaps are free, and a free gap may come
+    out zero: Delta_1 = Delta_2 = 0 is a valid root of the CFL layout and it is
+    the 2SC state. So `patterns=('CFL',)` does not guarantee a CFL state, and
+    for a while nothing on the result said so -- a warm-started sweep asked for
+    'CFL' from below the CFL onset converged on 2SC at its first density and
+    carried that root all the way up, every point labelled 'CFL' with
+    Delta = (0, 0, ~260).
+
+    What is checked is that the label is DERIVED from the solved gaps and not
+    from the request: each point must carry the verdict
+    `eos.general.pairing.realised_pattern` gives for its own Delta, and a state
+    whose gaps say 2SC must not be reported as anything else. Reproducing the
+    sweep that first showed the bug is `test/njl`'s job, not a suite that runs
+    on every change.
+
+    THREE POINTS, and on the compiled backend where there is one. A paired
+    solve diagonalises an 18x18 matrix at every quadrature node, so a density
+    sweep here would cost more than every other check in this file combined --
+    measured at over ten minutes against the suite's six seconds. Which state a
+    solve lands in does not depend on the backend at the level this compares
+    (the two agree to 1e-11, and a label is a sign test on gaps of order
+    100 MeV), so the cheap flavour answers the question the check asks.
+    """
+    flags = SpeciesFlags(csc=True)
+    backend = "fast" if NUMBA_OK else "reference"
+    worst, disagreeing, seen = 0.0, 0, 0
+    for n_B in (0.40, 0.60, 1.20):
+        result = eos_point(par, "beta_eq_neutrinoless", flags, n_B=n_B, T=0.0,
+                           patterns=("CFL",), backend=backend)
+        if not result.ok:
+            continue
+        point = result.point
+        seen += 1
+        if realised_pattern(point.Delta) != point.pattern_realised:
+            worst = 1.0
+        if point.pattern_realised != point.pattern:
+            disagreeing += 1
+        two_flavour = (abs(point.Delta[0]) < 1.0 and abs(point.Delta[1]) < 1.0
+                       and abs(point.Delta[2]) > 1.0)
+        if two_flavour and point.pattern_realised != "2SC":
+            worst = 1.0
+    if not seen:
+        return CheckResult("pattern labels", False, 1.0,
+                           "no CFL-restricted point converged")
+    return CheckResult(
+        "pattern labels", worst == 0.0, worst,
+        f"{disagreeing}/{seen} CFL-restricted points realised another state, "
+        f"each named on the result")
+
+
 def run_all(par=None, include_csc=True, include_sound=True):
     """Run every check and return the report.
 
@@ -781,6 +844,7 @@ def run_all(par=None, include_csc=True, include_sound=True):
             check_colour_neutrality(par),
             check_pairing_off_limit(par),
             check_paired_entropy(par),
+            check_pattern_labels(par),
         ]
     if include_sound:
         report.results += [check_saturation_density(par),

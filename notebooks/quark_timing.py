@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 import matplotlib.pyplot as plt
 
-from eos import alphabag, ccdm, njl, vmit
+from eos import abpr, alphabag, ccdm, njl, vmit
 from eos.ccdm.table import rows_from_result as ccdm_rows_from_result
 from eos.general.figure_style import (LABELS, OKAB_CAT, log_decades,
                                       panel_label, paper_grid,
@@ -672,7 +672,7 @@ HELD = dict(B_g_quarter = 165.,
             n_c=float("inf")
             )          # 3.0 for that scan, then 1-3-10-20
 
-SCAN_NB = np.linspace(0.3, 2.60, 41)
+SCAN_NB = np.linspace(0.3, 2.60, 300)
 SCAN_FLAGS = ccdm.SpeciesFlags(csc=False)
 
 scan_name, scan_values = SWEEP
@@ -936,4 +936,516 @@ for label, par, matrix, n_B, colour in scan_curves():
     ax.plot(matrix["mu_B"][0], matrix["zeta"][0], color=colour, ls="--")
 njl_style_legend(ax, [(r"$\sigma$", "-"), (r"$\zeta$", "--")],
                  loc="center left", fontsize="xx-small")
+plt.show()
+
+# %% [markdown]
+# ### Which branch is which
+#
+# A fixed-`n_B` table cannot contain the confined branch: there `n_B = 0`
+# identically, so no density row can be met. It is enumerated at fixed
+# POTENTIAL, and it is the P = 0 line every deconfined curve is measured
+# against.
+#
+# What the table can contain, and does at `p = 2, 4`, is a root with
+# `sigma, zeta < 0`: the source `(g_q/chi) rho_s` in R_2 is amplified by
+# `1/chi`, and the solve escapes it by driving `g_q sigma -> -m_u`, which
+# kills `M*_u` and shuts the source off. The condensate has flipped sign
+# relative to the vacuum -- it is the reflected Mexican-hat minimum, not
+# matter. `M*_f > 0` passes it by a hair; `M*_f >= m_f` does not, and since
+# `M*_f = (g sigma + m_f)/chi` with `chi <= 1` that is the same statement as
+# `sigma, zeta >= 0`.
+
+# %%
+HC3 = 7.6835057e6
+
+_par0 = next(iter(scan.values()))[0]
+_vac, _ok, _ = ccdm.thermo_from_mu(_par0, 1500.0, 0.0, 0.0, 0.0,
+                                   branch="confined", pattern="unpaired")
+print("confined branch, at ANY mu_B (absent from every fixed-n_B table):")
+print(f"   phi_bar = {_vac.phi_bar:.6f}   chi = {_vac.chi:.1e}   "
+      f"M*_u = {_vac.M_star[0]:.3e} MeV")
+print(f"   sigma = {_vac.sigma:.2f}   zeta = {_vac.zeta:.2f}   "
+      f"n_B = {_vac.n_B_nat / HC3:.1f}   P = {_vac.P_nat / HC3:.1f} MeV fm^-3\n")
+
+
+def physical(par, matrix):
+    """M*_f >= m_f for every flavour: the condensates melt toward zero,
+    never through it. nan (an unsolved grid node) is False here, which is
+    what keeps it out of the physical segments."""
+    return ((matrix["M_u"][0] >= par.m_u)
+            & (matrix["M_d"][0] >= par.m_d)
+            & (matrix["M_s"][0] >= par.m_s))
+
+
+def runs(flag):
+    """Contiguous slices of equal `flag`, so no line joins two branches."""
+    cut = np.flatnonzero(np.diff(flag.astype(int))) + 1
+    for lo, hi in zip(np.r_[0, cut], np.r_[cut, flag.size]):
+        yield slice(lo, hi), bool(flag[lo])
+
+
+print(f"{'set':>10} {'kept':>5} {'cut':>4} | {'physical onset':>38} | "
+      f"{'P = 0 surface':>26}")
+print("-" * 88)
+for label, (par, matrix, axs) in scan.items():
+    d, ok = par.derived, physical(par, matrix)
+    if not ok.any():
+        print(f"{label:>10}   nothing physical on this axis")
+        continue
+    mu, P = matrix["mu_B"][0], matrix["P"][0]
+    i = int(np.argmax(ok))
+    onset = (f"n_B={axs['nB'][i]:.3f} mu_B={mu[i]:6.1f} P={P[i]:+8.1f} "
+             f"phibar={matrix['phi_bar'][0][i]:.3f} "
+             f"zeta/zeta_0={matrix['zeta'][0][i] / d.zeta_0:.3f}")
+    Pp = P[ok]
+    if Pp.min() < 0.0 < Pp.max():
+        j = int(np.argmax(Pp > 0.0))
+        w = -Pp[j - 1] / (Pp[j] - Pp[j - 1])
+        n_s = axs["nB"][ok][j - 1] + w * np.diff(axs["nB"][ok][j - 1:j + 1])[0]
+        EA = mu[ok][j - 1] + w * np.diff(mu[ok][j - 1:j + 1])[0]
+        surf = f"n_B={n_s:.3f}  E/A={EA:6.1f} MeV"     # mu_B(P=0) = eps/n_B
+    else:
+        surf = f"NONE (P_min = {Pp.min():+.1f})"
+    print(f"{label:>10} {ok.sum():5d} {(~ok).sum():4d} | {onset:>38} | "
+          f"{surf:>26}")
+
+for label, (par, matrix, axs) in scan.items():
+    cut = ~physical(par, matrix) & ~np.isnan(matrix["P"][0])
+    if cut.any():
+        k = np.flatnonzero(cut)[cut.sum() // 2]
+        print(f"\n{label}: the CUT branch sits at sigma -> -m_u/g_q = "
+              f"{-par.m_u / par.g_q:.3f}, zeta -> -m_s/g_s = "
+              f"{-par.m_s / par.g_s:.3f}")
+        print(f"   n_B={axs['nB'][k]:.3f}  sigma={matrix['sigma'][0][k]:7.3f}  "
+              f"zeta={matrix['zeta'][0][k]:7.3f}  "
+              f"M*u/m_u={matrix['M_u'][0][k] / par.m_u:.3f}  "
+              f"P={matrix['P'][0][k]:+8.1f}")
+
+# %%
+fig, ax = scan_figure_mu(LABELS["P"])
+for label, par, matrix, n_B, colour in scan_curves():
+    for sl, keep in runs(physical(par, matrix)):
+        ax.plot(matrix["mu_B"][0][sl], matrix["P"][0][sl], color=colour,
+                lw=1.2 if keep else 0.7, ls="-" if keep else ":",
+                alpha=1.0 if keep else 0.45,
+                label=label if keep and sl.start == 0 or keep else None)
+ax.axhline(0.0, color="0.4", lw=0.8, zorder=0)          # the confined branch
+ax.text(0.02, 0.5, "confined:  $P=0$, $n_B=0$, all $\\mu_B$",
+        transform=ax.transAxes, fontsize="xx-small", color="0.4")
+ax.legend(loc="upper left", fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure_mu(r"$M^*_i / m_i$")
+for label, par, matrix, n_B, colour in scan_curves():
+    ok = physical(par, matrix)
+    for flavour, style in FLAVOUR_LS.items():
+        m_current = getattr(par, CURRENT[flavour])
+        for sl, keep in runs(ok):
+            ax.plot(matrix["mu_B"][0][sl],
+                    matrix[f"M_{flavour}"][0][sl] / m_current, color=colour,
+                    ls=style, alpha=1.0 if keep else 0.3)
+ax.axhline(1.0, color="0.4", lw=0.8, zorder=0)
+ax.text(0.02, 0.06, r"$M^*_i = m_i$  ($\sigma,\zeta = 0$): below this the"
+        "\ncondensate has flipped sign", transform=ax.transAxes,
+        fontsize="xx-small", color="0.4")
+ax.set_yscale("log")
+log_decades(ax, axis="y")
+njl_style_legend(ax, FLAVOUR_LS.items(), loc="upper right", ncol=3,
+                 fontsize="xx-small")
+plt.show()
+
+
+# %% [markdown]
+# ## The same scan, paired
+#
+# The `p` sweep above is unpaired matter: `csc=False`, no gaps, and the only
+# thing the dielectric moves is the chiral sector. Turning `csc=True` on makes
+# the three gaps unknowns of the same solve, so the pairing sector is now a
+# knob of its own — and the one that IS the pairing sector is the diquark
+# coupling `G_D`, which is what this cell sweeps with the dielectric held.
+#
+# `G_D` is dressed by the dielectric exactly as the specification asks,
+# `G_D -> G_D/chi^q`, so the number in `Parameters` is the BARE coupling and
+# the gap it buys grows as the glue melts. The shipped `5e-6` MeV^-2 with
+# `Lambda = 600` MeV is the calibrated point (a gap of 20-150 MeV at
+# `mu_q ~ 450` MeV); the sweep brackets it.
+#
+# `patterns=CSC_PATTERNS` is the documented restriction of the timing cell
+# above and is a declaration, not a default: uSC/dSC-like states are not
+# hunted here. The pattern that wins is printed per set, because on this axis
+# it is not constant — the enumeration is what decides, at every density.
+#
+# The density axis is short and the grid coarse compared with the unpaired
+# scan: a paired point diagonalises the BdG problem at every quadrature node
+# of every residual evaluation, and this is ~0.8 s/point against the unpaired
+# scan's milliseconds.
+
+# %%
+# Restated from the sections above so this one runs on its own, straight after
+# the import cell: every name here is either a declaration (which pairing
+# candidates are hunted, which linestyle is which flavour) or four lines of
+# matplotlib, and the cells that first define them solve tables of hundreds of
+# points to get there. Same values, no second meaning.
+CSC_PATTERNS = ("unpaired", "2SC", "CFL")
+FLAVOUR_LS = {"u": "-", "d": "--", "s": "-."}
+CURRENT = {"u": "m_u", "d": "m_d", "s": "m_s"}
+
+
+def scan_figure(ylabel):
+    fig, axes = paper_grid("1x1", mode="single", placeholder=False, aspect=1.25)
+    ax = axes.ravel()[0]
+    ax.set_xlabel(LABELS["nB"])
+    ax.set_ylabel(ylabel)
+    return fig, ax
+
+
+def njl_style_legend(axis, entries, **kw):
+    """A legend naming what the LINESTYLES mean, in neutral grey."""
+    return axis.legend(handles=[plt.Line2D([], [], color="0.3", ls=s, label=n)
+                                for n, s in entries], **kw)
+
+CSC_SWEEP = ("G_D", (3.0e-6, 5.0e-6, 7.0e-6))
+
+# The dielectric and bag sector held at the `p` sweep's own values, so the only
+# thing moving between curves is the pairing.
+CSC_HELD = dict(B_g_quarter=165.,
+                g_q=3.0,
+                g_s=3.0,
+                m_sigma=550.0,
+                gbar_omega=2.0,
+                n_c=float("inf"),
+                p=2)
+
+CSC_SCAN_NB = np.linspace(0.8, 2.0, 20)
+CSC_SCAN_FLAGS = ccdm.SpeciesFlags(csc=True)
+
+csc_name, csc_values = CSC_SWEEP
+csc_scan = {}
+print("=== ccdm, beta_eq_neutrinoless, T = 0, csc=True ===")
+print(f"sweeping {csc_name} over {list(csc_values)}; held: {CSC_HELD}\n")
+for value in csc_values:
+    held = {name: held_value for name, held_value in CSC_HELD.items()
+            if name != csc_name}
+    par = replace(ccdm.Parameters.default(), **held, **{csc_name: value})
+    rows = ccdm_rows_from_result(ccdm.eos_table(
+        par, "beta_eq_neutrinoless", CSC_SCAN_FLAGS,
+        {"nB": CSC_SCAN_NB, "T": np.array([0.0])}, backend="fast",
+        patterns=CSC_PATTERNS))
+    label = f"{csc_name} = {value:.1e}"
+    if not rows:
+        print(f"  [{label:22s}]   0/{len(CSC_SCAN_NB)} points: no deconfined "
+              f"phase on this axis")
+        continue
+    csc_scan[label] = (par, *matrix_from_rows(rows))
+    # Which pattern won, and where: the enumeration decides per point, so a
+    # single name for the whole curve would be a claim the table does not make.
+    won = {}
+    for row in rows:
+        won[row["pattern"]] = won.get(row["pattern"], 0) + 1
+    print(f"  [{label:22s}] {len(rows):3d}/{len(CSC_SCAN_NB)} points, onset at "
+          f"n_B = {rows[0]['n_B']:.3f} fm^-3, "
+          f"Delta_3 = {rows[-1]['Delta_3']:6.1f} MeV at the top; "
+          f"patterns {won}")
+
+
+def csc_curves(store):
+    """(label, par, matrix, n_B, colour) for every set in a paired scan."""
+    for (label, (par, matrix, axs)), colour in zip(store.items(), OKAB_CAT):
+        yield label, par, matrix, axs["nB"], colour
+
+
+# %% [markdown]
+# ### ccdm paired — the gaps, the pressure, the condensates
+#
+# `Delta_1` (`ds`) and `Delta_2` (`us`) coincide wherever the state is CFL and
+# both vanish in a 2SC state, where only `Delta_3` (`ud`) survives; drawing all
+# three is what makes the pattern visible without reading the printed count.
+
+# %%
+fig, ax = scan_figure(r"$\Delta_\eta$ [MeV]")
+for label, par, matrix, n_B, colour in csc_curves(csc_scan):
+    for key, style in (("Delta_1", "-"), ("Delta_2", "--"), ("Delta_3", "-.")):
+        ax.plot(n_B, matrix[key][0], color=colour, ls=style,
+                label=label if key == "Delta_1" else None)
+ax.legend(loc="lower right", fontsize="xx-small")
+njl_style_legend(ax, [(r"$\Delta_1$ ($ds$)", "-"), (r"$\Delta_2$ ($us$)", "--"),
+                      (r"$\Delta_3$ ($ud$)", "-.")],
+                 loc="upper left", fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure(LABELS["P"])
+for label, par, matrix, n_B, colour in csc_curves(csc_scan):
+    ax.plot(n_B, matrix["P"][0], color=colour, label=label)
+ax.legend(loc="upper left", fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure(r"$M^*_i / m_i$")
+for label, par, matrix, n_B, colour in csc_curves(csc_scan):
+    for flavour, style in FLAVOUR_LS.items():
+        ax.plot(n_B, matrix[f"M_{flavour}"][0] / getattr(par, CURRENT[flavour]),
+                color=colour, ls=style)
+ax.set_yscale("log")
+log_decades(ax, axis="y")
+njl_style_legend(ax, FLAVOUR_LS.items(), loc="upper right", ncol=3,
+                 fontsize="xx-small")
+plt.show()
+
+
+# %% [markdown]
+# ## njl, paired, sweeping the diquark coupling
+#
+# The njl counterpart of the cell above, and the sweep is the same sector by
+# the model's own name for it: `eta_D = G_D/G_S`, the diquark coupling in
+# units of the scalar one. It is **inert at `csc=False`** — which is why the
+# published-set comparison earlier in this notebook says the three sets differ
+# only through their vector coupling — and here it is the whole knob.
+#
+# The Fierz value is 0.75; `rg_njl1` carries 1.45, the strong-coupling point
+# of Gholami et al. Everything else is held at the `rkh` vacuum fit, so the
+# chiral sector is identical between the curves and only the pairing moves.
+#
+# At the low end the winner CHANGES ALONG THE AXIS — 2SC, unpaired, then CFL as
+# the s quark's mass falls far enough to lock. The unpaired points in the middle
+# of a paired curve are the enumeration doing its job, not a solve that failed:
+# a point that failed is absent from `rows_from_result` altogether.
+
+# %%
+NJL_CSC_SWEEP = ("eta_D", (0.75, 1.0, 1.45))
+NJL_CSC_NB = np.linspace(0.4, 1.8, 20)
+NJL_CSC_FLAGS = njl.SpeciesFlags(csc=True)
+
+njl_csc_name, njl_csc_values = NJL_CSC_SWEEP
+njl_csc_scan = {}
+print("=== njl, beta_eq_neutrinoless, T = 0, csc=True, base set 'rkh' ===")
+print(f"sweeping {njl_csc_name} over {list(njl_csc_values)}\n")
+for value in njl_csc_values:
+    par = replace(njl.Parameters.named("rkh"), **{njl_csc_name: value})
+    rows = njl_rows_from_result(njl.eos_table(
+        par, "beta_eq_neutrinoless", NJL_CSC_FLAGS,
+        {"nB": NJL_CSC_NB, "T": np.array([0.0])}, backend="fast",
+        patterns=CSC_PATTERNS))
+    label = f"{njl_csc_name} = {value:g}"
+    if not rows:
+        print(f"  [{label:22s}]   0/{len(NJL_CSC_NB)} points")
+        continue
+    njl_csc_scan[label] = (par, *matrix_from_rows(rows))
+    won = {}
+    for row in rows:
+        won[row["pattern"]] = won.get(row["pattern"], 0) + 1
+    print(f"  [{label:22s}] {len(rows):3d}/{len(NJL_CSC_NB)} points, "
+          f"Delta_3 = {rows[-1]['Delta_3']:6.1f} MeV at the top; "
+          f"patterns {won}")
+
+
+# %% [markdown]
+# ### njl paired — the gaps and the pressure
+
+# %%
+fig, ax = scan_figure(r"$\Delta_\eta$ [MeV]")
+for label, par, matrix, n_B, colour in csc_curves(njl_csc_scan):
+    for key, style in (("Delta_1", "-"), ("Delta_2", "--"), ("Delta_3", "-.")):
+        ax.plot(n_B, matrix[key][0], color=colour, ls=style,
+                label=label if key == "Delta_1" else None)
+ax.legend(loc="lower right", fontsize="xx-small")
+njl_style_legend(ax, [(r"$\Delta_1$ ($ds$)", "-"), (r"$\Delta_2$ ($us$)", "--"),
+                      (r"$\Delta_3$ ($ud$)", "-.")],
+                 loc="upper left", fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure(LABELS["P"])
+for label, par, matrix, n_B, colour in csc_curves(njl_csc_scan):
+    ax.plot(n_B, matrix["P"][0], color=colour, label=label)
+ax.legend(loc="upper left", fontsize="xx-small")
+plt.show()
+
+
+# %% [markdown]
+# ## Four paired models on one axis
+#
+# One chosen parametrization each, at T = 0, on the same density grid:
+#
+# * **njl** and **ccdm** SOLVE the gaps. Both carry a gap equation for
+#   `Delta_1, Delta_2, Delta_3` and a chiral one for the constituent masses,
+#   and the pattern is enumerated per point.
+# * **abpr** and **alphaBag CFL** are given a gap. `Delta0` is a PARAMETER of
+#   the first and a CONDITION of the second (`fixed={'Delta0': ...}` — the
+#   `cfl` mode takes it where the other modes take a fraction), and neither has
+#   a gap equation to solve it from. Locking is imposed rather than found, so
+#   `Y_u = Y_d = Y_s = 1` and `Y_e = 0` identically at every density.
+#
+# The same `Delta0 = 100` MeV is handed to both bag models, so what separates
+# their curves is the free-gas correction (`a4` against `alpha_s`) and nothing
+# in the pairing sector.
+#
+# The masses are the honest disagreement: njl and ccdm return `M*_i` from a
+# gap equation and it falls by an order of magnitude across the axis, while the
+# two bag models have no such equation and sit at `M*_i = m_i` by construction.
+# The figure draws both and does not pretend they are the same quantity.
+
+# %%
+CFL_NB = np.linspace(0.4, 2.0, 17)
+DELTA0 = 100.0          # the gap the two bag models are GIVEN, in MeV
+
+CFL_PARS = {
+    "njl": njl.Parameters.named("rg_njl1"),
+    "ccdm": replace(ccdm.Parameters.default(), **CSC_HELD),
+    "abpr": abpr.Parameters(B4=165.0, Delta0=DELTA0, a4=0.7),
+    "alphabag": replace(alphabag.Parameters.default(), B4=165.0, alpha=0.3),
+}
+
+# Each model called out in full: the entry points are uniform but the paired
+# phase is reached differently in each (a species flag here, a mode there, a
+# condition in the third), and that difference is the point of the panel.
+cfl_rows = {}
+cfl_rows[r"njl  $\eta_D$=1.45"] = njl_rows_from_result(njl.eos_table(
+    CFL_PARS["njl"], "beta_eq_neutrinoless", njl.SpeciesFlags(csc=True),
+    {"nB": CFL_NB, "T": np.array([0.0])}, backend="fast",
+    patterns=CSC_PATTERNS))
+cfl_rows[r"ccdm  $G_D$=5e-6"] = ccdm_rows_from_result(ccdm.eos_table(
+    CFL_PARS["ccdm"], "beta_eq_neutrinoless", ccdm.SpeciesFlags(csc=True),
+    {"nB": CFL_NB, "T": np.array([0.0])}, backend="fast",
+    patterns=CSC_PATTERNS))
+cfl_rows[r"abpr  $a_4$=0.7, $\Delta_0$=100"] = abpr.eos_table(
+    CFL_PARS["abpr"], "cfl", axes={"nB": CFL_NB}, rows=True)
+cfl_rows[r"$\alpha$Bag CFL  $\alpha_s$=0.3, $\Delta_0$=100"] = (
+    alphabag.rows_from_result(alphabag.eos_table(
+        CFL_PARS["alphabag"], "cfl", alphabag.SpeciesFlags(),
+        {"nB": CFL_NB, "T": np.array([0.0])}, fixed={"Delta0": DELTA0})))
+
+cfl_matrix = {}
+print("=== four paired models, T = 0, "
+      f"n_B = {CFL_NB[0]:.2f} to {CFL_NB[-1]:.2f} fm^-3 ===")
+for label, rows in cfl_rows.items():
+    if not rows:
+        print(f"  [{label}]  nothing on this axis")
+        continue
+    cfl_matrix[label] = matrix_from_rows(rows)
+    gap = rows[-1].get("Delta_3", rows[-1].get("Delta"))
+    print(f"  [{label:38s}] {len(rows):3d}/{len(CFL_NB)} points, "
+          f"gap at the top {gap:6.1f} MeV")
+
+
+# %%
+fig, ax = scan_figure(LABELS["P"])
+for (label, (matrix, axs)), colour in zip(cfl_matrix.items(), OKAB_CAT):
+    ax.plot(axs["nB"], matrix["P"][0], color=colour, label=label)
+ax.axhline(0.0, color="0.6", lw=0.6, zorder=0)
+ax.legend(loc="upper left", fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure(r"$M^*_i / m_i$")
+for (label, (matrix, axs)), colour in zip(cfl_matrix.items(), OKAB_CAT):
+    if "M_u" not in matrix:
+        # No gap equation in this functional: M*_i IS m_i, at every density.
+        ax.plot(axs["nB"], np.ones_like(axs["nB"]), color=colour, lw=1.2,
+                label=label)
+        continue
+    par = CFL_PARS["njl" if label.startswith("njl") else "ccdm"]
+    for flavour, style in FLAVOUR_LS.items():
+        ax.plot(axs["nB"],
+                matrix[f"M_{flavour}"][0] / getattr(par, CURRENT[flavour]),
+                color=colour, ls=style, label=label if flavour == "u" else None)
+ax.set_yscale("log")
+log_decades(ax, axis="y")
+ax.legend(loc="lower left", fontsize="xx-small")
+njl_style_legend(ax, FLAVOUR_LS.items(), loc="upper right", ncol=3,
+                 fontsize="xx-small")
+plt.show()
+
+fig, ax = scan_figure(LABELS["Y_i"])
+for (label, (matrix, axs)), colour in zip(cfl_matrix.items(), OKAB_CAT):
+    for flavour, style in FLAVOUR_LS.items():
+        ax.plot(axs["nB"], matrix[f"Y_{flavour}"][0], color=colour, ls=style,
+                label=label if flavour == "u" else None)
+    ax.plot(axs["nB"], np.maximum(matrix["Y_e"][0], 1e-12), color=colour,
+            ls=":")
+ax.set_yscale("log")
+ax.set_ylim(1e-8, 3.0)
+log_decades(ax, axis="y")
+ax.legend(loc="lower left", fontsize="xx-small")
+njl_style_legend(ax, list(FLAVOUR_LS.items()) + [("e", ":")],
+                 loc="lower right", ncol=4, fontsize="xx-small")
+plt.show()
+
+
+# %% [markdown]
+# ## The gap against temperature, and against density
+#
+# **`Delta(T)` is a solved quantity in two of these models and a formula in the
+# third.** njl and ccdm re-solve the gap equation at every temperature — the
+# occupation factors `tanh(E/2T)` weaken the pairing until the gap equation has
+# only the trivial root, and the pattern the enumeration returns falls back to
+# `unpaired` there, which is the melting seen from the other side. alphaBag
+# carries no gap equation and closes the temperature dependence with the
+# weak-coupling BCS interpolation `Delta(T) = Delta0 sqrt(1 - T^2/T_c^2)` with
+# `T_c = 0.57 * 2^(1/3) Delta0` (`eos.alphabag.cfl_gap`), so its curve is the
+# closed form and not a solve.
+#
+# abpr is absent from the temperature panel and that is the model, not a gap in
+# the notebook: it is a T = 0 parametrization and `Delta0` is one of its four
+# numbers, so it has no `Delta(T)` to draw. It appears in the density panel as
+# the flat line it is.
+#
+# The critical temperatures scale with the T = 0 gap, so a model whose gap is
+# twice another's melts at roughly twice the temperature — which is why the
+# panel is drawn in absolute MeV rather than scaled: the ordering IS the result.
+
+# %%
+DELTA_NB = 1.5                              # fm^-3, well inside every phase
+DELTA_T = np.linspace(0.0, 150.0, 16)       # MeV
+
+print(f"=== Delta(T) at n_B = {DELTA_NB} fm^-3 ===")
+hot = {}
+hot[r"njl  $\eta_D$=1.45"] = njl_rows_from_result(njl.eos_table(
+    CFL_PARS["njl"], "beta_eq_neutrinoless", njl.SpeciesFlags(csc=True),
+    {"nB": np.array([DELTA_NB]), "T": DELTA_T}, backend="fast",
+    patterns=CSC_PATTERNS))
+hot[r"ccdm  $G_D$=5e-6"] = ccdm_rows_from_result(ccdm.eos_table(
+    CFL_PARS["ccdm"], "beta_eq_neutrinoless", ccdm.SpeciesFlags(csc=True),
+    {"nB": np.array([DELTA_NB]), "T": DELTA_T}, backend="fast",
+    patterns=CSC_PATTERNS))
+hot[r"$\alpha$Bag CFL  $\Delta_0$=100"] = alphabag.rows_from_result(
+    alphabag.eos_table(
+        CFL_PARS["alphabag"], "cfl", alphabag.SpeciesFlags(),
+        {"nB": np.array([DELTA_NB]), "T": DELTA_T}, fixed={"Delta0": DELTA0}))
+
+for label, rows in hot.items():
+    # The largest T that still carries a gap: the melting point as the table
+    # sees it, read off the rows rather than from a formula.
+    warm = [row["T"] for row in rows
+            if max(row.get("Delta_3", 0.0), row.get("Delta", 0.0)) > 1.0]
+    print(f"  [{label:32s}] {len(rows):2d}/{len(DELTA_T)} points, "
+          f"gapped up to T = {max(warm) if warm else 0.0:5.1f} MeV")
+
+fig, axes = paper_grid("1x2", mode="double", placeholder=False, aspect=1.25)
+ax_T, ax_n = axes.ravel()
+
+for (label, rows), colour in zip(hot.items(), OKAB_CAT):
+    temps = np.array([row["T"] for row in rows])
+    if "Delta" in rows[0]:                       # given, not solved
+        ax_T.plot(temps, [row["Delta"] for row in rows], color=colour,
+                  ls="-", label=label)
+        continue
+    for key, style in (("Delta_1", "-"), ("Delta_3", "-.")):
+        ax_T.plot(temps, [row[key] for row in rows], color=colour, ls=style,
+                  label=label if key == "Delta_1" else None)
+ax_T.set_xlabel(LABELS["T"])
+ax_T.set_ylabel(r"$\Delta_\eta$ [MeV]")
+ax_T.legend(loc="lower left", fontsize="xx-small")
+panel_label(ax_T, f"(a)  $n_B$ = {DELTA_NB} fm$^{{-3}}$")
+
+# T = 0 against density: the tables of the comparison cell above, no new solve.
+for (label, (matrix, axs)), colour in zip(cfl_matrix.items(), OKAB_CAT):
+    if "Delta" in matrix:                        # abpr, alphaBag: the input
+        ax_n.plot(axs["nB"], matrix["Delta"][0], color=colour, ls="-",
+                  label=label)
+        continue
+    for key, style in (("Delta_1", "-"), ("Delta_3", "-.")):
+        ax_n.plot(axs["nB"], matrix[key][0], color=colour, ls=style,
+                  label=label if key == "Delta_1" else None)
+ax_n.set_xlabel(LABELS["nB"])
+ax_n.set_ylabel(r"$\Delta_\eta$ [MeV]")
+njl_style_legend(ax_n, [(r"$\Delta_1$ ($ds$)", "-"), (r"$\Delta_3$ ($ud$)", "-.")],
+                 loc="lower right", fontsize="xx-small")
+panel_label(ax_n, "(b)  $T$ = 0")
 plt.show()

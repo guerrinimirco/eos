@@ -448,7 +448,7 @@ The pairing machinery is `eos.general.pairing`, shared with `eos.njl` because
 the pairing sector of the two is the same sector. It is stated here in full so
 that this document is self-contained.
 
-### The gap matrix and the BdG problem
+### The gap matrix and the quasiparticle spectrum
 
 Build the 9x9 gap matrix on the colour-flavour modes directly from the
 antisymmetric tensors,
@@ -466,21 +466,28 @@ Its eigenvalue multiplicities are *derived*, never assigned: unpaired `0 (x9)`;
 eigenbasis and the problem does not factorise into independent scalar
 dispersions. At `M* = (60, 65, 300)`, `mu* = 450`, `Delta = 60` MeV the
 eigenvalue prescription misses branches by up to 33.6 MeV in uSC and 27.1 in
-CFL. So at each momentum the code assembles and diagonalises
+CFL. So at each momentum the code assembles and diagonalises the mean-field
+inverse propagator in the **full Dirac basis** — four components per
+colour-flavour mode, two particle and two antiparticle, so 36 states, with the
+gap mixing them (Rüster et al., Phys. Rev. D 72, 034004 (2005), Appendix A).
+They block-diagonalise into six 4x4 blocks, one pair of them for each pair of
+modes a single gap couples, and one 12x12 for the `(u_r, d_g, s_b)` triple all
+three gaps couple; `eos.general.pairing` writes both out, and `eos.njl`'s
+document states them entry by entry.
 
-    H_BdG(k) = [[ xi(k),  G     ],
-                [ G,     -xi(k) ]]
-    xi^(j),r(k) = E_(k, f(j)) - r mu*_j ,   xi = diag(xi^(j),r)_(j=1..9)
+The spectrum comes in `+-` pairs and Omega wants the positive half, taken as
+half the sum over all 36 of `|lambda_a|`, which is smooth through a gapless
+window: a branch crossing zero has its partner crossing back, and
+`d|lambda|/dx = sign(lambda) dlambda/dx` carries the branch sign that the
+Hellmann-Feynman derivatives below need. Write `|V_a>` for the eigenvector of
+`lambda_a`.
 
-an 18x18 real symmetric matrix, once for particles (`r = +1`) and once for
-antiparticles (`r = -1`). The nine quasiparticle energies `E^(j),r_Delta(k)`
-are the **non-negative half of the signed spectrum**, `sort(eigvalsh)[9:]`, and
-not the nine largest in modulus: the two agree in value, but only the first is
-smooth through a gapless window, and that smoothness is what makes the
-Hellmann-Feynman derivatives below carry the correct branch sign. Write
-`V^(j),r(k)` for the corresponding 18-component eigenvector and split it as
-`V = (V_top, V_bot)` into its two 9-component halves; the matrix is real, so
-`|V_top,(j b)|^2` is simply its square.
+Solving the free Dirac problem FIRST — fixing `E = sqrt(k^2 + M*^2)` and
+pairing the on-shell modes in an 18x18 Bogoliubov-de Gennes problem — is the
+familiar shortcut and is NOT what this module does. It drops the
+particle-antiparticle mixing the gap induces, controlled by the mass mismatch
+of the pair: exact at equal paired masses, and wrong by MeV when a light quark
+pairs with a heavy one, which is every CFL phase in this model.
 
 ### The pairing potential, as a correction
 
@@ -488,8 +495,15 @@ Hellmann-Feynman derivatives below carry the correct branch sign. Write
                   + dOmega_pair
                   + sum_eta Delta_eta^2/(4 G_D)
 
-    dOmega_pair = -(1/2pi^2) int_0^Lambda dk k^2 sum_(r=+-) sum_(j=1..9)
-                     [ varphi(E^(j),r_Delta) - varphi(|xi^(j),r|) ]
+    dOmega_pair = -(1/2pi^2) int_0^Lambda dk k^2
+                     [ (1/2) sum_(a=1..36) varphi(|lambda_a|)
+                       - sum_(r=+-) sum_(j in C) varphi(|xi^(j),r|) ]
+    xi^(j),r    = E_(k, f(j)) - r mu*_j
+
+`C` is the set of modes the blocks cover: a mode NO nonzero gap touches is
+left out of both sums, so it cancels exactly rather than as a difference of
+two ill-conditioned numbers (an ungapped branch crosses zero at its own Fermi
+surface with its partner at `-0` in the same block).
 
     varphi(x)         = x + 2 T ln(1 + e^(-x/T))
     varphi'(x)        = tanh(x/2T)
@@ -519,14 +533,14 @@ immediately.
 There is one residual per channel, not one gap:
 
     R_Delta_eta = Delta_eta/(2 G_D)
-                  - (1/2pi^2) int_0^Lambda dk k^2 sum_(r=+-) sum_(j=1..9)
-                      < V^(j),r | [[0, B_eta],[B_eta, 0]] | V^(j),r >
-                      tanh( E^(j),r_Delta / 2T )
-                = 0
+                  - (1/2pi^2) int_0^Lambda dk k^2 sum_(a=1..36)
+                      w_a < V_a | dH/dDelta_eta | V_a >
+                = 0 ,
+    w_a = (1/2) sign(lambda_a) tanh(|lambda_a|/2T)
 
-The matrix element is the Hellmann-Feynman derivative
-`dE^(j),r_Delta/dDelta_eta`, and `dH_BdG/dDelta_eta` is the constant matrix
-`B_eta` in the off-diagonal blocks, assembled once.
+The matrix element is the Hellmann-Feynman derivative `dlambda_a/dDelta_eta`,
+and `dH/dDelta_eta` is the constant placement pattern of that gap inside the
+blocks, assembled once.
 
 **This is never the `Delta/|E|` form**, which is obtained by differentiating
 `|E|` as though every branch were positive. Against finite differences of
@@ -546,23 +560,26 @@ second code path,
     s_quark    = sum_j S_j + ds_pair
 
 and each correction is the Hellmann-Feynman derivative of `dOmega_pair`, taken
-on `H_BdG` in the same quadrature pass. With
-`W_(j,b),r = |V_top,(j b)^r|^2 - |V_bot,(j b)^r|^2`:
+on the same blocks in the same quadrature pass. `dH/dmu*_j` and `dH/dM*_f` are
+DIAGONAL — they carry the row signs with which that mode's potential and that
+flavour's mass enter — so their expectation values are sums of squared
+eigenvector components:
 
-    dn_j     = -d(dOmega_pair)/dmu_j
-             = (1/2pi^2) int_0^Lambda dk k^2 sum_(r=+-)
-                 [ -r sum_(b=1..9) tanh(E^(b),r_Delta/2T) W_(j,b),r
-                   + r tanh(xi^(j),r / 2T) ]
+    dn_j     = -d(dOmega_pair)/dmu*_j
+             = (1/2pi^2) int_0^Lambda dk k^2
+                 [ sum_a w_a < V_a | dH/dmu*_j | V_a >
+                   + sum_(r=+-) r tanh(xi^(j),r / 2T) ]
 
-    drho_s,f = -d(dOmega_pair)/dM*_f
-             = -(1/2pi^2) int_0^Lambda dk k^2 sum_(r=+-) sum_(j in f)
-                 (M*_f/E_(k,f))
-                 [ sum_(b=1..9) tanh(E^(b),r_Delta/2T) W_(j,b),r
-                   - tanh(xi^(j),r / 2T) ]
+    drho_s,f = +d(dOmega_pair)/dM*_f
+             = -(1/2pi^2) int_0^Lambda dk k^2
+                 [ sum_a w_a < V_a | dH/dM*_f | V_a >
+                   - sum_(r=+-) sum_(j in f and C)
+                       (M*_f/E_(k,f)) tanh(xi^(j),r / 2T) ]
 
     ds_pair  = -d(dOmega_pair)/dT
-             = (1/2pi^2) int_0^Lambda dk k^2 sum_(r=+-) sum_(j=1..9)
-                 [ dvarphi/dT (E^(j),r_Delta) - dvarphi/dT (|xi^(j),r|) ]
+             = (1/2pi^2) int_0^Lambda dk k^2
+                 [ (1/2) sum_(a=1..36) dvarphi/dT (|lambda_a|)
+                   - sum_(r=+-) sum_(j in C) dvarphi/dT (|xi^(j),r|) ]
 
 Note the sign of `drho_s`: the scalar density is `rho_s = +dOmega/dM*`
 (equivalently `-dP/dM*`, which is the per-mode identity above), so the

@@ -34,7 +34,7 @@ condensation-energy normalisations differ by a factor two — the scalar cost is
 — so `eta_D = G_D/G_S = 1` does NOT mean "equally strong channels". Second,
 sigma enters the quasiparticle diagonal while Delta is strictly off-diagonal:
 the gap matrix has identically zero diagonal, mixes particles with holes, and
-therefore needs the doubled basis of the Bogoliubov–de Gennes problem below.
+therefore needs the doubled Dirac basis of the spectrum below.
 That is also why the gap kernel carries branch signs where the mass equation
 does not.
 
@@ -128,7 +128,7 @@ number in them:
 
 The lepton content is structural in the same sense and is carried by the
 species flags: `csc` (the pairing sector — with it off there are no gaps, no
-Bogoliubov–de Gennes problem, and `mu_3 = mu_8 = 0` identically), `muons` (on
+quasiparticle spectrum to diagonalise, and `mu_3 = mu_8 = 0` identically), `muons` (on
 by default), `thermal_neutrinos` and `photons` (both off). The three flags this
 model does not have — `hyperons`, `deltas`, `thermal_mesons` — **raise** rather
 than being ignored: there are no baryons here to be strange or resonant, and
@@ -305,7 +305,7 @@ in a bag model.
 
 ## The pairing sector
 
-The gap matrix, the 18x18 Bogoliubov–de Gennes problem, the pairing correction
+The gap matrix, the 36-state Dirac-basis spectrum, the pairing correction
 to `Omega` and the Hellmann–Feynman kernels are NOT in this package: they are
 `eos/general/pairing.py`, shared with the chiral colour-dielectric model,
 because the pairing sector of the two is the same sector. The cut medium
@@ -331,47 +331,81 @@ never assigned by hand; at `Delta_0 = 60` MeV the spectrum of `G` is
 With independent gaps the `+- sqrt(2) Delta_0` eigenvalue generalises to
 `+- sqrt(Delta_2^2 + Delta_3^2)`.
 
-**The Bogoliubov–de Gennes problem.** At each momentum `k`, for particles
-(`r = +`) and antiparticles (`r = -`) separately, with
-`xi^r_j = E_f(j) - r mu*_j`:
+**The quasiparticle spectrum.** The mean-field inverse propagator is
+diagonalised in the **full Dirac basis**: four components per colour-flavour
+mode — two particle, two antiparticle — so 36 states at each momentum, with
+the gap mixing them. This is Appendix A of Rüster et al., Phys. Rev. D 72,
+034004 (2005), and it is what the published MUSES NJL module diagonalises.
 
-    H^r(k) = [[ diag(xi^r),  G          ],
-              [ G,          -diag(xi^r) ]]        an 18x18 real matrix
+The 36 states block-diagonalise. Six of the nine modes pair off pairwise —
+`(d_r, u_g)` through `Delta_3`, `(s_r, u_b)` through `Delta_2`, `(s_g, d_b)`
+through `Delta_1` — and each such pair `(a, b)` gives two 4x4 blocks, one per
+sign `s = +-1`:
 
-whose spectrum comes in `+-` pairs. The nine quasiparticle energies are the
-**non-negative half of the signed spectrum**, `E_a = sort(eig H)[9:]` — not the
-nine largest in modulus. The two prescriptions agree in value, but only the
-first is smooth through a gapless window, where a branch crosses zero and its
-partner crosses back, and that smoothness is what makes the Hellmann–Feynman
-derivatives carry the correct branch sign with no sign bookkeeping.
+    M^(s)_ab(k) =
+      [[ -s mu*_a + s M_a,  k,                 0,                -Delta_eta ],
+       [  k,               -s mu*_a - s M_a,   Delta_eta,         0         ],
+       [  0,                Delta_eta,         s mu*_b + s M_b,   k         ],
+       [ -Delta_eta,        0,                 k,                 s mu*_b - s M_b ]]
 
-At unequal masses `[G, M] != 0` — the Frobenius norm is 7.4e4 at
-`M = (40, 45, 480)` MeV against exactly zero at equal masses — so there is no
-closed-form dispersion for a general pattern and the matrix is diagonalised
-numerically. The 2SC pattern is the exception:
+The remaining triple `(u_r, d_g, s_b)` is coupled by all three gaps at once
+and gives one 12x12 block: slot `m` (mode `j`) carries rows `4m + (0,1,2,3)`
+with diagonal `(-mu*_j - M_j, -mu*_j + M_j, mu*_j - M_j, mu*_j + M_j)` and `k`
+at `(4m, 4m+1)` and `(4m+2, 4m+3)`, and the gap `Delta_eta` joining slots `A`
+and `B` enters symmetrically at
+
+    (4A+0, 4B+3) = -Delta_eta      (4A+1, 4B+2) = +Delta_eta
+    (4A+2, 4B+1) = +Delta_eta      (4A+3, 4B+0) = -Delta_eta
+
+with `Delta_3` joining slots (0,1), `Delta_2` slots (0,2) and `Delta_1` slots
+(1,2). Every matrix is real symmetric, its spectrum comes in `+-` pairs, and
+Omega wants the positive half — taken as **half the sum over all 36 of
+`|lambda_a|`**, so a branch crossing zero inside a gapless window needs no
+bookkeeping: its partner crosses back, and
+`d|lambda|/dx = sign(lambda) dlambda/dx` carries the branch sign.
+
+A mode **no nonzero gap touches** is left out of the blocks altogether, and
+out of the unpaired reference with it. Its four Dirac components are then
+exactly the unpaired ones and it contributes nothing — but as a difference it
+would be zero minus an ill-conditioned number, since an ungapped branch
+crosses zero at its own Fermi surface with its partner at `-0` in the same
+block. Leaving it out makes the zero exact; carrying it stalls the
+equilibrium solve at 1e-8.
+
+*Why not the on-shell reduction.* Solving the free Dirac problem first, fixing
+`E_f = sqrt(k^2 + M_f^2)` and pairing the on-shell modes in an 18x18
+Bogoliubov–de Gennes problem `[[diag(xi^r), G], [G, -diag(xi^r)]]` with
+`xi^r_j = E_f(j) - r mu*_j`, is the familiar construction, and for one gap it
+gives
 
     E^+- = sqrt((Ebar - mubar)^2 + Delta^2) +- [ (E_d - E_u)/2 - dmu ]
     Ebar = (E_u + E_d)/2 ,  mubar = (mu*_ur + mu*_dg)/2 ,
     dmu  = (mu*_dg - mu*_ur)/2
 
-which reproduces the numerical spectrum to 1e-11 MeV over random
-configurations and serves both as a fast path and as the unit test of the
-general one. `E^-` may be **negative**: that is the gapless window, the BCS
-blocking region, not an error.
+It drops the particle-antiparticle mixing the gap induces, and what controls
+that is the **mass mismatch of the pair**: at equal paired masses the closed
+form reproduces the exact spectrum to 1e-13 MeV whatever the mass is, and the
+two part company as the masses differ — 3.4 MeV at `M = (5.5, 300)` MeV,
+`Delta = 80` MeV, `k = 320` MeV. So the reduction is harmless for 2SC, which
+pairs u with d, and not harmless for CFL, which pairs both with s: at
+parameter set 1 it moves the CFL branches by up to 11 MeV, the pressure by
+6-16%, and the 2SC -> CFL transition density by 9%. `E^-` may be **negative**:
+that is the gapless window, the BCS blocking region, not an error.
 
 **The pairing potential**, written as a *correction* — a difference from the
 unpaired spectrum:
 
-    dOmega_pair = -(1/2 pi^2) sum_r int_0^Lambda dk k^2 sum_(a=1..9)
-                     [ varphi(E^r_a) - varphi(|xi^r_a|) ]
+    dOmega_pair = -(1/2 pi^2) int_0^Lambda dk k^2
+                     [ (1/2) sum_(a=1..36) varphi(|lambda_a|)
+                       - sum_r sum_(j in C) varphi(|xi^r_j|) ]
     varphi(x) = x + 2 T ln(1 + e^(-x/T)) ,   varphi(x) = x at T = 0
 
 This vanishes **identically** at `Delta = 0`, which is what makes the unpaired
 phase a clean limit of the same code, and in the clean weak-coupling limit it
 obeys the BCS logarithm,
-`-dOmega_pair -> (2/pi^2) mu^2 Delta^2 [ln(2 Lambda/Delta) - 1/2]`. Both signs
-of `r` are summed: the antiparticle branches contribute 8.8% of the particle
-piece at `Lambda = 600` MeV and 17.1% at 1000 MeV. The `|xi_j|` subtraction
+`-dOmega_pair -> (2/pi^2) mu^2 Delta^2 [ln(2 Lambda/Delta) - 1/2]`. `C` is the set of modes the blocks cover. Both signs of `r` are
+summed in the reference: the antiparticle branches contribute 8.8% of the
+particle piece at `Lambda = 600` MeV and 17.1% at 1000 MeV. The `|xi_j|` subtraction
 kinks at each of the nine `k_F,j`, so the pairing quadrature is split there
 (and at `k_F,j +- 25 T`) exactly as above. It is the *splitting* that buys the
 accuracy, not the node count: at 100 nodes per panel the relative error is
@@ -399,7 +433,7 @@ with eigenvectors `|V_a>` in the doubled basis and `P_j` the projector on mode
          psi(x) = 2 ln(1 + e^(-x/T)) + (x/T) [1 - tanh(x/2T)]
 
 All four come from ONE quadrature pass and one batched diagonalisation;
-computing them separately would diagonalise the same 18x18 matrices five times,
+computing them separately would diagonalise the same blocks five times,
 and finite-differencing them instead was measured 40x slower and
 ill-conditioned enough to lose convergence.
 
@@ -920,7 +954,7 @@ where it belongs above.
 1. **P must come from the logarithm form when the integral is cut** — the
    surface term does not vanish at a finite cutoff, and at T = 0 below the
    cutoff the two forms agree, which is how the error hides.
-2. **The gap kernel is not `Delta/|E|`** — it is Hellmann–Feynman on the BdG
+2. **The gap kernel is not `Delta/|E|`** — it is Hellmann–Feynman on the
    matrix, which carries the branch sign for free.
 3. **Paired densities and entropy are not the unpaired Fermi integrals.**
 4. **The gap equation has three roots** under any mismatch — scan, then bracket

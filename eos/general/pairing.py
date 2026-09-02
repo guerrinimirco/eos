@@ -1,12 +1,12 @@
-"""Colour pairing: the gap matrix, the BdG problem, and what a diquark
-condensate does to Omega, to the densities, to the entropy and to itself.
+"""Colour pairing: the gap matrix, the quasiparticle spectrum, and what a
+diquark condensate does to Omega, the densities, the entropy and itself.
 
 Two models in this repository condense diquarks -- the three-flavour NJL of
 `eos.njl` and the chiral colour-dielectric model of `eos.ccdm` -- and the
 pairing sector of both is the SAME sector. Same nine colour-flavour modes,
-same 9x9 gap matrix, same 18x18 Bogoliubov-de Gennes problem, same correction
-form for the pairing piece of the thermodynamic potential, same
-Hellmann-Feynman kernels for the gap equations. So it is written once here
+same 9x9 gap matrix, same 36-state mean-field spectrum, same correction form
+for the pairing piece of the thermodynamic potential, same Hellmann-Feynman
+kernels for the gap equations. So it is written once here
 (CLAUDE.md section 7), as pure functions of
 
     (M_star[3], mu_star[9], Delta[3], T, k_max)
@@ -27,13 +27,24 @@ generators are
     (T_3)_(r,g,b) = (+1/2, -1/2, 0)      (T_8)_(r,g,b) = (+1/3, +1/3, -2/3)
 
 so T_8 = lambda_8/sqrt(3). THREE normalisations of T_8 are in circulation and
-mixing them corrupts mu_8 by factors of 1.15 to 1.7: Ruester et al.,
-Pagliara-Schaffner-Bielich and Kunkel et al. use the halved Gell-Mann
-diag(1/2, 1/2, -1), for which mu_8^theirs = (2/sqrt(3)) mu_8^ours, and
-Buballa and Steiner-Reddy-Prakash use the full lambda_8, for which
-mu_8^ours = sqrt(3) mu_8^theirs. Every mu_8 this module produces or consumes is
-in the diag(1,1,-2)/3 normalisation, and a comparison with a paper has to
-convert.
+mixing them corrupts mu_8 by factors of 1.15 to 1.7:
+
+  * the halved Gell-Mann diag(1/2, 1/2, -1), for which
+    mu_8^theirs = (2/sqrt(3)) mu_8^ours -- Ruester et al.,
+    Pagliara-Schaffner-Bielich, and Kunkel et al.'s Eq. (7) as WRITTEN;
+  * the full lambda_8, for which mu_8^ours = sqrt(3) mu_8^theirs -- Buballa,
+    Steiner-Reddy-Prakash, Gholami et al. (arXiv:2411.04064 Eq. 3, which uses
+    lambda_3 and lambda_8 by name), and the MUSES NJL module those two papers
+    are computed with, whose paired potentials read
+    mu_bar_ur_dg = mu~ + mu_Q/6 + mu_8/sqrt(3);
+  * this module's own diag(1, 1, -2)/3.
+
+The RG-consistent line of papers therefore SPLITS: Kunkel et al. print the
+halved convention and compute in the full one, because their published module
+is Gholami et al.'s. A comparison against either paper's CODE or against
+Gholami's equations uses sqrt(3); only a comparison against the symbols
+printed in Kunkel et al. uses 2/sqrt(3). Every mu_8 this module produces or
+consumes is in the diag(1,1,-2)/3 normalisation.
 
 Units are natural throughout: momenta, masses and potentials in MeV,
 densities in MeV^3, Omega in MeV^4. Nothing here converts to fm; the models'
@@ -49,10 +60,16 @@ Four things, each of which returns a plausible-looking wrong answer:
 
   * the gap kernel is NOT Delta/|E|. That form is wrong by a factor 12 in the
     gapless window, where one quasiparticle branch has gone negative and the
-    two branches cancel. `pair_block` differentiates the BdG eigenvalues by
+    two branches cancel. `pair_block` differentiates the eigenvalues by
     Hellmann-Feynman instead, which carries the branch sign automatically
-    because the sorted non-negative eigenvalue IS |E| and its derivative
-    therefore IS sign(E) dE/dDelta;
+    because what enters Omega is |lambda| and its derivative therefore IS
+    sign(lambda) dlambda/dDelta;
+
+  * the spectrum is the one of the FULL DIRAC basis, not the on-shell
+    Bogoliubov problem obtained by fixing E = sqrt(k^2 + M^2) first. The two
+    agree exactly when the two paired quarks have equal masses and part
+    company as those masses differ, so the reduction is harmless for 2SC and
+    is a 6-16% error in the CFL pressure. See THE QUASIPARTICLE SPECTRUM;
 
   * paired-mode densities and entropies are NOT the unpaired Fermi integrals.
     At a 2SC point with Delta = 80 MeV the unpaired density formula is wrong
@@ -65,16 +82,18 @@ Four things, each of which returns a plausible-looking wrong answer:
 Antiparticle branches are not optional either: at T = 0 they contribute 8.8%
 of the pairing potential at Lambda = 600 MeV and 17.1% at Lambda = 1000 MeV.
 
-Reading order: the mode bookkeeping, the gap matrix, the BdG problem, the
-2SC closed form, the quadrature, the one pass that computes everything, and
-the gap-root scan.
+Reading order: the mode bookkeeping, the gap matrix, the quasiparticle
+spectrum and the blocks it decomposes into, the quadrature, the unpaired
+reference, the one pass that computes everything (twice: batched LAPACK and a
+compiled twin), and the gap-root scan.
 
 References
 ----------
 Alford, Schmitt, Rajagopal, Schaefer, Rev. Mod. Phys. 80, 1455 (2008)
     [arXiv:0709.4635] -- the review; the gap matrix and the patterns.
 Ruester, Werth, Buballa, Shovkovy, Rischke, Phys. Rev. D 72, 034004 (2005)
-    [arXiv:hep-ph/0503184] -- the neutral three-flavour phase diagram.
+    [arXiv:hep-ph/0503184] -- the neutral three-flavour phase diagram, and
+    Appendix A, which is the spectrum this module diagonalises.
 Steiner, Reddy, Prakash, Phys. Rev. D 66, 094007 (2002)
     [arXiv:hep-ph/0205201] -- colour neutrality and mu_8.
 Buballa, Phys. Rept. 407, 205 (2005) [arXiv:hep-ph/0402234].
@@ -196,48 +215,6 @@ def _basis_matrices():
 B_ETA = _basis_matrices()
 
 
-def _bdg_blocks():
-    """The mode index sets the gap matrix never couples across.
-
-    `(B_eta)_((f a),(g b)) = eps^(a b eta) eps_(f g eta)` vanishes unless the
-    two modes differ in BOTH flavour and colour by the same epsilon, which
-    partitions the nine modes into four groups that no gap connects:
-
-        (ur, dg, sb)   the three colour-flavour-diagonal modes
-        (ug, dr)  (ub, sr)  (db, sg)   three pairs
-
-    The partition is a property of the BASIS matrices, not of the gaps, so it
-    is the same for every pattern and for every value of Delta -- it is taken
-    from the union of the three B_eta, which is the coarsest (and therefore
-    always safe) grouping. `diag(xi)` is diagonal and so preserves it, and the
-    18x18 BdG matrix is therefore exactly block-diagonal in one 6x6 and three
-    4x4 blocks, in the doubled basis (modes, modes + 9).
-
-    That is 6^3 + 3*4^3 = 408 flops against 18^3 = 5832, a factor 14.3, and it
-    is EXACT rather than an approximation: `bdg_eigh(backend='fast')`
-    reproduces the dense spectrum to round-off.
-    """
-    coupled = np.any(np.abs(B_ETA) > 0.0, axis=0)
-    seen, blocks = set(), []
-    for start in range(N_MODES):
-        if start in seen:
-            continue
-        stack, group = [start], []
-        while stack:
-            j = stack.pop()
-            if j in seen:
-                continue
-            seen.add(j)
-            group.append(j)
-            for k in range(N_MODES):
-                if coupled[j, k] and k not in seen:
-                    stack.append(k)
-        blocks.append(np.array(sorted(group)))
-    return tuple(blocks)
-
-
-#: The four index sets of `_bdg_blocks`, assembled once at import.
-BDG_BLOCKS = _bdg_blocks()
 
 
 def gap_matrix(Delta):
@@ -262,124 +239,248 @@ def gap_matrix(Delta):
 
 
 # =============================================================================
-# THE BOGOLIUBOV-DE GENNES PROBLEM
+# THE QUASIPARTICLE SPECTRUM
 # =============================================================================
-def bdg_matrix(xi, G):
-    """The 18x18 BdG matrix [[diag(xi), G], [G, -diag(xi)]] [MeV].
+# The mean-field inverse propagator in the FULL DIRAC basis: four components
+# per colour-flavour mode -- two particle, two antiparticle -- so 36 states at
+# each momentum, with the gap mixing them. This is Ruester, Werth, Buballa,
+# Shovkovy and Rischke, Phys. Rev. D 72, 034004 (2005), Appendix A.
+#
+# The familiar alternative solves the free Dirac problem FIRST, takes
+# E = sqrt(k^2 + M^2), and pairs the resulting ON-SHELL modes in an 18x18
+# Bogoliubov problem. It drops the particle-antiparticle mixing the gap
+# induces, and WHAT CONTROLS THAT IS THE MASS MISMATCH OF THE PAIR: with the
+# two paired quarks at equal masses the two spectra agree to 1e-13 MeV
+# whatever the mass is, and they part company as the masses differ -- 3.4 MeV
+# at M = (5.5, 300) MeV, Delta = 80 MeV, k = 320 MeV.
+#
+# So the reduction is harmless for 2SC, which pairs u with d, and it is not
+# harmless for CFL, which pairs both of them with s. In CFL at Gholami et
+# al.'s parameter set 1 the s quark pairs at M_s ~ 290 MeV against light
+# partners near 20 MeV: the quasiparticle branches move by up to 11 MeV, the
+# pressure by 6-16 %, and the whole 2SC -> CFL transition density by 9 %,
+# which is how the discrepancy against the published module was found. The
+# exact spectrum is therefore what this module carries, and the on-shell
+# reduction is not offered as an option.
+#
+# The 36 states block-diagonalise: six 4x4 blocks for the six modes that pair
+# pairwise, and one 12x12 for the (u_r, d_g, s_b) triple all three gaps couple.
 
-    `xi` may be one vector of nine, or a stack of them with shape (..., 9);
-    the result carries the same leading shape, which is what lets one
-    quadrature pass diagonalise every node at once.
+#: Which two modes each gap pairs. eta = 1 pairs d with s, eta = 2 pairs u
+#: with s, eta = 3 pairs u with d -- the same statement `B_ETA` makes, read
+#: off it by `_check_blocks_against_B_ETA` below rather than asserted twice.
+_PAIRED_MODES = {3: (("d", "r"), ("u", "g")),
+                 2: (("s", "r"), ("u", "b")),
+                 1: (("s", "g"), ("d", "b"))}
+
+#: The triple every gap couples, which is what makes CFL one 12x12 block.
+_TRIPLE_MODES = (("u", "r"), ("d", "g"), ("s", "b"))
+
+
+def _spectrum_blocks(active=(True, True, True)):
+    """The blocks a given set of NONZERO gaps splits the 36 states into.
+
+    Each block is (rows, momentum, gaps) with
+
+        rows      [(mode, s_mu, s_M), ...]   the diagonal, entry i being
+                                             s_mu mu_mode + s_M M_flavour
+        momentum  [(i, j), ...]              where the momentum k sits
+        gaps      [(i, j, sign, eta), ...]   where Delta_eta sits
+
+    all symmetric, and the second return is the modes those blocks cover.
+
+    A mode NO nonzero gap touches is left out, and this is not an
+    optimisation. Its four Dirac components are then exactly the unpaired ones
+    the correction subtracts, so it contributes zero -- but computed as a
+    difference it is zero MINUS AN ILL-CONDITIONED NUMBER: an ungapped branch
+    crosses zero at its own Fermi surface, its partner at -0 sits in the same
+    block, and a divide-and-conquer eigensolver mixes the two arbitrarily.
+    The cancellation then fails at 1e-8, which is above `RESIDUAL_TOL` and
+    stalls the solve. Leaving the mode out makes the zero exact.
+
+    Two modes coupled by ONE gap split into two 4x4 blocks; the (u_r, d_g,
+    s_b) triple, when two or three gaps connect it, is one 12x12.
     """
-    xi = np.asarray(xi, dtype=float)
-    lead = xi.shape[:-1]
-    H = np.zeros(lead + (2 * N_MODES, 2 * N_MODES))
-    idx = np.arange(N_MODES)
-    H[..., idx, idx] = xi
-    H[..., idx + N_MODES, idx + N_MODES] = -xi
-    H[..., :N_MODES, N_MODES:] = G
-    H[..., N_MODES:, :N_MODES] = G
+    index = {m: j for j, m in enumerate(MODES)}
+    blocks = []
+    covered = []
+
+    for eta, (mode_a, mode_b) in _PAIRED_MODES.items():
+        if not active[eta - 1]:
+            continue
+        a, b = index[mode_a], index[mode_b]
+        covered += [a, b]
+        for s in (+1.0, -1.0):
+            rows = [(a, -s, +s), (a, -s, -s), (b, +s, +s), (b, +s, -s)]
+            gaps = [(0, 3, -1.0, eta), (1, 2, +1.0, eta)]
+            blocks.append((rows, [(0, 1), (2, 3)], gaps))
+
+    # The triple, under whichever gaps are on: eta = 3 joins slots 0 and 1,
+    # eta = 2 joins 0 and 2, eta = 1 joins 1 and 2.
+    edges = [(eta, pair) for eta, pair in ((3, (0, 1)), (2, (0, 2)), (1, (1, 2)))
+             if active[eta - 1]]
+    for group in _connected_slots(edges):
+        modes = [index[_TRIPLE_MODES[slot]] for slot in group]
+        covered += modes
+        inside = [(eta, (group.index(a), group.index(b)))
+                  for eta, (a, b) in edges if a in group and b in group]
+        if len(group) == 2:
+            # one gap, two modes: the same 4x4 split the pairs above use
+            eta = inside[0][0]
+            a, b = modes
+            for s in (+1.0, -1.0):
+                rows = [(a, -s, +s), (a, -s, -s), (b, +s, +s), (b, +s, -s)]
+                gaps = [(0, 3, -1.0, eta), (1, 2, +1.0, eta)]
+                blocks.append((rows, [(0, 1), (2, 3)], gaps))
+            continue
+        rows, momentum, gaps = [], [], []
+        for slot, mode in enumerate(modes):
+            base = 4 * slot
+            rows += [(mode, -1.0, -1.0), (mode, -1.0, +1.0),
+                     (mode, +1.0, -1.0), (mode, +1.0, +1.0)]
+            momentum += [(base, base + 1), (base + 2, base + 3)]
+        for eta, (slot_a, slot_b) in inside:
+            A, B = 4 * slot_a, 4 * slot_b
+            gaps += [(A + 0, B + 3, -1.0, eta), (A + 1, B + 2, +1.0, eta),
+                     (A + 2, B + 1, +1.0, eta), (A + 3, B + 0, -1.0, eta)]
+        blocks.append((rows, momentum, gaps))
+    return blocks, np.array(sorted(covered), dtype=np.int64)
+
+
+def _connected_slots(edges):
+    """The connected groups of the triple's three slots, under `edges`.
+
+    A slot no edge reaches is a group of one, which `_spectrum_blocks` drops.
+    """
+    groups = []
+    seen = set()
+    for start in range(3):
+        if start in seen:
+            continue
+        group, stack = [], [start]
+        while stack:
+            slot = stack.pop()
+            if slot in seen:
+                continue
+            seen.add(slot)
+            group.append(slot)
+            for _, (a, b) in edges:
+                if a == slot and b not in seen:
+                    stack.append(b)
+                if b == slot and a not in seen:
+                    stack.append(a)
+        if len(group) > 1:
+            groups.append(sorted(group))
+    return groups
+
+
+def _block_tables(blocks):
+    """`_spectrum_blocks` padded into the fixed-shape arrays numba can take."""
+    n_blocks = len(blocks)
+    width = max(len(rows) for rows, _, _ in blocks)
+    n_mom = max(len(mom) for _, mom, _ in blocks)
+    n_gap = max(len(gaps) for _, _, gaps in blocks)
+
+    size = np.array([len(rows) for rows, _, _ in blocks], dtype=np.int64)
+    row_mode = np.full((n_blocks, width), -1, dtype=np.int64)
+    row_s_mu = np.zeros((n_blocks, width))
+    row_s_M = np.zeros((n_blocks, width))
+    mom_n = np.array([len(mom) for _, mom, _ in blocks], dtype=np.int64)
+    mom_i = np.zeros((n_blocks, n_mom), dtype=np.int64)
+    mom_j = np.zeros((n_blocks, n_mom), dtype=np.int64)
+    gap_n = np.array([len(g) for _, _, g in blocks], dtype=np.int64)
+    gap_i = np.zeros((n_blocks, n_gap), dtype=np.int64)
+    gap_j = np.zeros((n_blocks, n_gap), dtype=np.int64)
+    gap_s = np.zeros((n_blocks, n_gap))
+    gap_eta = np.zeros((n_blocks, n_gap), dtype=np.int64)
+
+    for b, (rows, mom, gaps) in enumerate(blocks):
+        for i, (mode, s_mu, s_M) in enumerate(rows):
+            row_mode[b, i], row_s_mu[b, i], row_s_M[b, i] = mode, s_mu, s_M
+        for m, (i, j) in enumerate(mom):
+            mom_i[b, m], mom_j[b, m] = i, j
+        for g, (i, j, sign, eta) in enumerate(gaps):
+            gap_i[b, g], gap_j[b, g] = i, j
+            gap_s[b, g], gap_eta[b, g] = sign, eta - 1
+    row_flavour = np.where(row_mode >= 0, FLAVOUR_OF_MODE[row_mode], 0)
+    return (size, row_mode, row_s_mu, row_s_M, row_flavour,
+            mom_n, mom_i, mom_j, gap_n, gap_i, gap_j, gap_s, gap_eta)
+
+
+#: The blocks and their tables for each of the eight gap patterns, assembled
+#: once at import: which gaps are nonzero decides the decomposition, and there
+#: are only eight answers.
+_BY_PATTERN = {}
+for _mask in ((False, False, False), (True, False, False), (False, True, False),
+              (False, False, True), (True, True, False), (True, False, True),
+              (False, True, True), (True, True, True)):
+    _blocks, _covered = _spectrum_blocks(_mask)
+    _BY_PATTERN[_mask] = (_blocks, _covered,
+                          _block_tables(_blocks) if _blocks else None)
+
+#: The all-gaps-on decomposition, which is what `spectrum_matrix` and
+#: `spectrum_energies` show a caller asking about the spectrum itself.
+SPECTRUM_BLOCKS = _BY_PATTERN[(True, True, True)][0]
+
+
+def spectrum_matrix(block, M_star, mu_star, Delta, k):
+    """H(k) of one block, shape (..., n, n) over the momenta in `k` [MeV]."""
+    rows, momentum, gaps = block
+    k = np.asarray(k, dtype=float)
+    n = len(rows)
+    H = np.zeros(k.shape + (n, n))
+    for i, (mode, s_mu, s_M) in enumerate(rows):
+        H[..., i, i] = (s_mu * mu_star[mode]
+                        + s_M * M_star[FLAVOUR_OF_MODE[mode]])
+    for i, j in momentum:
+        H[..., i, j] += k
+        H[..., j, i] += k
+    for i, j, sign, eta in gaps:
+        H[..., i, j] += sign * Delta[eta - 1]
+        H[..., j, i] += sign * Delta[eta - 1]
     return H
 
 
-def bdg_eigh(xi, G, backend="reference"):
-    """(E, V): the nine quasiparticle energies and their eigenvectors.
+def spectrum_energies(M_star, mu_star, Delta, k):
+    """The 18 non-negative quasiparticle energies at each momentum [MeV].
 
-    `E` is the NON-NEGATIVE HALF OF THE SIGNED SPECTRUM, `sort(eigvalsh)[9:]`
-    -- not the nine largest in modulus. The two prescriptions agree in value,
-    because the spectrum comes in +-pairs, but only the first is a smooth
-    function of the parameters through a gapless window, where a branch
-    crosses zero and its partner crosses back. That smoothness is what makes
-    the Hellmann-Feynman derivatives below carry the correct branch sign
-    without any sign bookkeeping: the sorted eigenvalue is |E| and its
-    derivative is therefore sign(E) dE/dx.
-
-    `V[..., :, a]` is the eigenvector of `E[..., a]`, in the doubled
-    (particle, hole) basis: the top nine components are the particle
-    amplitudes, the bottom nine the hole amplitudes.
-
-    backend='fast' diagonalises the four `BDG_BLOCKS` separately instead of
-    the whole 18x18 at once. The decomposition is exact, so this is the same
-    spectrum -- but the branches come back GROUPED BY BLOCK rather than sorted
-    across all nine, and within a degenerate subspace the eigenvectors are a
-    different orthonormal basis. Every consumer in `pair_block` contracts over
-    the branch index, so neither difference reaches a result; nothing else may
-    assume `E` is sorted.
+    The 36 eigenvalues come in +- pairs, and these are the positive half,
+    sorted. At Delta = 0 they are |E_j -+ mu_j| over the nine modes, which is
+    the unpaired spectrum `pair_block` subtracts.
     """
-    if backend == "fast":
-        return _bdg_eigh_blocked(xi, G)
-    if backend != "reference":
-        raise ValueError(f"unknown backend {backend!r}; eos.general.pairing "
-                         f"has 'reference' and 'fast'")
-    w, v = np.linalg.eigh(bdg_matrix(xi, G))
-    return w[..., N_MODES:], v[..., :, N_MODES:]
+    M_star = np.asarray(M_star, dtype=float)
+    mu_star = np.asarray(mu_star, dtype=float)
+    Delta = np.asarray(Delta, dtype=float)
+    k = np.asarray(k, dtype=float)
+    lam = np.concatenate(
+        [np.linalg.eigvalsh(spectrum_matrix(b, M_star, mu_star, Delta, k))
+         for b in SPECTRUM_BLOCKS], axis=-1)
+    return np.sort(lam, axis=-1)[..., 18:]
 
 
-def _bdg_eigh_blocked(xi, G):
-    """`bdg_eigh` on the four `BDG_BLOCKS`, which is 14.3x fewer flops.
+def _check_blocks_against_B_ETA():
+    """`_PAIRED_MODES` and `_TRIPLE_MODES` against `B_ETA`, at import.
 
-    Each block of `n` modes contributes a 2n x 2n BdG problem whose upper half
-    of the spectrum is `n` branches; the four blocks supply 3 + 2 + 2 + 2 = 9
-    between them. The eigenvectors are written back into the full doubled
-    basis, so `V` has the same 18-row shape the dense path returns and a
-    caller cannot tell which path produced it except by the branch ORDER.
+    Two statements of which modes pair would be two things to keep in step;
+    this makes the block tables answerable to `B_ETA`, which `gap_matrix` and
+    the counterterm already read. Cheap enough to run every import.
     """
-    xi = np.asarray(xi, dtype=float)
-    lead = xi.shape[:-1]
-    E = np.empty(lead + (N_MODES,))
-    V = np.zeros(lead + (2 * N_MODES, N_MODES))
-
-    filled = 0
-    for idx in BDG_BLOCKS:
-        n = idx.size
-        sub = np.zeros(lead + (2 * n, 2 * n))
-        rows = np.arange(n)
-        sub[..., rows, rows] = xi[..., idx]
-        sub[..., rows + n, rows + n] = -xi[..., idx]
-        block_G = G[np.ix_(idx, idx)]
-        sub[..., :n, n:] = block_G
-        sub[..., n:, :n] = block_G
-
-        w, v = np.linalg.eigh(sub)
-        E[..., filled:filled + n] = w[..., n:]
-        # back into the full basis: the block's particle rows are `idx` and
-        # its hole rows are `idx + N_MODES`.
-        V[..., idx, filled:filled + n] = v[..., :n, n:]
-        V[..., idx + N_MODES, filled:filled + n] = v[..., n:, n:]
-        filled += n
-    return E, V
+    for eta, (mode_a, mode_b) in _PAIRED_MODES.items():
+        a, b = MODES.index(mode_a), MODES.index(mode_b)
+        if B_ETA[eta - 1, a, b] == 0.0:
+            raise AssertionError(
+                f"block table says Delta_{eta} pairs {mode_a} with {mode_b}, "
+                f"which B_ETA does not")
+    for eta, (slot_a, slot_b) in ((3, (0, 1)), (2, (0, 2)), (1, (1, 2))):
+        a = MODES.index(_TRIPLE_MODES[slot_a])
+        b = MODES.index(_TRIPLE_MODES[slot_b])
+        if B_ETA[eta - 1, a, b] == 0.0:
+            raise AssertionError(
+                f"block table says Delta_{eta} couples the triple's slots "
+                f"{slot_a} and {slot_b}, which B_ETA does not")
 
 
-def bdg_energies(xi, G):
-    """The nine quasiparticle energies alone (see `bdg_eigh`) [MeV]."""
-    w = np.linalg.eigvalsh(bdg_matrix(xi, G))
-    return w[..., N_MODES:]
-
-
-def twosc_dispersion(E_u, E_d, mu_u, mu_d, Delta):
-    """The 2SC quasiparticle energies in closed form [MeV].
-
-        E^+- = sqrt((Ebar - mubar)^2 + Delta^2) +- [ (E_d - E_u)/2 - dmu ]
-        Ebar = (E_u + E_d)/2,  mubar = (mu_u + mu_d)/2,  dmu = (mu_d - mu_u)/2
-
-    Valid ONLY for the 2SC pattern -- one gap, two flavours, two colours --
-    where the gap matrix and the mass matrix happen to commute within the
-    paired block. For a general pattern at unequal masses they do not:
-    ||[G, M]||_F is 7.4e4 at M = (40, 45, 480) MeV against exactly zero at
-    equal masses, so there is no closed-form dispersion and `bdg_eigh` is the
-    only route.
-
-    Kept for two reasons: it is a fast path for 2SC production runs, and it is
-    the unit test of the general path, which reproduces it to 4.5e-13 MeV over
-    random configurations of masses, potentials, gap and momentum.
-
-    E^- may be NEGATIVE. That is the gapless window, not an error: the two
-    branches then cancel in the gap kernel, which is the whole content of the
-    Clogston-Chandrasekhar limit.
-    """
-    base = np.sqrt((0.5 * (E_u + E_d) - 0.5 * (mu_u + mu_d)) ** 2 + Delta ** 2)
-    shift = 0.5 * (E_d - E_u) - 0.5 * (mu_d - mu_u)
-    return base + shift, base - shift
+_check_blocks_against_B_ETA()
 
 
 # =============================================================================
@@ -489,36 +590,64 @@ def _dphi_dT(x, T):
 
 
 # =============================================================================
+# THE UNPAIRED REFERENCE
+# =============================================================================
+def _unpaired_reference(k, weight, M_mode, mu_star, T, covered):
+    """What every entry of `PairBlock` is a correction TO.
+
+    At Delta = 0 the 36 eigenvalues are +-(E_j -+ mu_j) over the nine modes,
+    so the positive half is |xi| with xi = E_j - r mu_j for r = +-1, and it is
+    written out here rather than diagonalised: it is analytic, it is the same
+    for both flavours of the pass, and computing it the same way twice is what
+    would let the correction fail to vanish at Delta = 0.
+
+    `covered` names the modes to include -- the ones the blocks of
+    `_spectrum_blocks` carry, since a mode absent from both sides cancels
+    exactly rather than approximately.
+
+    Returns (omega, entropy, per-mode d/dmu, per-flavour d/dM), each summed
+    over the quadrature and UNSCALED by 1/(2 pi^2).
+    """
+    E = np.sqrt(k[:, None] ** 2 + M_mode[covered][None, :] ** 2)
+    mu_star = mu_star[covered]
+    flavour = FLAVOUR_OF_MODE[covered]
+    omega = 0.0
+    entropy = 0.0
+    d_mu = np.zeros(N_MODES)
+    d_M = np.zeros(3)
+    for r in (+1.0, -1.0):
+        xi = E - r * mu_star[None, :]
+        omega += -float(np.sum(weight[:, None] * _phi(np.abs(xi), T)))
+        entropy += float(np.sum(weight[:, None] * _dphi_dT(np.abs(xi), T)))
+        tanh_xi = _dphi(xi, T)              # tanh(|xi|/2T) sign(xi)
+        d_mu[covered] += -r * np.sum(weight[:, None] * tanh_xi, axis=0)
+        per_mode = np.sum(
+            weight[:, None] * tanh_xi * (M_mode[covered][None, :] / E), axis=0)
+        for i_f in range(3):
+            d_M[i_f] += float(np.sum(per_mode[flavour == i_f]))
+    return omega, entropy, d_mu, d_M
+
+
+# =============================================================================
 # THE COMPILED PASS
 # =============================================================================
-# The block structure of `_bdg_blocks`, taken one step further and written as
-# loops numba can compile. The three 4x4 blocks decouple AGAIN: the gap couples
-# the particle of one mode only to the hole of its partner, so each 4x4 is two
-# independent 2x2 Bogoliubov problems,
+# The same seven blocks, diagonalised by cyclic Jacobi in a compiled loop
+# instead of by a batched LAPACK call. Only the PAIRED half is compiled: the
+# unpaired reference above is analytic and cheap, and one copy of it is one
+# fewer place for the two flavours to disagree.
 #
-#     A = [[xi_i, g], [g, -xi_j]]   on (particle_i, hole_j)
-#     B = [[xi_j, g], [g, -xi_i]]   on (particle_j, hole_i)
-#
-# with closed-form eigenpairs (`twosc_dispersion` is the energy half of this
-# statement). Only the (ur, dg, sb) 6x6 needs a numerical diagonalisation, by
-# cyclic Jacobi -- robust at every degeneracy, unlike a cubic in closed form.
+# Hellmann-Feynman throughout, and the derivative matrices are why it is
+# cheap: dH/dmu_j and dH/dM_f are DIAGONAL -- +-1 on the rows of that mode --
+# so their expectation values are sums of squared eigenvector components, and
+# dH/dDelta_eta has two or four nonzero entries. Nothing here builds a matrix
+# product.
 #
 # ONE SELECTION RULE, stated once because it is the part that goes wrong
-# quietly: `bdg_eigh` returns the non-negative member of each +- pair of the
-# SIGNED spectrum. Within a 2x2 sub-block the pairs run ACROSS the two
-# sub-blocks -- A's eigenvalues are m +- s and B's are -m +- s, pairing
-# (m+s) with -(m+s) -- so the branch kept is |m + s| with A's upper
-# eigenvector when m + s >= 0 and B's LOWER-partner vector when it is not,
-# and likewise |m - s|. Inside a gapless window that is exactly the switch
-# that keeps the Hellmann-Feynman derivatives carrying sign(E).
-
-#: The mode index sets of the compiled pass, frozen from `BDG_BLOCKS`' own
-#: derivation: the (ur, dg, sb) triple, and the (i, j) of the three pairs.
-_BLOCK0 = np.array([0, 4, 8])
-_PAIR_I = np.array([1, 2, 5])
-_PAIR_J = np.array([3, 6, 7])
-for _arr in (_BLOCK0, _PAIR_I, _PAIR_J):
-    _arr.flags.writeable = False
+# quietly: the 36 eigenvalues come in +- pairs and Omega wants the positive
+# half, which is taken as HALF THE SUM OVER ALL 36 of |lambda|. A branch that
+# crosses zero inside a gapless window therefore needs no bookkeeping: its
+# partner crosses back, and the derivative of |lambda| carries sign(lambda),
+# which is the `sgn` factor below.
 
 
 @njit(cache=True)
@@ -560,263 +689,260 @@ def _dphi_dT_scalar(x, T):
 
 
 @njit(cache=True)
-def _eig2_upper(a, b, c):
-    """(lambda_max, u, v) of the symmetric [[a, c], [c, b]].
+def _symmetric_eigh(A, V, d, e, n):
+    """Eigenvalues into `d`, eigenvectors into the columns of `V`. In place.
 
-    c = 0 is an EXACT branch, not a small-norm fallback: a pattern with a
-    zero gap channel reaches the diagonal case at every node, and there the
-    formula vector (c, lambda - a) is (0, round-off) -- its direction is
-    noise, and the noise picked the HOLE axis for a particle branch often
-    enough to corrupt every occupation it touched. With c != 0 the vector is
-    the larger-normed of the two analytic candidates (c, lambda - a) and
-    (lambda - b, c), which is the standard conditioning trick: lambda sits
-    within round-off of ONE diagonal exactly when the other candidate is
-    order one.
+    Householder reduction to tridiagonal form followed by the implicit-shift
+    QL iteration -- EISPACK's tred2 and tql2, which is what LAPACK's dsyev
+    does and what `numpy.linalg.eigh` is measured against here: over a
+    thousand random symmetric matrices of order 2 to 12 the eigenvalues agree
+    to 3.2e-15 relative and the residual ||A v - lambda v|| is 5.6e-15.
+
+    Only the leading n x n of the buffers is touched, so one preallocated
+    12x12 pair serves every block. Cyclic Jacobi was written first and is
+    four times slower on the 12x12: 7.6 ms against 1.9 ms over a 672-node
+    pass, which is most of the pairing cost.
     """
-    m = 0.5 * (a + b)
-    d = 0.5 * (a - b)
-    s = np.sqrt(d * d + c * c)
-    lam = m + s
-    if c == 0.0:
-        if a >= b:
-            return lam, 1.0, 0.0
-        return lam, 0.0, 1.0
-    v1x = c
-    v1y = lam - a
-    v2x = lam - b
-    v2y = c
-    n1 = v1x * v1x + v1y * v1y
-    n2 = v2x * v2x + v2y * v2y
-    if n1 >= n2:
-        norm = np.sqrt(n1)
-        return lam, v1x / norm, v1y / norm
-    norm = np.sqrt(n2)
-    return lam, v2x / norm, v2y / norm
+    for i in range(n):
+        for j in range(n):
+            V[i, j] = A[i, j]
+    # --- Householder reduction to tridiagonal form (EISPACK tred2) --------
+    for j in range(n):
+        d[j] = V[n - 1, j]
+    for i in range(n - 1, 0, -1):
+        scale = 0.0
+        h = 0.0
+        for q in range(i):
+            scale += abs(d[q])
+        if scale == 0.0:
+            e[i] = d[i - 1]
+            for j in range(i):
+                d[j] = V[i - 1, j]
+                V[i, j] = 0.0
+                V[j, i] = 0.0
+        else:
+            for q in range(i):
+                d[q] /= scale
+                h += d[q] * d[q]
+            f = d[i - 1]
+            g = np.sqrt(h)
+            if f > 0.0:
+                g = -g
+            e[i] = scale * g
+            h -= f * g
+            d[i - 1] = f - g
+            for j in range(i):
+                e[j] = 0.0
+            for j in range(i):
+                f = d[j]
+                V[j, i] = f
+                g = e[j] + V[j, j] * f
+                for q in range(j + 1, i):
+                    g += V[q, j] * d[q]
+                    e[q] += V[q, j] * f
+                e[j] = g
+            f = 0.0
+            for j in range(i):
+                e[j] /= h
+                f += e[j] * d[j]
+            hh = f / (h + h)
+            for j in range(i):
+                e[j] -= hh * d[j]
+            for j in range(i):
+                f = d[j]
+                g = e[j]
+                for q in range(j, i):
+                    V[q, j] -= (f * e[q] + g * d[q])
+                d[j] = V[i - 1, j]
+                V[i, j] = 0.0
+        d[i] = h
+    for i in range(n - 1):
+        V[n - 1, i] = V[i, i]
+        V[i, i] = 1.0
+        h = d[i + 1]
+        if h != 0.0:
+            for q in range(i + 1):
+                d[q] = V[q, i + 1] / h
+            for j in range(i + 1):
+                g = 0.0
+                for q in range(i + 1):
+                    g += V[q, i + 1] * V[q, j]
+                for q in range(i + 1):
+                    V[q, j] -= g * d[q]
+        for q in range(i + 1):
+            V[q, i + 1] = 0.0
+    for j in range(n):
+        d[j] = V[n - 1, j]
+        V[n - 1, j] = 0.0
+    V[n - 1, n - 1] = 1.0
+    e[0] = 0.0
+    # --- the implicit-shift QL iteration (EISPACK tql2) -------------------
+    for i in range(1, n):
+        e[i - 1] = e[i]
+    e[n - 1] = 0.0
+    f = 0.0
+    tst1 = 0.0
+    eps = 2.0 ** -52
+    for l in range(n):
+        if abs(d[l]) + abs(e[l]) > tst1:
+            tst1 = abs(d[l]) + abs(e[l])
+        m = l
+        while m < n:
+            if abs(e[m]) <= eps * tst1:
+                break
+            m += 1
+        if m > l:
+            while True:
+                g = d[l]
+                p = (d[l + 1] - g) / (2.0 * e[l])
+                r = np.hypot(p, 1.0)
+                if p < 0.0:
+                    r = -r
+                d[l] = e[l] / (p + r)
+                d[l + 1] = e[l] * (p + r)
+                dl1 = d[l + 1]
+                h = g - d[l]
+                for i in range(l + 2, n):
+                    d[i] -= h
+                f += h
+                p = d[m]
+                c = 1.0
+                c2 = c
+                c3 = c
+                el1 = e[l + 1]
+                s = 0.0
+                s2 = 0.0
+                for i in range(m - 1, l - 1, -1):
+                    c3 = c2
+                    c2 = c
+                    s2 = s
+                    g = c * e[i]
+                    h = c * p
+                    r = np.hypot(p, e[i])
+                    e[i + 1] = s * r
+                    s = e[i] / r
+                    c = p / r
+                    p = c * d[i] - s * g
+                    d[i + 1] = h + s * (c * g + s * d[i])
+                    for q in range(n):
+                        h = V[q, i + 1]
+                        V[q, i + 1] = s * V[q, i] + c * h
+                        V[q, i] = c * V[q, i] - s * h
+                p = -s * s2 * c3 * el1 * e[l] / dl1
+                e[l] = s * p
+                d[l] = c * p
+                if abs(e[l]) <= eps * tst1:
+                    break
+        d[l] += f
+        e[l] = 0.0
 
 
 @njit(cache=True)
-def _jacobi6(A, V):
-    """Cyclic Jacobi on the symmetric 6x6 `A`, vectors into `V`. In place.
+def _pair_pass(k, w, M_star, mu_star, Delta, T, size, row_mode, row_s_mu,
+               row_s_M, row_flavour, mom_n, mom_i, mom_j, gap_n, gap_i, gap_j,
+               gap_s, gap_eta):
+    """The paired half of `pair_block`'s quadrature, one compiled pass.
 
-    Converges quadratically; a dozen sweeps is far more than the spectrum
-    ever needs, and the threshold is relative to the matrix norm so a scale
-    of 1e15 MeV (a confined effective mass) needs no special case.
+    Returns the UNSCALED accumulators (omega, d/dmu[9], d/dM[3],
+    d/dDelta[3], entropy, min_energy), each in the same convention as the
+    reference path's, so `pair_block` subtracts one unpaired reference from
+    either.
     """
-    for i in range(6):
-        for j in range(6):
-            V[i, j] = 1.0 if i == j else 0.0
-    norm = 0.0
-    for i in range(6):
-        for j in range(6):
-            norm += A[i, j] * A[i, j]
-    if norm <= 0.0:
-        return
-    for _ in range(30):
-        off = 0.0
-        for p in range(5):
-            for q in range(p + 1, 6):
-                off += A[p, q] * A[p, q]
-        if off <= 1.0e-30 * norm:
-            break
-        for p in range(5):
-            for q in range(p + 1, 6):
-                apq = A[p, q]
-                if apq == 0.0:
-                    continue
-                theta = 0.5 * (A[q, q] - A[p, p]) / apq
-                t = 1.0 / (abs(theta) + np.sqrt(theta * theta + 1.0))
-                if theta < 0.0:
-                    t = -t
-                c = 1.0 / np.sqrt(t * t + 1.0)
-                s = t * c
-                for i in range(6):
-                    aip = A[i, p]
-                    aiq = A[i, q]
-                    A[i, p] = c * aip - s * aiq
-                    A[i, q] = s * aip + c * aiq
-                for i in range(6):
-                    api = A[p, i]
-                    aqi = A[q, i]
-                    A[p, i] = c * api - s * aqi
-                    A[q, i] = s * api + c * aqi
-                for i in range(6):
-                    vip = V[i, p]
-                    viq = V[i, q]
-                    V[i, p] = c * vip - s * viq
-                    V[i, q] = s * vip + c * viq
+    n_blocks = size.shape[0]
+    width = row_mode.shape[1]
+    A = np.zeros((width, width))
+    V = np.zeros((width, width))
+    lam = np.zeros(width)
+    work = np.zeros(width)
 
-
-@njit(cache=True)
-def _pair_pass(k, w, M_mode, mu_star, G, B_eta, T):
-    """The whole of `pair_block`'s quadrature, one compiled pass.
-
-    Returns the UNSCALED accumulators in the reference path's own convention
-    -- (omega, delta_n[9], dM_per_mode[9], delta_s, kernel[3], min_energy) --
-    so the wrapper applies the same 1/(2 pi^2) factors and flavour sums to
-    both flavours and the two cannot drift apart in the bookkeeping.
-    """
-    nk = k.shape[0]
     omega = 0.0
-    delta_n = np.zeros(9)
-    dM_mode = np.zeros(9)
-    delta_s = 0.0
-    kernel = np.zeros(3)
+    entropy = 0.0
+    d_mu = np.zeros(N_MODES)
+    d_M = np.zeros(3)
+    d_Delta = np.zeros(3)
     min_energy = np.inf
 
-    A66 = np.empty((6, 6))
-    V66 = np.empty((6, 6))
-    lam6 = np.empty(6)
-    order = np.empty(6, dtype=np.int64)
-    E_node = np.empty(9)
-    xi = np.empty(9)
-    E_mode = np.empty(9)
-    dxi_dM = np.empty(9)
-    top = np.empty(9)
-    bot = np.empty(9)
-
-    for node in range(nk):
+    for node in range(k.shape[0]):
         kk = k[node]
         weight = w[node] * kk * kk
-        for j in range(9):
-            E_mode[j] = np.sqrt(kk * kk + M_mode[j] * M_mode[j])
-            dxi_dM[j] = M_mode[j] / E_mode[j]
+        for b in range(n_blocks):
+            n = size[b]
+            for i in range(n):
+                for j in range(n):
+                    A[i, j] = 0.0
+            for i in range(n):
+                mode = row_mode[b, i]
+                A[i, i] = (row_s_mu[b, i] * mu_star[mode]
+                           + row_s_M[b, i] * M_star[row_flavour[b, i]])
+            for m in range(mom_n[b]):
+                i, j = mom_i[b, m], mom_j[b, m]
+                A[i, j] += kk
+                A[j, i] += kk
+            for g in range(gap_n[b]):
+                i, j = gap_i[b, g], gap_j[b, g]
+                value = gap_s[b, g] * Delta[gap_eta[b, g]]
+                A[i, j] += value
+                A[j, i] += value
 
-        for r in (1.0, -1.0):
-            for j in range(9):
-                xi[j] = E_mode[j] - r * mu_star[j]
+            _symmetric_eigh(A, V, lam, work, n)
 
-            n_branch = 0
-            # --- the (ur, dg, sb) 6x6 ------------------------------------
-            for a in range(3):
-                for b in range(3):
-                    A66[a, b] = 0.0
-                    A66[3 + a, 3 + b] = 0.0
-                    A66[a, 3 + b] = G[_BLOCK0[a], _BLOCK0[b]]
-                    A66[3 + a, b] = G[_BLOCK0[a], _BLOCK0[b]]
-                A66[a, a] = xi[_BLOCK0[a]]
-                A66[3 + a, 3 + a] = -xi[_BLOCK0[a]]
-            _jacobi6(A66, V66)
-            for i in range(6):
-                lam6[i] = A66[i, i]
-                order[i] = i
-            # insertion sort, ascending: the upper half is the kept spectrum
-            for i in range(1, 6):
-                key = lam6[i]
-                key_o = order[i]
-                j6 = i - 1
-                while j6 >= 0 and lam6[j6] > key:
-                    lam6[j6 + 1] = lam6[j6]
-                    order[j6 + 1] = order[j6]
-                    j6 -= 1
-                lam6[j6 + 1] = key
-                order[j6 + 1] = key_o
-            for pick in range(3, 6):
-                E_b = lam6[pick]
-                col = order[pick]
-                for j in range(9):
-                    top[j] = 0.0
-                    bot[j] = 0.0
-                for a in range(3):
-                    top[_BLOCK0[a]] = V66[a, col]
-                    bot[_BLOCK0[a]] = V66[3 + a, col]
-                E_node[n_branch] = E_b
-                _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
-                                   B_eta, delta_n, dM_mode, kernel)
-                n_branch += 1
+            for branch in range(n):
+                energy = abs(lam[branch])
+                if energy < min_energy:
+                    min_energy = energy
+                omega -= 0.5 * weight * _phi_scalar(energy, T)
+                entropy += 0.5 * weight * _dphi_dT_scalar(energy, T)
+                occ = 0.5 * weight * _dphi_scalar(energy, T)
+                if lam[branch] < 0.0:
+                    occ = -occ
+                for i in range(n):
+                    share = occ * V[i, branch] * V[i, branch]
+                    d_mu[row_mode[b, i]] += row_s_mu[b, i] * share
+                    d_M[row_flavour[b, i]] += row_s_M[b, i] * share
+                for g in range(gap_n[b]):
+                    i, j = gap_i[b, g], gap_j[b, g]
+                    d_Delta[gap_eta[b, g]] += (2.0 * gap_s[b, g] * occ
+                                               * V[i, branch] * V[j, branch])
 
-            # --- the three pairs, each two closed-form 2x2 problems ------
-            for pair in range(3):
-                i = _PAIR_I[pair]
-                j = _PAIR_J[pair]
-                g = G[i, j]
-                lamA, uA, vA = _eig2_upper(xi[i], -xi[j], g)
-                # the +- partner structure: A's eigenvalues are m +- s and
-                # B's are -m +- s, so the non-negative member of each pair is
-                # |m + s| and |m - s|, with the vector taken from whichever
-                # sub-block carries that sign
-                lamB, uB, vB = _eig2_upper(xi[j], -xi[i], g)
-                # branch 1: |m + s| = |lamA|
-                for jj in range(9):
-                    top[jj] = 0.0
-                    bot[jj] = 0.0
-                if lamA >= 0.0:
-                    E_b = lamA
-                    top[i] = uA
-                    bot[j] = vA
-                else:
-                    # the partner -(m+s) = B's lower; its vector is the
-                    # orthogonal complement of B's upper
-                    E_b = -lamA
-                    top[j] = -vB
-                    bot[i] = uB
-                E_node[n_branch] = E_b
-                _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
-                                   B_eta, delta_n, dM_mode, kernel)
-                n_branch += 1
-                # branch 2: |m - s|; m - s is A's lower, -(m - s) is B's upper
-                for jj in range(9):
-                    top[jj] = 0.0
-                    bot[jj] = 0.0
-                lamA_lo = xi[i] - xi[j] - lamA          # trace(A) - lamA
-                if lamA_lo >= 0.0:
-                    E_b = lamA_lo
-                    top[i] = -vA
-                    bot[j] = uA
-                else:
-                    E_b = lamB
-                    top[j] = uB
-                    bot[i] = vB
-                E_node[n_branch] = E_b
-                _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
-                                   B_eta, delta_n, dM_mode, kernel)
-                n_branch += 1
-
-            # --- the per-node scalars ------------------------------------
-            for b in range(9):
-                if E_node[b] < min_energy:
-                    min_energy = E_node[b]
-                omega -= weight * _phi_scalar(E_node[b], T)
-                delta_s += weight * _dphi_dT_scalar(E_node[b], T)
-            for j in range(9):
-                a_xi = abs(xi[j])
-                omega += weight * _phi_scalar(a_xi, T)
-                delta_s -= weight * _dphi_dT_scalar(a_xi, T)
-                tanh_xi = _dphi_scalar(xi[j], T)
-                delta_n[j] += weight * r * tanh_xi
-                dM_mode[j] -= weight * dxi_dM[j] * tanh_xi
-
-    return omega, delta_n, dM_mode, delta_s, kernel, min_energy
+    return omega, d_mu, d_M, d_Delta, entropy, min_energy
 
 
-@njit(cache=True)
-def _accumulate_branch(E_b, top, bot, xi, dxi_dM, r, T, weight,
-                       B_eta, delta_n, dM_mode, kernel):
-    """One quasiparticle branch's contributions, Hellmann-Feynman throughout.
+def _pair_pass_reference(k, weight, M_star, mu_star, Delta, T, blocks):
+    """The paired half, batched over the quadrature with `numpy.linalg.eigh`.
 
-    The reference path contracts (nk, 9, 9) arrays; here the same sums run
-    over the at most three nonzero components a branch has in the blocked
-    basis. `delta_n` takes dE/dmu_j = -r (top_j^2 - bot_j^2) tanh(E/2T),
-    `dM_mode` takes dE/dM through dxi/dM, and the gap kernels take
-    2 top_i (B_eta)_ij bot_j -- the sparse handful of (i, j) pairs each
-    B_eta actually couples.
+    The same accumulators `_pair_pass` returns, computed the same way -- one
+    Hellmann-Feynman expectation value per branch per parameter -- with the
+    node loop pushed into LAPACK instead of into numba.
     """
-    tanh_E = _dphi_scalar(E_b, T)
-    for j in range(9):
-        occ = top[j] * top[j] - bot[j] * bot[j]
-        if occ != 0.0:
-            delta_n[j] += weight * (-r) * tanh_E * occ
-            dM_mode[j] += weight * tanh_E * dxi_dM[j] * occ
-    for eta in range(3):
-        mix = 0.0
-        for i in range(9):
-            t_i = top[i]
-            if t_i == 0.0:
-                continue
-            for j in range(9):
-                if bot[j] != 0.0 and B_eta[eta, i, j] != 0.0:
-                    mix += t_i * B_eta[eta, i, j] * bot[j]
-        if mix != 0.0:
-            kernel[eta] += weight * tanh_E * 2.0 * mix
+    omega = 0.0
+    entropy = 0.0
+    d_mu = np.zeros(N_MODES)
+    d_M = np.zeros(3)
+    d_Delta = np.zeros(3)
+    min_energy = np.inf
+
+    for rows, momentum, gaps in blocks:
+        H = spectrum_matrix((rows, momentum, gaps), M_star, mu_star, Delta, k)
+        lam, V = np.linalg.eigh(H)                       # (nk, n), (nk, n, n)
+        energy = np.abs(lam)
+        min_energy = min(min_energy, float(np.min(energy)))
+
+        omega += -0.5 * float(np.sum(weight[:, None] * _phi(energy, T)))
+        entropy += 0.5 * float(np.sum(weight[:, None] * _dphi_dT(energy, T)))
+
+        occ = 0.5 * weight[:, None] * _dphi(energy, T) * np.sign(lam)
+        # dH/dmu_j and dH/dM_f are diagonal, so their expectation values are
+        # the squared components of each eigenvector, summed over the rows of
+        # that mode -- one contraction serves every one of the twelve.
+        share = np.einsum("kb,kib->i", occ, V * V)        # (n,)
+        for i, (mode, s_mu, s_M) in enumerate(rows):
+            d_mu[mode] += s_mu * share[i]
+            d_M[FLAVOUR_OF_MODE[mode]] += s_M * share[i]
+        for i, j, sign, eta in gaps:
+            d_Delta[eta - 1] += 2.0 * sign * float(
+                np.sum(occ * V[:, i, :] * V[:, j, :]))
+
+    return omega, d_mu, d_M, d_Delta, entropy, min_energy
 
 
 def pair_block(M_star, mu_star, Delta, T, k_max,
@@ -824,10 +950,15 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
                backend="reference"):
     """The pairing correction to Omega, n_j, rho_s,f, s and the gap equations.
 
-    One quadrature pass, one batched diagonalisation, five results: computing
-    them separately would diagonalise the same 18x18 matrices five times, and
+    One quadrature pass, one set of diagonalisations, five results: computing
+    them separately would diagonalise the same blocks five times, and
     finite-differencing them instead was measured 40x slower and
     ill-conditioned enough to lose convergence.
+
+    Every entry is a CORRECTION to the unpaired spectrum -- the paired sum
+    minus `_unpaired_reference` -- so every entry is identically zero at
+    Delta = 0 and a model adds them to its unpaired sums without a second code
+    path.
 
     Parameters
     ----------
@@ -841,15 +972,18 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
     quadrature : an explicit (k, w) rule, if the caller is holding one; by
         default `pair_nodes` builds it from the CURRENT masses and potentials,
         which move as an outer solve converges
-    backend : 'reference' (default) or 'fast', which selects how the BdG
-        problem at each node is diagonalised -- see `bdg_eigh`. The two are the
-        same spectrum computed two ways and agree to round-off, so the choice
-        belongs to the caller that already declared one (CLAUDE.md section 9)
+    backend : 'reference' (default) or 'fast'. The two diagonalise the same
+        seven blocks, by LAPACK batched over the quadrature or by compiled
+        cyclic Jacobi node by node, and agree to round-off; the choice belongs
+        to the caller that already declared one (CLAUDE.md section 9). Without
+        numba, 'fast' runs the reference path -- the same numbers, not a
+        different answer.
 
-    Both the particle branches (xi = E - mu*) and the ANTIPARTICLE branches
-    (xi = E + mu*) are summed. The antiparticle piece is not a small
-    correction and it grows with the cutoff: 8.8% of the particle piece at
-    Lambda = 600 MeV, 17.1% at Lambda = 1000 MeV.
+    Both the particle branches and the ANTIPARTICLE branches are summed; they
+    are two halves of the one spectrum here, since the Dirac basis carries
+    both. The antiparticle piece is not a small correction and it grows with
+    the cutoff: 8.8% of the particle piece at Lambda = 600 MeV, 17.1% at
+    Lambda = 1000 MeV.
     """
     M_star = np.asarray(M_star, dtype=float)
     mu_star = np.asarray(mu_star, dtype=float)
@@ -864,90 +998,36 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
     if quadrature is None:
         quadrature = pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel)
     k, w = quadrature
+    weight = w * k ** 2
 
-    G = gap_matrix(Delta)
-    M_mode = M_star[FLAVOUR_OF_MODE]
-
+    blocks, covered, tables = _BY_PATTERN[tuple(Delta != 0.0)]
     if backend == "fast" and _NUMBA_OK:
-        # The whole pass compiled: closed-form 2x2 sub-blocks, a Jacobi 6x6,
-        # and the contractions run over the handful of components a blocked
-        # branch actually has. Without numba, 'fast' continues below through
-        # `bdg_eigh(..., 'fast')`, the blocked-numpy diagonalisation -- the
-        # same spectrum, never a silent fallback to a different answer.
-        omega, delta_n, dM_mode, delta_s, kernel, min_energy = _pair_pass(
+        omega, d_mu, d_M, d_Delta, entropy, min_energy = _pair_pass(
             np.ascontiguousarray(k, dtype=float),
             np.ascontiguousarray(w, dtype=float),
-            np.ascontiguousarray(M_mode, dtype=float),
-            np.ascontiguousarray(mu_star, dtype=float), G, B_ETA, float(T))
-        inv = 1.0 / (2.0 * np.pi ** 2)
-        delta_rho_s = np.array(
-            [-inv * float(np.sum(dM_mode[FLAVOUR_OF_MODE == i]))
-             for i in range(3)])
-        scale = float(np.max(np.abs(Delta)))
-        return PairBlock(delta_omega=float(omega) * inv,
-                         delta_n=delta_n * inv,
-                         delta_rho_s=delta_rho_s,
-                         delta_s=float(delta_s) * inv,
-                         gap_kernel=kernel * inv,
-                         min_energy=float(min_energy),
-                         gapless=bool(min_energy < GAPLESS_FRACTION * scale))
+            np.ascontiguousarray(M_star, dtype=float),
+            np.ascontiguousarray(mu_star, dtype=float),
+            np.ascontiguousarray(Delta, dtype=float), float(T), *tables)
+    elif backend in ("reference", "fast"):
+        omega, d_mu, d_M, d_Delta, entropy, min_energy = _pair_pass_reference(
+            k, weight, M_star, mu_star, Delta, T, blocks)
+    else:
+        raise ValueError(f"unknown backend {backend!r}; eos.general.pairing "
+                         f"has 'reference' and 'fast'")
 
-    weight = w * k ** 2
-    E_mode = np.sqrt(k[:, None] ** 2 + M_mode[None, :] ** 2)   # (nk, 9)
-
-    omega = 0.0
-    delta_n = np.zeros(N_MODES)
-    delta_rho_s = np.zeros(3)
-    delta_s = 0.0
-    kernel = np.zeros(3)
-    min_energy = np.inf
-
-    for r in (+1.0, -1.0):                     # particles, then antiparticles
-        xi = E_mode - r * mu_star[None, :]
-        E, V = bdg_eigh(xi, G, backend)        # (nk, 9), (nk, 18, 9)
-        top, bot = V[:, :N_MODES, :], V[:, N_MODES:, :]
-        occ_top, occ_bot = top ** 2, bot ** 2  # the BdG matrix is real
-
-        abs_xi = np.abs(xi)
-        min_energy = min(min_energy, float(np.min(E)))
-
-        # Omega: the correction form, a difference from the unpaired spectrum
-        omega += -np.sum(weight[:, None] * (_phi(E, T) - _phi(abs_xi, T)))
-
-        tanh_E = _dphi(E, T)                   # (nk, 9)
-        tanh_xi = _dphi(xi, T)                 # signed: tanh(|xi|/2T) sign(xi)
-
-        # densities: dxi_j/dmu_j = -r, so dH/dmu_j = -r (P_j + -P_j)
-        dE_dmu = -r * np.einsum("kb,kjb->kj", tanh_E, occ_top - occ_bot)
-        delta_n += np.sum(weight[:, None] * (dE_dmu + r * tanh_xi), axis=0)
-
-        # scalar densities: dxi_j/dM_f = M_f/E_j on the modes of flavour f
-        dxi_dM = M_mode[None, :] / E_mode                      # (nk, 9)
-        dE_dM = np.einsum("kb,kj,kjb->kj", tanh_E, dxi_dM, occ_top - occ_bot)
-        per_mode = np.sum(weight[:, None] * (dE_dM - dxi_dM * tanh_xi), axis=0)
-        for i_f in range(3):
-            delta_rho_s[i_f] += float(np.sum(per_mode[FLAVOUR_OF_MODE == i_f]))
-
-        # entropy: s = -dOmega/dT at fixed spectrum
-        delta_s += float(np.sum(weight[:, None]
-                                * (_dphi_dT(E, T) - _dphi_dT(abs_xi, T))))
-
-        # the gap equation kernels, Hellmann-Feynman on dH/dDelta_eta
-        for eta in range(3):
-            mix = 2.0 * np.einsum("kib,ij,kjb->kb", top, B_ETA[eta], bot)
-            kernel[eta] += float(np.sum(weight[:, None] * tanh_E * mix))
+    M_mode = M_star[FLAVOUR_OF_MODE]
+    omega_0, entropy_0, d_mu_0, d_M_0 = _unpaired_reference(
+        k, weight, M_mode, mu_star, T, covered)
 
     inv = 1.0 / (2.0 * np.pi ** 2)
-    omega *= inv
-    delta_n *= inv
-    delta_rho_s *= -inv          # rho_s = +dOmega/dM, and the sign is in here
-    delta_s *= inv
-    kernel *= inv
-
     scale = float(np.max(np.abs(Delta)))
-    return PairBlock(delta_omega=float(omega), delta_n=delta_n,
-                     delta_rho_s=delta_rho_s, delta_s=float(delta_s),
-                     gap_kernel=kernel, min_energy=float(min_energy),
+    return PairBlock(delta_omega=(omega - omega_0) * inv,
+                     delta_n=(d_mu - d_mu_0) * inv,
+                     # rho_s = +dOmega/dM, and the sign is in here
+                     delta_rho_s=-(d_M - d_M_0) * inv,
+                     delta_s=(entropy - entropy_0) * inv,
+                     gap_kernel=d_Delta * inv,
+                     min_energy=float(min_energy),
                      gapless=bool(min_energy < GAPLESS_FRACTION * scale))
 
 
@@ -1065,3 +1145,56 @@ def pattern_seed(pattern, scale):
         raise ValueError(f"unknown pairing pattern {pattern!r}; the patterns "
                          f"declared here are {sorted(PATTERNS)}")
     return tuple(scale * s for s in PATTERNS[pattern][1])
+
+
+#: Which pattern a SOLVED set of gaps actually realises, by the mask of the
+#: gaps that came out nonzero. Every one of the eight masks is named, including
+#: the one `PATTERNS` does not offer as a request: (Delta_1, Delta_2) nonzero
+#: with Delta_3 zero is the s-pairing state, sSC, which no seed here aims at but
+#: which a free solve can land on.
+_REALISED = {
+    (False, False, False): "unpaired",
+    (False, False, True): "2SC",
+    (False, True, False): "usSC",
+    (True, False, False): "dsSC",
+    (False, True, True): "uSC",
+    (True, False, True): "dSC",
+    (True, True, False): "sSC",
+    (True, True, True): "CFL",
+}
+
+#: A gap smaller than this fraction of the largest one is zero. Solved gaps a
+#: pattern leaves free come back as exactly +-0.0 when the state does not
+#: condense them, so this only has to separate that from a real gap.
+REALISED_TOL = 1.0e-6
+
+
+def realised_pattern(Delta, rel_tol=REALISED_TOL, abs_floor=1.0e-6):
+    """The pattern a solved gap vector IS, which is not what was requested.
+
+    A pattern is a DECLARATION of which gaps are free (`pattern_mask`), and a
+    free gap is free to come out zero: Delta_1 = Delta_2 = 0 is a perfectly
+    good root of the CFL layout, and it is the 2SC state. So a solve requested
+    in one pattern can converge on another, and the requested name is then a
+    statement about the unknown vector rather than about the phase.
+
+    That is not hypothetical and it is not rare. A warm-started sweep asked for
+    'CFL' from below the CFL onset converges on 2SC at its first density and
+    carries that root up the whole sweep; every point comes back labelled 'CFL'
+    with Delta = (0, 0, ~260). Nothing downstream could see it, because the
+    only pattern a point carried was the one that had been asked for.
+
+    Returns one of the eight names of `_REALISED`. Six of them are keys of
+    `PATTERNS` and can be requested back; 'sSC', 'usSC' and 'dsSC' are
+    REPORTS -- states a free seed can reach that no seed here aims at -- and
+    passing one to `pattern_mask` raises, which is the intended behaviour.
+
+    The comparison is relative to the largest gap, so it is scale-free; a
+    vector whose largest gap is below `abs_floor` [MeV] is unpaired.
+    """
+    Delta = np.abs(np.asarray(Delta, dtype=float))
+    scale = float(Delta.max()) if Delta.size else 0.0
+    if scale <= abs_floor:
+        return "unpaired"
+    mask = tuple(bool(d > rel_tol * scale) for d in Delta)
+    return _REALISED[mask]

@@ -71,6 +71,7 @@ from eos.general.thermodynamics_leptons import (
 )
 from eos.njl.species import (
     DEFAULT_PATTERNS, PATTERNS, SpeciesFlags, pattern_mask, pattern_seed,
+    realised_pattern,
 )
 from eos.njl.thermodynamics import (gap_seed_scale, has_vector, state_at,
                                     vacuum_solution)
@@ -282,13 +283,14 @@ def thermal_sectors(T, flags, trapped):
 # THE RESIDUAL
 # =============================================================================
 def _state(x, par, spec, pattern, T, vac, two_flavour=False,
-           backend="reference"):
+           backend="reference", pair_nodes_per_panel=None):
     """The `NJLState` an unknown vector describes."""
     M, Delta, mu_3, mu_8, Sigma_V, mu_B, mu_C, mu_S, _ = _unpack(
         x, par, spec, pattern)
     return state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,
                     vac=vac, pattern=pattern, two_flavour=two_flavour,
-                    backend=backend)
+                    backend=backend,
+                    pair_nodes_per_panel=pair_nodes_per_panel)
 
 
 def _charge_rows(x, par, flags, spec, pattern, st, T):
@@ -322,7 +324,8 @@ def _charge_rows(x, par, flags, spec, pattern, st, T):
     return rows
 
 
-def residual(x, par, flags, spec, pattern, n_B, T, vac, backend="reference"):
+def residual(x, par, flags, spec, pattern, n_B, T, vac, backend="reference",
+             pair_nodes_per_panel=None):
     """The equations of one mode in one pattern, in assembly order.
 
     `flags.two_flavour` reaches the state and nothing else: the rows are the
@@ -332,7 +335,8 @@ def residual(x, par, flags, spec, pattern, n_B, T, vac, backend="reference"):
     vacuum rather than of the matter, and the 't Hooft determinant feeds it
     into M_u and M_d whether or not an s quark is populated.
     """
-    st = _state(x, par, spec, pattern, T, vac, flags.two_flavour, backend)
+    st = _state(x, par, spec, pattern, T, vac, flags.two_flavour, backend,
+                pair_nodes_per_panel)
     mask = pattern_mask(pattern)
 
     rows = list(st.mass_residual)
@@ -389,10 +393,22 @@ class EoSPoint:
     is `eos.general.solve.RESIDUAL_TOL`. When `converged` is False every other
     field holds the best iterate reached, which is not a physical state.
 
-    Three fields exist only because this model pairs, and each is part of the
+    Four fields exist only because this model pairs, and each is part of the
     answer rather than a diagnostic:
 
-        pattern   which of the enumerated candidates won, by free energy;
+        pattern   which of the enumerated candidates won, by free energy. This
+                  is the name of the LAYOUT the unknown vector was solved in,
+                  which is what `x` has to be unpacked by (`seed_from`,
+                  `warm_start`), and it is a statement about the equations
+                  rather than about the phase;
+        pattern_realised
+                  the pattern the solved gaps ARE
+                  (`eos.general.pairing.realised_pattern`). A free gap is free
+                  to come out zero, so a solve requested in one layout can
+                  converge on another -- a 'CFL' solve landing on 2SC is the
+                  documented case -- and where the two names differ it is this
+                  one that names the physics. A caller drawing a branch reads
+                  this; a caller re-seeding reads `pattern`;
         Delta     the three gaps [MeV], zero where the pattern does not pair;
         gapless   whether a quasiparticle branch has reached zero. A gapless
                   state is physical, but comparing candidates by Omega across
@@ -414,6 +430,7 @@ class EoSPoint:
     Y_Le: float = 0.0               # electron family, (n_e + n_nue)/n_B
 
     pattern: str = "unpaired"
+    pattern_realised: str = "unpaired"
     gapless: bool = False
     Delta: tuple = (0.0, 0.0, 0.0)  # MeV
     M: tuple = (0.0, 0.0, 0.0)      # MeV
@@ -499,7 +516,8 @@ def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
         Y_C=st.n_C / n_B if n_B else 0.0,
         Y_S=st.n_S / n_B if n_B else 0.0,
         Y_Le=per_B(n_Le),
-        pattern=st.pattern, gapless=st.gapless,
+        pattern=st.pattern, pattern_realised=realised_pattern(st.Delta),
+        gapless=st.gapless,
         Delta=tuple(float(d) for d in st.Delta),
         M=tuple(float(m) for m in st.M),
         mu_B=st.mu_B, mu_C=st.mu_C, mu_S=st.mu_S, mu_3=st.mu_3, mu_8=st.mu_8,
@@ -541,12 +559,15 @@ def _refuse_fixed_YS(flags, spec, model):
 
 
 def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
-                  vac=None, backend="reference", **fractions):
+                  vac=None, backend="reference", pair_nodes_per_panel=None,
+                  **fractions):
     """One mode in ONE declared pattern. The pattern is not chosen here.
 
     `backend` selects the flavour of the medium integrals and is passed
     straight down to `state_at`: 'reference' (the default, and what
-    correctness is judged against) or 'fast'. See `eos.njl.eos_point`.
+    correctness is judged against) or 'fast'. `pair_nodes_per_panel` is the
+    Gauss-Legendre node count of the pairing quadrature, likewise passed
+    straight down; None keeps the shipped rule. See `eos.njl.eos_point`.
     """
     if spec is None:
         spec = mode_spec(mode, leptons=fractions.pop("leptons", True),
@@ -573,7 +594,8 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         rather than whichever one happens to be largest (CLAUDE.md's
         `solve_system(..., tol=...)`).
         """
-        raw = residual(x, par, flags, spec, pattern, n_B, T, vac, backend)
+        raw = residual(x, par, flags, spec, pattern, n_B, T, vac, backend,
+                       pair_nodes_per_panel)
         return [r / s for r, s in zip(raw, scales_at(x))]
 
     def scales_at(x):
@@ -596,7 +618,8 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         if err_cold < err:
             x, err, ok = x_cold, err_cold, ok_cold
 
-    st = _state(x, par, spec, pattern, T, vac, flags.two_flavour, backend)
+    st = _state(x, par, spec, pattern, T, vac, flags.two_flavour, backend,
+                pair_nodes_per_panel)
     return point_from_state(st, par, flags, spec, mode, x, ok, err, T)
 
 
@@ -650,7 +673,8 @@ def patterns_for(flags, patterns=None):
 
 
 def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
-          vac=None, backend="reference", **fractions):
+          vac=None, backend="reference", pair_nodes_per_panel=None,
+          **fractions):
     """One mode at (n_B, T), with the pairing pattern chosen by free energy.
 
     Every enumerated pattern is solved to self-consistency and the converged
@@ -688,9 +712,10 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
         if seed is None and reference is not None:
             seed = seed_from(reference, par, spec, pattern)
         try:
-            point = solve_pattern(par, mode, n_B, T, flags, pattern,
-                                  spec=spec, x0=seed, vac=vac,
-                                  backend=backend)
+            point = solve_pattern(
+                par, mode, n_B, T, flags, pattern, spec=spec, x0=seed,
+                vac=vac, backend=backend,
+                pair_nodes_per_panel=pair_nodes_per_panel)
         except (ValueError, RuntimeError, np.linalg.LinAlgError):
             continue
         candidates.append(point)
@@ -703,7 +728,8 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
     if candidates:
         return candidates[0]
     return solve_pattern(par, mode, n_B, T, flags, "unpaired", spec=spec,
-                         vac=vac, backend=backend)
+                         vac=vac, backend=backend,
+                         pair_nodes_per_panel=pair_nodes_per_panel)
 
 
 def solve_beta_eq_neutrinoless(par, n_B, T=0.0, flags=None, x0=None,

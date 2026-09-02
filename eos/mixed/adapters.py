@@ -1141,7 +1141,7 @@ def alphabag_phase(params=None, flags=None):
                  cold_start=cold_start, wing_sweep=wing_sweep)
 
 
-def njl_phase(par, flags=None, patterns=None):
+def njl_phase(par, flags=None, patterns=None, backend="reference"):
     """The three-flavour NJL quark phase as a `Phase` (physical potential slot).
 
     Two things make this adapter different from every other quark one here.
@@ -1167,6 +1167,17 @@ def njl_phase(par, flags=None, patterns=None):
     `frozen_thermo` is absent: NJL exposes no thermo-at-given-densities
     surface, so the frozen-composition responses raise for a pairing that
     includes it (docs/DEFERRED.md).
+
+    `backend` is `eos.njl`'s own argument, passed through rather than
+    reinterpreted: 'reference' (the default, and what correctness is judged
+    against) or 'fast', the jitted kernel of `eos.njl.backends`. It is worth
+    passing here because the phase is the expensive half of a hybrid build --
+    a paired NJL call diagonalises an 18x18 Bogoliubov-de Gennes matrix at
+    every quadrature node, measured at three quarters of one solve -- and
+    because without this argument the engine could not reach the fast flavour
+    at all: `thermo` is called by the mixed solver, not by the caller. The
+    two agree to round-off rather than bit for bit (CLAUDE.md section 9), so
+    the default stays the reference one.
     """
     from eos.njl.parameters import Parameters as NJLParameters
     from eos.njl.species import DEFAULT_PATTERNS, SpeciesFlags as NJLFlags
@@ -1210,7 +1221,8 @@ def njl_phase(par, flags=None, patterns=None):
         for pattern in patterns:
             st, ok, _ = thermo_from_mu(par, mu, mu_C, mu_S, T,
                                        pattern=pattern,
-                                       x0=seeds.get(pattern), vac=vac)
+                                       x0=seeds.get(pattern), vac=vac,
+                                       backend=backend)
             if not ok:
                 continue
             if best is None or st.P > best.P:
@@ -1224,7 +1236,8 @@ def njl_phase(par, flags=None, patterns=None):
         return (th, best_state) if return_state else th
 
     def cold_start(n_B, T):
-        p = _njl_beta(par, n_B, T, flags=flags, patterns=patterns)
+        p = _njl_beta(par, n_B, T, flags=flags, patterns=patterns,
+                     backend=backend)
         if not p.converged:
             raise RuntimeError(f"eos.njl cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B

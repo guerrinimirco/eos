@@ -47,7 +47,7 @@ MAX_BISECT = 6
 
 
 def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None,
-             backend="reference", patterns=None):
+             backend="reference", patterns=None, pair_nodes_per_panel=None):
     """One point of a table: the mode's solve at this density and line.
 
     `conditions` carries the line's temperature (`T`) or entropy per baryon
@@ -60,13 +60,16 @@ def solve_at(par, mode, n_B, conditions, flags, leptons=None, x0=None,
     if "SnB" in conditions:
         def entropy_at(T):
             point = solve(par, mode, n_B, T, flags, x0, leptons=leptons,
-                          backend=backend, patterns=patterns, **fractions)
+                          backend=backend, patterns=patterns,
+                          pair_nodes_per_panel=pair_nodes_per_panel,
+                          **fractions)
             return point.s / point.n_B if point.n_B else 0.0
         T = temperature_at_entropy(entropy_at, conditions["SnB"])
     else:
         T = conditions["T"]
     return solve(par, mode, n_B, T, flags, x0, leptons=leptons,
-                 backend=backend, patterns=patterns, **fractions)
+                 backend=backend, patterns=patterns,
+                 pair_nodes_per_panel=pair_nodes_per_panel, **fractions)
 
 
 def quark_row(point):
@@ -89,7 +92,8 @@ def quark_row(point):
                Y_C=point.Y_C, Y_S=point.Y_S,
                Y_u=point.Y_u, Y_d=point.Y_d, Y_s=point.Y_s, Y_e=point.Y_e,
                M_u=point.M[0], M_d=point.M[1], M_s=point.M[2],
-               pattern=point.pattern, gapless=point.gapless,
+               pattern=point.pattern,
+               pattern_realised=point.pattern_realised, gapless=point.gapless,
                Delta_1=point.Delta[0], Delta_2=point.Delta[1],
                Delta_3=point.Delta[2], mu_3=point.mu_3, mu_8=point.mu_8)
     row["Y_mu-"] = point.n_mu / n_B if n_B else 0.0
@@ -126,6 +130,21 @@ class TableSpec:
             -- measured at 90% of one paired point's cost. Restricting is a
             declaration that uSC/dSC-like states are not being hunted, which
             is a physics choice the caller makes explicitly.
+
+            MEASURED, on a 9-point csc=True table over n_B = 1.0 to 1.4 fm^-3
+            at T = 0: 63.9 s with the defaults, 7.5 s with backend='fast',
+            3.7 s with backend='fast' and this restriction -- 17.5x, agreeing
+            with the default table to 1.2e-10 relative in P and 6.2e-12 in
+            eps. Neither argument changes the equations; both are declarations
+            the caller makes.
+    pair_nodes_per_panel: Gauss-Legendre nodes per panel of the PAIRING
+            quadrature; None keeps the shipped rule (24). Lowering it is the
+            third speed lever and the only one that moves numbers. Measured on
+            the same 9-point csc=True table: 11.5 s at 24 nodes, 6.2 s at 16
+            and 3.6 s at 12, with P moving by 3e-10 and 4e-10 relative -- both
+            above the 1e-10 the `test/baseline` entries are frozen at, and a
+            point can miss the convergence gate outright at 16. The default is
+            unchanged and this is an argument the caller sets deliberately.
     """
     par: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"
@@ -135,6 +154,7 @@ class TableSpec:
     leptons: bool = None
     backend: str = "reference"
     patterns: tuple = None
+    pair_nodes_per_panel: int = None
 
     def __post_init__(self):
         if "nB" not in self.axes:
@@ -202,7 +222,8 @@ def build_table(spec, skip_errors=True, rows=False, progress=None,
     def solve_one(n_B, conditions, x0):
         point = solve_at(spec.par, spec.mode, n_B, conditions, spec.include,
                          leptons=spec.leptons, x0=x0, backend=spec.backend,
-                         patterns=spec.patterns)
+                         patterns=spec.patterns,
+                         pair_nodes_per_panel=spec.pair_nodes_per_panel)
         if point is not None and point.converged:
             last["point"] = point
         return point

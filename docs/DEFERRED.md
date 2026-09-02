@@ -1931,9 +1931,50 @@ not pay for getting the bound right.
   Why it shows up only in M_u and M_d: near chiral restoration M - m is the
   small difference of two large numbers, so a percent-level change in one
   scalar density moves the light constituent masses by twenty percent and
-  moves nothing else measurably. Closing this means an independent third
-  calculation, or the specification's author confirming which sign
-  `verify_njl_csc.py` used.
+  moves nothing else measurably.
+
+  **CLOSED by the independent third calculation.** The published NJL module of
+  the same line of work (Hofmann, Gholami, Pelicer & Yang, Zenodo
+  10.5281/zenodo.18249033, source `gitlab.com/nsf-muses/njl`) was built from
+  source and run at exactly this point -- conventional cutoff
+  (`RG_consistency: false`, which is `lambda_UV = 1` here), eta_D = 0.75,
+  eta_V = 0, charge and colour neutral, beta equilibrium, T = 1 MeV,
+  mu = 500 MeV. It gives, in the 2SC phase,
+
+      M_u = 9.7004, M_d = 8.9190, M_s = 243.108, Delta_3 = 95.4995,
+      mu_Q = -62.305, mu_8 = -1.41814, Omega = -324.791, n_q = 4.46663 fm^-3
+
+  against this implementation's (9.73, 8.90), M_s = 243.13, Delta_3 = 95.50,
+  mu_C = -62.27, n_B = 1.4887 = n_q/3, P = 324.75. The unpaired row agrees the
+  same way (9.8432, 8.5534, 265.578, mu_Q = -34.195, P = 302.16 against
+  9.84, 8.55, 265.59, -34.20, 302.12). **The (|top|^2 - |bot|^2) sign this code
+  uses is the one the module uses; the specification's (11.96, 7.65) is not
+  reproduced by either.** The identity n_B = dP/dmu_B and the module now agree.
+
+  The same run confirms the mu_8 normalisation of `eos/general/pairing.py`
+  numerically: the module reports -1.41814 where this code reports -2.46, and
+  -2.46/-1.41814 = 1.7346 against sqrt(3) = 1.7321. The module computes in the
+  FULL-lambda_8 convention its own paper prints halved.
+
+- **CLOSED: the CFL branch disagreed with the MUSES module, and the spectrum
+  was why.** Against the same build, parameter set `rg_njl1`, neutral
+  beta-equilibrated matter with leptons at T = 1 MeV, the 2SC branch agreed to
+  1e-4 in P at mu = 420, 460 and 500 MeV while CFL was 16.0 %, 9.0 % and 5.7 %
+  too high, with phi_u = phi_d only 0.27-0.34 of the module's. The cause was
+  the QUASIPARTICLE SPECTRUM: `eos/general/pairing` solved the free Dirac
+  problem first and paired the on-shell modes in an 18x18 Bogoliubov-de Gennes
+  problem, which drops the particle-antiparticle mixing the gap induces. That
+  omission is controlled by the MASS MISMATCH of the pair -- exact at equal
+  paired masses, wrong by MeV when a light quark pairs with a heavy one -- so
+  it was invisible in 2SC (u with d) and 6-16 % in CFL (both with s).
+
+  The module now diagonalises the full Dirac basis (36 states, six 4x4 blocks
+  and one 12x12; Ruester et al., PRD 72, 034004 (2005), Appendix A). Every
+  branch then agrees with the module to about 1e-6 in P, and the 2SC -> CFL
+  transition lands at mu_B = 1380.3 MeV with n_B jumping 3.72 -> 4.68 n_0,
+  which is the module's own answer and Kunkel et al.'s published 3.7 -> 4.7
+  n_0. The 9 % offset is gone. `output/njl_muses/` holds the slices this was
+  measured against.
 
 - **The 't Hooft--diquark cross-term is omitted and eta_D absorbs it.** The
   determinant term expanded in the presence of diquark condensates generates a

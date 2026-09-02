@@ -540,7 +540,7 @@ The pairing machinery is shared with the NJL model of this repository
 is self-contained. It follows \cite{Buballa2005,Alford2008,Ruester2005}, with
 the neutrality treatment of \cite{Steiner2002}.
 
-\subsection{The gap matrix and the BdG problem}
+\subsection{The gap matrix and the quasiparticle spectrum}
 
 Build the $9\times9$ gap matrix on the colour--flavour modes directly from the
 antisymmetric tensors,
@@ -562,26 +562,35 @@ the mass matrix share no eigenbasis and the problem does not factorise into
 independent scalar dispersions. At $\Mstar=(60,65,300)$, $\mustar=450$,
 $\Delta=60$ MeV the eigenvalue prescription misses branches by up to $33.6$ MeV
 in uSC and $27.1$ in CFL. So at each momentum the code assembles and
-diagonalises
+diagonalises the mean-field inverse propagator in the \textbf{full Dirac
+basis}: four components per colour--flavour mode, two particle and two
+antiparticle, so $36$ states, with the gap mixing them (R\"uster \emph{et al.},
+Phys. Rev. D \textbf{72}, 034004 (2005), Appendix~A). They block-diagonalise
+into six $4\times4$ blocks --- two for each pair of modes a single gap couples
+--- and one $12\times12$ for the $(u_r, d_g, s_b)$ triple all three gaps
+couple. \texttt{eos.general.pairing} builds both, and \texttt{eos.njl}'s
+document writes them out entry by entry.
+
+The spectrum comes in $\pm$ pairs and $\Omega$ wants the positive half, taken
+as \emph{half the sum over all $36$ of} $|\lambda_a|$, which is smooth through
+a gapless window: a branch crossing zero has its partner crossing back, and
+$\partial|\lambda|/\partial x = \mathrm{sign}(\lambda)\,\partial\lambda/
+\partial x$ carries the branch sign the Hellmann--Feynman derivatives below
+need. Write $|V_a\rangle$ for the eigenvector of $\lambda_a$ and
 \begin{equation}
-\boxed{\;
-H_{\rm BdG}(k) = \begin{pmatrix} \xi(k) & \mathcal G \\ \mathcal G & -\xi(k)\end{pmatrix},
-\qquad
-\xi^{(j),r}(k) = E_{k,f(j)} - r\,\mustar_j,\;}
-\label{eq:bdg}
+  w_a = \tfrac12\,\mathrm{sign}(\lambda_a)\tanh\frac{|\lambda_a|}{2T},
+  \qquad
+  \xi^{(j),r}(k) = E_{k,f(j)} - r\,\mustar_j .
+  \label{eq:bdg}
 \end{equation}
-an $18\times18$ real symmetric matrix, once for particles ($r=+1$) and once for
-antiparticles ($r=-1$), with $\xi=\mathrm{diag}(\xi^{(j),r})_{j=1}^{9}$. The
-nine quasiparticle energies $E^{(j),r}_\Delta(k)$ are the \textbf{non-negative
-half of the signed spectrum},
-$\mathrm{sort}(\mathrm{eigvalsh})[9{:}]$, and not the nine largest in modulus:
-the two agree in value, but only the first is smooth through a gapless window,
-and that smoothness is what makes the Hellmann--Feynman derivatives below carry
-the correct branch sign. Write $\mathcal V^{(j),r}(k)$ for the corresponding
-$18$-component eigenvector and split it as
-$\mathcal V = (\mathcal V^{\rm top},\mathcal V^{\rm bot})$ into its two
-$9$-component halves; the matrix is real, so
-$|\mathcal V^{\rm top}_{ib}|^2$ is simply its square.
+
+Solving the free Dirac problem FIRST --- fixing $E=\sqrt{k^2+\Mstar^2}$ and
+pairing the on-shell modes in an $18\times18$ Bogoliubov--de~Gennes problem
+$\big(\begin{smallmatrix}\xi & \mathcal G\\ \mathcal G & -\xi\end{smallmatrix}
+\big)$ --- is the familiar shortcut and is \emph{not} what this module does. It
+drops the particle--antiparticle mixing the gap induces, which is controlled by
+the mass mismatch of the pair: exact at equal paired masses, and wrong by MeV
+where a light quark pairs with a heavy one, which is every CFL phase here.
 
 \subsection{The pairing potential, as a correction}
 
@@ -590,11 +599,12 @@ $|\mathcal V^{\rm top}_{ib}|^2$ is simply its square.
  + \delta\Omega_{\rm pair} + \sum_{\eta=1}^{3}\frac{\Delta_\eta^2}{4G_D},
 \label{eq:Omegaquark}\\
 \delta\Omega_{\rm pair} &= -\frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2
- \sum_{r=\pm}\sum_{j=1}^{9}
- \left[\phi\!\left(E^{(j),r}_\Delta\right)
- - \phi\!\left(\left|\xi^{(j),r}\right|\right)\right],
+ \left[\frac12\sum_{a=1}^{36}\phi\!\left(|\lambda_a|\right)
+ - \sum_{r=\pm}\sum_{j\in\mathcal C}
+   \phi\!\left(\left|\xi^{(j),r}\right|\right)\right],
 \label{eq:dOmega}\\
-\phi(x) &\equiv x + 2T\ln\left(1+e^{-x/T}\right),
+\phi(x) &\equiv x + 2T\ln\left(1+e^{-x/T}\right),%
+\qquad\text{$\mathcal C$ the modes the blocks cover,}
 \qquad \phi'(x) = \tanh\frac{x}{2T},
 \qquad \frac{\partial\phi}{\partial T}
  = 2\ln\left(1+e^{-x/T}\right) + \frac{2x/T}{e^{x/T}+1}.
@@ -626,18 +636,16 @@ There is one residual per channel, not one gap:
 \begin{equation}
 \boxed{\;
 R_{\Delta_\eta} = \frac{\Delta_\eta}{2G_D}
- - \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{r=\pm}\sum_{j=1}^{9}
- \left\langle \mathcal V^{(j),r}\left|
- \begin{pmatrix} 0 & \mathcal B_\eta \\ \mathcal B_\eta & 0\end{pmatrix}
- \right|\mathcal V^{(j),r}\right\rangle
- \tanh\frac{E^{(j),r}_\Delta}{2T} = 0\;}
+ - \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{a=1}^{36}
+ w_a \left\langle V_a\left|
+ \frac{\partial H}{\partial\Delta_\eta}
+ \right|V_a\right\rangle = 0\;}
 \label{eq:gapeq}
 \end{equation}
-with $\mathcal V^{(j),r}$ the eigenvector of $H_{\rm BdG}$ belonging to
-$E^{(j),r}_\Delta$. The matrix element is the Hellmann--Feynman derivative
-$\partial E^{(j),r}_\Delta/\partial\Delta_\eta$, and
-$\partial H_{\rm BdG}/\partial\Delta_\eta$ is the constant matrix
-$\mathcal B_\eta$ in the off-diagonal blocks, assembled once.
+with $w_a$ from \eqref{eq:bdg}. The matrix element is the Hellmann--Feynman
+derivative $\partial\lambda_a/\partial\Delta_\eta$, and
+$\partial H/\partial\Delta_\eta$ is the constant placement pattern of that gap
+inside the blocks, assembled once.
 
 \textbf{This is never the $\Delta/|E|$ form}, which is obtained by
 differentiating $|E|$ as though every branch were positive. Against finite
@@ -660,27 +668,30 @@ s_{\rm quark} = \sum_j \mathcal S_j + \delta s_{\rm pair},
 \label{eq:pairedsums}
 \end{equation}
 and each correction is the Hellmann--Feynman derivative of \eqref{eq:dOmega},
-taken on \eqref{eq:bdg} in the same quadrature pass:
+taken on the same blocks in the same quadrature pass. Both
+$\partial H/\partial\mu_j$ and $\partial H/\partial\Mstar_f$ are
+\emph{diagonal} --- they carry the signs with which that mode's potential and
+that flavour's mass enter each block row --- so their expectation values are
+sums of squared eigenvector components:
 \begin{align}
 \delta n_j &= -\frac{\partial\,\delta\Omega_{\rm pair}}{\partial\mu_j}
- = \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{r=\pm}\left[
- -r\sum_{b=1}^{9}\tanh\frac{E^{(b),r}_\Delta}{2T}
- \left(\left|\mathcal V^{{\rm top},(b),r}_{j}\right|^2
-      -\left|\mathcal V^{{\rm bot},(b),r}_{j}\right|^2\right)
- + r\tanh\frac{\xi^{(j),r}}{2T}\right],
+ = \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\left[
+ \sum_{a} w_a \left\langle V_a\left|\frac{\partial H}{\partial\mu_j}
+ \right|V_a\right\rangle
+ + \sum_{r=\pm} r\tanh\frac{\xi^{(j),r}}{2T}\right],
 \label{eq:dn}\\
-\delta\rho_{s,f} &= -\frac{\partial\,\delta\Omega_{\rm pair}}{\partial\Mstar_f}
- = -\frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{r=\pm}
- \sum_{j\in f}\frac{\Mstar_f}{E_{k,f}}\left[
- \sum_{b=1}^{9}\tanh\frac{E^{(b),r}_\Delta}{2T}
- \left(\left|\mathcal V^{{\rm top},(b),r}_{j}\right|^2
-      -\left|\mathcal V^{{\rm bot},(b),r}_{j}\right|^2\right)
- - \tanh\frac{\xi^{(j),r}}{2T}\right],
+\delta\rho_{s,f} &= +\frac{\partial\,\delta\Omega_{\rm pair}}{\partial\Mstar_f}
+ = -\frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\left[
+ \sum_{a} w_a \left\langle V_a\left|\frac{\partial H}{\partial\Mstar_f}
+ \right|V_a\right\rangle
+ - \sum_{r=\pm}\sum_{j\in f\cap\,\mathcal C}\frac{\Mstar_f}{E_{k,f}}
+   \tanh\frac{\xi^{(j),r}}{2T}\right],
 \label{eq:drhos}\\
 \delta s_{\rm pair} &= -\frac{\partial\,\delta\Omega_{\rm pair}}{\partial T}
- = \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\sum_{r=\pm}\sum_{j=1}^{9}
- \left[\frac{\partial\phi}{\partial T}\!\left(E^{(j),r}_\Delta\right)
- - \frac{\partial\phi}{\partial T}\!\left(\left|\xi^{(j),r}\right|\right)\right],
+ = \frac{1}{2\pi^2}\int_0^{\Lambda}\!\!\mathrm dk\,k^2\left[
+ \frac12\sum_{a=1}^{36}\frac{\partial\phi}{\partial T}\!\left(|\lambda_a|\right)
+ - \sum_{r=\pm}\sum_{j\in\mathcal C}
+   \frac{\partial\phi}{\partial T}\!\left(\left|\xi^{(j),r}\right|\right)\right],
 \label{eq:ds}
 \end{align}
 with $\partial\phi/\partial T$ from \eqref{eq:phi}. Note the sign of

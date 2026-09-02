@@ -113,7 +113,84 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
             best_x, best_err = sol.x, err
         if best_err <= RESIDUAL_TOL:
             break
+    if best_err > RESIDUAL_TOL:
+        best_x, best_err = newton_polish(residual, best_x, scales_at, best_err)
     return best_x, best_err, bool(best_err <= RESIDUAL_TOL)
+
+
+#: Relative steps the polish differentiates at, largest first. Central
+#: differences, so the truncation error is O(h^2) and a step far below
+#: MINPACK's sqrt(macheps) ~ 1.5e-8 is still meaningful -- and a SPREAD is
+#: needed rather than one value, because the right step depends on the
+#: unknown: a potential of order 10^3 MeV wants a coarse one, and a colour
+#: potential sitting at 1e-6 MeV wants a fine one. Measured on the njl 2SC
+#: point below, 1e-8 takes the residual from 1.3e-8 to 5e-11 and the
+#: neighbouring two do nothing at all.
+POLISH_JACOBIAN_STEPS = (1.0e-6, 1.0e-8, 1.0e-10)
+
+#: How many Newton steps the polish may take, and how far it may back off
+#: along one. A step that does not reduce the residual at full, half or
+#: quarter length is a step into a different basin, and the polish stops.
+POLISH_STEPS = 3
+POLISH_BACKOFFS = (1.0, 0.5, 0.25)
+
+
+def newton_polish(residual, x, scales_at, err, steps=POLISH_STEPS):
+    """A few damped Newton steps from the best iterate a root finder reached.
+
+    MINPACK stops on its OWN progress test, not on this repository's gate, and
+    the two part company in a way that has nothing to do with the physics: its
+    forward-difference Jacobian steps by sqrt(macheps)|x|, which is 5e-6 at
+    the mu ~ 10^3 MeV of dense matter, so once the remaining Newton step is of
+    that size it reports "not making good progress" and returns. Observed in
+    `eos.njl`: a 2SC point whose scaled residual sat at 1.3e-8, three decades
+    above `RESIDUAL_TOL`, with a genuine root 7e-6 away in x and a Jacobian
+    conditioned at 50 -- and reached by the same solver from the same start
+    under a different rounding of the same equations. A termination artefact,
+    not a state that fails to exist.
+
+    So the polish re-differentiates centrally at each of
+    `POLISH_JACOBIAN_STEPS`, takes the Newton step, and backs off along it
+    while that does not help. It runs ONLY after the gate has been missed, so
+    it can lower a reported residual and never raise one; a system with no
+    root nearby stops on the first non-improving step.
+
+    Returns the better of (x, err) and what the polish reached.
+    """
+    x = np.asarray(x, dtype=float)
+    best_x, best_err = x, err
+    for _ in range(steps):
+        r0 = np.asarray(residual(best_x), dtype=float)
+        n = best_x.size
+        if r0.size != n:
+            return best_x, best_err          # not square: Newton has no step
+        improved = False
+        for relative_step in POLISH_JACOBIAN_STEPS:
+            jacobian = np.empty((r0.size, n))
+            for i in range(n):
+                h = relative_step * max(abs(best_x[i]), 1.0)
+                up, down = best_x.copy(), best_x.copy()
+                up[i] += h
+                down[i] -= h
+                jacobian[:, i] = (np.asarray(residual(up), dtype=float)
+                                  - np.asarray(residual(down), dtype=float)
+                                  ) / (2.0 * h)
+            try:
+                step = np.linalg.lstsq(jacobian, -r0, rcond=None)[0]
+            except np.linalg.LinAlgError:
+                continue
+            for damping in POLISH_BACKOFFS:
+                trial = best_x + damping * step
+                trial_err = scaled_residual_max(residual(trial),
+                                                scales_at(trial))
+                if trial_err < best_err:
+                    best_x, best_err, improved = trial, trial_err, True
+                    break
+            if improved:
+                break
+        if not improved or best_err <= RESIDUAL_TOL:
+            break
+    return best_x, best_err
 
 
 def undetermined_unknowns(jacobian, names, rtol=1.0e-10):
