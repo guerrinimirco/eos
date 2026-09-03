@@ -772,7 +772,8 @@ def check_pattern_labels(par):
     on every change.
 
     THREE POINTS, and on the compiled backend where there is one. A paired
-    solve diagonalises an 18x18 matrix at every quadrature node, so a density
+    solve diagonalises the quasiparticle blocks at every quadrature node, so a
+    density
     sweep here would cost more than every other check in this file combined --
     measured at over ten minutes against the suite's six seconds. Which state a
     solve lands in does not depend on the backend at the level this compares
@@ -810,7 +811,8 @@ def run_all(par=None, include_csc=True, include_sound=True):
     """Run every check and return the report.
 
     `include_csc` adds the paired states, which are the expensive half (a
-    paired solve diagonalises an 18x18 matrix at every quadrature node).
+    paired solve diagonalises the quasiparticle blocks at every quadrature
+    node).
 
     `include_sound` adds the density-ceiling and sound-speed checks and is ON:
     causality is an invariant (CLAUDE.md section 8), and an invariant that only

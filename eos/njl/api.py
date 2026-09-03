@@ -46,8 +46,10 @@ class PointResult:
     """One eos_point outcome: a convergence status the caller can test.
 
     `ok` is the solver's own judgement on its scaled residual; `message` says
-    what happened, and `point` carries the state (it is present even when `ok`
-    is False, so a caller can look at where the solve got to).
+    what happened, and `point` carries the state -- present even when `ok` is
+    False, so a caller can look at where the solve got to. The ONE exception
+    is a failed `SnB` request: there the temperature was never found, so there
+    is no iterate to hand back and `point` is None. Test `ok` first either way.
     """
     ok: bool
     message: str
@@ -95,7 +97,9 @@ def eos_point(par, mode, species=None, n_B=None,
     mode : str
         One of `MODE_FRACTIONS`.
     species : SpeciesFlags
-        The active degrees of freedom; unpaired, with muons, by default.
+        The active degrees of freedom. The default is `SpeciesFlags()`,
+        which is every flag False (CLAUDE.md section 4): unpaired, no muons,
+        no photons, no thermal neutrinos.
     n_B : float
         Baryon density [fm^-3].
     T, SnB : float
@@ -132,8 +136,9 @@ def eos_point(par, mode, species=None, n_B=None,
         WHAT IT IS WORTH, measured on a colour-superconducting solve at
         n_B = 1.2 fm^-3 (CPython 3.14.2, numpy 2.3.5): 8.5x at T = 0 and 7.1x
         at T = 30 MeV. Three quarters of an unaccelerated CSC solve is the
-        18x18 Bogoliubov-de Gennes diagonalisation at each quadrature node,
-        which is what the compiled pass replaces.
+        quasiparticle diagonalisation at each quadrature node -- the six 4x4
+        blocks and the one 12x12 the 36-state Dirac-basis spectrum decomposes
+        into -- which is what the compiled pass replaces.
     pair_nodes_per_panel : int
         Gauss-Legendre nodes per panel of the PAIRING quadrature; None (the
         default) keeps the shipped rule of 24. It is the third speed lever

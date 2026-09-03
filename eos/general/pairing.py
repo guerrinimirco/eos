@@ -46,6 +46,18 @@ Gholami's equations uses sqrt(3); only a comparison against the symbols
 printed in Kunkel et al. uses 2/sqrt(3). Every mu_8 this module produces or
 consumes is in the diag(1,1,-2)/3 normalisation.
 
+**mu_3 needs a conversion of its own, and it is a different number.** T_3
+above is the HALVED Gell-Mann lambda_3/2, while T_8 is lambda_8/sqrt(3): the
+two generators here are not in a common normalisation, so knowing the mu_8
+factor tells you nothing about mu_3. Against the full lambda_3 -- Gholami et
+al. and the MUSES module again -- mu_3^ours = 2 mu_3^theirs. This stayed
+invisible for a long time because mu_3 VANISHES in every state that had been
+compared: it is zero by symmetry in the chiral and CFL phases, and the MUSES
+gapsolver pins it to zero in 2SC outright. The state that finally exercised it
+is dsSC, d paired with s and nothing else, where mu_3 = 2.42 MeV against their
+1.21; carrying their number across unconverted moves the pressure by 1e-3
+relative and leaves the state visibly colour-CHARGED, n_3 = -9e-3 fm^-3.
+
 Units are natural throughout: momenta, masses and potentials in MeV,
 densities in MeV^3, Omega in MeV^4. Nothing here converts to fm; the models'
 own boundaries do that.

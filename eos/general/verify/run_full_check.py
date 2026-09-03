@@ -20,6 +20,9 @@ there is no model above them to disagree with.
   5. T = 0 limits      the closed forms against the finite-T integrals as
                        T -> 0, including the Sommerfeld T^2 approach that
                        distinguishes a correct limit from a wrong constant.
+  6. Pairing masks     the reduced quasiparticle block sets -- uSC, dSC, sSC,
+                       2SC -- against the eps -> 0 limit of the full one, the
+                       only mask an independent implementation has checked.
 
 WHAT IS DELIBERATELY NOT HERE. The split-panel Gauss-Legendre gas is the third
 alternative section 7 speaks of, and its validation against JEL already exists
@@ -49,6 +52,7 @@ from eos.general.fermi_integrals import (
     solve_fermi_jel, solve_fermi_gl, solve_fermi_t0, Fermi_Numerical,
     GL_MIN_DEGENERACY,
 )
+from eos.general.pairing import MODES, pair_block
 from eos.general.solve import undetermined_unknowns
 from eos.general.particles import (
     BARYONS_ALL, LEPTONS, MESONS_PSEUDOSCALAR, QUARKS, Neutrino, get_particle,
@@ -483,6 +487,74 @@ def check_undetermined_potential_screen(tol=1.0e-12):
         f"all three limbs fail on a broken input")
 
 
+def check_pairing_mask_reduction(tol=1.0e-9):
+    """Each reduced block set against the eps -> 0 limit of the full one.
+
+    `pairing._spectrum_blocks` decomposes the 36-state spectrum by WHICH gaps
+    are nonzero: a mode no gap touches leaves both the paired sum and the
+    unpaired reference, so its contribution cancels identically instead of
+    surviving as the difference of two large numbers. That makes uSC, dSC, sSC
+    and 2SC four DIFFERENT decompositions -- different blocks, different block
+    sizes, a different covered set -- and only the full mask, all three gaps
+    nonzero, has ever been checked against an independent implementation (the
+    MUSES NJL module of Hofmann et al., on its CFL branch).
+
+    The reduced sets inherit that check by continuity. A gap of eps MeV is
+    still a gap, so the FULL block set evaluated at (eps, Delta_2, Delta_3)
+    must converge, as eps -> 0, on the uSC set evaluated at (0, Delta_2,
+    Delta_3) -- and likewise for the masks that zero Delta_2, Delta_3, or two
+    of the three. A wrong reduction moves the reduced answer and leaves the
+    limit where it was, so the two separate: a mode dropped from one side and
+    not the other, or an edge written into the wrong slot of the 12x12 triple
+    block, both show here.
+
+    The state is deliberately mass-mismatched and colour-split. A spectrum
+    error that vanishes at equal paired masses is the one this module shipped
+    once already -- pairing on-shell modes is exact for u-d and wrong by MeV
+    for anything paired with s -- so a check at M_u = M_d = M_s would be blind
+    to its own history.
+    """
+    M_star = np.array([12.0, 11.0, 320.0])
+    mu_star = np.full(9, 470.0)
+    mu_star[MODES.index(("u", "r"))] += 8.0
+    mu_star[MODES.index(("d", "g"))] -= 6.0
+    mu_star[MODES.index(("s", "b"))] += 3.0
+    T, k_max, eps = 20.0, 6023.0, 1.0e-6
+
+    cases = (("uSC", 0, (0.0, 60.0, 90.0)),
+             ("dSC", 1, (60.0, 0.0, 90.0)),
+             ("sSC", 2, (60.0, 90.0, 0.0)),
+             ("2SC", 0, (0.0, 0.0, 90.0)))
+
+    errors = []
+    failures = []
+    for name, slot, Delta in cases:
+        full = list(Delta)
+        full[slot] = eps
+        for backend in ("reference", "fast"):
+            reduced = pair_block(M_star, mu_star, np.array(Delta), T, k_max,
+                                 backend=backend)
+            limit = pair_block(M_star, mu_star, np.array(full), T, k_max,
+                               backend=backend)
+            worst = max(
+                abs(limit.delta_omega - reduced.delta_omega)
+                / abs(reduced.delta_omega),
+                float(np.max(np.abs(limit.delta_n - reduced.delta_n)))
+                / float(np.max(np.abs(reduced.delta_n))),
+                float(np.max(np.abs(limit.delta_rho_s - reduced.delta_rho_s)))
+                / float(np.max(np.abs(reduced.delta_rho_s))))
+            errors.append(worst)
+            if worst > tol:
+                failures.append(f"{name} on {backend}: {worst:.2e}")
+
+    worst = float(max(errors))
+    return CheckResult(
+        "pairing mask reduction", not failures, worst,
+        "; ".join(failures) if failures else
+        f"{len(cases)} reduced masks, both backends, against the full mask at "
+        f"Delta_eta = {eps:g} MeV")
+
+
 def run_full_check():
     """Run the `eos.general` verification suite; returns a structured report."""
     report = FullCheckReport()
@@ -492,6 +564,7 @@ def run_full_check():
     report.results.append(check_undetermined_potential_screen())
     report.results.append(check_meson_gas())
     report.results.append(check_t0_limit())
+    report.results.append(check_pairing_mask_reduction())
     return report
 
 

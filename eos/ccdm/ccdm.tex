@@ -1661,6 +1661,70 @@ and both are returned: a set whose surface lies below the strange quark's
 threshold returns $Y_S = 0$ from a three-flavour call, so the content is read
 off $Y_S$.
 
+\subsection{Where this model sits in the window}
+
+\textbf{No point in the tier-3 priors clears the three-flavour arm, and the
+obstruction is $B_{\rm eff}$ rather than the search.} Measured at $T = 0$ in
+\texttt{beta\_eq\_neutrinoless} with \texttt{csc = True} over
+$n_B \in [0.3, 2.0]\;$fm$^{-3}$ at 16 scan densities, on
+$B_g^{1/4} = 120\;$MeV with $\bar g_\omega = 4$ and every other knob at its
+shipped value except where the row says:
+
+\begin{center}
+\begin{tabular}{lllll}
+\toprule
+moved knob & $n_B$ [fm$^{-3}$] & $E/A$ [MeV] & $Y_S$ & pattern \\
+\midrule
+none & 1.2585 & 1333.05 & 1.0000 & CFL \\
+$G_D = 2\times10^{-5}$, $q = 1$ & 1.1433 & 1387.60 & 0.5739 & unpaired \\
+$g_s = 8$ & 1.6567 & 1415.62 & 1.0000 & CFL \\
+$n_c = 0.3$; $n_c = \infty$; $\bar g_\omega = 12$; $p = 2$
+ & \multicolumn{4}{l}{no $P = 0$ crossing} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The deepest surface in the box is $1333.05\;$MeV against the $930.4\;$MeV of
+iron. Colour superconductivity works and is not enough: at otherwise identical
+parameters it takes $E/A$ from 1387.60 to $1333.05\;$MeV, a recovery of
+$54.5\;$MeV, by locking to CFL --- $Y_S = 1$ exactly, which is what the locking
+means.
+
+One number carries the bound. Across the scanned points
+%
+\begin{equation}
+E/A = 5.92\, B_{\rm eff}^{1/4} \qquad \text{to } 0.3\%,
+\end{equation}
+%
+the ideal-bag relation with this model's own $B_{\rm eff}$, so
+$E/A < 930.4\;$MeV needs $B_{\rm eff}^{1/4} < 157.2\;$MeV, or $163.6\;$MeV once
+the CFL recovery is credited --- $B_{\rm eff} < 93.2\;$MeV/fm$^3$. But
+$B_{\rm eff} = B_g + B_\chi$ and \textbf{the chiral part is the larger part and
+is not a tier-3 knob}: $B_\chi$ follows from the tier-1 vacuum data through
+$C_0$, dominated by the strange terms $\epsilon_\zeta \zeta_0$ and
+$\lambda_\zeta(\zeta_0^2 - v_\zeta^2)^2/4$, and the only tier-3 parameter
+touching it is $m_\sigma$, through the light sector alone. Over the whole prior
+box
+%
+\begin{align}
+B_{\rm eff}^{1/4} &\ge 231.90\;\text{MeV} \quad (376.4\;\text{MeV/fm}^3)
+ &&\text{at } B_g^{1/4} = 120,\ m_\sigma = 450\;\text{MeV}, \\
+B_\chi^{1/4} &= 227.63\;\text{MeV} \quad (349.4\;\text{MeV/fm}^3)
+ &&\text{at } B_g \to 0,\ m_\sigma = 450\;\text{MeV},
+\end{align}
+%
+so switching the glue bag off entirely still leaves the field energy a factor
+four above what absolute stability needs. This model describes hybrid-star
+quark matter, not a self-bound strange star, and a crustless strange-quark-star
+sequence is not reachable by a choice of \texttt{Parameters} in it.
+
+\textbf{The two-flavour arm has no deconfined solution at these densities at
+all.} With \texttt{two\_flavour = True} the model converges at 0 of 20 scan
+densities over $[0.3, 2.2]\;$fm$^{-3}$, paired and unpaired alike, at both
+$B_g^{1/4} = 120\;$MeV and the shipped set: with the strange Fermi sea emptied
+nothing opens the dielectric against the vacuum over that range, so there is no
+branch to carry a surface. The arm reports that as a status and fails nothing.
+
 \subsection{The \texttt{two\_flavour} flag}
 
 Two-flavour quark matter is \texttt{beta\_eq\_neutrinoless} with the strange

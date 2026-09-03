@@ -570,7 +570,12 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
     straight down; None keeps the shipped rule. See `eos.njl.eos_point`.
     """
     if spec is None:
-        spec = mode_spec(mode, leptons=fractions.pop("leptons", True),
+        # None, not True: an unnamed flag means `resolve_leptons`'s default,
+        # which is False in every model. Defaulting it True here would make
+        # solve_pattern(..., "fixed_YC", Y_C=0.3) add a neutralizing electron
+        # gas that eos_point() -- which passes the flag explicitly -- does not,
+        # and the two spellings of one call would differ by 23 MeV/fm^3 in P.
+        spec = mode_spec(mode, leptons=fractions.pop("leptons", None),
                          **fractions)
     _refuse_fixed_YS(flags, spec, 'eos.njl')
     if vac is None:
@@ -691,7 +696,11 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
     """
     if flags is None:
         flags = SpeciesFlags()
-    leptons = fractions.pop("leptons", True)
+    # None means "not named", which `resolve_leptons` turns into False --
+    # the same default every other model has, and the one `eos_point`
+    # already passes down (CLAUDE.md section 4: a default never ADDS
+    # physics to a call that did not ask for it).
+    leptons = fractions.pop("leptons", None)
     spec = mode_spec(mode, leptons=leptons, **fractions)
     _refuse_fixed_YS(flags, spec, 'eos.njl')
     if vac is None:

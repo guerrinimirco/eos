@@ -1,0 +1,34 @@
+suite certificate
+  opened      2026-09-03T01:50:07
+  closed      2026-09-03T05:40:39
+  HEAD        d5764cf
+  interpreter CPython 3.14.2, numpy 2.3.5, scipy 1.17.0
+  eos/ before 722994178c91419e7d904fd3d979a78d68e691dd
+  eos/ after  3fcafa667f08a709fbe8b3fc182ed4596158e045
+  verdict     DISCARD -- eos/ changed mid-run; this is not a measurement
+
+    def test_nonconvergence_is_a_return_value():
+        """A sampler walks into unphysical parameter space constantly and must be
+        able to score the point and move on. a = 1e4 fm^2 is repulsion four
+        orders of magnitude past anything physical; the solve does not reach the
+        gate, and that comes back as a status rather than an exception."""
+        absurd = Parameters(name="absurd", a=1.0e4)
+        result = eos_point(absurd, "beta_eq_neutrinoless", n_B=0.8, T=0.0)
+>       assert not result.ok
+E       AssertionError: assert not True
+E        +  where True = PointResult(ok=True, message='converged', point=EoSPoint(converged=True, error=np.float64(1.814243200115584e-12), n_B=...=np.float64(1.1089559150438315), Y_s=np.float64(0.8910296488434561), Y_e=np.float64(1.4436112713632929e-05), Y_nu=0.0)).ok
+
+test/vmit/test_uniform_api.py:42: AssertionError
+=============================== warnings summary ===============================
+test/baseline/test_baseline.py: 43 warnings
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/astro/tov/solver.py:395: DeprecationWarning: `trapz` is deprecated. Use `trapezoid` instead, or one of the numerical integration functions in `scipy.integrate`.
+    M_b_MeV = m_nucleon_MeV * np.trapz(integrand, dx=dr_fm)
+
+test/baseline/test_baseline.py::test_baseline[zlvmit]
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/zl/thermodynamics.py:331: RuntimeWarning: invalid value encountered in scalar divide
+    Y_p=n_p_calc / n_B, Y_n=n_n_calc / n_B, Y_C=n_C / n_B, Y_S=n_S / n_B,
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/vmit/test_uniform_api.py::test_nonconvergence_is_a_return_value
+1 failed, 1904 passed, 23 skipped, 44 warnings in 2300.76s (0:38:20)
