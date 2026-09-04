@@ -33,6 +33,7 @@ from eos.ccdm.table import rows_from_result as ccdm_rows_from_result
 from eos.general.figure_style import (LABELS, OKAB_CAT, log_decades,
                                       panel_label, paper_grid,
                                       particle_style)
+from eos.general import pqcd
 from eos.general.physics_constants import hc3
 from eos.general.table_io import matrix_from_rows
 from eos.ccdm.couplings import vector_coupling
@@ -1448,4 +1449,101 @@ ax_n.set_ylabel(r"$\Delta_\eta$ [MeV]")
 njl_style_legend(ax_n, [(r"$\Delta_1$ ($ds$)", "-"), (r"$\Delta_3$ ($ud$)", "-.")],
                  loc="lower right", fontsize="xx-small")
 panel_label(ax_n, "(b)  $T$ = 0")
+plt.show()
+
+
+# %% [markdown]
+# ## Pressure against mu_B, against the perturbative-QCD bands
+#
+# The one plane where a model of deconfined matter can be held against a
+# first-principles calculation. At asymptotically high density QCD is weakly
+# coupled and the pressure is a series in `alpha_s`; the models here are
+# effective descriptions fitted at a few times saturation, and the question the
+# panel asks is whether their `P(mu_B)` heads toward the perturbative result or
+# away from it.
+#
+# **Two bands, because pairing changes the order that is available.** The
+# unpaired band is the N3LO pressure of massless three-flavour matter in beta
+# equilibrium; the CFL band adds the condensation term `p_free gamma_1
+# Delta_bar^2`, known to NLO. Both live in `eos.general.pqcd` — nothing here
+# is fitted and nothing is a parameter of a model, so it sits beside the
+# observational constraints rather than inside any one of them. That module's
+# docstring writes out both series with their coefficients and references.
+#
+# **The band IS the truncation error.** `X = 3 Lambda_bar / (2 mu_B)` is the
+# renormalization scale in units of the natural one; a summed series would not
+# depend on it, so `band()` sweeps `X` in [1/2, 2] and returns the envelope. It
+# refuses below `MU_B_MIN` = 2.6 GeV, where those papers stop quoting the
+# result — at `X = 1/2` that is already `alpha_s = 0.64`. The desert between
+# the model curves and the band is the honest state of the field, not a gap in
+# the notebook.
+#
+# **The curves are the tables already solved above**, so nothing is re-solved
+# here: `MATRIX` for the unpaired line, `cfl_matrix` for the paired one. The
+# two njl curves are different parametrizations (`rkh` unpaired, `rg_njl1`
+# paired) and so are the two alphaBag ones, so colour says which model and
+# linestyle says paired or not — a pair of curves in one colour is NOT one
+# model with the pairing switched on. The CFL band is drawn at the same
+# `Delta0` = 100 MeV the two bag models are given, so that comparison is at
+# one gap throughout.
+
+# %%
+MU_B_PQCD = np.linspace(pqcd.MU_B_MIN, 3600.0, 40)          # MeV
+
+unpaired_lo, unpaired_hi = pqcd.band(MU_B_PQCD)
+cfl_lo, cfl_hi = pqcd.band(MU_B_PQCD, Delta=DELTA0)
+
+print(f"=== pQCD, mu_B = {MU_B_PQCD[0] / 1e3:.1f} to "
+      f"{MU_B_PQCD[-1] / 1e3:.1f} GeV, X in {pqcd.X_RANGE}, "
+      f"c0 = {pqcd.C0_DEFAULT} ===")
+print(f"  alpha_s at the band edges, mu_B = {MU_B_PQCD[0] / 1e3:.1f} GeV: "
+      f"{pqcd.alpha_s(2 * pqcd.X_RANGE[0] * MU_B_PQCD[0] / 3):.3f} (X = 1/2) "
+      f"to {pqcd.alpha_s(2 * pqcd.X_RANGE[1] * MU_B_PQCD[0] / 3):.3f} (X = 2)")
+for name, lo, hi in (("N3LO unpaired", unpaired_lo, unpaired_hi),
+                     (f"NLO CFL  Delta = {DELTA0:.0f}", cfl_lo, cfl_hi)):
+    print(f"  [{name:22s}] P at {MU_B_PQCD[0] / 1e3:.1f} GeV "
+          f"{lo[0]:7.1f} to {hi[0]:7.1f}   "
+          f"at {MU_B_PQCD[-1] / 1e3:.1f} GeV "
+          f"{lo[-1]:7.1f} to {hi[-1]:7.1f} MeV/fm^3")
+
+
+# %%
+# Colour is the model, linestyle is the pairing. The bag models and njl
+# unpaired come from `MATRIX`; njl and alphaBag CFL from `cfl_matrix`, whose
+# keys carry their parametrization, so they are matched on a prefix rather than
+# spelled out a second time. Grey is the reference-line colour of
+# `figure_style`, which is what the two bands are.
+PQCD_COLOUR = dict(zip(("vmit", "alphabag", "njl"), OKAB_CAT))
+
+fig, axes = paper_grid("1x1", mode="double", placeholder=False, aspect=1.5)
+ax = axes.ravel()[0]
+
+ax.fill_between(MU_B_PQCD, unpaired_lo, unpaired_hi, color="0.55", alpha=0.35,
+                lw=0, zorder=0, label="pQCD N3LO, unpaired")
+ax.fill_between(MU_B_PQCD, cfl_lo, cfl_hi, facecolor="none", edgecolor="0.35",
+                hatch="///", lw=0.8, zorder=1,
+                label=rf"pQCD NLO, CFL $\Delta$={DELTA0:.0f} MeV")
+
+for name in PQCD_COLOUR:
+    matrix, _ = MATRIX[name]
+    ax.plot(matrix["mu_B"][0], matrix["P"][0], color=PQCD_COLOUR[name],
+            ls="-", label=f"{name}, unpaired")
+
+for label, (matrix, _) in cfl_matrix.items():
+    if label.startswith("njl"):
+        name = "njl"
+    elif "Bag CFL" in label:
+        name = "alphabag"
+    else:
+        continue                      # ccdm and abpr are not asked for here
+    ax.plot(matrix["mu_B"][0], matrix["P"][0], color=PQCD_COLOUR[name],
+            ls="--", label=f"{name}, CFL")
+
+ax.set_xlabel(LABELS["mu_B"])
+ax.set_ylabel(LABELS["P"])
+ax.set_yscale("log")
+ax.set_ylim(50.0, 3e4)
+log_decades(ax, axis="y")
+ax.legend(loc="lower right", fontsize="xx-small")
+panel_label(ax, "$T$ = 0, beta equilibrium")
 plt.show()

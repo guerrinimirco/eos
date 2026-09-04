@@ -1226,6 +1226,38 @@ relative. Both are ABOVE the $10^{-10}$ the `test/baseline` entries are frozen
 at, so lowering it is a deliberate act by a caller who has decided what
 accuracy the answer needs.
 
+**What `backend="fast"` also selects: the analytic Jacobian.** With
+`backends/jacobian.py` present, the fast backend hands the root finder the
+hand-derived Jacobian of the residual instead of letting MINPACK difference
+it, and `eos.general.solve.solve_system` then runs a damped Newton attempt
+first, falling back to MINPACK's hybrid and Levenberg–Marquardt methods (now
+with the same Jacobian) from the original seed when Newton stalls. The
+Jacobian is the second derivatives of the three blocks the residual is built
+from — the nine cut Fermi gases differentiated under the integral, the pairing
+correction by second-order perturbation theory of the quasiparticle spectrum
+(`eos.general.pairing.pair_hessian`, with the $T = 0$ Fermi-surface terms of a
+gapless state put in at the zero crossings), and the counterterm in closed
+form — chained to the unknowns through the linear map of §2. The leptons are
+the one differenced column. `verify/` checks it against a central difference
+of the residual on every mode (worst $8\times10^{-7}$ on the scaled rows).
+
+Measured on `rg_njl1` (CPython 3.14.2): one CFL Jacobian costs 5–8 ms at
+$T = 0$ and 8–14 ms at $T = 50$ MeV against a 2–4 ms residual; a warm-started
+CFL step converges in three Newton steps (8e-3 → 2e-5 → 1e-10 → 1e-12) where
+MINPACK's forward differences took 70–140 residuals, and a warm 2SC step in
+two. Per solve, warm-started, the fast backend is 4–6× faster than the same
+backend differencing its residual; a cold CFL start gains 1–3×. Newton has a
+basin of its own, and from the unpaired seed at the 2SC → CFL switch it can
+converge onto the 2SC root of the CFL layout where the differenced hybrid
+method found the CFL root, so `solve_pattern` owes two rescues: a solve that
+converged but left its layout is re-seeded with the gaps reset and solved
+again (three or four Newton steps either way), and a solve that failed is
+followed by the differenced solve from the same seed. Below the CFL onset
+every CFL candidate collapses and pays the first rescue, which is why a
+table whose CFL layout never wins gains least. Every 200-point table built
+both ways agrees to $10^{-8}$ relative in $P$ with the same realised pattern
+at every point; the per-table factors are in `output/njl_tables/summary.txt`.
+
 ### 13.2 `eos_table`
 
 ```python
@@ -2042,8 +2074,9 @@ solver.py          the equilibrium conditions and the pattern enumeration
 table.py           the warm-started density sweep + progress callback
 api.py             eos_point / eos_table / eos_response / zero_pressure_point
 responses.py       second derivatives, by re-solved finite differences
-backends/          the same medium integrals, jitted; deleting it changes
-                   no number, only the time they take
+backends/          the same medium integrals, jitted, and the analytic
+                   Jacobian of the residual; deleting it changes no number,
+                   only the time they take
 verify/            the physics invariants
 ```
 

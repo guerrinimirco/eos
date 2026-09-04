@@ -34,7 +34,23 @@ uSC, dSC or an unequal-gap state -- solves each to self-consistency, and
 returns the survivor with the lowest f = eps - T s at the fixed density. The
 comparison is by FREE ENERGY because these modes fix n_B; a comparison at
 fixed mu_B (which is what `thermo_from_mu` and therefore `eos.mixed` do) is by
-pressure instead, and the two agree.
+pressure instead. The two pick the same phase wherever one phase is stable,
+and they CANNOT agree inside a first-order transition, because there no pure
+phase is the ground state at fixed n_B -- a mixture is.
+
+What this function returns there is the lower envelope of f(n_B) over the
+candidates, and its crossing lies INSIDE the coexistence window rather than
+at either edge of it: measured on `rg_njl1` in beta equilibrium at T = 0, the
+2SC and CFL branches have equal f at n_B = 0.653 fm^-3, while equal pressure
+at equal mu_B puts the transition at mu_B = 1370 MeV with the window
+n_B = 0.583 -> 0.736 fm^-3 (3.6 -> 4.6 n_0, the fixed-potential number the
+MUSES module and Kunkel et al. both report). So the switch in a fixed-n_B
+sweep is NOT the transition, and the jump in P across it is not physics: the
+window is located from the branches at fixed mu_B, and the plateau between
+its edges comes from the construction (Maxwell, Gibbs or the eta-mixed phase
+of `eos.mixed`), as CLAUDE.md section 8 requires before any table reaches a
+structure solver. Pass `patterns=` to get one branch at a time, which is what
+a construction needs.
 
 Enumeration is necessary rather than tidy. The gap equation has three roots at
 any Fermi-surface mismatch -- zero, a barrier maximum, and the physical BCS
@@ -75,6 +91,14 @@ from eos.njl.species import (
 )
 from eos.njl.thermodynamics import (gap_seed_scale, has_vector, state_at,
                                     vacuum_solution)
+
+# `backends/` is optional (CLAUDE.md section 5): with the directory gone, or
+# numba absent, the fast backend hands MINPACK the residual alone and every
+# number is the same, only slower.
+try:
+    from eos.njl.backends.jacobian import residual_jacobian
+except ImportError:                       # pragma: no cover - backends/ removed
+    residual_jacobian = None
 
 #: The four modes of CLAUDE.md section 3, and the fractions each takes beyond
 #: (n_B, T). Every one is closed here, at any temperature.
@@ -318,7 +342,21 @@ def _charge_rows(x, par, flags, spec, pattern, st, T):
     else:
         rows.append(st.n_C - n_charged)
     if spec.is_fixed("S"):
-        rows.append(st.n_S - spec.targets["Y_S"] * st.n_B)
+        if T == 0.0 and spec.targets["Y_S"] == 0.0:
+            # At T = 0 a vanishing strangeness fraction means an EMPTY strange
+            # sector, and n_S = 0 then holds for every mu_S that keeps all
+            # three s modes below threshold: the row is 0 = 0 across a whole
+            # interval and its Jacobian column is null. Solved as written, the
+            # iteration parks on the threshold kink -- the one place a
+            # one-sided finite difference is nonzero -- and stalls decades
+            # above the gate. The row is instead the boundary of that
+            # interval, mu*_s = M_s in the most favourable colour: the T = 0
+            # convention that an absent species sits at its onset, and the
+            # value dF/dn_S takes as n_S -> 0+. A potential, judged against
+            # mu_B (`residual_scales`).
+            rows.append(float(np.max(st.mu_star[6:9])) - float(st.M[2]))
+        else:
+            rows.append(st.n_S - spec.targets["Y_S"] * st.n_B)
     if spec.is_fixed("L_e"):
         rows.append(n_Le - spec.targets["Y_Le"] * st.n_B)
     return rows
@@ -337,6 +375,11 @@ def residual(x, par, flags, spec, pattern, n_B, T, vac, backend="reference",
     """
     st = _state(x, par, spec, pattern, T, vac, flags.two_flavour, backend,
                 pair_nodes_per_panel)
+    return rows_from_state(st, x, par, flags, spec, pattern, n_B, T)
+
+
+def rows_from_state(st, x, par, flags, spec, pattern, n_B, T):
+    """`residual`'s rows from a state already evaluated at x."""
     mask = pattern_mask(pattern)
 
     rows = list(st.mass_residual)
@@ -351,7 +394,7 @@ def residual(x, par, flags, spec, pattern, n_B, T, vac, backend="reference",
     return rows
 
 
-def residual_scales(par, spec, pattern, n_B, mu_scale):
+def residual_scales(par, spec, pattern, n_B, mu_scale, T=None):
     """The scale each row balances, so one tolerance means one thing.
 
     A mass row is a potential, judged against mu_B. A GAP row is not:
@@ -376,8 +419,14 @@ def residual_scales(par, spec, pattern, n_B, mu_scale):
     if has_vector(par):
         scales.append(mu_scale)
     scales.append(n_scale)
-    scales += [n_scale] * (1 + int(spec.is_fixed("S"))
-                           + int(spec.is_fixed("L_e")))
+    scales.append(n_scale)
+    if spec.is_fixed("S"):
+        # The T = 0, Y_S = 0 row of `_charge_rows` is a threshold potential,
+        # not a density; every other strangeness row is a density.
+        threshold = T == 0.0 and spec.targets["Y_S"] == 0.0
+        scales.append(mu_scale if threshold else n_scale)
+    if spec.is_fixed("L_e"):
+        scales.append(n_scale)
     return scales
 
 
@@ -589,6 +638,22 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
     warm = x0 is not None
     x0 = np.asarray(x0, dtype=float) if warm else cold
 
+    last = {}
+
+    def raw_rows(x):
+        """`residual` at x, remembering the last state: the Jacobian below
+        needs the state and the rows at the point it is asked for, which is
+        always the point the residual was just evaluated at."""
+        key = np.asarray(x, dtype=float).tobytes()
+        if last.get("key") != key:
+            st = _state(x, par, spec, pattern, T, vac, flags.two_flavour,
+                        backend, pair_nodes_per_panel)
+            last["key"] = key
+            last["state"] = st
+            last["raw"] = np.asarray(rows_from_state(st, x, par, flags, spec,
+                                                     pattern, n_B, T))
+        return last["raw"]
+
     def rows(x):
         """The rows ALREADY DIVIDED by their scales.
 
@@ -599,18 +664,97 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         rather than whichever one happens to be largest (CLAUDE.md's
         `solve_system(..., tol=...)`).
         """
-        raw = residual(x, par, flags, spec, pattern, n_B, T, vac, backend,
-                       pair_nodes_per_panel)
-        return [r / s for r, s in zip(raw, scales_at(x))]
+        return [r / s for r, s in zip(raw_rows(x), scales_at(x))]
 
     def scales_at(x):
         mu_B = _unpack(x, par, spec, pattern)[5]
-        return residual_scales(par, spec, pattern, n_B, max(abs(mu_B), 1.0))
+        return residual_scales(par, spec, pattern, n_B, max(abs(mu_B), 1.0),
+                               T=T)
 
     def unit_scales(x):
         return [1.0] * len(unknown_slots(par, spec, pattern))
 
-    x, err, ok = solve_system(rows, x0, unit_scales, tol=1.0e-13)
+    jac = None
+    if backend == "fast" and residual_jacobian is not None:
+        names = unknown_slots(par, spec, pattern)
+
+        def jac(x):
+            """The Jacobian of `rows`: the analytic one, scaled like them.
+
+            The scales themselves move with mu_B (`residual_scales` reads the
+            potential scale off the iterate), so the quotient rule adds
+            -r_i s_i'/s_i^2 to the mu_B column; at a root that term is zero,
+            away from one it keeps the Jacobian consistent with `rows`.
+            """
+            raw = raw_rows(x)
+            J = residual_jacobian(x, names, par, flags, spec, pattern, n_B, T,
+                                  vac, pair_nodes_per_panel,
+                                  state=last["state"])
+            scales = np.asarray(scales_at(x))
+            J = J / scales[:, None]
+            mu_B = _unpack(x, par, spec, pattern)[5]
+            if abs(mu_B) > 1.0:
+                bumped = np.asarray(residual_scales(
+                    par, spec, pattern, n_B, abs(mu_B) * (1.0 + 1.0e-6), T=T))
+                dscale = (bumped - scales) / (1.0e-6 * abs(mu_B)) * np.sign(mu_B)
+                J[:, names.index("mu_B")] -= raw * dscale / scales ** 2
+            return J
+
+    def reinflated(x):
+        """x with its gaps reset to the pattern's seed, everything else kept."""
+        x = np.array(x, dtype=float)
+        names = unknown_slots(par, spec, pattern)
+        seed = pattern_seed(pattern, gap_seed_scale(x[names.index("mu_B")] / 3.0))
+        for eta in range(3):
+            name = f"Delta_{eta + 1}"
+            if name in names:
+                x[names.index(name)] = seed[eta]
+        return x
+
+    def attempt(seed):
+        """One seed through `solve_system`, and what the Jacobian path owes
+        on top.
+
+        The Newton attempt has a basin of its own, and from the unpaired seed
+        at the 2SC -> CFL switch it lands somewhere the differenced hybrid
+        method does not: at T = 20 MeV it converges onto the 2SC root of the
+        CFL layout while the CFL root -- the ground state there by
+        0.3 MeV/fm^3 in f -- sits in the other basin, and at T = 0 it stalls.
+        A candidate an enumeration never sees is a wrong ground state, not a
+        slow one, so two rescues follow, each measured on the switch points
+        of a 200-point fixed-Y_C sweep against the differenced solver's
+        tables:
+
+          * a solve that CONVERGED but let a gap go -- left the layout it was
+            asked for -- is re-seeded with its gaps reset to the pattern's
+            seed and everything else kept, and solved again. From the
+            near-root masses and potentials Newton reaches the CFL root in
+            three or four steps where it exists (135-175 ms, against 600+ for
+            the differenced solve), and re-collapses just as fast where it
+            does not, which is the common case below the onset;
+          * a solve that FAILED is followed by the differenced solve from the
+            same seed, the path the reference tables were built with.
+
+        An in-layout root from any of the three wins. This is the one place
+        the fast backend pays twice, and a warm-started point never reaches
+        it.
+        """
+        x, err, ok = solve_system(rows, seed, unit_scales, tol=1.0e-13, jac=jac)
+        if jac is None:
+            return x, err, ok
+        if ok and _left_layout(x, par, spec, pattern):
+            x_re, err_re, ok_re = solve_system(rows, reinflated(x), unit_scales,
+                                               tol=1.0e-13, jac=jac)
+            if ok_re and not _left_layout(x_re, par, spec, pattern):
+                x, err, ok = x_re, err_re, ok_re
+        elif not ok:
+            x_fd, err_fd, ok_fd = solve_system(rows, seed, unit_scales,
+                                               tol=1.0e-13)
+            if ok_fd:
+                x, err, ok = x_fd, err_fd, ok_fd
+        return x, err, ok
+
+    x, err, ok = attempt(x0)
     if not ok and warm:
         # A seed that lands in the right basin can still stall just above the
         # gate -- the CFL point at n_B = 1.2 fm^-3 stops at 8e-9 from a
@@ -618,14 +762,24 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         # root. So the cold start is retried in full (both methods) rather
         # than as `solve_system`'s single fallback attempt, and the better of
         # the two is kept.
-        x_cold, err_cold, ok_cold = solve_system(rows, cold, unit_scales,
-                                                 tol=1.0e-13)
+        x_cold, err_cold, ok_cold = attempt(cold)
         if err_cold < err:
             x, err, ok = x_cold, err_cold, ok_cold
 
     st = _state(x, par, spec, pattern, T, vac, flags.two_flavour, backend,
                 pair_nodes_per_panel)
     return point_from_state(st, par, flags, spec, mode, x, ok, err, T)
+
+
+def _left_layout(x, par, spec, pattern):
+    """Did a 2SC or CFL solve come out in some other state? A free gap may
+    be zero (`check_pattern_labels`), and a solve that let one go has found
+    a root of a different pattern, which that pattern's own candidate finds
+    more cheaply."""
+    if pattern not in ("2SC", "CFL"):
+        return False
+    Delta = _unpack(x, par, spec, pattern)[1]
+    return realised_pattern(Delta) != pattern
 
 
 def patterns_for(flags, patterns=None):

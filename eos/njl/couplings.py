@@ -55,12 +55,31 @@ def vector_coupling(par, n_q):
                     coupling AT n_ref, so the constant variant is the
                     alpha = 0 member of the same family.
     gluon_exchange  G_V = G_V0/[1 + 8 k_F^2/(9 M_g^2)], k_F = (pi^2 n_q/2)^(1/3),
-                    from the nonlocal-NJL literature, with a non-perturbative
-                    gluon mass M_g ~ 500 MeV. Its effective exponent
-                    -d ln G_V/d ln n_q runs 0.062, 0.460, 0.608, 0.653 at
-                    n_q = 1e6, 1e8, 1e9, 1e10 MeV^3 -- it arrives at the
-                    conformal 2/3 as a consequence of its own structure, which
-                    is why it is the recommended choice rather than a fitted
+                    with a non-perturbative gluon mass M_g. This is Eq. (23) of
+                    Song, Baym, Hatsuda and Kojo, Phys. Rev. D 100, 034018
+                    (2019) [arXiv:1905.01005], written G_V = (4 pi alpha_s/3) /
+                    (9 M_g^2 + 8 k_F^2) there, so G_V0 = 4 pi alpha_s/(27 M_g^2)
+                    is their k_F -> 0 limit. They obtain it by matching the NJL
+                    vector energy G_V n_q^2 to the single-gluon-exchange (Fock)
+                    energy of QCD in Landau gauge with a massive gluon
+                    propagator D(p) = 1/(p^2 - M_g^2) and a frozen alpha_s; it
+                    is a LOCAL NJL result, not a nonlocal one, and their gluon
+                    mass estimate is 500 +/- 200 MeV, which is where this
+                    model's default M_g = 500 MeV comes from. Their vacuum
+                    Fierz ratio G_V0/G_S = 1/2 is the default G_V0_over_GS.
+
+                    Its effective exponent -d ln G_V/d ln n_q runs 0.062, 0.460,
+                    0.608, 0.653 at n_q = 1e6, 1e8, 1e9, 1e10 MeV^3. It arrives
+                    at the conformal 2/3 because that exponent is the pQCD limit
+                    built into the interpolation and not an emergent accident:
+                    the other limit of the same expression is
+                    G_V(k_F >> M_g) -> pi alpha_s/(6 k_F^2) (their Eq. 22),
+                    which is dimensional analysis -- G_V has dimension mass^-2
+                    and at asymptotic density k_F is the only scale -- so
+                    G_V ~ k_F^-2 ~ n_q^(-2/3) exactly. The gluon mass regulates
+                    the other end: G_V(0) is finite, which is why this form needs
+                    no guard at n_q = 0 and `power_law` does. Both properties are
+                    why it is the recommended choice rather than a fitted
                     interpolation.
     """
     form = par.vector_form
@@ -122,3 +141,26 @@ def vector_self_energy(par, n_q):
     n = dP/dmu, which holds to 1e-8 with the correct one.
     """
     return (2.0 - effective_exponent(par, n_q)) * vector_coupling(par, n_q) * n_q
+
+
+def vector_self_energy_derivative(par, n_q):
+    """d Sigma_V / d n_q = d^2 W / d n_q^2 [MeV^-2], for the Jacobian.
+
+    constant        2 G_V
+    power_law       (2 - alpha)(1 - alpha) G_V(n_q)
+    gluon_exchange  G_V0 [ 2/D - (22/9) u/D^2 + (8/9) u^2/D^3 ],  D = 1 + u
+
+    the last from W = G_V0 n^2/(1 + u) with u = 8 k_F^2/(9 M_g^2) ~ n^(2/3),
+    so u' = (2/3) u/n and u'' = -(2/9) u/n^2.
+    """
+    form = par.vector_form
+    if form == "constant":
+        return 2.0 * par.eta_V * par.G_S
+    if form == "power_law":
+        return (2.0 - par.alpha) * (1.0 - par.alpha) * vector_coupling(par, n_q)
+    if form == "gluon_exchange":
+        u = _gluon_ratio(par, n_q)
+        D = 1.0 + u
+        return par.G_V0_over_GS * par.G_S * (
+            2.0 / D - (22.0 / 9.0) * u / D ** 2 + (8.0 / 9.0) * u ** 2 / D ** 3)
+    raise ValueError(f"unknown vector_form {form!r}")

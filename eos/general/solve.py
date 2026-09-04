@@ -72,7 +72,8 @@ def scaled_residual_max(residuals, scales):
     return max(abs(r) / s for r, s in zip(residuals, scales))
 
 
-def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
+def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None,
+                 jac=None):
     """Solve one equilibrium system and judge it on its scaled residual.
 
     Powell's hybrid method first, Levenberg-Marquardt if that does not reach
@@ -98,16 +99,37 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
     the root finder's defaults, which is what every caller predating this
     argument gets.
 
+    `jac(x)`, when given, returns the Jacobian of `residual` and goes to the
+    root finder (MINPACK's hybrj and lmder in place of the forward-difference
+    hybrd and lmdif). It changes how many times `residual` is called, not what
+    is accepted: the gate below is judged on the residual either way, and the
+    polish that follows a missed gate differences for itself.
+
     Returns (x, scaled residual, converged) for the best attempt made.
     """
+    best_x, best_err = np.asarray(x0, dtype=float), np.inf
+    if jac is not None:
+        # Newton first: with an exact Jacobian it is quadratic where the
+        # hybrid method's Broyden updates are linear, and it stops at THIS
+        # gate rather than at MINPACK's own x-tolerance. Measured on an njl
+        # CFL point at T = 0 from a warm start: three steps to 2e-11 against
+        # seventy for hybrj. Where it stalls, MINPACK takes over below.
+        best_x, best_err, ok = newton_solve(residual, jac, best_x, scales_at)
+        if ok:
+            return best_x, best_err, True
+
+    # MINPACK starts from x0, not from where Newton stopped: a monotone
+    # descent that stalled has usually walked into a residual-norm valley the
+    # root is not in, and the hybrid method from the original seed finds the
+    # root the cold-start rules were written for.
     attempts = [('hybr', x0), ('lm', x0)]
     if x0_fallback is not None:
         attempts.append(('hybr', x0_fallback))
 
-    best_x, best_err = np.asarray(x0, dtype=float), np.inf
     for method, guess in attempts:
         options = ({'maxiter': LM_MAX_EVALUATIONS} if method == 'lm' else None)
-        sol = root(residual, guess, method=method, tol=tol, options=options)
+        sol = root(residual, guess, method=method, tol=tol, options=options,
+                   jac=jac)
         err = scaled_residual_max(residual(sol.x), scales_at(sol.x))
         if err < best_err:
             best_x, best_err = sol.x, err
@@ -116,6 +138,94 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None):
     if best_err > RESIDUAL_TOL:
         best_x, best_err = newton_polish(residual, best_x, scales_at, best_err)
     return best_x, best_err, bool(best_err <= RESIDUAL_TOL)
+
+
+#: Bounds of the Newton attempt `solve_system` makes when it is handed a
+#: Jacobian: how many steps, and how many halvings of one before the step is
+#: declared to point out of the basin. Forty steps is twice what a cold njl
+#: CFL start needs at T = 0; a warm start needs three. Eight halvings take a
+#: (clipped) step down to 1/256 of itself, and a step that needs less than
+#: that is not a Newton step.
+NEWTON_MAX_STEPS = 40
+NEWTON_BACKOFFS = 8
+
+#: A Newton step is first clipped so that its largest component is at most
+#: this fraction of the largest component of x. A Jacobian that is nearly
+#: singular at a symmetric seed -- an njl CFL cold start, where equal gaps and
+#: equal light masses leave a colour potential almost undetermined -- proposes
+#: steps of 1e5 MeV, and halving down from those costs a dozen residuals a
+#: step. Clipping is one bound, in the units of the unknowns themselves.
+NEWTON_STEP_FRACTION = 0.25
+
+#: Consecutive steps that each cut the residual by less than this factor
+#: declare a stall: the iterate is in the linear regime of a wrong basin or on
+#: a residual floor, and MINPACK takes over from here. Measured: a cold njl
+#: start converging linearly gains a factor 3-5 a step, a converging warm one
+#: gains decades, and a CFL layout collapsing onto a 2SC root gains 2%.
+NEWTON_STALL_RATIO = 0.5
+NEWTON_STALL_STEPS = 3
+
+#: Singular values below this fraction of the largest are dropped from the
+#: Newton step (see the least-squares note in `newton_solve`). A well-posed
+#: system here is conditioned at 1e7; an undetermined unknown sits at 1e16.
+NEWTON_RCOND = 1.0e-12
+
+
+def newton_solve(residual, jac, x0, scales_at, max_steps=NEWTON_MAX_STEPS):
+    """Damped Newton with the caller's Jacobian, judged on the scaled residual.
+
+    Each step solves J dx = -r in the least-squares sense, clips dx to
+    `NEWTON_STEP_FRACTION` of the iterate, and backs off along it by halving until the scaled residual
+    decreases -- a monotone method, so the iterate it returns is never worse
+    than the one it was given. It stops at `RESIDUAL_TOL`, on a singular
+    Jacobian, on a non-finite step or residual, when no halving helps, or when
+    `NEWTON_STALL_STEPS` steps in a row gain less than `NEWTON_STALL_RATIO`;
+    every one of those is a return, not an exception, and the caller decides
+    what to try next.
+
+    Returns (x, scaled residual, converged).
+    """
+    x = np.asarray(x0, dtype=float)
+    r = np.asarray(residual(x), dtype=float)
+    err = scaled_residual_max(r, scales_at(x))
+    slow = 0
+    for _ in range(max_steps):
+        if err <= RESIDUAL_TOL:
+            break
+        # Minimum-norm least squares rather than a plain solve: a model's
+        # equations can leave an unknown undetermined by symmetry -- njl's
+        # colour potential mu_3 at a CFL root with equal gaps, where the
+        # colour row is identically zero -- and the Jacobian is then exactly
+        # singular. A solve returns a step of 1e6 in that direction and the
+        # line search throws it away; the least-squares step leaves the
+        # undetermined unknown where it is and converges on the rest.
+        try:
+            step = np.linalg.lstsq(np.asarray(jac(x), dtype=float), -r,
+                                   rcond=NEWTON_RCOND)[0]
+        except np.linalg.LinAlgError:
+            break
+        if not np.all(np.isfinite(step)):
+            break
+        largest = float(np.max(np.abs(step)))
+        cap = NEWTON_STEP_FRACTION * max(float(np.max(np.abs(x))), 1.0)
+        damping = min(1.0, cap / largest) if largest > 0.0 else 1.0
+        accepted = False
+        previous = err
+        for _ in range(NEWTON_BACKOFFS):
+            trial = x + damping * step
+            r_trial = np.asarray(residual(trial), dtype=float)
+            if np.all(np.isfinite(r_trial)):
+                err_trial = scaled_residual_max(r_trial, scales_at(trial))
+                if err_trial < err:
+                    x, r, err, accepted = trial, r_trial, err_trial, True
+                    break
+            damping *= 0.5
+        if not accepted:
+            break
+        slow = slow + 1 if err > NEWTON_STALL_RATIO * previous else 0
+        if slow >= NEWTON_STALL_STEPS:
+            break
+    return x, err, bool(err <= RESIDUAL_TOL)
 
 
 #: Relative steps the polish differentiates at, largest first. Central

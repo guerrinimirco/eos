@@ -53,6 +53,61 @@ the shared pairing machinery --- by \texttt{test/general/test\_pairing.py}.
 
 \maketitle
 
+\section{Orientation: reading this model from a bag model}
+\label{sec:orientation}
+
+Readers who know the bag-model quark phases of this repository
+(\texttt{eos/vmit}, \texttt{eos/alphabag}) will find every equation below
+familiar in form and different in status. A bag model \emph{declares} what NJL
+\emph{derives}, and that single fact accounts for the whole difference in
+structure and in cost.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{0.20\textwidth}p{0.34\textwidth}p{0.38\textwidth}}
+\toprule
+quantity & \texttt{vmit} / \texttt{alphabag} & \texttt{njl} \\
+\midrule
+quark masses & parameters $m_u,m_d,m_s$, constant &
+  $M_u,M_d,M_s$ \emph{solved} from a gap equation at every point, falling from
+  $\simeq 368$ MeV to $\simeq m_f$ across chiral restoration \\
+bag constant & an input $B$ &
+  \emph{derived}: a vacuum pressure difference, reported, never set \\
+pairing gap & \texttt{alphabag}: an input $\Delta_0$ with a BCS $\Delta(T)$
+  imposed & $\Delta_1,\Delta_2,\Delta_3$ \emph{solved} from three gap
+  equations \\
+pairing pattern & \texttt{alphabag}: \texttt{cfl} is a \emph{mode} the caller
+  picks & an \emph{outcome}: every candidate is solved and the free energy
+  picks the winner \\
+colour neutrality & absent (CFL is neutral by construction) &
+  two extra unknowns $\mu_3,\mu_8$ and two extra rows $n_3 = n_8 = 0$ \\
+momentum integrals & to infinity & \emph{cut} at $\Lam$ (vacuum) and
+  $\Lam_{\rm UV}$ (medium) \\
+Dirac sea & absent, renormalised into $B$ &
+  explicit, in closed form, subtracted at the vacuum \\
+vector repulsion & \texttt{vmit}: $V = a\hbar c \sum_q n_q$, one constant $a$ &
+  $\Sigma_V = dW/d\nq$, with $\GV$ optionally a function of the density \\
+unknowns per point & 2--4 & 5 (unpaired, no vector) to 11 (CFL, trapped,
+  with vector) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two consequences are worth internalising before reading further.
+
+\emph{There is no ``quark gas plus a correction''.} In \texttt{alphabag} the
+CFL phase is the unpaired gas plus an analytic $\Delta^2\mu^2$ term. Here the
+paired phase is a \emph{different spectrum}: the gap mixes particles with
+holes, the quasiparticle energies come out of a matrix diagonalisation at every
+momentum, and the pairing piece of $\Omega$ is the difference between that
+spectrum and the unpaired one (Sec.~\ref{sec:pairing}). The \texttt{alphabag}
+form is a limit of it, and Sec.~\ref{sec:bagcompare} says in what sense.
+
+\emph{A ``bag constant'' in the NJL literature is one of three different
+numbers}, differing by well-defined terms; comparing them blindly is a
+20--25\% error. Sec.~\ref{sec:bagconstants} gives all three, with the published
+values each reproduces.
+
 \section{Conventions}
 \label{sec:conventions}
 
@@ -397,6 +452,82 @@ imposed as the panel upper limit before the panels are built}, because
 filtering breakpoints afterwards can delete the Fermi-surface break and revert
 silently to single-panel accuracy.
 
+\subsection{The same integrals in \texttt{vmit} and \texttt{alphabag}}
+\label{sec:bagcompare}
+
+Eqs.~\eqref{eq:medium1}--\eqref{eq:Plog} are the ideal-gas integrals the bag
+models of this repository also evaluate. Four things differ, and each is a
+place where a bag-model instinct gives the wrong answer here.
+
+\begin{enumerate}
+\item \emph{The upper limit is finite.} \texttt{vmit} and \texttt{alphabag}
+  integrate to infinity, because a bag model has no cutoff to regularise: the
+  four-fermion interaction is what needs one, and they have none. The cut is
+  not decoration --- it is what makes $\phi_f$ finite, and it is what
+  Sec.~\ref{sec:rg} exists to repair.
+\item \emph{The mass is a solved quantity.} $M$ in Eqs.~\eqref{eq:medium1} is
+  $M_f$ from the gap equation, not a parameter. Its density dependence is why
+  the NJL energy density is not a sum of independent flavour integrals: moving
+  $\mu_u$ moves $M_s$.
+\item \emph{The pressure must come from the logarithm.} In \texttt{vmit} and
+  \texttt{alphabag} the two pressure forms agree identically, because the upper
+  limit is infinite and the surface term \eqref{eq:surface} vanishes; here they
+  agree only at $T=0$ with $k_F < \Lam$.
+\item \emph{The quadrature has to be told where the Fermi surface is.} The bag
+  models sidestep this entirely by using the JEL expansion, which is a closed
+  form and has no quadrature to break.
+\end{enumerate}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{0.16\textwidth}p{0.24\textwidth}p{0.24\textwidth}p{0.28\textwidth}}
+\toprule
+ & \texttt{vmit} & \texttt{alphabag} & \texttt{njl} \\
+\midrule
+degrees of freedom & 3 flavours, $g=6$ & 3 flavours, $g=6$ ($+$ gluons)
+  & 9 colour-flavour modes, $g=2$ \\
+mass in the integral & $m_q$ (parameter) & $m_q$ (parameter) & $M_f$ (solved) \\
+upper limit & $\infty$ & $\infty$ & $\Lam_{\rm UV}$ \\
+evaluated by & JEL expansion & JEL $+$ massless closed forms
+  & panelled Gauss--Legendre \\
+$P$ from & JEL & closed forms & $P_{\log}$, never $P_{k^4}$ \\
+Dirac sea & none & none & $-\sum_f \varepsilon_{{\rm sea},f}$, closed form \\
+condensate cost & none & none
+  & $C = 2\GS\sum_f\phi_f^2 - 4K\phi_u\phi_d\phi_s$ \\
+pairing & none
+  & $+(\mu_u^2+\mu_d^2+\mu_s^2)\Delta^2/\pi^2$, $\Delta$ imposed
+  & $\delta\Omega_{\rm pair}$ from a 36-state spectrum, $\Delta$ solved \\
+perturbative QCD & none & $\alpha_s$ multiplying the free-gas terms
+  & none: the four-fermion couplings \emph{are} the interaction \\
+vector & $P_V = \varepsilon_V = \tfrac12 a\hbar c\,\nq^2$ & none
+  & $W = \GV(\nq)\nq^2$, $\Sigma_V = dW/d\nq$ \\
+bag & $\pm B/(\hbar c)^3$ & $\pm B/(\hbar c)^3$
+  & $-\Omega_{\rm vac}$, derived \\
+colour potentials & --- & --- & $\mu_3,\mu_8$, solved from $n_3 = n_8 = 0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The Euler relation $\varepsilon + P = Ts + \sum_i \mu_i n_i$ holds in all
+three, and in all three it is an audit rather than a definition.
+
+\paragraph{Where the \texttt{alphabag} CFL term sits.} That model adds
+$\delta P = (\mu_u^2+\mu_d^2+\mu_s^2)\Delta^2/[\pi^2 (\hbar c)^3]$, the
+standard CFL condensation energy of Alford, Braby, Paris and
+Reddy~\cite{AlfordBraby2005}: nine gapped modes at a common $\mu$, counted,
+with $\Delta$ an \emph{input}. Its counterpart here is not one term but the
+pair $\delta\Omega_{\rm pair} + D$ of Sec.~\ref{sec:totals} --- the
+change in the spectrum, plus the $\sum_\eta \Delta_\eta^2/(4\GD)$ cost of
+making the condensate --- evaluated where it is stationary in $\Delta$, which
+is the gap equation. At that point the two scale the same way,
+$\sim \mu^2\Delta^2$, and they differ in three ways that matter at
+$\Delta \sim 100$ MeV: the gap is \emph{solved} rather than declared; the nine
+modes are \emph{not} degenerate, since the $s$ mass breaks the locking and the
+three gaps are three numbers; and the paired densities and entropy are not
+obtained by differentiating a $\Delta^2\mu^2$ term but by the
+Hellmann--Feynman pass of Eqs.~\eqref{eq:dn}--\eqref{eq:ds}, which is the
+largest single departure and is worth tens of percent.
+
 \section{The Dirac sea, the condensates and the vacuum}
 \label{sec:vacuum}
 
@@ -457,6 +588,9 @@ constant is in a bag model.
 
 \section{The pairing sector}
 \label{sec:pairing}
+
+The pairing sector follows R\"uster \textit{et al.}~\cite{Ruester2005};
+Ref.~\cite{Alford2008} is the review of the phases it can realise.
 
 The machinery of this section is \texttt{eos/general/pairing.py}, shared with
 the colour-dielectric model, because the pairing sector of the two is the same
@@ -1129,6 +1263,77 @@ reach $10^{-16}$; note in particular that a gap row is a \emph{density}, since
 $\Delta_\eta/2\GD$ carries MeV$^3$, and judging it against a potential is four
 orders of magnitude too strict.
 
+\section{The public interface}
+\label{sec:api}
+
+Every entry point takes the parameter set first and none reaches for a default
+one. \emph{Non-convergence is a return value}; a malformed \emph{call} still
+raises, because that is a programming error a sampler would otherwise re-make a
+million times.
+
+\paragraph{\texttt{eos\_point(par, mode, species, n\_B, T | SnB, \dots)}}
+returns a status object carrying \texttt{ok}, a \texttt{message} and the
+\texttt{point}. Arguments and their legal values:
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{0.20\textwidth}p{0.38\textwidth}p{0.34\textwidth}}
+\toprule
+argument & legal values & default \\
+\midrule
+\texttt{par} & any \texttt{Parameters} (Sec.~\ref{sec:parameters}) & required \\
+\texttt{mode} & \texttt{beta\_eq\_neutrinoless},
+  \texttt{beta\_eq\_neutrino\_trapped}, \texttt{fixed\_YC},
+  \texttt{fixed\_YC\_YS} & required \\
+\texttt{species} & a \texttt{SpeciesFlags} & all flags \texttt{False} \\
+\texttt{n\_B} & $>0$, fm$^{-3}$ & required \\
+\texttt{T} / \texttt{SnB} & exactly one: $T \ge 0$ in MeV, or entropy per
+  baryon (an outer solve for $T$ bracketed over $[0.2,400]$ MeV) & --- \\
+\texttt{leptons} & \texttt{True}/\texttt{False}/\texttt{None}; on a
+  beta-equilibrium mode \texttt{True} is ignored and \texttt{False} raises &
+  \texttt{None}, i.e.\ \texttt{False} \\
+\texttt{x0} & a converged \texttt{point.x}, or a $\{$pattern$\to$vector$\}$
+  mapping & \texttt{None} (cold) \\
+\texttt{patterns} & any of \texttt{unpaired}, \texttt{2SC}, \texttt{uSC},
+  \texttt{dSC}, \texttt{CFL}, \texttt{free} &
+  the enumeration of Sec.~\ref{sec:enumeration} \\
+\texttt{backend} & \texttt{reference}, \texttt{fast} & \texttt{reference} \\
+\texttt{pair\_nodes\_per\_panel} & $\ge 1$ & 24 \\
+conditions & $Y_C$, $Y_S$, $Y_{L_e}$ as the mode requires; $Y_{L_\mu}$ raises
+  & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A pattern restriction is not a guarantee: a pattern declares which gaps are
+\emph{free}, and a free gap may come out zero, so a \texttt{CFL}-restricted
+call can return a 2SC state. The point names both, the layout it was solved in
+and the pattern its gaps realise.
+
+\paragraph{\texttt{eos\_table(par, mode, species, axes, \dots)}} solves a grid
+over $\{\nB\}\times\{T$ or $S/B\}$ and, optionally, over the fractions the mode
+fixes. The density axis is warm-started and a missed step is bisected back
+towards the last solved point up to six times, which is what carries the sweep
+across the strange-quark onset and the pairing onset. It reports through the
+repository's progress callback --- \texttt{\{mode, line, n\_lines, temp\_key,
+temp, fracs, n\_solved, n\_requested, elapsed\_s\}} --- plus one key this model
+adds, \texttt{pattern}. The row it emits is Sec.~\ref{sec:tablerow}.
+
+\paragraph{\texttt{eos\_response(par, mode, species, frozen, \dots)}} returns
+the second derivatives of Sec.~\ref{sec:responses}. One freeze is implemented,
+\texttt{equilibrium}; anything else raises naming what is missing.
+
+\paragraph{\texttt{zero\_pressure\_point(par, species, \dots)}} locates the
+self-bound surface of Sec.~\ref{sec:zeropressure}.
+
+\paragraph{The layers below.} \texttt{solve} is the enumeration without the
+argument validation; \texttt{solve\_pattern} is one mode in one declared
+pattern; \texttt{thermo\_from\_mu} is the phase-adapter surface of
+Sec.~\ref{sec:adapter}; \texttt{state\_at} evaluates one state with no
+equilibrium condition imposed; \texttt{vacuum\_solution} and
+\texttt{bag\_constant} return the vacuum of Sec.~\ref{sec:vacuum} and the
+$B_{\rm eff}$ of Sec.~\ref{sec:bagconstants}.
+
 \section{What a solved point returns}
 \label{sec:returns}
 
@@ -1233,6 +1438,7 @@ the cancellation eats every significant digit. Integrating costs one array in
 a pass already being made and leaves Euler available as the check it is used as.
 
 \subsection{The table row}
+\label{sec:tablerow}
 
 \texttt{eos\_table} sweeps the density axis with a warm start, bisecting a
 missed step back towards the last solved point --- which is what carries it
@@ -1353,7 +1559,6 @@ $M_s$ (vacuum) & $549.479$ MeV & $549.5$ \\
 $(-\phi_u)^{1/3}$ & $241.946$ MeV & $241.9$ \\
 $(-\phi_s)^{1/3}$ & $257.688$ MeV & $257.7$ \\
 $f_\pi$ & $92.391$ MeV & $92.4$ \\
-$B_{\rm eff}^{1/4}$ & $228.93$ MeV & $357.49$ MeV\,fm$^{-3}$ \\
 2SC gap at $\mu^{*}=450$ MeV, $\eta_D = 0.75$ & $92.71$ MeV & --- \\
 Clogston ratio $\delta\mu_c/(\Delta_0/\sqrt2)$ & $0.970$ & $1$ (weak coupling) \\
 \midrule
@@ -1370,6 +1575,63 @@ $\eta_D = 0.75$:}} \\
 \end{tabular}
 \end{center}
 
+\subsection{A second published vacuum, as an independent check}
+
+The Hatsuda--Kunihiro set ($\Lam = 631.4$ MeV, $\GS\Lam^2 = 1.835$,
+$K\Lam^5 = 9.29$, $m_{u,d} = 5.5$ MeV, $m_s = 135.7$ MeV) is not shipped as a
+named set, but the same code run at it gives $M_{u,d} = 335.5$ MeV and
+$M_s = 528.1$ MeV against the $336$ and $528$ quoted in
+Ref.~\cite{Baym2018}. Two independent vacuum fits reproduced by one gap
+equation is a stronger statement than one.
+
+\subsection{The three published ``bag constants'', and how they differ}
+\label{sec:bagconstants}
+
+This is the single most-mixed-up number in the NJL compact-star literature.
+Three quantities are all called $B$; all three are reported by this
+implementation, and they differ by well-defined terms:
+\begin{align}
+  B_{\rm eff} &= \Omega[M_f = m_f] - \Omega[M_f = M_f^{\rm vac}] ,
+  \label{eq:Beff2}\\
+  B_{\rm sea} &= B_{\rm eff} - C(m_f) ,
+  \label{eq:Bsea}\\
+  B_0 &= -\Omega_{\rm vac} = P_{\rm NJL}(\mu = T = 0) ,
+  \label{eq:B0}
+\end{align}
+where $C(m_f)$ is the condensate cost of Eq.~\eqref{eq:C}
+evaluated at the \emph{current} masses.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{lccc p{0.34\textwidth}}
+\toprule
+set & $B_{\rm eff}^{1/4}$ & $B_{\rm sea}^{1/4}$ & $B_0^{1/4}$ & published \\
+\midrule
+RKH & $228.93$ & $\mathbf{217.59}$ & $\mathbf{425.44}$ &
+  $217.6$ MeV (Schertler \textit{et al.}, quoted in Ref.~\cite{Pagliara2008});
+  $B_0 = 425.4$ MeV (Ref.~\cite{Pagliara2008}) \\
+HK  & $230.00$ & $\mathbf{218.28}$ & $444.50$ &
+  $(218\,\text{MeV})^4 = 296$ MeV\,fm$^{-3}$ (Ref.~\cite{Baym2018}, Eq.~57) \\
+\bottomrule
+\end{tabular}
+\end{center}
+(all entries in MeV.)
+
+So the numbers quoted as ``the NJL bag constant'' by Refs.~\cite{Baym2018}
+and~\cite{Pagliara2008} are $B_{\rm sea}$, and this implementation reproduces
+both to the digits they print. The function \texttt{bag\_constant} returns
+$B_{\rm eff}$, larger by $C(m_f)$ --- $22\%$ in MeV$^4$, $5\%$ in
+MeV --- and $B_{\rm eff}^{1/4} = 228.93$ MeV $= 357.49$ MeV\,fm$^{-3}$ is what
+the colour-dielectric companion model quotes its own $B_g + B_\chi$ against.
+\emph{None of the three is a free parameter}: all are outputs of the vacuum
+fit, and $B_0$ in particular is nothing but the vacuum subtraction
+$\Omega \to \Omega - \Omega_{\rm vac}$ written as an additive constant. Papers
+that \emph{add} a further bag constant by hand shift the deconfinement onset
+relative to a hadronic model; they do not fix the NJL normalisation
+(Sec.~\ref{sec:literature}).
+
+\subsection{One deliberate discrepancy}
+
 One deliberate discrepancy is recorded rather than reconciled. The
 implementation specification reports $M_u, M_d = (11.96, 7.65)$ MeV for the
 2SC point above and this implementation gives $(9.73, 8.90)$. The difference is
@@ -1380,6 +1642,215 @@ here and fails by $2.6\times10^{-4}$ with the other. Near chiral restoration
 $M-m$ is the small difference of two large numbers, which is why a
 percent-level change in one scalar density moves the light masses by twenty
 percent and moves $M_s$, $\Delta_3$, $\mu_8$, $\muC$, $\nB$ and $P$ not at all.
+
+\section{This model against the published NJLs}
+\label{sec:literature}
+
+Every model below is the Lagrangian of Sec.~\ref{sec:lagrangian}, or a stated
+subset of it. The differences sit in four places: which channels are switched
+on, how the ultraviolet is regularized, how the vacuum constant is fixed and
+whether a further bag constant is added by hand, and whether the pairing
+pattern and the neutrality conditions are solved or declared.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{0.14\textwidth}p{0.10\textwidth}p{0.11\textwidth}p{0.09\textwidth}p{0.14\textwidth}p{0.09\textwidth}p{0.18\textwidth}}
+\toprule
+ & $\GS$, $K$ & diquark & vector & cutoff & $K'$ & counterpart here \\
+\midrule
+\textbf{\texttt{eos/njl}} & RKH & $\eta_D$ free & three forms &
+  RG-consistent, $\lambda = 10$ & omitted & --- \\
+Rehberg \textit{et al.}~\cite{Rehberg1996} & \emph{the source} & none & none &
+  sharp $\Lam$ & --- & \texttt{Parameters.default()} \\
+R\"uster \textit{et al.}~\cite{Ruester2005} & RKH & varied about $3/4$ & none &
+  sharp $\Lam$ & --- & \texttt{csc}, $\lambda = 1$ \\
+Pagliara--Schaffner-Bielich~\cite{Pagliara2008} & RKH, identical &
+  $\GD = 1.0,\,1.2\,\GS$ & $\GV = 0,\,0.2\,\GS$ & sharp $\Lam$ & --- &
+  $\eta_D$, $\eta_V$, $\lambda = 1$ \\
+Logoteta \textit{et al.}~\cite{Logoteta2012} & RKH, identical & \emph{none} &
+  \emph{none} & sharp $\Lam$ & --- &
+  \texttt{csc=False}, $\eta_V = 0$, $\lambda = 1$ \\
+Lugones~\cite{Lugones2016} (review) & model-dependent & --- & --- & --- & --- &
+  bulk only; no finite-size terms \\
+Baym \textit{et al.}~\cite{Baym2018} & HK, $\Lam = 631.4$ & $H/G = 1.4$--$1.6$
+  & $g_V/G = 0.5$--$1.0$, constant & sharp $\Lam$ & written, set to $0$ &
+  $\lambda = 1$, HK numbers \\
+Gholami \textit{et al.}~\cite{Gholami2024} & RKH & $\eta_D = 1$; sets 1--3 &
+  $\eta_V$ & RG-consistent, massless & --- & \emph{the shipped default} \\
+Ivanytskyi~\cite{Ivanytskyi2025} & nonlocal, Gaussian & $\eta_D = 0.27$--$0.44$
+  & $\eta_V$, nonlocal & \emph{no cutoff} & --- & none; see below \\
+Kunkel \textit{et al.}~\cite{Kunkel2026} & RKH & $\eta_D = 1.45$ &
+  $\eta_V = 0.7$ & RG-consistent, massless & --- &
+  \texttt{Parameters.\allowbreak named("rg\_njl1")} \\
+MUSES NJL module~\cite{MUSESNJL} & RKH & configurable & configurable &
+  RG-consistent, four schemes & --- & our scheme $\equiv$ its
+  \texttt{analytic} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Rehberg, Klevansky and H\"ufner~\cite{Rehberg1996}.} The parameter
+set is theirs and is reproduced digit for digit
+(Sec.~\ref{sec:reproduces}). Their model has no diquark and no vector channel.
+Their mass equation is Eq.~\eqref{eq:massgap} unchanged.
+
+\paragraph{R\"uster \textit{et al.}~\cite{Ruester2005}.} The source of two
+things this implementation takes literally: the Appendix~A quasiparticle
+spectrum of Sec.~\ref{sec:bdg}, and the gap-index convention
+$\Delta_{1,2,3} = ds,\,us,\,ud$. Their $\mu_8$ is the halved Gell-Mann one,
+$\mu_8^{\rm theirs} = 1.1547\,\mu_8^{\rm ours}$. They work at fixed $\mu$ and
+$T$ and map a phase diagram where we solve at fixed $\nB$ and rank by free
+energy --- the same criterion read on the conjugate axis.
+
+\paragraph{Pagliara and Schaffner-Bielich~\cite{Pagliara2008}.} The closest
+published match to this implementation at $\lambda = 1$: the same RKH
+parameters, the same dispersion relations, the same six gap equations and the
+same three neutrality conditions $n_Q = n_3 = n_8 = 0$, plus a vector term
+$\omega_0 = 2\GV\langle\psi^\dagger\psi\rangle$ shifting
+$\mu \to \mu - \omega_0$, which is the constant form of
+Sec.~\ref{sec:vector}. Their pressure,
+\begin{equation}
+  p = \frac{1}{2\pi^2}\sum_{i=1}^{18}\int_0^{\Lam}\!\! dk\,k^2|\epsilon_i|
+    + 4K\sigma_u\sigma_d\sigma_s - \frac{1}{4\GD}\sum_c |\Delta_c|^2
+    - 2\GS\sum_\alpha \sigma_\alpha^2 + \frac{\omega_0^2}{4\GV} + p_e ,
+\end{equation}
+is $P = -\Omega$ of Sec.~\ref{sec:totals} term by term: their $-D$, their $-C$
+(the $-2\GS\sum\sigma^2 + 4K\sigma\sigma\sigma$ pair), their
+$\omega_0^2/4\GV = -(\Sigma_V \nq - W)$ at constant $\GV$, and their
+$\sum_i|\epsilon_i|$ integral is our spectrum sum \emph{without} the unpaired
+subtraction. The two are algebraically the same and numerically not: the
+difference form is what makes $\delta\Omega_{\rm pair}$ vanish identically at
+$\Delta = 0$. Their two bag constants are reproduced exactly
+(Sec.~\ref{sec:bagconstants}). Expected differences: their $B^{*}$, which makes
+deconfinement coincide with chiral restoration, is a \emph{hadronic matching}
+choice with no counterpart here; and they use only the eighteen on-shell
+eigenvalues, whose cost in CFL is measured in Sec.~\ref{sec:bdg}.
+
+\paragraph{Logoteta \textit{et al.}~\cite{Logoteta2012}.} The nucleation paper:
+the same RKH set, the same gap equation, and \emph{neither} colour
+superconductivity \emph{nor} a vector channel. Their effective bag pressure
+deserves care, because it is not a constant and not the $B_{\rm eff}$ of
+Eq.~\eqref{eq:Beff2}. They write $\varepsilon = \sum_i \varepsilon_{{\rm kin},i}
++ B_{\rm eff}$ with $B_{\rm eff} = B_0 - B$ and
+$B = \sum_f \varepsilon_{\rm sea}(M_f) - C$, so that
+\begin{equation}
+  B_{\rm eff}^{\rm Logoteta}
+   = \Big[-\sum_f \varepsilon_{\rm sea}(M_f) + C\Big] - \varepsilon_{\rm vac} ,
+\end{equation}
+which is exactly the pair of terms our $\varepsilon$ of Sec.~\ref{sec:totals}
+carries. It is therefore \emph{density-dependent} --- they plot it running from
+$90$ to $195$ MeV\,fm$^{-3}$ --- and coincides with \texttt{bag\_constant} only
+in the chirally restored limit $M_f \to m_f$. Their $Q^{*}$ phase, quark matter
+frozen at the strangeness content of the hadronic phase it nucleated out of, is
+a \texttt{fixed\_YC\_YS} call here and not a beta-equilibrium one.
+
+\paragraph{Lugones~\cite{Lugones2016}.} A review of deconfinement nucleation:
+quark drops, finite-size effects, surface and curvature terms. \emph{None of
+the finite-size physics is in this model, by design} --- it is a bulk
+homogeneous equation of state, so surface tension, curvature energy and the
+colour-Debye screening of a finite drop are the caller's, and the model
+supplies the bulk $\Omega$ they correct. The relevant entry point for a
+nucleation study is \texttt{thermo\_from\_mu} (Sec.~\ref{sec:adapter}) together
+with a \texttt{fixed\_YC\_YS} point for the flavour-conserving transient.
+
+\paragraph{Baym \textit{et al.}~\cite{Baym2018}.} The QHC18 review, and the
+paper that puts the 't~Hooft--diquark cross-term on the record:
+\begin{equation}
+  M_i = m_i - 4G\sigma_i + K|\epsilon_{ijk}|\sigma_j\sigma_k
+        + \frac{K'}{4}|d_i|^2 , \qquad
+  \Delta_k = -2d_k\Big(H - \frac{K'}{4}\sigma_i\Big) .
+\end{equation}
+Their $K|\epsilon_{ijk}|\sigma_j\sigma_k$ is our $2K\phi_j\phi_k$ once the
+double sum is written out --- the same term, not a factor-two disagreement.
+The genuinely new pieces are the $K'$ terms, and \emph{they set $K' = 0$ in
+every published QHC18 result}, on the argument that its effect is absorbed into
+$g_V$ and $H$. That is precisely the position taken here, and it is why
+$\eta_D$ must be read as an effective coupling. Other differences, all
+expected: the HK parameter set (Sec.~\ref{sec:reproduces} shows the same code
+reproduces their vacuum masses at it); couplings $H/G \simeq 1.4$--$1.6$ and
+$g_V/G = 0.5$--$1.0$, inside which \texttt{rg\_njl1}'s $\eta_D = 1.45$ sits; a
+sharp cutoff throughout, with the model used only for $\nB \gtrsim 5n_0$ and
+interpolated to APR below, which is a \emph{different} way of avoiding the
+artifacts Sec.~\ref{sec:rg} removes --- they stay away from the region where
+the cutoff bites, we push the cutoff away; a constant $g_V$ only; and the
+$\lambda_8$ convention, so $\mu_8^{\rm ours} = \sqrt3\,\mu_8^{\rm theirs}$.
+QHC18 is moreover a polynomial interpolation in $\muB$ between APR and NJL, not
+an NJL equation of state; this model returns the NJL branch itself.
+
+\paragraph{Gholami, Hofmann and Buballa~\cite{Gholami2024}.} The model this
+implementation defaults to. Their Eq.~(C7) is the counterterm shape
+\eqref{eq:countertermshape}, with their per-gap coefficient $2/\pi^2$ equal to our
+per-pair $1/\pi^2$ summed over the two colour pairs; their
+$\lambda \gtrsim 5$ convergence and their $\lambda = 10$ choice are ours, and
+their ``below $1\%$ between $\lambda = 10$ and $20$'' is our measured
+$1.4$--$1.9\times10^{-3}$. Two of their conclusions are adopted rather than
+re-derived: the \emph{massive} scheme must not be used, since it inverts the
+gap ordering to $\Delta_3 < \Delta_1 = \Delta_2$ and predicts the wrong melting
+pattern; and the RG-consistent phase diagram melts CFL in a dSC pattern where
+the sharp-cutoff one melts it in a uSC pattern --- which is why the asymmetric
+\texttt{free} seed is in the enumeration of Sec.~\ref{sec:enumeration}. Two
+things their prose does not state and that measurement forced are recorded in
+Sec.~\ref{sec:rg}: the vacuum piece of the split is taken at the same
+condensates \emph{gaps included}, and the pairing panels must follow
+$\Lam_{\rm UV}$.
+
+\paragraph{Ivanytskyi~\cite{Ivanytskyi2025}.} A \emph{nonlocal} three-flavour
+NJL: the contact currents are smeared by a Gaussian form factor
+$g_k = \exp(-k^2/\Lam^2)$ with $\Lam = 564$ MeV, which makes every momentum
+integral converge and removes the cutoff from the model entirely. This is the
+\emph{other} published cure for the disease Sec.~\ref{sec:rg} treats. His
+Lagrangian is not ours --- no determinant term, mass-degenerate flavours
+(``CFLL''), nonlocal vertices, and neutrality automatic because degenerate
+masses give equal densities at one common $\mu$ --- so no parameter set of this
+model reproduces his numbers, and the comparison is one of \emph{behaviour}.
+Where the two agree it matters: he shows that a \emph{local} vector channel
+gives $\omega_\infty \to -\mu + (3\pi^2\mu/\GV d)^{1/3}$, hence
+$p = \mu^2/4\GV$ and $c_s^2 = 1$ --- exactly the Zel'dovich runaway
+Sec.~\ref{sec:vector} identifies for constant $\GV$ --- and that a local
+diquark channel gives a divergent gap and $c_s^2 = 1/5$. Our density-dependent
+$\GV$ and his momentum-dependent form factor are two ways of suppressing the
+same interaction at large momentum, and they reach the same conformal limit;
+the difference is that he puts the suppression in the vertex while we put it in
+the coupling's density dependence, which keeps the model local and keeps the
+RKH vacuum fit intact.
+
+\paragraph{Kunkel \textit{et al.}~\cite{Kunkel2026}.} Proto\-neutron\-star
+evolution with colour superconductivity, and the paper
+\texttt{Parameters.named("kunkel")} is named for. Their Lagrangian, their mass
+equation $M_\alpha = m_\alpha - 4\GS\sigma_\alpha + 2K\sigma_\beta\sigma_\gamma$
+and their gap indexing are ours; their regularization is the sharp
+$\Lam' = 602.3$ MeV vacuum with the RG-consistent massless scheme in medium,
+and their couplings are $\GD = 1.45\,\GS$, $\GV = 0.7\,\GS$. That is
+\texttt{rg\_njl1} at $\lambda = 10$, and it is the same model. Their lepton
+treatment matches ours in an unusual detail: muons in the neutrino-transparent
+equation of state and \emph{no} fixed muon lepton fraction in the trapped one,
+which is exactly the \texttt{beta\_eq\_neutrino\_trapped} implemented here ---
+a shared deferral rather than a divergence. Expected differences: they add a
+bag constant by hand, $B = 10$ MeV\,fm$^{-3}$, chosen so that a 2SC phase
+exists at $T = 0$ when matched to DD2, which is a knob on the \emph{hybrid}
+construction and not part of the quark equation of state; they work at fixed
+$(T,\muB,\mu_Q)$ and interpolate to fixed $Y_{L_e}$ and fixed $s/\nB$
+afterwards, where this model solves at those variables directly; their printed
+$\mu_8$ convention is the halved one while their code is the full $\lambda_8$;
+and their 2SC--CFL mixed region is a linear volume-fraction interpolation,
+where this model returns the single lowest-free-energy phase and leaves any
+two-quark-phase mixture to the caller. Reproduced from their paper: the $T = 0$
+2SC~$\to$~CFL density jump, $3.7\,n_0 \to 4.7\,n_0$.
+
+\paragraph{The MUSES NJL module~\cite{MUSESNJL}.} The authors' own code, and
+what Refs.~\cite{Gholami2024} and~\cite{Kunkel2026} are computed with. This
+implementation has been checked against it directly, and four traps in that
+comparison are recorded because each makes a mismatch look like a physics
+disagreement when it is not: its \texttt{RG\_scheme} defaults to
+\texttt{minimal}, which keeps only the leading logarithm and is $5\%$ off at
+$\Delta = 250$ MeV, while the closed form used here is its \texttt{analytic};
+its $\Omega$ includes the leptons and ours does not; its $n$ is the quark
+density, $\nB = n/3$; and its $\mu_8$ is the full-$\lambda_8$ convention. That
+comparison is also what found the on-shell-reduction defect of
+Sec.~\ref{sec:bdg}: the 2SC sector always matched to $10^{-4}$ while the CFL
+pressure was $6$--$16\%$ high, because the error is controlled by the paired
+pair's mass mismatch --- zero for $u$--$d$, MeV for anything with $s$ --- so it
+hid in 2SC and broke CFL.
 
 \section{What is not implemented}
 \label{sec:notimplemented}
@@ -1520,6 +1991,8 @@ condensate, survive.
   Phys.\ Rev.\ D \textbf{66}, 094007 (2002), arXiv:hep-ph/0205201.
 \bibitem{Alford2008} M.~G.~Alford, A.~Schmitt, K.~Rajagopal, T.~Sch\"afer,
   Rev.\ Mod.\ Phys.\ \textbf{80}, 1455 (2008), arXiv:0709.4635.
+\bibitem{Braun2018} J.~Braun, M.~Leonhardt, M.~Pospiech,
+  SciPost Phys.\ \textbf{6}, 056 (2019), arXiv:1812.08414.
 \bibitem{Baym2018} G.~Baym, T.~Hatsuda, T.~Kojo, P.~D.~Powell, Y.~Song,
   T.~Takatsuka, Rept.\ Prog.\ Phys.\ \textbf{81}, 056902 (2018),
   arXiv:1707.04966.
@@ -1528,7 +2001,18 @@ condensate, survive.
 \bibitem{Pagliara2008} G.~Pagliara, J.~Schaffner-Bielich,
   Phys.\ Rev.\ D \textbf{77}, 063004 (2008), arXiv:0711.1119.
 \bibitem{Gholami2024} H.~Gholami, M.~Hofmann, M.~Buballa,
-  arXiv:2408.06704.
+  Phys.\ Rev.\ D \textbf{111}, 014021 (2025), arXiv:2408.06704.
+\bibitem{AlfordBraby2005} M.~Alford, M.~Braby, M.~Paris, S.~Reddy,
+  Astrophys.\ J.\ \textbf{629}, 969 (2005), arXiv:nucl-th/0411016.
+\bibitem{Logoteta2012} D.~Logoteta, I.~Bombaci, C.~Provid\^encia, I.~Vida\~na,
+  Phys.\ Rev.\ D \textbf{85}, 023003 (2012), arXiv:1203.4159.
+\bibitem{Lugones2016} G.~Lugones, Eur.\ Phys.\ J.\ A \textbf{52}, 53 (2016),
+  doi:10.1140/epja/i2016-16053-x.
+\bibitem{Ivanytskyi2025} O.~Ivanytskyi,
+  Phys.\ Rev.\ D \textbf{111}, 034004 (2025), arXiv:2409.05859.
+\bibitem{MUSESNJL} M.~Hofmann, H.~Gholami, C.~Pelicer, Y.~Yang, the MUSES NJL
+  module, Zenodo doi:10.5281/zenodo.18249033; shipped with the Calliope release
+  of the MUSES Calculation Engine.
 \bibitem{TypelCompOSE2015} S.~Typel, M.~Oertel, T.~Kl\"ahn \textit{et al.},
   the CompOSE manual, Eur.\ Phys.\ J.\ A \textbf{58}, 221 (2022),
   arXiv:2203.03209.

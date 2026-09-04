@@ -507,13 +507,102 @@ _check_blocks_against_B_ETA()
 # `pair_nodes` below.
 
 
+#: Coarse grid on which `gapless_momenta` looks for a branch near zero. Every
+#: entry of dH/dk is 0 or 1 with one per row, so |d lambda/dk| <= 1 (Weyl), and
+#: on a grid of spacing h a branch can only reach zero inside an interval whose
+#: endpoints carry |lambda| < h. That bound is what lets the grid be coarse.
+GAPLESS_SCAN_POINTS = 48
+GAPLESS_REFINE = 8
+
+#: A gap below this [MeV] is zero for the purpose of deciding which blocks
+#: exist. A free solve leaves a gap it does not condense at +-1e-13 rather
+#: than at 0.0, and read as nonzero that activates a block whose branches
+#: sit at |xi| -- reported gapless, and breaking the quadrature at a
+#: "crossing" that is the Fermi surface itself, twice. Its physical content,
+#: Delta^2 ~ 1e-26 MeV^2, is nothing.
+GAP_FLOOR = 1.0e-9
+
+
+def active_gaps(Delta):
+    """Which of the three gaps are nonzero, as the tuple `_BY_PATTERN` keys."""
+    return tuple(bool(d) for d in np.abs(np.asarray(Delta, dtype=float)) > GAP_FLOOR)
+
+
+def _nearest_branch(block, M_star, mu_star, Delta, k):
+    """The signed eigenvalue closest to zero at one momentum."""
+    lam = np.linalg.eigvalsh(spectrum_matrix(block, M_star, mu_star, Delta,
+                                             np.array([float(k)])))[0]
+    return lam[np.argmin(np.abs(lam))]
+
+
+def gapless_momenta(M_star, mu_star, Delta, blocks, k_lo, k_hi):
+    """The momenta where a quasiparticle branch crosses zero [MeV], sorted.
+
+    In a gapless phase a branch of one paired block changes sign at two
+    momenta on either side of a Fermi surface, and at T = 0 the occupation
+    weight sign(lambda) STEPS there. Those momenta are not the unpaired Fermi
+    momenta the panel rule already breaks at -- for a u-s pair mismatched by
+    delta mu they sit at xi ~ +- sqrt(delta mu^2 - Delta^2) away -- so without
+    a breakpoint the step lands inside a Gauss panel, the quadrature error
+    floors near 1e-5 and moves with the unknowns, and the outer solve stalls
+    decades above its gate. That is how every gapless CFL and gapless 2SC
+    state at T = 0 was being lost to a metastable gapped one.
+
+    A crossing is where the count of negative eigenvalues changes, which is
+    robust where the smallest |lambda| alone is not (a branch can touch zero
+    without crossing). Each block is scanned on `GAPLESS_SCAN_POINTS` momenta
+    over [k_lo, k_hi]; an interval whose count changes holds a crossing, and
+    an interval whose endpoints both sit within the slope bound of zero is
+    refined `GAPLESS_REFINE`-fold before deciding, so a pair of crossings
+    inside one interval is caught unless they are closer than the refined
+    spacing -- a step pair that narrow contributes below the gate anyway.
+    Each crossing is then located by Brent's method on the branch itself.
+
+    Only CROSSINGS are breakpoints. At T > 0 a branch that comes within a few
+    T of zero without crossing is a sharp feature too, and a 2SC state a hair
+    inside its gapless onset can stall a decade above the gate on it; but a
+    breakpoint that exists only while min |lambda| sits below some threshold
+    appears and disappears as the unknowns move, which is a discontinuity in
+    the residual, and measured it lost as many cold solves as it rescued
+    warm ones. That case is left to the thermal collar around the Fermi
+    momenta.
+
+    """
+    from scipy.optimize import brentq
+    k = np.linspace(k_lo, k_hi, GAPLESS_SCAN_POINTS)
+    h = k[1] - k[0]
+    found = []
+    for block in blocks:
+        lam = np.linalg.eigvalsh(spectrum_matrix(block, M_star, mu_star, Delta, k))
+        negatives = np.sum(lam < 0.0, axis=1)
+        nearest = np.min(np.abs(lam), axis=1)
+        brackets = []
+        for i in range(len(k) - 1):
+            if negatives[i] != negatives[i + 1]:
+                brackets.append((k[i], k[i + 1]))
+            elif nearest[i] < h and nearest[i + 1] < h:
+                fine = np.linspace(k[i], k[i + 1], GAPLESS_REFINE + 1)
+                lam_f = np.linalg.eigvalsh(
+                    spectrum_matrix(block, M_star, mu_star, Delta, fine))
+                neg_f = np.sum(lam_f < 0.0, axis=1)
+                for j in np.nonzero(np.diff(neg_f))[0]:
+                    brackets.append((fine[j], fine[j + 1]))
+        for lo, hi in brackets:
+            found.append(brentq(
+                lambda x: _nearest_branch(block, M_star, mu_star, Delta, x),
+                lo, hi, xtol=1.0e-9, rtol=1.0e-12))
+    return np.array(sorted(found))
+
+
 def pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel=NODES_PER_PANEL,
-               max_panel_ratio=None):
+               max_panel_ratio=None, Delta=None):
     """(k, w): a panel-split Gauss-Legendre rule on [0, k_max] [MeV].
 
     Breakpoints at each of the nine Fermi momenta k_F,j = sqrt(mu*_j^2 - M_f^2)
     and, at T > 0, at k_F,j +- 25 T. The |xi_j| subtraction in the pairing
-    potential kinks at every one of them.
+    potential kinks at every one of them. Given `Delta`, breakpoints go as
+    well at the gapless momenta of `gapless_momenta`, where the T = 0
+    occupation steps; without them a gapless state cannot be converged.
 
     THE CUTOFF IS THE PANEL LIMIT, imposed before the panels are built. The
     tempting alternative -- build the breakpoints, then filter out the ones
@@ -521,11 +610,40 @@ def pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel=NODES_PER_PANEL,
     to a single panel; that produced 1e-1 errors at T = 30 MeV during
     development of the specification this module implements.
     """
-    M_star = np.asarray(M_star, dtype=float)[FLAVOUR_OF_MODE]
+    M_mode = np.asarray(M_star, dtype=float)[FLAVOUR_OF_MODE]
     mu_star = np.asarray(mu_star, dtype=float)
-    inside = np.abs(mu_star) > M_star
-    kF = np.sqrt(np.maximum(mu_star[inside] ** 2 - M_star[inside] ** 2, 0.0))
+    inside = np.abs(mu_star) > M_mode
+    kF = np.sqrt(np.maximum(mu_star[inside] ** 2 - M_mode[inside] ** 2, 0.0))
+    if Delta is not None:
+        kF = np.concatenate([kF, gapless_breakpoints(M_star, mu_star, Delta,
+                                                     k_max)])
     return panel_nodes(kF, T, k_max, nodes_per_panel, max_panel_ratio)
+
+
+def gapless_breakpoints(M_star, mu_star, Delta, k_max):
+    """The zero-crossing momenta of the CURRENT state [MeV], or none.
+
+    `gapless_momenta` confined to the band where a crossing can be: a branch
+    only reaches zero within a gap or so of a Fermi surface, so the scan runs
+    over [min k_F - reach, max k_F + reach] with reach = 3 max|Delta| + 100.
+    Empty when no gap is on or no mode is above threshold. `pair_nodes` breaks
+    the quadrature here and `pair_hessian` puts the T = 0 Fermi-surface terms
+    here: one definition of the band, so the two cannot disagree on where the
+    occupation steps.
+    """
+    M_star = np.asarray(M_star, dtype=float)
+    mu_star = np.asarray(mu_star, dtype=float)
+    Delta = np.asarray(Delta, dtype=float)
+    M_mode = M_star[FLAVOUR_OF_MODE]
+    inside = np.abs(mu_star) > M_mode
+    kF = np.sqrt(np.maximum(mu_star[inside] ** 2 - M_mode[inside] ** 2, 0.0))
+    if not any(active_gaps(Delta)) or not kF.size:
+        return np.zeros(0)
+    blocks = _BY_PATTERN[active_gaps(Delta)][0]
+    reach = 3.0 * float(np.max(np.abs(Delta))) + 100.0
+    k_lo = max(0.0, float(np.min(kF)) - reach)
+    k_hi = min(k_max, float(np.max(kF)) + reach)
+    return gapless_momenta(M_star, mu_star, Delta, blocks, k_lo, k_hi)
 
 
 # =============================================================================
@@ -919,6 +1037,174 @@ def _pair_pass(k, w, M_star, mu_star, Delta, T, size, row_mode, row_s_mu,
     return omega, d_mu, d_M, d_Delta, entropy, min_energy
 
 
+@njit(cache=True)
+def _fprime_bracket(lam_b, lam_c, T):
+    """[F'(lam_b) - F'(lam_c)] / (lam_b - lam_c) for F(x) = phi(|x|)/2.
+
+    The divided difference of Daleckii and Krein: what the second derivative
+    of Tr F(H) contracts the off-diagonal matrix elements with. On the
+    diagonal it is F''(lam) = sech^2(lam/2T)/4T, and a pair closer than
+    round-off takes that value at the midpoint rather than dividing 0 by 0.
+    At T = 0, F' = sign(lam)/2 is a step: the difference is zero between
+    branches of one sign, 1/(|lam_b| + |lam_c|) across a sign change, and the
+    step itself -- the delta function on the diagonal -- is the Fermi-surface
+    term `pair_hessian` adds at each crossing.
+    """
+    if T <= 0.0:
+        s_b = 1.0 if lam_b > 0.0 else (-1.0 if lam_b < 0.0 else 0.0)
+        s_c = 1.0 if lam_c > 0.0 else (-1.0 if lam_c < 0.0 else 0.0)
+        if s_b == s_c:
+            return 0.0
+        d = lam_b - lam_c
+        if abs(d) < 1.0e-12:
+            return 0.0
+        return 0.5 * (s_b - s_c) / d
+    d = lam_b - lam_c
+    if abs(d) < 1.0e-7 * (1.0 + abs(lam_b) + abs(lam_c)):
+        z = 0.25 * (lam_b + lam_c) / T
+        if abs(z) > 300.0:
+            return 0.0
+        c = np.cosh(z)
+        return 0.25 / (T * c * c)
+    return 0.5 * (np.tanh(0.5 * lam_b / T) - np.tanh(0.5 * lam_c / T)) / d
+
+
+@njit(cache=True)
+def _pair_hessian_pass(k, w, M_star, mu_star, Delta, T, with_mu, size, row_mode,
+                       row_s_mu, row_s_M, row_flavour, mom_n, mom_i, mom_j,
+                       gap_n, gap_i, gap_j, gap_s, gap_eta):
+    """The second derivatives of the paired half of `pair_block`, one pass.
+
+    Returns the UNSCALED 15 x 15 Hessian of
+
+        G = sum_nodes w k^2 sum_blocks sum_b F(lambda_b),   F(x) = phi(|x|)/2
+
+    -- minus the paired accumulator `_pair_pass` calls omega -- with respect
+    to the 15 parameters (mu*_0..8, M_u, M_d, M_s, Delta_1, Delta_2, Delta_3),
+    the ones H(k) is linear in. Only the upper triangle of each parameter pair
+    is filled, in whichever order the block lists them: the caller symmetrises.
+
+    Second-order perturbation theory in the Daleckii-Krein form, which is
+    what makes it one pass: with H linear in every parameter,
+
+        d^2 G / dp dq = sum_nodes w k^2 sum_{b,c} [F'(l_b) - F'(l_c)]/(l_b - l_c)
+                        (V^T H_p V)_bc (V^T H_q V)_bc
+
+    needs the eigenvectors once and no second derivative of H. The matrix
+    elements are cheap for the same reason the first derivatives were: H_mu
+    and H_M are diagonal and H_Delta has two or four entries, so every
+    (V^T H_p V)_bc is a handful of products of eigenvector components. The
+    T = 0 delta-function terms on the diagonal are NOT here; see
+    `pair_hessian`.
+
+    `with_mu` False leaves the nine potentials out of the parameter set: a
+    vacuum block is evaluated at mu* = 0 and is a function of the masses and
+    the gaps alone, so its potential derivatives are discarded anyway, and
+    dropping them halves the contraction.
+    """
+    n_blocks = size.shape[0]
+    width = row_mode.shape[1]
+    A = np.zeros((width, width))
+    V = np.zeros((width, width))
+    lam = np.zeros(width)
+    work = np.zeros(width)
+    G = np.zeros((15, width, width))
+    active = np.zeros(15, dtype=np.int64)
+    present = np.zeros(15, dtype=np.bool_)
+    H = np.zeros((15, 15))
+
+    for node in range(k.shape[0]):
+        kk = k[node]
+        weight = w[node] * kk * kk
+        for b in range(n_blocks):
+            n = size[b]
+            for i in range(n):
+                for j in range(n):
+                    A[i, j] = 0.0
+            for i in range(n):
+                mode = row_mode[b, i]
+                A[i, i] = (row_s_mu[b, i] * mu_star[mode]
+                           + row_s_M[b, i] * M_star[row_flavour[b, i]])
+            for m in range(mom_n[b]):
+                i, j = mom_i[b, m], mom_j[b, m]
+                A[i, j] += kk
+                A[j, i] += kk
+            for g in range(gap_n[b]):
+                i, j = gap_i[b, g], gap_j[b, g]
+                value = gap_s[b, g] * Delta[gap_eta[b, g]]
+                A[i, j] += value
+                A[j, i] += value
+
+            _symmetric_eigh(A, V, lam, work, n)
+
+            # the parameters this block's H depends on
+            n_act = 0
+            for p in range(15):
+                present[p] = False
+            for i in range(n):
+                p = 9 + row_flavour[b, i]
+                if not present[p]:
+                    present[p] = True
+                    active[n_act] = p
+                    n_act += 1
+                if with_mu:
+                    p = row_mode[b, i]
+                    if not present[p]:
+                        present[p] = True
+                        active[n_act] = p
+                        n_act += 1
+            for g in range(gap_n[b]):
+                p = 12 + gap_eta[b, g]
+                if not present[p]:
+                    present[p] = True
+                    active[n_act] = p
+                    n_act += 1
+            for a in range(n_act):
+                p = active[a]
+                for r in range(n):
+                    for c in range(n):
+                        G[p, r, c] = 0.0
+
+            # (V^T H_p V)_rc, symmetric in (r, c): the upper triangle only
+            for i in range(n):
+                p_mu = row_mode[b, i]
+                p_M = 9 + row_flavour[b, i]
+                s_mu = row_s_mu[b, i]
+                s_M = row_s_M[b, i]
+                for r in range(n):
+                    v_ir = V[i, r]
+                    for c in range(r, n):
+                        prod = v_ir * V[i, c]
+                        G[p_M, r, c] += s_M * prod
+                        if with_mu:
+                            G[p_mu, r, c] += s_mu * prod
+            for g in range(gap_n[b]):
+                i, j = gap_i[b, g], gap_j[b, g]
+                p = 12 + gap_eta[b, g]
+                s = gap_s[b, g]
+                for r in range(n):
+                    for c in range(r, n):
+                        G[p, r, c] += s * (V[i, r] * V[j, c] + V[j, r] * V[i, c])
+
+            # the contraction, each off-diagonal pair once and doubled
+            for r in range(n):
+                for c in range(r, n):
+                    D = weight * _fprime_bracket(lam[r], lam[c], T)
+                    if D == 0.0:
+                        continue
+                    if c != r:
+                        D *= 2.0
+                    for a in range(n_act):
+                        p = active[a]
+                        g_p = G[p, r, c]
+                        if g_p == 0.0:
+                            continue
+                        for a2 in range(a, n_act):
+                            q = active[a2]
+                            H[p, q] += D * g_p * G[q, r, c]
+    return H
+
+
 def _pair_pass_reference(k, weight, M_star, mu_star, Delta, T, blocks):
     """The paired half, batched over the quadrature with `numpy.linalg.eigh`.
 
@@ -1001,18 +1287,19 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
     mu_star = np.asarray(mu_star, dtype=float)
     Delta = np.asarray(Delta, dtype=float)
 
-    if not np.any(Delta):
+    if not any(active_gaps(Delta)):
         zero_n = np.zeros(N_MODES)
         return PairBlock(delta_omega=0.0, delta_n=zero_n,
                          delta_rho_s=np.zeros(3), delta_s=0.0,
                          gap_kernel=np.zeros(3), min_energy=0.0, gapless=False)
 
     if quadrature is None:
-        quadrature = pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel)
+        quadrature = pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel,
+                                Delta=Delta)
     k, w = quadrature
     weight = w * k ** 2
 
-    blocks, covered, tables = _BY_PATTERN[tuple(Delta != 0.0)]
+    blocks, covered, tables = _BY_PATTERN[active_gaps(Delta)]
     if backend == "fast" and _NUMBA_OK:
         omega, d_mu, d_M, d_Delta, entropy, min_energy = _pair_pass(
             np.ascontiguousarray(k, dtype=float),
@@ -1033,6 +1320,25 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
 
     inv = 1.0 / (2.0 * np.pi ** 2)
     scale = float(np.max(np.abs(Delta)))
+    gapless = bool(min_energy < GAPLESS_FRACTION * scale)
+    if gapless:
+        # A gap the solver has driven to its own round-off -- 1e-9 MeV beside
+        # a 220 MeV one, which is what a CFL-layout solve converging on the
+        # 2SC root leaves in Delta_1 and Delta_2 -- still sits above
+        # GAP_FLOOR, so its block is built, and that block's branches cross
+        # zero at the Fermi surface of a mode that is, physically, unpaired.
+        # Numerically harmless (the crossing IS a breakpoint already), but
+        # it would report a fully gapped 2SC state as gapless. So the flag
+        # is judged over the blocks of the gaps that are real by the
+        # `realised_pattern` standard, and only when it would otherwise fire.
+        real = tuple(bool(d) for d in np.abs(Delta) > REALISED_TOL * scale)
+        if real != active_gaps(Delta) and any(real):
+            energy = np.inf
+            for block in _BY_PATTERN[real][0]:
+                lam = np.linalg.eigvalsh(spectrum_matrix(block, M_star, mu_star,
+                                                          Delta, k))
+                energy = min(energy, float(np.min(np.abs(lam))))
+            gapless = bool(energy < GAPLESS_FRACTION * scale)
     return PairBlock(delta_omega=(omega - omega_0) * inv,
                      delta_n=(d_mu - d_mu_0) * inv,
                      # rho_s = +dOmega/dM, and the sign is in here
@@ -1040,7 +1346,194 @@ def pair_block(M_star, mu_star, Delta, T, k_max,
                      delta_s=(entropy - entropy_0) * inv,
                      gap_kernel=d_Delta * inv,
                      min_energy=float(min_energy),
-                     gapless=bool(min_energy < GAPLESS_FRACTION * scale))
+                     gapless=gapless)
+
+
+@dataclass(frozen=True)
+class PairHessian:
+    """The derivatives of `PairBlock`'s three solver-facing entries.
+
+    Each is a matrix over the 15 parameters the spectrum is linear in, in the
+    order (mu*_0..8, M_u, M_d, M_s, Delta_1, Delta_2, Delta_3):
+
+    d_delta_n       (9, 15)   d(delta_n_j)/d(parameter)      [MeV^2]
+    d_delta_rho_s   (3, 15)   d(delta_rho_s,f)/d(parameter)  [MeV^2]
+    d_gap_kernel    (3, 15)   d(kernel_eta)/d(parameter)     [MeV^2]
+
+    Every entry is a second derivative of the pairing correction to Omega, so
+    the three share one symmetric Hessian and differ only in sign and which
+    rows they read; a model's analytic Jacobian chains them to its own
+    unknowns. Zero, like the block, when no gap is on.
+    """
+    d_delta_n: np.ndarray
+    d_delta_rho_s: np.ndarray
+    d_gap_kernel: np.ndarray
+
+
+def _sech2(z):
+    """sech^2(z) without overflow: (2 e^-|z| / (1 + e^-2|z|))^2."""
+    e = np.exp(-np.abs(z))
+    return (2.0 * e / (1.0 + e * e)) ** 2
+
+
+def _unpaired_reference_hessian(k, weight, M_mode, mu_star, T, covered):
+    """The Hessian of `_unpaired_reference`'s omega, with the sign of G.
+
+    G_0 = sum_nodes w k^2 sum_{j covered} sum_r Phi(xi_jr), Phi(x) = phi(|x|),
+    xi = E_j - r mu*_j, whose derivatives are closed form: d xi/d mu = -r,
+    d xi/d M = M/E, d^2 xi/dM^2 = k^2/E^3. Phi'' = sech^2(x/2T)/2T is the
+    thermal smearing of the Fermi surface; at T = 0 it is 2 delta(x), and the
+    delta integrates to 2 k_F E_F at each occupied Fermi momentum, which is
+    the term the block's own crossings get in `pair_hessian`.
+    """
+    H0 = np.zeros((15, 15))
+    for j in covered:
+        M = M_mode[j]
+        mu = mu_star[j]
+        f = FLAVOUR_OF_MODE[j]
+        E = np.sqrt(k ** 2 + M ** 2)
+        for r in (+1.0, -1.0):
+            xi = E - r * mu
+            if T > 0.0:
+                Phi2 = _sech2(0.5 * xi / T) / (2.0 * T)
+                Phi1 = np.tanh(0.5 * xi / T)
+            else:
+                Phi2 = np.zeros_like(xi)
+                Phi1 = np.sign(xi)
+            H0[j, j] += float(np.sum(weight * Phi2))
+            H0[j, 9 + f] += float(np.sum(weight * Phi2 * (-r) * (M / E)))
+            H0[9 + f, 9 + f] += float(np.sum(weight * (Phi2 * (M / E) ** 2
+                                                       + Phi1 * k ** 2 / E ** 3)))
+            if T <= 0.0 and r * mu > abs(M):
+                kF = np.sqrt(mu ** 2 - M ** 2)
+                EF = abs(mu)
+                H0[j, j] += 2.0 * kF * EF
+                H0[j, 9 + f] += -2.0 * r * kF * M
+                H0[9 + f, 9 + f] += 2.0 * kF * M ** 2 / EF
+    for j in covered:
+        f = FLAVOUR_OF_MODE[j]
+        H0[9 + f, j] = H0[j, 9 + f]
+    return H0
+
+
+def _crossing_terms(M_star, mu_star, Delta, blocks, crossings):
+    """The T = 0 Fermi-surface terms of the paired spectrum, as a Hessian.
+
+    F'(lam) = sign(lam)/2 steps by one where a branch crosses zero, so F''
+    carries delta(lam_b(k)) there and the k-integral collapses to the
+    crossing:
+
+        k_c^2 (dlam/dp)(dlam/dq) / |dlam/dk|   at each branch with lam(k_c) = 0
+
+    with the derivatives by Hellmann-Feynman at k_c. The momentum derivative
+    is the same expectation value with H_k, which has a 1 wherever the
+    spectrum matrix has k. A branch that touches zero without crossing has no
+    step and no term; its slope vanishes and it is skipped.
+    """
+    H = np.zeros((15, 15))
+    tol = 1.0e-6 * max(1.0, float(np.max(np.abs(Delta))))
+    # `gapless_momenta` reports a crossing once per block that holds it, and
+    # a branch and its +- partner sit in different blocks: every momentum
+    # comes back twice. The loop below visits every block at each momentum,
+    # so the list is deduplicated first or the terms double.
+    crossings = np.unique(np.round(np.asarray(crossings, dtype=float), 6))
+    for k_c in crossings:
+        for rows, momentum, gaps in blocks:
+            block = (rows, momentum, gaps)
+            A = spectrum_matrix(block, M_star, mu_star, Delta, np.array([k_c]))[0]
+            lam, V = np.linalg.eigh(A)
+            for b in np.nonzero(np.abs(lam) < tol)[0]:
+                v = V[:, b]
+                g = np.zeros(15)
+                for i, (mode, s_mu, s_M) in enumerate(rows):
+                    g[mode] += s_mu * v[i] ** 2
+                    g[9 + FLAVOUR_OF_MODE[mode]] += s_M * v[i] ** 2
+                for i, j, sign, eta in gaps:
+                    g[12 + eta - 1] += 2.0 * sign * v[i] * v[j]
+                slope = sum(2.0 * v[i] * v[j] for i, j in momentum)
+                if abs(slope) < 1.0e-12:
+                    continue
+                H += k_c ** 2 * np.outer(g, g) / abs(slope)
+    return H
+
+
+def pair_hessian(M_star, mu_star, Delta, T, k_max,
+                 nodes_per_panel=NODES_PER_PANEL, quadrature=None,
+                 backend="fast", crossings=None, with_mu=True):
+    """The derivatives of the pairing correction, for an analytic Jacobian.
+
+    The second derivatives of `pair_block`'s delta_omega with respect to the
+    15 parameters the spectrum is linear in, read off as the derivatives of
+    delta_n, delta_rho_s and the gap kernel (`PairHessian`). Same quadrature
+    rule as the block -- pass the same `quadrature` and the Hessian is the
+    derivative of the integral the block approximates, to that rule's
+    accuracy -- and the same correction form: the unpaired reference is
+    differentiated in closed form and subtracted, so every entry vanishes
+    identically at Delta = 0.
+
+    Three pieces. The bulk is `_pair_hessian_pass`, second-order perturbation
+    theory over the quadrature. At T = 0 the occupation is a step, and its
+    derivative lives on the Fermi surfaces: on the unpaired ones in closed
+    form inside `_unpaired_reference_hessian`, and on the paired spectrum's
+    own zero crossings -- the gapless momenta `pair_nodes` already breaks the
+    quadrature at -- through `_crossing_terms`. A gapped state at T = 0 has no
+    crossing and the paired half is bulk only.
+
+    `crossings` are the zero-crossing momenta of `gapless_breakpoints`, if
+    the caller already holds them (it built `quadrature` from them); None
+    finds them here. `with_mu` False returns zero in every potential row and
+    column and does not compute them, for a block evaluated at mu* = 0 whose
+    potential derivatives the caller will discard. Compiled only: `backend` accepts 'fast', and asks for
+    numba, because the Hessian is a second implementation of the same
+    equations (CLAUDE.md section 9) whose reference is the finite difference
+    of the reference residual, checked in the models' `verify/` suites.
+    """
+    M_star = np.asarray(M_star, dtype=float)
+    mu_star = np.asarray(mu_star, dtype=float)
+    Delta = np.asarray(Delta, dtype=float)
+    if not any(active_gaps(Delta)):
+        return PairHessian(d_delta_n=np.zeros((N_MODES, 15)),
+                           d_delta_rho_s=np.zeros((3, 15)),
+                           d_gap_kernel=np.zeros((3, 15)))
+    if backend != "fast":
+        raise ValueError(f"pair_hessian has backend 'fast' only; got "
+                         f"{backend!r}")
+    if not _NUMBA_OK:
+        raise NotImplementedError("pair_hessian needs numba; without it the "
+                                  "solver differences its residual instead")
+
+    if quadrature is None:
+        quadrature = pair_nodes(M_star, mu_star, T, k_max, nodes_per_panel,
+                                Delta=Delta)
+    k, w = quadrature
+    weight = w * k ** 2
+    blocks, covered, tables = _BY_PATTERN[active_gaps(Delta)]
+
+    H = _pair_hessian_pass(
+        np.ascontiguousarray(k, dtype=float),
+        np.ascontiguousarray(w, dtype=float),
+        M_star, mu_star, Delta, float(T), bool(with_mu), *tables)
+    H = H + H.T - np.diag(np.diag(H))
+    if T <= 0.0:
+        if crossings is None:
+            crossings = gapless_breakpoints(M_star, mu_star, Delta, k_max)
+        crossings = np.asarray(crossings, dtype=float)
+        if crossings.size:
+            H += _crossing_terms(M_star, mu_star, Delta, blocks, crossings)
+
+    M_mode = M_star[FLAVOUR_OF_MODE]
+    H0 = _unpaired_reference_hessian(k, weight, M_mode, mu_star, T, covered)
+
+    inv = 1.0 / (2.0 * np.pi ** 2)
+    correction = H - H0
+    if not with_mu:
+        correction[0:9, :] = 0.0
+        correction[:, 0:9] = 0.0
+        H[:, 0:9] = 0.0
+    return PairHessian(d_delta_n=inv * correction[0:9],
+                       # rho_s = +dOmega/dM = -dG/dM, as in `pair_block`
+                       d_delta_rho_s=-inv * correction[9:12],
+                       d_gap_kernel=inv * H[12:15])
 
 
 def delta_omega_pair(M_star, mu_star, Delta, T, k_max, **kwargs):

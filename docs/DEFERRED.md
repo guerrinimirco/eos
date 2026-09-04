@@ -2355,3 +2355,118 @@ not pay for getting the bound right.
   backend parity between `solver.py` and `solver_fast.py`, the DD2 published
   M_max and R_1.4, and a crust-attached against crust-free comparison now that
   the tables ship in `eos/astro/tov/data/`.
+
+---
+
+## njl, ccdm: the T = 0 solve at a gapless ONSET, and near-gapless states at T > 0
+
+OPEN, measured 2026-09-03. Two limits of the pairing solve remain after the
+quadrature was given breakpoints at the zero-crossings of the quasiparticle
+branches (`eos.general.pairing.gapless_momenta`), which is what made gapless
+CFL converge at T = 0 -- before it, a fixed-Y_C = 0.1 table reported a
+metastable 2SC at 98 of 100 points because the gapless CFL that minimised f
+could not reach the gate.
+
+1. **A 2SC state sitting exactly on its gapless onset at T = 0.** At fixed
+   Y_C = 0, Y_S = 0 (n_d = 2 n_u, no leptons) the u-d pair is driven to
+   Delta - delta mu ~ 0.1 MeV from n_B ~ 0.945 fm^-3 upward and stays there:
+   the residual floors at 1e-6..1e-5, the candidate is dropped, and the table
+   falls back to the metastable unpaired state (f higher by ~140 MeV/fm^3).
+   The same points close at T = 1 MeV to 1e-11..1e-13. This is the g2SC
+   regime; the homogeneous phase is chromomagnetically unstable there in any
+   case, so what is missing is a construction, not a tolerance.
+
+2. **Near-touching branches at T > 0.** A branch that comes within a few T
+   of zero without crossing is a feature of width ~T that no panel breaks at.
+   At T = 1 MeV, Y_C = 0, Y_S = 0, the 2SC residual lands at 2e-10..2e-9 --
+   2 to 20 times the gate -- at 2 of 100 densities and the point falls back
+   to unpaired. Breakpoints placed at the near-touch (below 25 T, located by a
+   bounded minimiser) were tried and REVERTED: they exist only while a
+   threshold holds, so they appear and disappear as the unknowns move, and
+   they lost as many cold solves as they rescued warm ones.
+
+Neither is a wrong number at the gate; both are a candidate that misses the
+gate and a metastable one reported in its place. `converged = True` on every
+row of a table is therefore not evidence the table is the ground state: check
+P monotone and 0 <= cs2 <= 1 along the sweep, and read alternation between
+patterns as a lost root rather than a transition.
+
+---
+
+## njl: the vacuum-pairing bound on eta_D is cited but never computed
+
+OPEN, 2026-09-04. `docs/njl_csc_implementation.md` asks twice — section 10.5
+and the tier-3 table of section 13 — for "the published bound on
+eta_D = G_D/G_S beyond which the *vacuum itself* would pair", and the number
+appears nowhere. The only bound recorded in the repository is `njl.md`'s
+`eta_D < 0.765`, and that is Ivanytskyi's NONLOCAL model with a Gaussian
+formfactor; it does not transfer to a local model with a three-momentum
+cutoff, and at face value it would exclude the shipped `rg_njl1` set at
+eta_D = 1.45 outright.
+
+**This is a ceiling on a whole line of physics, not a loose end.** Song, Baym,
+Hatsuda and Kojo [arXiv:1905.01005] Appendix C put eta_D >~ 1.4 from the
+N-Delta splitting and QHC19 uses 1.35-1.65, while Yuan and Gao
+[arXiv:2605.19657] find that absolutely stable CFL matter — the only route to
+a Bodmer-Witten window that survives reading, since a positive bag raises E/A
+as B^(1/4) — needs eta_D >~ 1.5. If the local bound sits near 0.765 then that
+entire route is closed before any code is written; if it sits above 1.7 the
+route is open and the sampler prior of section 13 should be widened.
+
+**It is cheap to settle and needs no new code.** The question is whether the
+gap equation has a Delta != 0 root at mu* = 0, T = 0 as eta_D rises, and
+`thermodynamics._vacuum_pair_block` already evaluates the pairing block at
+exactly that point. The counterterm must be carried: it vanishes at
+lambda_UV = 1 but not at the default lambda_UV = 10, which is the scheme any
+answer has to be quoted in. Neither `verify/` nor `test/njl/` asks the
+question today.
+
+---
+
+## njl, general: the zero-pressure locator does not terminate on a paired branch
+
+OPEN, measured 2026-09-04 (python 3.14.2, numpy 2.3.5, scipy 1.17.0, RKH set,
+lambda_UV = 10).
+
+**The gap.** `njl/verify`'s `_check_zero_pressure` runs two arms, both
+unpaired. On a beta-equilibrium mode strangeness self-equilibrates and
+mu_S = 0, so the invariant `E/A = mu_B + Y_S mu_S` collapses to `E/A = mu_B`
+on both and the second term is never exercised in this model. It is exercised
+in `eos.alphabag`'s suite, on a CFL surface where mu_S = 40.68 MeV, and
+`locate_zero_pressure` is shared `general/` code, so the TERM is guarded; what
+is unguarded is this model's own `point_at` closure -- its `quark_charges`
+call and its `p.mu_S` -- in a paired state.
+
+**Why the obvious fix does not work.** A third arm at `SpeciesFlags(csc=True)`
+was written and withdrawn. Per-point cost is not the obstacle: a paired
+`eos_point` at T = 0 costs 2.4-3.0 s against 0.04-0.1 s unpaired, so a scan
+plus a refinement should be about a minute. The obstacle is the REFINEMENT.
+Measured pressures on the paired branch bracket the surface cleanly --
+
+    n_B [fm^-3]   P unpaired      P csc
+    0.20          -6.219          -6.053
+    0.35          -6.228          -6.360
+    0.50          +37.633         +35.354
+
+-- and yet `locate_zero_pressure` did not return in 10 minutes on
+`n_lo = 0.20, n_hi = 0.60, n_scan = 9`, nor in 3.5 minutes on the tight
+bracket `n_lo = 0.35, n_hi = 0.50, n_scan = 4`, where the four scan points
+alone are 12 s. So it is Brent, not the scan.
+
+**The likely cause, stated as a hypothesis and not verified.** With `csc` on,
+each `eos_point` enumerates the pairing patterns and returns the max-P
+envelope. The winning pattern changes with density -- 2SC below, CFL above --
+so the envelope Brent is handed is only piecewise smooth and may step at the
+crossing. `brentq` on a function with a jump inside its bracket bisects
+towards the discontinuity and never meets `xtol`, at 2.4-3.0 s per
+evaluation. If that is right the fix belongs in `eos.general.zero_pressure`
+(an iteration cap, and a root returned with a status when the bracket cannot
+be closed -- CLAUDE.md section 6 makes non-convergence a return value), not in
+any model, and it would let the paired arm come back.
+
+**What this does not say.** The unpaired arms pass, at max_error = 1.0e-15,
+and reproduce the published number: E/A = 1102.02 MeV at n_B = 0.3824 fm^-3
+for the RKH set, against Buballa's 1102 MeV at 2.25 n_sat (Phys. Rept. 407,
+205 (2005), section 3.3.2). Y_S = 0 on both arms, so the surface sits below
+the s quark's threshold and the three-flavour call returns the two-flavour
+number -- which is the behaviour `eos.general.zero_pressure` documents.

@@ -57,6 +57,17 @@ class Parameters:
     #: between them is channel and Fierz counting. eta_D also has to absorb
     #: the 't Hooft--diquark cross-term, which this model omits (section 2.1
     #: of docs/njl_csc_implementation.md); a paper using it should say so.
+    #:
+    #: THE FIERZ VALUE IS THE WEAKEST OF THE PUBLISHED CHOICES, not the
+    #: consensus one. Song, Baym, Hatsuda and Kojo, Phys. Rev. D 100, 034018
+    #: (2019) [arXiv:1905.01005] Appendix C read the diquark strength off the
+    #: N-Delta mass splitting through the NJL Faddeev calculation of Ishii,
+    #: Bentz and Yazaki, Nucl. Phys. A 587, 617 (1995), and get eta_D >~ 1.4;
+    #: the QHC19 equation of state uses 1.35-1.65 and Kunkel et al. 1.45. So
+    #: the range this model should be sampled over is roughly 0.75 to 1.65,
+    #: with the upper half the better motivated. What bounds it from above is
+    #: the coupling at which the VACUUM itself would pair, and that bound has
+    #: not been computed for this model -- see docs/DEFERRED.md.
     eta_D: float = 0.75
     #: eta_V = G_V/G_S, the constant-vector-coupling variant.
     eta_V: float = 0.0

@@ -95,8 +95,15 @@ from eos.njl import (
     solve_beta_eq_neutrino_trapped, solve_fixed_yc, solve_fixed_yc_ys,
     state_at, surface_term, vacuum_solution,
 )
+from eos.njl.solver import (_unpack, default_guess, mode_spec, residual,
+                            unknown_slots)
 from eos.njl.species import realised_pattern
 from eos.njl.thermodynamics import NUMBA_OK, thermo_from_mu
+
+try:
+    from eos.njl.backends.jacobian import residual_jacobian
+except ImportError:                       # pragma: no cover - backends/ removed
+    residual_jacobian = None
 
 #: The published vacuum outputs of the RKH fit (Rehberg, Klevansky, Huefner,
 #: Phys. Rev. C 53, 410 (1996)), as reproduced in section 4 of
@@ -667,26 +674,42 @@ def _check_zero_pressure(par):
     Bodmer-Witten hypothesis rather than checking an implementation. The
     numbers go in the detail line instead.
 
+    BOTH ARMS ARE UNPAIRED, AND THAT LEAVES THE Y_S mu_S TERM UNTESTED HERE.
+    On a beta-equilibrium mode strangeness self-equilibrates and mu_S = 0, so
+    the identity collapses to E/A = mu_B on both arms and the second term is
+    never exercised. The phase where it is nonzero is a paired one -- a
+    colour-flavour locked surface pairs the three flavours at equal densities
+    and unequal masses -- and a paired arm was written for this check and then
+    withdrawn: `eos.general.zero_pressure`'s Brent refinement does not
+    terminate on the paired branch, because the pattern enumeration switches
+    between 2SC and CFL with density and the max-P envelope it refines is
+    therefore discontinuous. docs/DEFERRED.md carries the measurement. The
+    shared term itself is not unguarded: `locate_zero_pressure` lives in
+    `general/` and `eos.alphabag`'s suite exercises it on a CFL surface with
+    mu_S = 40.68 MeV. What is untested is this model's own `point_at` closure
+    in a paired state, which is the narrower claim.
+
     A set with no self-bound surface, and a flavour content this phase
     refuses, are reported the same way and fail nothing.
     """
+    # (label, SpeciesFlags kwargs, n_lo, n_hi, n_scan)
+    arms = [("three", {}, 0.25, 0.60, 15),
+            ("two", {"two_flavour": True}, 0.25, 0.60, 15)]
     worst, detail = 0.0, []
-    for two_flavour in (False, True):
+    for label, kwargs, n_lo, n_hi, n_scan in arms:
         try:
-            flags = SpeciesFlags(two_flavour=two_flavour)
+            flags = SpeciesFlags(**kwargs)
         except NotImplementedError:
-            detail.append("two-flavour: no such arm in this phase")
+            detail.append(f"{label}: no such arm in this phase")
             continue
-        surface = zero_pressure_point(par, flags,
-                                        n_lo=0.25, n_hi=0.60,
-                                        n_scan=15)
-        label = "two" if two_flavour else "three"
+        surface = zero_pressure_point(par, flags, n_lo=n_lo, n_hi=n_hi,
+                                      n_scan=n_scan)
         if not surface.ok:
-            detail.append(f"{label}-flavour: {surface.message}")
+            detail.append(f"{label}: {surface.message}")
             continue
         worst = max(worst, surface.identity_error)
         detail.append(
-            f"{label}-flavour: E/A={surface.E_per_A:.2f} MeV at "
+            f"{label}: E/A={surface.E_per_A:.2f} MeV at "
             f"n_B={surface.n_B:.4f} fm^-3, Y_S={surface.Y_S:.4f}, "
             f"{'below' if surface.below_iron else 'above'} iron")
     return CheckResult("zero-pressure surface", worst < 1e-12, worst,
@@ -751,6 +774,106 @@ def check_backend_parity(par):
     tol = 1.0e-12 * (par.Lambda_medium / par.Lambda) ** 3
     return CheckResult("backend parity", worst < tol, worst,
                        f"worst {where}" if where else "")
+
+
+def check_jacobian_parity(par, tol=1.0e-5):
+    """The analytic Jacobian against a central difference of the residual.
+
+    CLAUDE.md section 9: the fast flavour is validated against the reference.
+    `backends/jacobian.residual_jacobian` is the hand-derived derivative of
+    `solver.residual`, and its reference is the residual itself, differenced.
+    Judged row by row on the SCALED rows -- each row divided by its own
+    largest entry -- because the raw rows span twenty orders of magnitude and
+    a relative test on a colour row that is identically zero at a 2SC root
+    would measure round-off. The states are cold guesses rather than roots:
+    a Jacobian only has to be right at the root to converge, but one that is
+    right everywhere is what makes the Newton attempt of
+    `eos.general.solve.solve_system` land there from a cold start, and the
+    set below covers every row the assembly has -- leptons, muons, the
+    trapped mode, the T = 0 strangeness threshold row, both density-dependent
+    vector forms -- and a gapless CFL root at T = 0, the case whose derivative
+    lives on a Fermi surface `pair_hessian` has to put in by hand.
+
+    The tolerance is what central differences of a three-pass RG quadrature
+    reach, not what the Jacobian reaches: measured 5e-7 worst on the cold
+    guesses and 5e-6 on the gapless root, against a 1e-5 gate.
+
+    Skipped, not failed, where `backends/` or numba is absent (section 5).
+    """
+    if not NUMBA_OK or residual_jacobian is None:
+        return CheckResult("jacobian parity", True, 0.0,
+                           "skipped: backends/ or numba absent, and section 5 "
+                           "makes both optional")
+    from dataclasses import replace
+    vac = vacuum_solution(par)
+    plain = SpeciesFlags(csc=True, muons=False)
+    muons = SpeciesFlags(csc=True, muons=True)
+    gluon = replace(par, vector_form="gluon_exchange", G_V0_over_GS=0.3)
+    power = replace(par, vector_form="power_law", eta_V=0.3, alpha=0.5)
+    cases = [
+        (par, "beta_eq_neutrinoless", {}, None, "unpaired", 1.0, 0.0, plain),
+        (par, "beta_eq_neutrinoless", {}, None, "2SC", 1.0, 0.0, plain),
+        (par, "beta_eq_neutrinoless", {}, None, "CFL", 1.0, 0.0, plain),
+        (par, "fixed_YC", {"Y_C": 0.1}, True, "CFL", 0.8, 20.0, muons),
+        (par, "fixed_YC_YS", {"Y_C": 0.5, "Y_S": 0.0}, False, "2SC", 0.6, 0.0, plain),
+        (par, "fixed_YC_YS", {"Y_C": 0.5, "Y_S": 0.1}, False, "2SC", 0.6, 5.0, plain),
+        (par, "beta_eq_neutrino_trapped", {"Y_Le": 0.3}, None, "2SC", 0.8, 10.0, muons),
+        (gluon, "beta_eq_neutrinoless", {}, None, "2SC", 1.0, 0.0, plain),
+        (power, "beta_eq_neutrinoless", {}, None, "2SC", 1.0, 0.0, plain),
+    ]
+    worst, where = 0.0, ""
+
+    def compare(p, mode, fracs, leptons, pattern, n_B, T, flags, x, label):
+        spec = mode_spec(mode, leptons=leptons, **fracs)
+        names = unknown_slots(p, spec, pattern)
+        J = residual_jacobian(x, names, p, flags, spec, pattern, n_B, T, vac)
+        F = np.zeros_like(J)
+        for i in range(len(x)):
+            h = 1.0e-4 * max(abs(x[i]), 1.0)
+            up, dn = x.copy(), x.copy()
+            up[i] += h
+            dn[i] -= h
+            F[:, i] = (np.array(residual(up, p, flags, spec, pattern, n_B, T, vac))
+                       - np.array(residual(dn, p, flags, spec, pattern, n_B, T, vac))
+                       ) / (2.0 * h)
+        row_scale = np.abs(F).max(axis=1) + 1.0e-300
+        err = np.abs(J - F) / row_scale[:, None]
+        # a row whose every finite-difference entry is round-off constrains
+        # nothing: the colour row at a state with mu_3 = 0 by symmetry
+        alive = np.abs(F).max(axis=1) > 1.0e-6 * np.abs(F).max()
+        return float(err[alive].max()), label
+
+    for p, mode, fracs, leptons, pattern, n_B, T, flags in cases:
+        spec = mode_spec(mode, leptons=leptons, **fracs)
+        x = default_guess(p, spec, pattern, n_B, T, vac)
+        err, label = compare(p, mode, fracs, leptons, pattern, n_B, T, flags, x,
+                             f"{mode} {fracs} {pattern} T={T} cold")
+        if err > worst:
+            worst, where = err, label
+    # A gapless CFL state at T = 0, CONSTRUCTED rather than solved for: the
+    # s modes 60 MeV below the light ones against 20 MeV u-s and d-s gaps
+    # puts two branches through zero, and a state written down cannot land
+    # somewhere else the way a cold solve in the gapless window can. The
+    # state is asserted gapless, so a change that closed the window would be
+    # caught rather than silently checking a gapped point.
+    spec = mode_spec("fixed_YC", leptons=True, Y_C=0.1)
+    names = unknown_slots(par, spec, "CFL")
+    values = dict(M_u=12.0, M_d=12.0, M_s=250.0, Delta_1=20.0, Delta_2=20.0,
+                  Delta_3=110.0, mu_3=0.0, mu_8=-20.0, Sigma_V=0.0,
+                  mu_B=1440.0, mu_C=-60.0)
+    x = np.array([values[name] for name in names])
+    M, Delta, mu_3, mu_8, Sigma_V, mu_B, mu_C, mu_S, _ = _unpack(
+        x, par, spec, "CFL")
+    state = state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, 0.0,
+                     vac=vac, pattern="CFL", backend="fast")
+    if not state.gapless:
+        return CheckResult("jacobian parity", False, worst,
+                           "the constructed CFL state is not gapless")
+    err, label = compare(par, "fixed_YC", {"Y_C": 0.1}, True, "CFL", 0.7, 0.0,
+                         plain, x, "constructed gapless CFL state, T=0")
+    if err > worst:
+        worst, where = err, label
+    return CheckResult("jacobian parity", worst < tol, worst, f"worst {where}")
 
 
 def check_pattern_labels(par):
@@ -838,6 +961,7 @@ def run_all(par=None, include_csc=True, include_sound=True):
         check_residual_gate(par, states),
         _check_zero_pressure(par),
         check_backend_parity(par),
+        check_jacobian_parity(par),
     ]
     if include_csc:
         report.results += [

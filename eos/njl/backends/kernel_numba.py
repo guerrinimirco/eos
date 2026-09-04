@@ -201,3 +201,81 @@ def modes_thermo(mu, m, T, k_max, g, x, wx, absent):
         out[j, 3] = d
         out[j, 4] = e
     return out
+
+
+@njit(cache=True)
+def mode_jacobian(mu, m, T, k_max, g, x, wx):
+    """One mode's (dn/dmu, dn/dm, drho_s/dm) [MeV^2], for the Jacobian.
+
+    The same panels and nodes as `mode_thermo`, differentiated under the
+    integral. With f = f(E -+ mu) and f' = -f(1 - f)/T,
+
+        dn/dmu     = pref int dk k^2 [f+(1 - f+) + f-(1 - f-)]/T
+        dn/dm      = pref int dk k^2 (m/E) (f+' - f-')
+        drho_s/dm  = pref int dk k^2 [ (k^2/E^3)(f+ + f-) + (m/E)^2 (f+' + f-') ]
+
+    and drho_s/dmu = -dn/dm, the symmetry of the second derivatives of
+    Omega, so it is not returned twice. At T = 0 the f' terms are the step's
+    derivative and collapse to the Fermi surface: dn/dmu = pref k_F |mu|,
+    dn/dm = -pref k_F m sign(mu), drho_s/dm gets -pref k_F m^2/|mu| beside
+    its bulk term. Zero, like the block, for a mode below threshold.
+    """
+    dn_dmu = 0.0
+    dn_dm = 0.0
+    drs_dm = 0.0
+    if T <= 0.0 and abs(mu) <= abs(m):
+        return dn_dmu, dn_dm, drs_dm
+
+    k_F = 0.0
+    if abs(mu) > abs(m):
+        k_F = np.sqrt(mu * mu - m * m)
+
+    edges = np.empty(5)
+    n_edges = _edges(k_F, T, k_max, edges)
+    pref = g / (2.0 * _PI2)
+    nodes = x.shape[0]
+
+    for p in range(n_edges - 1):
+        lo = edges[p]
+        hi = edges[p + 1]
+        half = 0.5 * (hi - lo)
+        mid = 0.5 * (lo + hi)
+        for q in range(nodes):
+            k = mid + half * x[q]
+            w = half * wx[q]
+            E = np.sqrt(k * k + m * m)
+            f_p = _occupation(E - mu, T)
+            f_m = _occupation(E + mu, T)
+            weight = w * k * k
+            drs_dm += weight * (k * k / (E * E * E)) * (f_p + f_m)
+            if T > 0.0:
+                fp_p = -f_p * (1.0 - f_p) / T
+                fp_m = -f_m * (1.0 - f_m) / T
+                dn_dmu += weight * (-fp_p - fp_m)
+                dn_dm += weight * (m / E) * (fp_p - fp_m)
+                drs_dm += weight * (m / E) * (m / E) * (fp_p + fp_m)
+    if T <= 0.0:
+        sign = 1.0 if mu > 0.0 else -1.0
+        dn_dmu += k_F * abs(mu)
+        dn_dm += -k_F * m * sign
+        drs_dm += -k_F * m * m / abs(mu)
+    return pref * dn_dmu, pref * dn_dm, pref * drs_dm
+
+
+@njit(cache=True)
+def modes_jacobian(mu, m, T, k_max, g, x, wx, absent):
+    """Every mode's (dn/dmu, dn/dm, drho_s/dm) in one pass: (N, 3).
+
+    `absent` as in `modes_thermo`: a mode a declaration removed carries no
+    medium and no derivative of one.
+    """
+    N = mu.shape[0]
+    out = np.zeros((N, 3))
+    for j in range(N):
+        if absent[j]:
+            continue
+        a, b, c = mode_jacobian(mu[j], m[j], T, k_max, g, x, wx)
+        out[j, 0] = a
+        out[j, 1] = b
+        out[j, 2] = c
+    return out

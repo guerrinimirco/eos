@@ -61,7 +61,7 @@ from eos.general.fermi_integrals import (
     ABSENT, DEGENERACY, NODES_PER_PANEL, ModeThermo, _gauss_legendre,
     kinetic_thermo, surface_term,
 )
-from eos.general.pairing import (
+from eos.general.pairing import (active_gaps, 
     CHARGE, FLAVOUR_OF_MODE, N_MODES, STRANGENESS, colour_densities,
     mode_potentials, pair_block, pair_nodes, pattern_mask,
 )
@@ -369,7 +369,7 @@ def rg_pair_block(par, M, mu_star, Delta, T,
     conventional sharp-cutoff regularization costs exactly one quadrature pass
     and reproduces its numbers bit for bit.
     """
-    if par.lambda_UV == 1.0 or not np.any(Delta):
+    if par.lambda_UV == 1.0 or not any(active_gaps(Delta)):
         return pair_block(M, mu_star, Delta, T, par.Lambda_medium,
                           nodes_per_panel=nodes_per_panel, **kwargs)
 
@@ -380,9 +380,12 @@ def rg_pair_block(par, M, mu_star, Delta, T,
     # cost the same node count and bring it to 3e-13.
     rule = dict(nodes_per_panel=nodes_per_panel,
                 max_panel_ratio=RG_PANEL_RATIO)
+    # Delta goes into the rule as well: in a gapless state the T = 0
+    # occupation steps at the momenta where a quasiparticle branch crosses
+    # zero, and `pair_nodes` puts a breakpoint there only when told the gaps.
     hot = pair_block(M, mu_star, Delta, T, par.Lambda_medium, **kwargs,
-                     quadrature=pair_nodes(M, mu_star, T,
-                                           par.Lambda_medium, **rule))
+                     quadrature=pair_nodes(M, mu_star, T, par.Lambda_medium,
+                                           Delta=Delta, **rule))
     M_bytes = np.ascontiguousarray(M, dtype=float).tobytes()
     Delta_bytes = np.ascontiguousarray(Delta, dtype=float).tobytes()
     backend = kwargs.get("backend", "reference")
@@ -490,13 +493,31 @@ def _vacuum_solution(par, M0):
 
 
 def bag_constant(par, vac=None):
-    """B_eff [MeV^4]: the vacuum pressure difference across chiral restoration.
+    """The FULLY RESTORED bag [MeV^4]: Omega at the current masses minus Omega
+    at the broken-phase ones.
 
     Omega at fixed masses, evaluated at the CURRENT (restored) masses minus at
     the broken-phase ones. It is a DERIVED quantity here, not an input the way
     a bag constant is in a bag model, and it is reported because the
     colour-dielectric companion model quotes its own B_g + B_chi against it:
-    (228.93 MeV)^4 = 357.49 MeV/fm^3 at the RKH set.
+    (228.93 MeV)^4 = 357.49 MeV/fm^3 at the RKH set. It is the quantity Kojo,
+    Powell, Song and Baym call B_q^NJL, Phys. Rev. D 91, 045003 (2015)
+    [arXiv:1412.1108] Eq. (28), who get 284 MeV/fm^3 = (219 MeV)^4 for the HK
+    set by the same formula.
+
+    THIS IS NOT THE `B_eff` OF THE NJL LITERATURE, and the names collide.
+    There, B_eff = B_0 - B(n) is DENSITY DEPENDENT: B_0 is the constant this
+    model subtracts at every point (`Vacuum.Omega`, up to sign) and B(n) is the
+    same combination of sea and condensate energies evaluated at the IN-MEDIUM
+    masses -- Logoteta, Bombaci, Providencia and Vidana, Phys. Rev. D 85,
+    023003 (2012) [arXiv:1203.4159] Eqs. (20)-(21). For THIS parameter set
+    their B_eff runs 90-195 MeV/fm^3 over the pressures a star reaches (their
+    Fig. 3), against the 357.49 MeV/fm^3 here, because at those densities the
+    strange condensate is still largely intact while this function melts all
+    three down to the current masses. Comparing a surface energy against the
+    number below rather than against theirs overstates the bag by a factor of
+    two to four. Same disease, and the same fix, as `chi_diel` in
+    `eos.ccdm`: two quantities, one name, so the name says which.
     """
     if vac is None:
         vac = vacuum_solution(par)
