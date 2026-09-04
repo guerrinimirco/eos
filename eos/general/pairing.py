@@ -588,9 +588,23 @@ def gapless_momenta(M_star, mu_star, Delta, blocks, k_lo, k_hi):
                 for j in np.nonzero(np.diff(neg_f))[0]:
                     brackets.append((fine[j], fine[j + 1]))
         for lo, hi in brackets:
-            found.append(brentq(
-                lambda x: _nearest_branch(block, M_star, mu_star, Delta, x),
-                lo, hi, xtol=1.0e-9, rtol=1.0e-12))
+            # The bracket was found on the eigenvalue COUNT and the root is
+            # located on the nearest branch, which are two different functions
+            # -- exactly the difference the paragraph above calls robust. Where
+            # they disagree the nearest branch does not change sign across the
+            # interval (two crossings inside one, or the nearest branch
+            # changing identity across it) and Brent raises rather than
+            # returning. A BREAKPOINT IS NOT A PHYSICAL QUANTITY: it splits the
+            # quadrature, so the midpoint of an interval one scan spacing wide
+            # serves, and the alternative is a ValueError out of a table build.
+            f_lo = _nearest_branch(block, M_star, mu_star, Delta, lo)
+            f_hi = _nearest_branch(block, M_star, mu_star, Delta, hi)
+            if f_lo * f_hi <= 0.0:
+                found.append(brentq(
+                    lambda x: _nearest_branch(block, M_star, mu_star, Delta, x),
+                    lo, hi, xtol=1.0e-9, rtol=1.0e-12))
+            else:
+                found.append(0.5 * (lo + hi))
     return np.array(sorted(found))
 
 

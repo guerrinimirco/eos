@@ -255,12 +255,24 @@ def warm_start(point):
 
     Keyed by pattern because the pattern decides the vector's LAYOUT -- a 2SC
     vector has one gap in it and a CFL vector three -- so a seed handed to the
-    wrong pattern is not merely a poor guess, it is the wrong length. A
-    density sweep therefore carries the winning pattern's seed and lets the
-    others start cold, which is also what keeps the enumeration honest: a
-    pattern that only ever sees a warm start from itself can never be
-    displaced.
+    wrong pattern is not merely a poor guess, it is the wrong length.
+
+    EVERY candidate that held its layout is carried, not only the winner. The
+    danger a warm start runs in this model is not slowness but capture: seed a
+    pattern from a density where it had COLLAPSED -- a CFL layout whose two
+    s-quark gaps came back zero, which is the 2SC state -- and it stays on that
+    root for the rest of the sweep, so a branch that exists is never found and
+    every row is labelled with a pattern it is not in. `point._seeds` is built
+    against exactly that (`solve`): a candidate contributes its vector only
+    where `pattern_realised` agrees with the layout it was solved in, so a
+    collapsed one starts cold at the next density and can be re-found the
+    moment its root appears. Before that check existed the whole enumeration
+    had to start cold to stay honest; it no longer does, and a paired sweep
+    costs about half what it did.
     """
+    if point._seeds:
+        return {pattern: np.array(x, dtype=float)
+                for pattern, x in point._seeds.items()}
     return {point.pattern: np.array(point.x, dtype=float)}
 
 
@@ -526,6 +538,19 @@ class EoSPoint:
     #: dimensionless and stays reachable through it.
     _state: object = None
     x: np.ndarray = field(default_factory=lambda: np.zeros(0))
+
+    #: What the NEXT point of a sweep may re-seed from: {pattern: vector} for
+    #: every candidate of this solve that both converged and stayed in the
+    #: layout it was solved in. Empty on a point that came from `solve_pattern`
+    #: directly, which enumerates nothing. See `warm_start`, its one consumer.
+    #:
+    #: UNDERSCORED for the same reason `_state` is: these are the model's own
+    #: unknown vectors in natural units, scaffolding that reached the answer
+    #: rather than part of it, so they stay off the fm-based boundary of
+    #: CLAUDE.md section 5 -- and that underscore is the line the baseline
+    #: flattener draws, which is what keeps a seeding change out of the frozen
+    #: numbers.
+    _seeds: dict = field(default_factory=dict)
 
 
 def point_from_state(st, par, flags, spec, mode, x, converged, error, T):
@@ -847,6 +872,13 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
     {pattern: vector} mapping as `warm_start` returns, which seeds each named
     pattern and leaves the rest cold. A seed belongs to the layout it was
     solved in, so it cannot simply be handed to whichever pattern comes next.
+
+    The winner carries `_seeds` back out, holding the vector of every candidate
+    that converged AND stayed in its own layout, so the next density can
+    re-seed the whole enumeration rather than only the pattern that won. A
+    candidate that collapsed is deliberately absent: it would seed the next
+    solve onto the root it collapsed to and keep it there for the rest of the
+    sweep. See `warm_start`.
     """
     if flags is None:
         flags = SpeciesFlags()
@@ -887,7 +919,11 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
 
     converged = [p for p in candidates if p.converged]
     if converged:
-        return min(converged, key=lambda p: p.f)
+        winner = min(converged, key=lambda p: p.f)
+        winner._seeds = {p.pattern: np.array(p.x, dtype=float)
+                         for p in converged
+                         if p.pattern_realised == p.pattern}
+        return winner
     if candidates:
         return candidates[0]
     return solve_pattern(par, mode, n_B, T, flags, "unpaired", spec=spec,

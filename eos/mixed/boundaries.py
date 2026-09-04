@@ -480,6 +480,12 @@ def refine_window(window, phases, eta, spec, T=0.0, species=None):
 #: comment was written.
 MU_C_SCAN = (-320.0, -2.0, 15)
 
+#: A residual this close to zero [fm^-3] IS neutrality, whether or not the
+#: residual changes sign around it. Fifteen orders below the densities in play,
+#: so it can only fire where a phase carries no net charge to begin with; see
+#: the tangential root in `neutral_phase`.
+NEUTRAL_TOL = 1.0e-8
+
 
 @dataclass
 class MaxwellPoint:
@@ -569,10 +575,24 @@ def neutral_phase(phase, mu_B, T=0.0, muons=True):
     This is what eta = 1 means for one phase: n_C = n_e + n_mu inside it, with
     no charge borrowed from anywhere else. Returns
     `(PhaseThermo, LeptonDomain, mu_C)`, or None where the branch does not
-    exist across the scan or the residual does not change sign on it.
+    exist across the scan or the residual neither vanishes nor changes sign
+    on it.
 
     Beta equilibrium fixes mu_e = -mu_C (CLAUDE.md section 2: mu_C + mu_e = 0),
     so the single unknown is mu_C and the single condition is neutrality.
+
+    **NEUTRALITY IS NOT ALWAYS A SIGN CHANGE.** A phase that is neutral BY
+    CONSTRUCTION touches zero without crossing it, and no bisection can find a
+    root it cannot bracket. Colour-flavour-locked quark matter is the case:
+    the locking forces n_u = n_d = n_s, hence n_C = 0 at every mu_C, so the
+    residual is -n_e(-mu_C) <= 0 throughout and reaches zero only at mu_C = 0,
+    where the phase neutralizes with no electrons at all. So mu_C = 0 is
+    scanned too, and a scanned point whose residual is within `NEUTRAL_TOL` is
+    taken as the root -- the one closest to mu_C = 0, since a self-neutral
+    phase carries no leptons. Every phase that neutralizes transversally is
+    located by the sign change below exactly as before: a scanned point that
+    close to zero is its root anyway, to a precision the bisection could not
+    improve on.
     """
     if T != 0.0:
         raise NotImplementedError(
@@ -583,11 +603,18 @@ def neutral_phase(phase, mu_B, T=0.0, muons=True):
 
     lo, hi, count = MU_C_SCAN
     scanned = []
-    for mu_C in np.linspace(lo, hi, count):
+    for mu_C in list(np.linspace(lo, hi, count)) + [0.0]:
         try:
             scanned.append((float(mu_C), residual(mu_C)))
         except RuntimeError:            # this branch does not exist here
             continue
+
+    touching = [c for c, r in scanned if abs(r) <= NEUTRAL_TOL]
+    if touching:
+        mu_C = min(touching, key=abs)
+        return (phase(mu_B, mu_C), charged_leptons(-mu_C, T, muons),
+                float(mu_C))
+
     for (c0, r0), (c1, r1) in zip(scanned, scanned[1:]):
         if r0 * r1 <= 0.0:
             mu_C = _bisect_where_defined(residual, c0, r0, c1, r1)

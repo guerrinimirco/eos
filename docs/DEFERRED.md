@@ -2231,6 +2231,23 @@ not pay for getting the bound right.
   fix is a counter that returns non-convergence rather than a bound that happens
   to be large. The change rides with the T = 0 entry-point work on the same file.
 
+- **CLOSED: `gapless_momenta` bracketed on one function and rooted on
+  another.** Its brackets come from the count of NEGATIVE EIGENVALUES changing
+  across a scan interval -- the robust criterion, and the one its own docstring
+  argues for, since a branch can touch zero without crossing -- but the root
+  was then located by `brentq` on `_nearest_branch`, the signed eigenvalue
+  closest to zero. The two disagree whenever two branches cross inside one
+  interval, or the nearest branch changes identity across it: the count says a
+  crossing is in there, the nearest branch does not change sign, and Brent
+  raises `ValueError: f(a) and f(b) must have different signs`. That escaped as
+  an exception from deep solver code all the way out of a table build -- found
+  when a mixed sweep over an `eos.njl` 2SC/CFL pair died on it, which is a
+  public boundary returning a traceback where CLAUDE.md section 6 requires a
+  status. A BREAKPOINT IS NOT A PHYSICAL QUANTITY: these momenta split the
+  pairing quadrature, so where the nearest branch does not bracket, the
+  midpoint of an interval one scan spacing wide is used instead, and the
+  accurate Brent path still serves every case that does bracket.
+
 ### mixed
 - **Three species sectors are refused by a quark adapter, and each is a
   wing/window mismatch rather than a missing model capability.** A phase's
@@ -2258,6 +2275,28 @@ not pay for getting the bound right.
   shows holes). abpr is structurally excluded as a mixed-phase quark
   adapter: a single common potential, so its charge block is rank one and
   (mu_C, mu_S) have no independent meaning.
+- **CLOSED: the eta = 1 construction could not see a phase that neutralizes
+  without leptons.** `neutral_phase` located neutrality by bracketing a SIGN
+  CHANGE in `n_C - n_e` across `MU_C_SCAN`, and a colour-flavour-locked quark
+  phase has no sign to change: the locking forces n_u = n_d = n_s, so n_C = 0
+  at every mu_C, the residual is `-n_e(-mu_C) <= 0` throughout, and it reaches
+  zero only at mu_C = 0 — a TANGENTIAL root, and one that sat outside the
+  scan window (which stopped at -2 MeV) besides. So `locate_maxwell` on an
+  `eos.njl` 2SC/CFL pair returned `exists=False` — no crossing, on a grid
+  that brackets one — and the failure looked like "these parameters have no
+  transition", which is the same value a genuine absence returns. The physics
+  was never in question: the branches cross at mu_B = 1369.9 MeV, P = 163.4
+  MeV/fm^3, n_B 0.583 -> 0.736 fm^-3, which is where the published transition
+  of that set is (Kunkel et al., 1380.3 MeV and 0.595 -> 0.749). Only the
+  bracket was. `neutral_phase` now scans mu_C = 0 as well and accepts a
+  scanned point whose residual is within `NEUTRAL_TOL` (1e-8 fm^-3) as the
+  root, taking the one closest to mu_C = 0 since a self-neutral phase carries
+  no leptons; every transversal phase is still located by the sign change,
+  unchanged. Pinned by
+  `test/mixed/test_locate_maxwell.py::test_maxwell_finds_a_phase_that_neutralizes_without_leptons`.
+  Worth knowing for what comes next: any phase that is neutral by
+  construction hits this, so an `abpr` branch (CFL by definition, CLAUDE.md
+  section 3) would have hit it too.
 - The zl+vmit pairing's offset refinement can fail on coarse probe scans (a
   mid-window continuation gap between n_B ~ 1.1 and 1.9 at the shipped
   parameters): the mixed solve converges on either side but the probe steps

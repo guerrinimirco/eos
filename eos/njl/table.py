@@ -18,9 +18,12 @@ axis: the strange quark's onset, and the pairing onset where the winning
 pattern changes.
 
 A warm start here is keyed by PATTERN (see `eos.njl.solver.warm_start`), so a
-line carries the seed of whichever pattern last won and lets the others start
-cold. That is deliberate: a pattern seeded only from itself would never be
-displaced by a rival, and the point of the enumeration is that it can be.
+line carries one seed per candidate and each pattern continues from its own
+previous root. What keeps the enumeration honest is not withholding those
+seeds but `pattern_realised`: a candidate that COLLAPSED -- came back in a
+state other than the layout it was solved in -- carries no seed forward and
+starts cold at the next density, so a rival it fell onto cannot capture it for
+the rest of the line.
 
 Progress reporting is the shared callback of CLAUDE.md section 5 -- one
 dictionary shape for every model, invoked once per completed line -- with one
