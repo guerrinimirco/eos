@@ -1155,14 +1155,41 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
     contract asks for: "solving the phase's own internal self-consistency at
     those fixed potentials".
 
-    THE SEED CHOOSES THE ROOT, so `seed_cacheable=False` -- the ENJL rule. The
-    gap equation has three roots at any Fermi-surface mismatch, so a cached
-    seed would not merely change how fast a point is reached but which state
-    is reached. The adapter enumerates the pairing patterns at every call and
-    keeps the one with the largest pressure, which at fixed potentials is the
-    stable one; the winner's label rides on the returned block's `fields`
-    alongside the gaps and the colour potentials, since a mixed table that
-    does not say which quark phase it found is not reporting its own result.
+    WHETHER THE SEED CHOOSES THE ROOT DEPENDS ON `patterns`, and so does
+    whether this phase carries one at all. The gap equation has three roots at
+    any Fermi-surface mismatch, so a single solve does reach the state it was
+    started near. What decides whether that matters is how many candidates are
+    enumerated:
+
+      * MORE THAN ONE. Every pattern is solved and the one with the largest
+        pressure is kept, which at fixed potentials is the stable one, and
+        each is seeded from a root of ITS OWN pattern. The seed then moves
+        each candidate to its own root faster and cannot move the comparison
+        between them, so it is an ordinary cacheable seed -- the DD2 and DID
+        rule -- and is a pure function of (T, n_B_guess), a constant from the
+        residual's point of view. The thing the ENJL rule forbids is carrying
+        the previous TRIAL POINT forward, and nothing here does: `x0` reaches
+        `thermo` only from the engine's per-solve seed.
+      * EXACTLY ONE. The phase is BRANCH-DECLARED -- it is `patterns=("2SC",)`
+        against `patterns=("CFL",)` as the two branches of one functional, the
+        shape `test/mixed/test_njl_pattern_pair.py` builds and the reason a
+        construction wants a held pattern at all: left open, the phase
+        function has a step in mu_B where the winner changes and the
+        differenced mixed residual stalls on it. With nothing to compare
+        against, the seed IS the root choice, so the ENJL rule applies in
+        full: no seed, and `seed_cacheable=False`.
+
+    The winner's label rides on the returned block's `fields` alongside the
+    gaps and the colour potentials, since a mixed table that does not say
+    which quark phase it found is not reporting its own result.
+
+    A COLLAPSED CANDIDATE CARRIES NO SEED. `thermo` returns the internal
+    vector of every pattern that converged AND came back in the layout it was
+    solved in; one that fell onto a rival's root contributes nothing, so it
+    starts cold next time and can be re-found the moment its own root appears.
+    That is `eos.njl.solver.warm_start`'s rule, and without it a CFL layout
+    that collapsed once to 2SC would be pinned there for the rest of a sweep
+    and a branch that exists would never be reported.
 
     `frozen_thermo` is absent: NJL exposes no thermo-at-given-densities
     surface, so the frozen-composition responses raise for a pairing that
@@ -1179,10 +1206,12 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
     two agree to round-off rather than bit for bit (CLAUDE.md section 9), so
     the default stays the reference one.
     """
+    from eos.general.pairing import realised_pattern
     from eos.njl.parameters import Parameters as NJLParameters
     from eos.njl.species import DEFAULT_PATTERNS, SpeciesFlags as NJLFlags
     from eos.njl.thermodynamics import thermo_from_mu, vacuum_solution
     from eos.njl.solver import (
+        warm_start as _njl_warm,
         solve_beta_eq_neutrinoless as _njl_beta,
         solve_beta_eq_neutrino_trapped as _njl_trapped,
         solve_fixed_yc as _njl_yc,
@@ -1217,7 +1246,16 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
     def thermo(mu, mu_C, mu_S, T, n_B_guess=None, x0=None,
                return_state=False):
         seeds = dict(x0) if isinstance(x0, dict) else {}
-        best = best_state = None
+        best = None
+        # EVERY candidate that held its own layout goes into the returned
+        # state, not only the winner: the seed a pattern needs next time is
+        # its OWN root, and a dict carrying one key leaves the other patterns
+        # to start cold at every call. A candidate that collapsed carries
+        # nothing forward -- seeding it from the root it fell onto would keep
+        # it there and hide a branch that exists -- which is the rule
+        # `eos.njl.solver.warm_start` applies inside a density sweep, applied
+        # here to a sweep through potentials instead.
+        states = {}
         for pattern in patterns:
             st, ok, _ = thermo_from_mu(par, mu, mu_C, mu_S, T,
                                        pattern=pattern,
@@ -1225,15 +1263,16 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
                                        backend=backend)
             if not ok:
                 continue
+            if realised_pattern(st.Delta) == pattern:
+                states[pattern] = _internal_vector(st, par, pattern)
             if best is None or st.P > best.P:
-                best, best_state = st, {pattern: _internal_vector(st, par,
-                                                                  pattern)}
+                best = st
         if best is None:
             raise RuntimeError(
                 f"eos.njl: no pairing pattern converged at mu_B={mu:g}, "
                 f"mu_C={mu_C:g}, mu_S={mu_S:g}, T={T:g} MeV")
         th = _block(best)
-        return (th, best_state) if return_state else th
+        return (th, states) if return_state else th
 
     def cold_start(n_B, T):
         p = _njl_beta(par, n_B, T, flags=flags, patterns=patterns,
@@ -1242,34 +1281,111 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
             raise RuntimeError(f"eos.njl cold start failed at n_B={n_B}")
         return p.mu_B, p.mu_e, p.mu_B
 
-    def _wing_point(spec, n_B, T):
+    def seed(T, n_B_guess):
+        """The internal vector of every pattern at the phase's own
+        equilibrium at `n_B_guess`, as {pattern: vector}.
+
+        A PURE FUNCTION of its arguments -- it reaches for nothing but the
+        parameters this factory closed over -- which is what lets the engine
+        evaluate it once per solve and hand the same dict to every residual
+        evaluation (`MixedCtx.phase_seed`). That is memoizing a constant, the
+        case the engine's own docstring calls safe, and it is a different
+        thing from carrying the previous TRIAL POINT forward, which would make
+        the residual depend on the path taken to reach it and put that path
+        dependence into the outer finite-difference Jacobian.
+
+        Reached only where more than one pattern is enumerated: with a single
+        held pattern the phase is branch-declared and carries no seed at all
+        (see the factory docstring).
+
+        What it is worth depends on how close `n_B_guess` is to where the
+        mixed solve actually lands, and it is not this phase's big lever:
+        MEASURED at (mu_B, mu_C) = (1600, -120) MeV with
+        `Parameters.named("rg_njl1")` and backend='fast', a `thermo` call over
+        ('unpaired', '2SC', 'CFL') costs 722 ms cold and 676 ms from a seed
+        taken at n_B_guess = 0.6. The lever is the ENUMERATION -- the same
+        call costs 2230 ms over the default patterns, and one mixed point with
+        DID at n_B = 0.9 costs 355 s over three patterns against 16.6 s over
+        ('2SC',) -- and that is `patterns`, which is the caller's declaration
+        to make and not a default this adapter may quietly change.
+
+        None where the phase cannot reach its own equilibrium at `n_B_guess`:
+        a seed is a convenience, and `thermo` starts cold without one.
+        """
+        try:
+            mu_B, mu_e, _ = cold_start(n_B_guess, T)
+        except (RuntimeError, ValueError):
+            return None
+        # Beta equilibrium is mu_C + mu_e = 0 (CLAUDE.md section 2), which is
+        # where the phase's own equilibrium puts it; the mixed solve will move
+        # mu_C away from there, and a seed only has to be close enough.
+        try:
+            _, states = thermo(mu_B, -mu_e, 0.0, T, return_state=True)
+        except RuntimeError:
+            return None
+        return states or None
+
+    def _wing_point(spec, n_B, T, x0=None):
         if spec.C is Regime.NOT_CONSERVED:
             if spec.L_e is Regime.GLOBAL:
                 return _njl_trapped(par, n_B, spec.targets["Y_Le"], T,
-                                    flags=flags, patterns=patterns)
-            return _njl_beta(par, n_B, T, flags=flags, patterns=patterns)
+                                    flags=flags, patterns=patterns, x0=x0,
+                                    backend=backend)
+            return _njl_beta(par, n_B, T, flags=flags, patterns=patterns,
+                             x0=x0, backend=backend)
         if spec.S is Regime.GLOBAL:
             return _njl_yc_ys(par, n_B, spec.targets["Y_C"],
                               spec.targets["Y_S"], T,
                               flags=flags, leptons=spec.yc_leptons,
-                              patterns=patterns)
+                              patterns=patterns, x0=x0, backend=backend)
         return _njl_yc(par, n_B, spec.targets["Y_C"], T, flags=flags,
-                       leptons=spec.yc_leptons, patterns=patterns)
+                       leptons=spec.yc_leptons, patterns=patterns, x0=x0,
+                       backend=backend)
 
     def wing_sweep(spec, n_B_grid, T):
-        out = []
+        # The pure NJL wing at the spec's own equilibrium, WARM STARTED along
+        # the grid -- the DID rule, which this adapter was alone in not
+        # following. The seed is `eos.njl.solver.warm_start`'s
+        # {pattern: vector}, so each candidate continues from its OWN root and
+        # one that collapsed carries nothing forward and starts cold at the
+        # next density -- which is what stops a rival it once fell onto from
+        # capturing it for the rest of the wing.
+        #
+        # MEASURED on twelve densities from 0.6 to 1.4 fm^-3 at T = 0 with
+        # `Parameters.named("rg_njl1")`, csc on, backend='fast': 899 ms/point
+        # cold against 550 warm over ('unpaired', '2SC', 'CFL'). It is worth
+        # having and it is not the big lever -- what dominates a paired wing
+        # is how many patterns are enumerated at each density, which is
+        # `patterns` and belongs to the caller.
+        #
+        # A failure resets the seed instead of ending the sweep: a wing runs
+        # through the pairing onsets, and a density this phase cannot reach
+        # says nothing about the one above it. `backend` travels with the
+        # points for the same reason it travels into `thermo` -- without it
+        # the wings would be solved on the reference path while the mixed
+        # rows above them were not.
+        out, x0 = [], None
         for n in n_B_grid:
             try:
-                p = _wing_point(spec, float(n), T)
-            except Exception:
+                point = _wing_point(spec, float(n), T, x0=x0)
+            except (RuntimeError, ValueError, np.linalg.LinAlgError):
+                x0 = None
                 continue
-            if p.converged:
-                out.append((p.n_B, p.P, p.eps))
+            if not point.converged:
+                x0 = None
+                continue
+            out.append((point.n_B, point.P, point.eps))
+            x0 = _njl_warm(point)
         return out
 
+    # A held pattern is a branch declaration, and a branch's seed picks its
+    # root (the docstring above). The seed exists only where the enumeration
+    # is there to make the choice instead.
+    branch_declared = len(patterns) == 1
     return Phase(name="NJL", thermo=thermo, potential_kind="physical",
-                 seed_cacheable=False, cold_start=cold_start,
-                 wing_sweep=wing_sweep)
+                 seed=(None if branch_declared else seed),
+                 seed_cacheable=not branch_declared,
+                 cold_start=cold_start, wing_sweep=wing_sweep)
 
 
 def _internal_vector(st, par, pattern):

@@ -2509,3 +2509,30 @@ for the RKH set, against Buballa's 1102 MeV at 2.25 n_sat (Phys. Rept. 407,
 205 (2005), section 3.3.2). Y_S = 0 on both arms, so the surface sits below
 the s quark's threshold and the three-flavour call returns the two-flavour
 number -- which is the behaviour `eos.general.zero_pressure` documents.
+
+### njl — `TableSpec.solve_nodes` outside beta equilibrium
+
+`solve_nodes` (the fast table mode, `eos.njl.table.build_fast_table`) answers
+`beta_eq_neutrinoless` on a temperature axis and nothing else.
+
+A branch is interpolated as a cubic Hermite spline of P(mu_B) whose slope is
+the solved n_B, which needs dP/dmu_B = n_B to hold ALONG THE SWEEP. Gibbs-Duhem
+at fixed T gives dP = n_B dmu_B + n_C dmu_C + n_S dmu_S + (lepton terms), and
+only beta equilibrium kills the remainder: mu_S = 0, the leptons are tied to
+the matter by mu_C + mu_e = 0, and neutrality makes n_C = n_e, so the charge
+terms cancel identically. A fixed-Y_C sweep breaks it even with neutralizing
+leptons — there mu_C is an independent unknown and mu_C + mu_e = 0 is exactly
+what does not hold; trapping gives mu_C + mu_e = mu_nue instead; fixing Y_S
+adds a live mu_S term. Measured on a 13-point 2SC sweep at T = 0,
+|dP/dmu_B / n_B - 1| is 4.0e-4 in beta_eq_neutrinoless against 3.0e-2 to 6.9e-2
+in the other four, which is percents in P — so `build_fast_table` raises
+naming the mode rather than returning a table that looks fine.
+
+An `SnB` axis is refused for two reasons: it puts an outer solve for T around
+every node, a second continuation the branch ladder does not carry, and the
+identity above holds at fixed T rather than at fixed S/n_B.
+
+Lifting either would mean carrying the other conjugate pairs in the spline —
+n_C against mu_C, n_S against mu_S — which is a multivariate interpolation and
+a different piece of machinery. `solve_nodes=None` solves every mode and every
+axis exactly, as it always has.

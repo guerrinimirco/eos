@@ -80,7 +80,7 @@ from eos.general.modes import (
     fixed_YC, fixed_YC_YS, muon_potential, resolve_leptons,
 )
 from eos.general.physics_constants import hc3
-from eos.general.solve import solve_system
+from eos.general.solve import newton_solve, solve_system
 from eos.general.thermodynamics_leptons import (
     ThermoResult, electron_thermo, muon_thermo, neutralizing_leptons,
     neutrino_thermo, photon_thermo,
@@ -634,7 +634,7 @@ def _refuse_fixed_YS(flags, spec, model):
 
 def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
                   vac=None, backend="reference", pair_nodes_per_panel=None,
-                  **fractions):
+                  rescue=True, **fractions):
     """One mode in ONE declared pattern. The pattern is not chosen here.
 
     `backend` selects the flavour of the medium integrals and is passed
@@ -642,6 +642,24 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
     correctness is judged against) or 'fast'. `pair_nodes_per_panel` is the
     Gauss-Legendre node count of the pairing quadrature, likewise passed
     straight down; None keeps the shipped rule. See `eos.njl.eos_point`.
+
+    `rescue=False` asks for ONE damped-Newton run from the given seed and no
+    hunt: the ladder of `attempt` below, and the cold retry after it, are
+    skipped. It answers a different question from the default -- not "find
+    this root, trying everything" but "is this pattern still HERE, starting
+    from where it was one step ago" -- and it is the caller who knows which
+    question is being asked, which is why it is an argument and not a
+    heuristic. Only a sweep walking a branch with a warm seed should pass it.
+
+    MEASURED, walking the CFL branch down a ten-node ladder at T = 0 with
+    `Parameters.named("rg_njl1")` and eta_D = 1.45: the first node past the
+    CFL onset takes 21.46 s, of which the first Newton run is 285 ms and
+    already reports the answer -- error 2e-1, gaps collapsed to (0, 0, 242),
+    `realised_pattern` 2SC. The remaining 21.2 s is the hunt re-confirming it,
+    and on a 200-point table that single node was 84% of the whole build.
+    With no analytic Jacobian there is no Newton run to stop after, so the
+    argument is ignored and the full ladder runs; it changes nothing about a
+    solve that succeeds.
     """
     if spec is None:
         # None, not True: an unnamed flag means `resolve_leptons`'s default,
@@ -763,7 +781,12 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         An in-layout root from any of the three wins. This is the one place
         the fast backend pays twice, and a warm-started point never reaches
         it.
+
+        `rescue=False` stops before all of it: one Newton run, whatever it
+        says.
         """
+        if not rescue and jac is not None:
+            return newton_solve(rows, jac, seed, unit_scales)
         x, err, ok = solve_system(rows, seed, unit_scales, tol=1.0e-13, jac=jac)
         if jac is None:
             return x, err, ok
@@ -780,7 +803,7 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         return x, err, ok
 
     x, err, ok = attempt(x0)
-    if not ok and warm:
+    if not ok and warm and rescue:
         # A seed that lands in the right basin can still stall just above the
         # gate -- the CFL point at n_B = 1.2 fm^-3 stops at 8e-9 from a
         # continuation seed and reaches 3e-11 from the cold one, on the SAME

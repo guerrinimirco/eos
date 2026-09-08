@@ -74,7 +74,10 @@ from eos.njl.solver import (
     solve_beta_eq_neutrino_trapped, solve_beta_eq_neutrinoless,
     solve_fixed_yc, solve_fixed_yc_ys, solve_pattern, warm_start,
 )
-from eos.njl.table import TableSpec, TableResult, build_table, quark_row
+from eos.njl.table import (
+    Branch, TableSpec, TableResult, build_fast_table, build_table,
+    quark_row, rows_from_result,
+)
 from eos.njl.api import (
     PointResult, eos_point, eos_response, eos_table,
     zero_pressure_point,
@@ -93,7 +96,8 @@ __all__ = [
     "EoSPoint", "MODE_FRACTIONS", "mode_spec", "default_guess", "warm_start",
     "residual", "solve", "solve_pattern", "solve_beta_eq_neutrinoless",
     "solve_beta_eq_neutrino_trapped", "solve_fixed_yc", "solve_fixed_yc_ys",
-    "TableSpec", "TableResult", "build_table", "quark_row",
+    "TableSpec", "TableResult", "build_table", "build_fast_table",
+    "Branch", "quark_row", "rows_from_result",
     "PointResult", "eos_point", "eos_table", "eos_response",
     "zero_pressure_point",
 ]
