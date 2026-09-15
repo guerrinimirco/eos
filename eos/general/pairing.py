@@ -1631,6 +1631,29 @@ def gap_roots(residual, hi, n_scan=60, xtol=1.0e-10):
 # of the named seeds would have found. That is the point of enumerating seeds
 # rather than patterns.
 #
+# It is NOT enumerated by default, and the reason is what it is for rather
+# than what it costs. The asymmetric states it aims at are, with two
+# exceptions, states 'uSC' and 'dSC' name and seed directly; and those two are
+# in _REALISED, so a converged candidate can seed the next density, which
+# 'free' can never do -- realised_pattern cannot return 'free', so a solver's
+# `pattern_realised == pattern` seed filter can never pass for it and it hunts
+# from cold forever. Measured cold on eos.njl at 12 points over T = 0/30/50
+# and n_B = 0.8-2.0 fm^-3: in 11 of them every asymmetric state 'free' reached
+# was reached by 'uSC' or 'dSC' as well, more cheaply and converging where
+# 'free' did not; in the twelfth it found a uSC state neither did, losing by
+# 95.7 MeV/fm^3 in f. It is also the less reliable probe -- at T = 30,
+# n_B = 1.2 fm^-3 it collapsed to 2SC while both named seeds held their own
+# asymmetric layouts.
+#
+# So it stays REQUESTABLE and nothing raises: it is the only seed aiming at
+# the masks no pattern names -- sSC, usSC, dsSC (_REALISED below) and
+# unequal-gap CFL states. A caller who wants the asymmetric sector asks for it
+# by the name of the state, patterns=('unpaired', '2SC', 'CFL', 'uSC', 'dSC');
+# one who wants the unnamed masks adds 'free'. Whether 'uSC' and 'dSC' should
+# themselves join the default is open: no asymmetric state won anywhere in the
+# box measured above, but the RG-consistent melting of CFL into dSC (Gholami,
+# Hofmann & Buballa, PRD 111, 014021 (2025)) lies outside it.
+#
 # The table is here rather than in either model because both of them pair, and
 # which gaps a named pattern makes free is a property of the gap matrix above,
 # not of the Lagrangian that supplies G_D (CLAUDE.md section 7).
@@ -1646,8 +1669,10 @@ PATTERNS = {
 
 #: The patterns a model enumerates by default, in the order they are tried.
 #: Omega decides between them; the order only decides which of two exactly
-#: degenerate answers is reported.
-DEFAULT_PATTERNS = ("unpaired", "2SC", "CFL", "free")
+#: degenerate answers is reported. 'uSC', 'dSC' and 'free' are requestable and
+#: not enumerated: see the comment above for why the asymmetric seeds are
+#: asked for by name rather than carried by every solve.
+DEFAULT_PATTERNS = ("unpaired", "2SC", "CFL")
 
 
 def pattern_mask(pattern):

@@ -1,0 +1,57 @@
+ticket 04: NJL solves per hybrid row
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+rg_njl1, beta_eq_neutrinoless, T = 0.0, eta = 0.0, patterns ('unpaired', '2SC', 'CFL'), backend 'fast'
+
+=== A3. the COLD row x3, n_B = 1.000 fm^-3 (last run's counts) ===
+  wall median 38.8 s  runs 41.5 38.8 37.0
+  cpu  median 38.4 s  runs 40.9 38.4 36.7
+  chi = +0.9745
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  sweep                47     48     48     147     2     1     35.1     35.9     6
+  TOTAL                47     48     48     147     2     1     35.1     35.9     6
+  sweep retry depth: 0=47
+  scipy nfev 46
+  1 root calls   site              n  steps   jac
+      sweep            n=4 calls=   1 steps=    42 jac=     4  (9% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      sweep:46/4
+
+=== B. 7 WARM rows, n_B = 1.004 -> 1.050 fm^-3 (target-grid spacing 0.0076) ===
+  wall 201.4 s   cpu 199.5 s   7 of 7 solved   chi +0.9766 -> +0.9912
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  sweep               289    296    296     912    16     2    182.8    189.6    30
+  TOTAL               289    296    296     912    16     2    182.8    189.6    30
+  sweep retry depth: 0=289
+  scipy nfev 281
+  8 root calls   site              n  steps   jac
+      sweep            n=4 calls=   8 steps=   249 jac=    32  (11% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      sweep:47/4  sweep:36/4  sweep:51/4  sweep:25/4  sweep:25/4  sweep:38/4
+      sweep:34/4  sweep:25/4
+  rows inside the window on the 200-point target grid: 51
+
+=== C. locate_window, n_probe=12, refine='exact', hint=(0.6, 1.55) ===
+  wall 3384.6 s   cpu 3234.4 s
+  window 0.8534 -> 1.2450  exists=True  15 probes
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  locate.bisect       175    185    185     585    20     0     92.5    101.2    30
+  locate.scan         529    538    538    1650    24     4   1330.7   1347.3    48
+  locate.walk         971    979    979    3003    44     7   1404.4   1426.6    87
+  solve_fixed_chi     150    151    151     462     6     1    420.5    422.8    12
+  TOTAL              1825   1853   1853    5700    94    12   3248.1   3298.0   177
+  sweep retry depth: 0=992, 1=118, 2=171, 3=190, 4=111, 5=172, 6=71
+  scipy nfev 1778
+  47 root calls   site              n  steps   jac
+      locate.bisect    n=4 calls=  10 steps=   125 jac=    40  (24% of residuals)
+      locate.scan      n=4 calls=  12 steps=   449 jac=    68  (13% of residuals)
+      locate.walk      n=4 calls=  22 steps=   837 jac=   112  (12% of residuals)
+      solve_fixed_chi  n=4 calls=   3 steps=   127 jac=    20  (14% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      locate.scan:80/8  locate.scan:66/12  locate.scan:59/8  locate.scan:53/8  locate.scan:37/4  locate.scan:30/4
+      locate.scan:30/4  locate.scan:36/4  locate.scan:26/4  locate.scan:38/4  locate.scan:26/4  locate.scan:36/4
+      locate.walk:18/4  locate.walk:30/4  locate.walk:8/4  locate.walk:39/8  locate.walk:38/8  locate.walk*:31/4
+      locate.walk*:27/4  locate.walk*:57/8  locate.walk*:37/4  locate.walk*:76/4  locate.walk*:55/8  locate.walk*:43/4
+      locate.walk*:55/4  locate.walk*:89/4  locate.walk*:24/4  locate.walk*:32/4  locate.walk*:52/8  locate.walk*:30/4
+      locate.walk*:32/4  locate.walk*:107/8  locate.walk*:32/4  locate.walk*:37/4  locate.bisect:8/4  locate.bisect:24/4
+      locate.bisect:8/4  locate.bisect:24/4  locate.bisect:10/4  locate.bisect:17/4  locate.bisect:8/4  locate.bisect:29/4
+      locate.bisect:10/4  locate.bisect:27/4  solve_fixed_chi:37/4  solve_fixed_chi:51/12  solve_fixed_chi:59/4

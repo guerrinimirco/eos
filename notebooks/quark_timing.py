@@ -982,7 +982,7 @@ def fit_bag(points, window=FIT_NB):
     return dict(a4=a4, alpha_s=np.pi * (1.0 - a4) / 2.0,
                 B14=np.sign(B) * np.abs(B) ** 0.25,
                 ms_eff=np.sign(ms_sq) * np.sqrt(np.abs(ms_sq)),
-                Delta0=Delta0, Delta0_spread=float(delta0_eff(keep).ptp()),
+                Delta0=Delta0, Delta0_spread=float(np.ptp(delta0_eff(keep))),
                 ms_sq_minus_4D2=ms_sq - 4.0 * Delta0 ** 2, err=resid,
                 n=len(keep))
 
@@ -1086,6 +1086,7 @@ ax_fit.set_ylabel(r"$(P_{\rm bag}-P_{\rm NJL})/\max|P_{\rm NJL}|$")
 panel_label(ax_fit, "(d)")
 plt.show()
 
+
 # %%
 # ===========================================================================
 # The visual map: NJL couplings + pairing pattern -> Alford CSC bag numbers.
@@ -1157,6 +1158,292 @@ for row, (key, ylabel, physical) in enumerate(BAG_ROWS):
 fig.suptitle("NJL couplings + pairing pattern  ->  Alford CSC bag parameters\n"
              "(orange border: a value outside the bag model's own window)",
              fontsize="small")
+plt.show()
+
+
+# %%
+# ===========================================================================
+# eos.njl -> an Alford-style colour-superconducting bag model, fitted phase by
+# phase in the potentials (mu_B, mu_C, mu_S).  docs/csc_bag_mapping.md is the
+# derivation; this is the fit it prescribes.
+#
+#   P_phase = sum_f P_f(mu_f, T; m_f, a4)
+#             + c_phase (sum_f mu_f^2) Delta^2/pi^2 - B
+#
+# c_phase = 1 (CFL), 1/3 (2SC), 0 (unpaired) -- the count of gapped
+# quasiparticles, and the same 3:1 that Geissel, Gorda and Braun
+# [arXiv:2504.03834] get for gamma_1 at leading order.
+#
+# CFL is fitted DIFFERENTLY, and section 5.1 of the document says why: flavour
+# locking makes n_C = 0 and n_S = n_B identically, so P depends only on the
+# combination mu_B + mu_S and no grid in the three potentials can separate
+# m_s from Delta there. For that phase the gap is held at the NJL power law
+# and the Alford-Braby-Paris-Reddy polynomial in the common quark potential is
+# fitted instead of the flavour-resolved gas.
+#
+# The fit is separable: at fixed (m_s, sigma) the pressure is LINEAR in
+# (a4, Delta_star^2, B), so a bounded linear least squares sits inside a
+# one-dimensional minimisation over m_s. The bounds are the bag model's own
+# window -- 0 < a4 <= 1, B > 0, m_s >= 0 -- and a parameter that ends up
+# pegged is REPORTED, because a fit that only succeeds outside the window is
+# telling you the ansatz is missing a term.
+# ===========================================================================
+import itertools
+import time
+from dataclasses import replace
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import lsq_linear, minimize_scalar
+
+from eos import njl
+from eos.alphabag.thermodynamics import fermi_thermo
+from eos.mixed import njl_phase
+from eos.general.figure_style import LABELS, OKAB_CAT, panel_label, paper_grid
+
+FIT_SET = "rkh"
+# MEASURED: with vector_form="constant" the fit fails and the failure is
+# structural -- a constant G_V contributes ~ G_V n_q^2, i.e. ~ mu^6, which the
+# mu^4/mu^2/const basis cannot hold. Unpaired phase, same grid, rms in P:
+# 2.1% at eta_V = 0 (with a4 pegged at 1), 9.8% at eta_V = 0.5, 13.8% at
+# eta_V = 1 (both with B pegged at 0), against 3.8% for the gluon-exchange
+# form with every parameter inside the window.
+FIT_HELD = dict(eta_D=1.45, eta_V=0.0, vector_form="gluon_exchange",
+                G_V0_over_GS=0.5, M_g=500.0)
+FIT_T = 0.0                                     # MeV
+FIT_MU_B = np.linspace(1500.0, 2600.0, 10)      # MeV
+FIT_MU_C = np.array([-80.0, -40.0, 0.0, 40.0])  # MeV
+FIT_MU_S = np.array([-80.0, 0.0, 80.0])         # MeV
+FIT_PATTERNS = ("unpaired", "2SC", "CFL")
+MU_STAR = 2600.0                                # MeV, the gap's reference
+PI2 = np.pi ** 2
+HBARC = 197.3269804
+HC3 = HBARC ** 3
+#: sum over gapped quasiparticles of Delta_qp^2, as a multiple of
+#: (sum_f mu_f^2) Delta^2/pi^2. 1 for CFL (nine modes), 1/3 for 2SC (four).
+C_PHASE = {"unpaired": 0.0, "2SC": 1.0 / 3.0, "CFL": 1.0}
+# ---------------------------------------------------------------------------
+par = replace(njl.Parameters.named(FIT_SET), **FIT_HELD)
+
+
+def flavour_mu(mu_B, mu_C, mu_S):
+    """(mu_u, mu_d, mu_s) from the conserved-charge potentials, S = +1 per s."""
+    return (mu_B / 3.0 + 2.0 * mu_C / 3.0,
+            mu_B / 3.0 - mu_C / 3.0,
+            mu_B / 3.0 - mu_C / 3.0 + mu_S)
+
+
+def sample(pattern):
+    """The NJL phase on the grid, at fixed potentials, one pattern declared."""
+    phase = njl_phase(par, njl.SpeciesFlags(csc=True), patterns=(pattern,),
+                      backend="fast")
+    # CFL: mu_C does not enter and mu_S only through mu_B + mu_S (section 5.1),
+    # so a 3-D grid there would be the same line sampled many times over.
+    if pattern == "CFL":
+        grid = [(mu_B, 0.0, 0.0) for mu_B in FIT_MU_B]
+    else:
+        grid = list(itertools.product(FIT_MU_B, FIT_MU_C, FIT_MU_S))
+    out = []
+    for mu_B, mu_C, mu_S in grid:
+        try:
+            th = phase.thermo(mu_B, mu_C, mu_S, FIT_T)
+        except Exception:
+            continue
+        gaps = np.array([th.fields.get(f"Delta_{i}", 0.0) for i in (1, 2, 3)])
+        if C_PHASE[pattern] > 0 and not np.any(np.abs(gaps) > 1.0):
+            continue                       # the layout collapsed: not this branch
+        out.append(dict(mu_B=mu_B, mu_C=mu_C, mu_S=mu_S, P=th.P, n_B=th.n_B,
+                        n_C=th.n_C, n_S=th.n_S,
+                        Delta=float(np.sqrt((gaps ** 2).sum() / 3.0))))
+    return out
+
+
+def gap_powerlaw(records):
+    """(Delta_star, sigma) of Delta = Delta_star (mu_B/mu_star)^sigma."""
+    mu_B = np.array([r["mu_B"] for r in records])
+    D = np.array([r["Delta"] for r in records])
+    keep = D > 1.0
+    if keep.sum() < 3:
+        return 0.0, 0.0
+    sigma, lnD = np.polyfit(np.log(mu_B[keep] / MU_STAR), np.log(D[keep]), 1)
+    return float(np.exp(lnD)), float(sigma)
+
+
+def bases(mu_B, mu_C, mu_S, m_s, Delta_star, sigma, pattern):
+    """(offset, coeff of a4, coeff of Delta_star^2, coeff of B) for P [MeV/fm^3].
+
+    The free gas is `eos.alphabag`'s own: the exact massive Fermi gas plus the
+    MASSLESS alpha_s correction, which at T = 0 is exactly (a4 - 1) mu^4/4pi^2,
+    so the pressure is strictly LINEAR in a4 and a4 need not be minimised over.
+    # ponytail: T = 0 only -- at T > 0 the thermal term carries its own
+    # alpha_s factor and a4 moves to the outer minimisation.
+    """
+    if pattern == "CFL":
+        # Locked: one potential, and the ABPR polynomial rather than the
+        # flavour-resolved gas (section 5.1).
+        mu = (mu_B + mu_S) / 3.0
+        offset = 0.0
+        c_a4 = 3.0 * mu ** 4 / (4.0 * PI2 * HC3)
+        c_ms2 = -3.0 * mu ** 2 / (4.0 * PI2 * HC3)
+        c_D2 = 3.0 * (mu_B / MU_STAR) ** (2.0 * sigma) * mu ** 2 / (PI2 * HC3)
+        return offset, c_a4, c_ms2, c_D2
+
+    mu_f = flavour_mu(mu_B, mu_C, mu_S)
+    masses = (0.0, 0.0, m_s)
+    offset = 0.0
+    c_a4 = 0.0
+    for mu, m in zip(mu_f, masses):
+        if mu <= m:
+            continue                       # flavour not populated
+        free = mu ** 4 / (4.0 * PI2 * HC3)
+        offset += fermi_thermo(mu, FIT_T, m)[1] - free
+        c_a4 += free
+    c_D2 = (C_PHASE[pattern] * sum(m ** 2 for m in mu_f)
+            * (mu_B / MU_STAR) ** (2.0 * sigma) / (PI2 * HC3))
+    return offset, c_a4, None, c_D2
+
+
+def rows(records, m_s, Delta_star, sigma, pattern, h=1.0):
+    """The linear system: design matrix, right-hand side, and the scales.
+
+    Four rows per grid point -- P and the three charge densities, which are
+    first derivatives of the SAME potential and cost nothing extra. The
+    derivatives are central differences OF THE MODEL's own basis functions,
+    which are elementary, so this is exact to the difference and no chain rule
+    has to be maintained by hand.
+    """
+    def basis_vector(mu_B, mu_C, mu_S):
+        off, c_a4, c_ms2, c_D2 = bases(mu_B, mu_C, mu_S, m_s, Delta_star,
+                                       sigma, pattern)
+        if pattern == "CFL":
+            # unknowns (a4, m_s^2, B). Delta is HELD at the NJL power law and
+            # its pressure moves into the offset: with only sigma separating
+            # m_s^2 from Delta^2 in a locked phase, fitting both is fitting a
+            # near-singular system (docs/csc_bag_mapping.md section 5.1).
+            return off + Delta_star ** 2 * c_D2, np.array(
+                [c_a4, c_ms2, -1.0 / HC3])
+        # unknowns (a4, Delta_star^2, B); m_s is the outer parameter
+        return off, np.array([c_a4, c_D2, -1.0 / HC3])
+
+    A, b = [], []
+    P_scale = max(abs(r["P"]) for r in records)
+    n_scale = max(abs(r["n_B"]) for r in records)
+    for r in records:
+        mu = (r["mu_B"], r["mu_C"], r["mu_S"])
+        off0, v0 = basis_vector(*mu)
+        A.append(v0 / P_scale)
+        b.append((r["P"] - off0) / P_scale)
+        # d/d(mu_B, mu_C, mu_S) -> (n_B, n_C, n_S)
+        for axis, target in enumerate(("n_B", "n_C", "n_S")):
+            hi = list(mu); hi[axis] += h
+            lo = list(mu); lo[axis] -= h
+            off_hi, v_hi = basis_vector(*hi)
+            off_lo, v_lo = basis_vector(*lo)
+            A.append((v_hi - v_lo) / (2.0 * h) / n_scale)
+            b.append((r[target] - (off_hi - off_lo) / (2.0 * h)) / n_scale)
+    return np.array(A), np.array(b), P_scale, n_scale
+
+
+def fit(records, pattern):
+    """One phase: (a4, m_s, B, Delta_star, sigma) inside the physical window."""
+    Delta_star, sigma = gap_powerlaw(records)
+
+    def solve_linear(m_s):
+        A, b, *_ = rows(records, m_s, Delta_star, sigma, pattern)
+        if pattern == "CFL":                    # (a4, m_s^2, B)
+            lo = [0.0, 0.0, 0.0]
+            hi = [1.0, np.inf, np.inf]
+        else:                                   # (a4, Delta*^2, B)
+            lo = [0.0, 0.0, 0.0]
+            hi = [1.0, np.inf, np.inf]
+        res = lsq_linear(A, b, bounds=(lo, hi))
+        return res
+
+    if pattern == "CFL":
+        res = solve_linear(0.0)
+        a4, ms_sq, B = res.x
+        m_s, D2 = np.sqrt(ms_sq), Delta_star ** 2
+    else:
+        # m_s is the one genuinely nonlinear parameter: it sits inside the
+        # exact massive gas. One bounded scalar minimisation, no gradient.
+        scan = minimize_scalar(lambda m: solve_linear(m).cost,
+                               bounds=(0.0, 700.0), method="bounded")
+        m_s = float(scan.x)
+        res = solve_linear(m_s)
+        a4, D2, B = res.x
+    n_rows = len(res.fun)
+    return dict(a4=a4, alpha_s=np.pi * (1.0 - a4) / 2.0, m_s=m_s,
+                B14=B ** 0.25 if B > 0 else 0.0,
+                B_MeV4=B, Delta_star=Delta_star, sigma=sigma,
+                D2=D2, Delta_fit=float(np.sqrt(max(D2, 0.0))), rms=float(np.sqrt(2.0 * res.cost / n_rows)),
+                max_res=float(np.abs(res.fun).max()),
+                a4_pegged=bool(a4 >= 1.0 - 1e-9),
+                B_pegged=bool(B <= 1e-12),
+                n_points=len(records))
+
+
+
+print(f"=== eos.njl -> CSC bag, {FIT_SET}, eta_D={par.eta_D:g}, "
+      f"vector={par.vector_form!r}, T={FIT_T:g} MeV ===")
+print(f"  {'phase':9s} {'a4':>6s} {'alpha_s':>8s} {'m_s':>7s} {'B^1/4':>7s} "
+      f"{'D*_fit':>7s} {'D*_njl':>7s} {'sigma':>7s} |  rms  P   n_B   n_C   n_S")
+bagfits, bagdata = {}, {}
+for pattern in FIT_PATTERNS:
+    started = time.perf_counter()
+    recs = sample(pattern)
+    if len(recs) < 8:
+        print(f"  {pattern:9s} only {len(recs)} usable grid points -- skipped")
+        continue
+    f = fit(recs, pattern)
+    bagfits[pattern], bagdata[pattern] = f, recs
+
+    A, b, _, _ = rows(recs, f["m_s"], f["Delta_star"], f["sigma"], pattern)
+    x = ([f["a4"], f["m_s"] ** 2, f["B_MeV4"]] if pattern == "CFL"
+         else [f["a4"], f["D2"], f["B_MeV4"]])
+    resid = (A @ np.array(x) - b).reshape(-1, 4)
+    f["resid"] = resid
+    pegged = ",".join(name for name, hit in
+                      (("a4", f["a4_pegged"]), ("B", f["B_pegged"]),
+                       ("m_s", f["m_s"] < 1.0)) if hit) or "-"
+    print(f"  {pattern:9s} {f['a4']:6.3f} {f['alpha_s']:8.3f} {f['m_s']:7.1f} "
+          f"{f['B14']:7.1f} {f['Delta_fit']:7.1f} {f['Delta_star']:7.1f} "
+          f"{f['sigma']:+7.3f} | " +
+          " ".join(f"{np.sqrt((resid[:, i] ** 2).mean()):.1e}"
+                   for i in range(4)) +
+          f"  pegged: {pegged}   [{len(recs)} pts, "
+          f"{time.perf_counter() - started:.0f} s]")
+
+# --- how good is the map, and where does it fail --------------------------
+fig, axes = paper_grid("1x2", mode="double", placeholder=False, aspect=1.25)
+ax_P, ax_r = axes[0, 0], axes[0, 1]
+COLOUR = dict(zip(FIT_PATTERNS, OKAB_CAT))
+for pattern, f in bagfits.items():
+    recs = bagdata[pattern]
+    n_B = np.array([r["n_B"] for r in recs])
+    P = np.array([r["P"] for r in recs])
+    order = np.argsort(n_B)
+    ax_P.plot(n_B[order], P[order], "o", ms=2.5, color=COLOUR[pattern],
+              label=f"{pattern} (njl)")
+    # the fitted model's own pressure, on the same points
+    P_bag = P - f["resid"][:, 0] * max(abs(P))
+    ax_P.plot(n_B[order], P_bag[order], "-", lw=0.9, color=COLOUR[pattern])
+    ax_r.plot(n_B, f["resid"][:, 0], "o", ms=2.5, color=COLOUR[pattern],
+              label=pattern)
+    ax_r.plot(n_B, f["resid"][:, 1], "x", ms=3, color=COLOUR[pattern],
+              alpha=0.5)
+
+ax_P.set_xlabel(LABELS["nB"])
+ax_P.set_ylabel(LABELS["P"])
+ax_P.legend(loc="upper left", fontsize="xx-small")
+ax_P.set_title("points: njl, lines: fitted bag", fontsize="small")
+panel_label(ax_P, "(a)")
+
+ax_r.axhline(0.0, color="0.5", lw=0.8)
+ax_r.set_xlabel(LABELS["nB"])
+ax_r.set_ylabel(r"$(X_{\rm bag}-X_{\rm njl})/\max|X_{\rm njl}|$")
+ax_r.set_title(r"o: $P$,  x: $n_B$", fontsize="small")
+ax_r.legend(loc="lower left", fontsize="xx-small")
+panel_label(ax_r, "(b)")
 plt.show()
 
 

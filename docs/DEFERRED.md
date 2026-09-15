@@ -2536,3 +2536,44 @@ Lifting either would mean carrying the other conjugate pairs in the spline —
 n_C against mu_C, n_S against mu_S — which is a multivariate interpolation and
 a different piece of machinery. `solve_nodes=None` solves every mode and every
 axis exactly, as it always has.
+
+---
+
+## njl, ccdm: where the asymmetric pairing sector wins is not known
+
+`DEFAULT_PATTERNS` enumerates `unpaired`, `2SC` and `CFL`. The asymmetric
+seeds — `uSC`, `dSC` and `free` — are requestable and not enumerated, because
+`realised_pattern` can never return `'free'` (so that candidate can never seed
+the next density and is re-hunted cold at every point of every sweep), and
+because `uSC` and `dSC` reach the same states more cheaply and CAN be cached.
+
+**What is measured.** On `eos.njl`, `Parameters.named("rg_njl1")`,
+`beta_eq_neutrinoless`, every candidate solved cold and alone at 12 points over
+T = 0, 30, 50 MeV and n_B = 0.8–2.0 fm^-3: no asymmetric state wins anywhere.
+`dSC` converges as a real state throughout, losing to `CFL` by 57–114
+MeV/fm^3. In 11 of the 12 points every asymmetric state the `free` seed reached
+was reached by `uSC` or `dSC` as well, more cheaply and converging where `free`
+did not; in the twelfth it found a uSC state neither did, losing by 95.7
+MeV/fm^3.
+
+**What is NOT measured, and is the gap.** Gholami, Hofmann & Buballa, PRD 111,
+014021 (2025) — the model `eos.njl` implements by default — find the
+RG-consistent phase diagram melts CFL in a **dSC** pattern. Melting is a
+finite-T phenomenon and **that region is not inside the box above**: at T = 50
+MeV, n_B = 0.8 fm^-3 CFL has already lost, but to `2SC`, not to an asymmetric
+state. So the measurement bounds nothing about the melting pattern. Nothing
+above varies `G_D`/`eta_D` or `m_s` either, which is the other axis uSC/dSC are
+argued on, and nothing at all has been measured on `ccdm` beyond a
+confirmation that `free` finds nothing its named rivals do not.
+
+**What closing it takes.** A T-scan at fixed n_B carried until CFL stops
+winning, with `uSC` and `dSC` enumerated, recording what it melts INTO; then a
+decision on whether those two join `DEFAULT_PATTERNS`. One precondition:
+`eos.njl.solver._left_layout` drops a candidate that left its layout only for
+`("2SC", "CFL")`, so a `uSC` or `dSC` candidate that falls to 2SC is currently
+kept and competes — which makes the reported `pattern` label unstable between
+tied candidates. That filter must widen before either could be a default.
+
+**Until then**, a caller studying the asymmetric sector passes
+`patterns=("unpaired", "2SC", "CFL", "uSC", "dSC")`, adding `"free"` for the
+masks no pattern names (`sSC`, `usSC`, `dsSC`, unequal-gap states).

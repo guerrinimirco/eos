@@ -918,7 +918,12 @@ dropped rather than substituted.
 | `free` | all three | `(0.3, 0.6, 1)` |
 
 `eta = 1,2,3` pair `(ds), (us), (ud)`. The default enumeration at `csc=True` is
-`unpaired, 2SC, CFL, free`; with `csc=False` only `unpaired` exists. A pattern
+`unpaired, 2SC, CFL`; with `csc=False` only `unpaired` exists. The asymmetric
+seeds `uSC`, `dSC` and `free` are requestable and not enumerated: a caller who
+wants the asymmetric sector asks for it by the name of the state,
+`patterns=("unpaired","2SC","CFL","uSC","dSC")`, and adds `free` for the masks
+no pattern names. `free` can never seed the next density, because
+`realised_pattern` cannot return it. A pattern
 is a declaration of which `Delta_eta` are unknowns, and it adds no code. The
 gap equation has three roots at any Fermi-surface mismatch (zero, a barrier
 maximum, and the physical BCS root), so which root a solve lands on is decided

@@ -77,13 +77,22 @@ SAMPLES_INDEX = [
            header="# R_km  M_sun",
            note="HESS J1731-347, X-ray-only carbon-atmosphere fit. Do not "
                 "substitute full_priors_carbatm_corr.txt."),
+    Sample("J0614_Miller.txt", 188310363,
+           "2e0a6a264ef2e3f78ffe0552582e22ad35be687973c29cebe60fbdfce650a8c9",
+           "22131748", "J0614_NICER_rm.txt",
+           header="",
+           note="NICER PSR J0614-3329, HEADLINE for this repo: Miller et al. "
+                "2026 three-circle NICER-only run. Ships its own '#' header, "
+                "so nothing is prepended. Weighted -- the third column must "
+                "be used."),
     Sample("J0614.dat", 10047398,
            "93412719fcb978b96e0a4a1cc5edd09dfc503c14ea090704ae92b0b0e88d151c",
            "17380576", "Headline_Contours_and_Samples.tar.gz",
            header="# M_sun  R_km   [note: mass first, then radius]",
            member=None,
-           note="NICER PSR J0614-3329, headline M-R samples from inside the "
-                "archive. Columns are mass first, radius second."),
+           note="NICER PSR J0614-3329, Mauviard et al. 2025. Kept as the "
+                "SENSITIVITY run, not the headline. Columns are mass first, "
+                "radius second."),
 ]
 
 # The two gravitational-wave files already have dedicated fetchers, because

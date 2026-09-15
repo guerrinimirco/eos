@@ -1144,12 +1144,17 @@ the same simplification for the same reason (§17).
 ### 12.4 The pattern is not a mode
 
 Which condensates survive is decided by free energy, not declared. Every
-enumerated candidate — `unpaired`, `2SC`, `CFL`, and one asymmetric `free`
-seed that can land on `uSC`, `dSC` or an unequal-gap state — is solved to
+enumerated candidate — `unpaired`, `2SC` and `CFL` — is solved to
 self-consistency, and the converged one with the lowest $f = \varepsilon - Ts$
 is returned; at fixed $\mu_B$ (which is what the phase adapter does) the
 criterion is the largest $P$ instead, and the two agree. A candidate that did
-not converge is dropped, not substituted. Every point reports the winner, the
+not converge is dropped, not substituted. A caller who wants the asymmetric sector asks for it by the name of the state, `patterns=("unpaired","2SC","CFL","uSC","dSC")`; `free` stays requestable for the masks no pattern names (`sSC`, `usSC`, `dsSC`, and unequal-gap states). The asymmetric
+seeds are not enumerated because `realised_pattern` can never return `"free"`,
+so that candidate can never seed the next density and is re-hunted cold
+forever, while `uSC` and `dSC` reach the same states more cheaply and can be
+cached; see the comment above `PATTERNS` in `eos/general/pairing.py`.
+
+Every point reports the winner, the
 three gaps, $\mu_3$, $\mu_8$ and whether the state is gapless.
 
 Two seeding facts. CFL is electrically neutral **without** electrons, so its
@@ -1195,7 +1200,7 @@ eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
 | `SnB` | `float` | $>0$, dimensionless | — | entropy per baryon; solved for $T$ by an outer 1-D bracket over $[0.2, 400]$ MeV. An unreachable target comes back as `ok=False`, not a raise |
 | `leptons` | `bool` or `None` | `True`, `False`, `None` | `None` $\to$ `False` | fixed-fraction modes only. On a beta mode `True` is ignored, `False` raises |
 | `x0` | array, or `{pattern: array}`, or `None` | a converged `point.x`, or `warm_start(point)` | `None` (cold) | warm start. A bare vector seeds the FIRST pattern tried; a mapping seeds each named pattern and leaves the rest cold |
-| `patterns` | tuple of `str`, or `None` | any of `"unpaired"`, `"2SC"`, `"uSC"`, `"dSC"`, `"CFL"`, `"free"` | `None` | restricts the enumeration. `None` means `("unpaired","2SC","CFL","free")` with `csc=True` and `("unpaired",)` with it off |
+| `patterns` | tuple of `str`, or `None` | any of `"unpaired"`, `"2SC"`, `"uSC"`, `"dSC"`, `"CFL"`, `"free"` | `None` | restricts the enumeration. `None` means `("unpaired","2SC","CFL")` with `csc=True` and `("unpaired",)` with it off. The asymmetric seeds `"uSC"`, `"dSC"` and `"free"` are requestable and not enumerated (§12.4) |
 | `backend` | `str` | `"reference"`, `"fast"` | `"reference"` | which flavour of the nine medium integrals. `"fast"` needs numba and raises rather than falling back |
 | `pair_nodes_per_panel` | `int` or `None` | $\ge 1$ | `None` $\to$ 24 | Gauss–Legendre nodes per panel of the PAIRING quadrature |
 | `**conditions` | | `Y_C`, `Y_S`, `Y_Le` as the mode requires | — | a missing one raises; an extra one raises; `Y_Lmu` raises `NotImplementedError`; `leptons` in here raises `TypeError` |
@@ -1810,6 +1815,18 @@ pattern), and the RG-consistent phase diagram melts CFL in a **dSC** pattern
 where the sharp-cutoff one melts it in a uSC pattern. The `free` seed in our
 enumeration exists so that a `CFL`-layout solve can fall onto exactly such an
 asymmetric state.
+
+That seed is requestable and **not enumerated by default** (§12.4), and the
+asymmetric sector is reached under the names of its states, `uSC` and `dSC`.
+Measured cold at 12 points over $T = 0, 30, 50$ MeV and
+$n_B = 0.8$–$2.0\ \mathrm{fm^{-3}}$, no asymmetric state wins anywhere: `dSC`
+converges as a real state throughout and loses to `CFL` by 57–114 MeV/fm$^3$,
+and every asymmetric state the `free` seed reached was reached by `uSC` or
+`dSC` as well, bar one that lost by 95.7 MeV/fm$^3$. **That box does not
+contain the melting region**, which is where this reference's dSC pattern
+lives, so those numbers bound nothing about it; locating it is recorded in
+`docs/DEFERRED.md`. A caller studying melting enumerates `uSC` and `dSC`
+explicitly.
 
 Two things their prose does not state and that measurement forced (both in
 `docs/DEFERRED.md` and §8):

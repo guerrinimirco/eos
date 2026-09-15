@@ -40,6 +40,12 @@ CONTOURS = HERE / "data"
 REPO_ROOT = HERE.parent.parent.parent
 SAMPLES = REPO_ROOT / "plot" / "data" / "samples"
 
+# The shipped CSVs were built with python 3.9.7 / numpy 1.26.4 / scipy on this
+# machine, and REBUILDING THEM UNDER THE OTHER LOCAL STACK (3.14 / numpy 2.3)
+# MOVES EVERY CONTOUR: the KDE subsample and the marching-squares path both come
+# out slightly different, e.g. J0740's 68% ring gains a point. Verified 2026-09-06
+# by re-deriving J0740 under both. Nothing here is wrong under either -- but use
+# one stack for the whole directory, or the sources stop being comparable.
 FRACTIONS = (0.68, 0.95)         # 1σ / 2σ enclosed probability
 KDE_NMAX = 8000                  # subsample cap: gaussian_kde is O(n_samples * n_grid)
 GRID = 180                       # KDE evaluation grid per axis
@@ -164,7 +170,7 @@ MR_SOURCES = {
     "J0030": ("J0030.txt", 0, 1, None),   # header-documented: R, M
     "J0740": ("J0740.txt", 0, 1, 2),      # header-documented: R, M, weight
     "HESS":  ("HESS.txt",  0, 1, None),   # header "# R_NS (km) M_NS (Msun)"
-    "J0614": ("J0614.dat", 1, 0, None),   # header-less: col0=M, col1=R
+    "J0614": ("J0614_Miller.txt", 0, 1, 2),  # header-documented: R, M, weight
 }
 
 def compute_mr_contours(density_grids=True):

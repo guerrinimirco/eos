@@ -245,34 +245,25 @@ def _check_backend_parity(par, flags, grid):
                        "eos_fast (analytic J) vs eos_ref")
 
 
-def _check_restarts_extend_the_basin(par):
-    """The perturbed restarts reach targets the published seed does not.
+def _check_inversion_is_a_function_of_its_target(par):
+    """The inverse map returns ONE answer per target, and it round-trips.
 
-    `nmp.N_RESTARTS = 32` exists because a single solve from the DD2 couplings
-    maps one basin of attraction and reads it as the feasible set. That is a
-    claim about the residual surface, not about the loop -- the loop keeping
-    the best of N tries is monotone by construction and asserts nothing -- so
-    what is checked is that the extra tries CHANGE THE ANSWER on a grid where
-    the single seed fails outright.
+    This replaces "restarts extend the basin", which measured a property the
+    closure no longer has: there is no seed, so there is no basin to restart
+    into. The 4x4 Powell hybrid it checked returned a DIFFERENT coupling set
+    depending on where it started for 53 of 117 targets drawn from an
+    empirical prior -- the seed, not the NMPs, decided which root came back.
 
-    A count over a grid, deliberately, rather than a verdict at one cell: a
-    single cell's verdict is decided in its target's last bits (ticket 67
-    measured eight targets at three perturbations each, none holding across
-    its own three), while the count is stable. Measured on python.org 3.14.2 /
-    numpy 2.3.5 / scipy 1.17.0: 22/30 at zero restarts, 27/30 at 32.
-
-    The DEFAULT closure, over (K_sat, m*/m). It used to be the Q_sat-imposing
-    one over (K_sat, Q_sat), because a Q_sat row carrying a third finite
-    difference made that the harder residual surface -- 0/9 at zero restarts
-    against 4/9 at 32. Analytic derivatives removed the difficulty rather than
-    the check: that closure now reaches 30/30 at zero restarts over a grid
-    three times wider (K_sat 150-350, Q_sat -400 to 800), so there is nothing
-    left there for restarts to find. The basin structure the restarts exist
-    for is real and survives, and it is the default closure that shows it.
+    What is checked instead is what replaced it. Over the same (K_sat, m*/m)
+    grid: every cell either round-trips through `compute_nmp` to better than
+    1e-9, or refuses with a bound -- never converges to something that is not
+    a realisation of its own target. A cell may be genuinely infeasible (K_sat
+    below the quadratic's vertex, or an m*/m the E_sat cannot support), and
+    that is a ValueError naming the reachable limit, not a failure here.
 
     Here rather than in `test/dd2/` because it is a property of the inverse
-    map's basin structure measured over a grid, the same class as the forward
-    and inverse maps agreeing, and because it costs ~10 s.
+    map measured over a grid, the same class as the forward and inverse maps
+    agreeing.
     """
     from eos.dd2.nmp import compute_nmp, invert_nmp
 
@@ -281,22 +272,33 @@ def _check_restarts_extend_the_basin(par):
                                "E_sym", "L_sym")}
     cells = [(K, M) for K in (160.0, 200.0, 240.0, 280.0, 320.0)
              for M in (0.40, 0.50, 0.60, 0.70, 0.80, 0.90)]
-    reached = {}
-    for n_restarts in (0, 32):
-        n_ok = 0
-        for K_sat, m_ratio in cells:
-            try:
-                _, status = invert_nmp(dict(six, K_sat=K_sat,
-                                            m_eff_ratio=m_ratio),
-                                       n_restarts=n_restarts)
-            except ValueError:      # m*/m outside the physical window
-                continue
-            n_ok += bool(status.ok)
-        reached[n_restarts] = n_ok
-    gained = reached[32] - reached[0]
-    return CheckResult("restarts extend the basin", gained > 0, float(gained),
-                       f"{reached[0]}/{len(cells)} cells at 0 restarts, "
-                       f"{reached[32]}/{len(cells)} at 32")
+    solved = refused = 0
+    worst = 0.0
+    for K_sat, m_ratio in cells:
+        target = dict(six, K_sat=K_sat, m_eff_ratio=m_ratio)
+        try:
+            got, status = invert_nmp(target)
+        except ValueError:          # infeasible, with its bound in the message
+            refused += 1
+            continue
+        if got is None or not status.ok:
+            refused += 1
+            continue
+        try:
+            back = compute_nmp(got)
+        except ValueError:          # does not saturate inside the bracket
+            return CheckResult("inversion is a function of its target", False,
+                               float("nan"),
+                               f"K_sat={K_sat}, m*/m={m_ratio} converged to a "
+                               f"parametrization with no saturation point")
+        miss = max(abs(back[k] - v) / abs(v) for k, v in target.items())
+        worst = max(worst, miss)
+        solved += 1
+    return CheckResult(
+        "inversion is a function of its target", worst < 1e-9, worst,
+        f"{solved}/{len(cells)} cells solved and round-tripped "
+        f"(worst {worst:.1e}), {refused} refused with a bound")
+
 
 
 def _check_analytic_derivatives(par):
@@ -489,7 +491,7 @@ def run_full_check(par=None, flags=None, grid=None):
     report.results.append(_check_backend_parity(par, flags, grid))
     report.results.append(_check_delivered_table(par, flags))
     report.results.append(_check_analytic_derivatives(par))
-    report.results.append(_check_restarts_extend_the_basin(par))
+    report.results.append(_check_inversion_is_a_function_of_its_target(par))
     report.results.append(_check_compose(par))
     report.results.append(_check_hyperon_depths(par))
     report.results.append(_check_potential_round_trip(par))

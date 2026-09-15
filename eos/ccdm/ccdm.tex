@@ -1100,8 +1100,9 @@ dropped rather than substituted.
 \centering
 \caption{The pairing patterns: which $\Delta_\eta$ are unknowns, and the
 relative seed each is given. $\eta=1,2,3$ pair $(ds),(us),(ud)$. The default
-enumeration at \code{csc=True} is \code{unpaired}, \code{2SC}, \code{CFL},
-\code{free}; with \code{csc=False} only \code{unpaired} exists.}
+enumeration at \code{csc=True} is \code{unpaired}, \code{2SC}, \code{CFL};
+with \code{csc=False} only \code{unpaired} exists. The asymmetric seeds
+\code{uSC}, \code{dSC} and \code{free} are requestable and not enumerated.}
 \label{tab:patterns}
 \begin{tabular}{lll}
 \toprule
@@ -1122,7 +1123,12 @@ code. The gap equation has three roots at any Fermi-surface mismatch (zero, a
 barrier maximum, and the physical BCS root), so which root a solve lands on is
 decided by the seed; enumerating the seeds is what makes the answer an answer
 rather than one solve repeated. \code{free} is the asymmetric seed that lets a
-CFL-layout solve fall to something that is not CFL. Gapless states,
+CFL-layout solve fall to something that is not CFL. It is requestable and not
+enumerated: \code{realised\_pattern} can never return it, so the candidate can
+never seed the next density and is re-hunted cold forever, while \code{uSC}
+and \code{dSC} reach the same states more cheaply and can be cached. A caller
+who wants the asymmetric sector asks for it by the name of the state and adds
+\code{free} only for the masks no pattern names. Gapless states,
 \eqref{eq:gapless}, are \emph{flagged} rather than ranked.
 
 The candidate set of a fixed-density solve is the \emph{product} of the two

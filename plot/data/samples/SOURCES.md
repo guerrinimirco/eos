@@ -30,11 +30,20 @@ by `numpy.loadtxt`). Column identities were re-verified from value ranges on
 - **Columns:** `R_km  M_sun`. Verified: R∈[8.2,14.5], M∈[0.32,1.38]; lightest known compact object.
 - **Why this file:** the X-ray-only fit is the model-independent headline result. Do **not** use `HESS_full_priors_carbatm_corr.txt` (kept here, unused): adding χEFT/NICER/GW EoS priors pulls R up ~0.8 km and halves the width — that was a previous *wrong* HESS.txt.
 
-### `J0614.dat` — PSR J0614-3329 (NICER)
+### `J0614_Miller.txt` — PSR J0614-3329 (NICER) — **HEADLINE**
+- **Paper:** Miller, Dittmann, Holt, Lamb et al. **2026**, "The Radius of the Neutron Star PSR J0614-3329 from NICER Data" — [arXiv:2609.00965](https://arxiv.org/abs/2609.00965)
+- **Data:** Maryland-Illinois release, Zenodo **10.5281/zenodo.22131748** — <https://zenodo.org/records/22131748> (file `J0614_NICER_rm.txt`). Ships its own `#` header, so `fetch_samples.py` prepends nothing.
+- **Columns:** `R_km  M_sun  weight`. Verified: 2 510 799 samples, R∈[7.03,18.29], M∈[1.105,1.783], w∈[1,1368], N_eff = 9.3e5. **Weighted** — the third column must be used (it is, via the MR_SOURCES spec).
+- **Which run (resolved):** the paper's headline **NICER-only, three-circle** model — R = 11.16 (68 % 9.88-12.77), M = 1.436 (68 % 1.366-1.508). It wins the model comparison by Δln Z = 10.4 over two circles and 11.5 over two ovals. The KDE contours this repo builds from it reproduce the release's own published `contour68_mr.txt` / `contour95_mr.txt` to ≈0.1 km.
+- **Why this run, not the joint NICER+XMM fit:** the paper's joint fits systematically underpredict the XMM data (MOS2 ≈1σ, MOS1 ≈2σ, pn ≈3σ low) under the standard assumption that the XMM background is known from surrounding fields. The radius answer depends on how that is patched — 68 % R = 9.52-11.88 km with the standard background, 11.60-14.76 km if an extra component is allowed (Holt et al. 2025) — so the NICER-only result is the one free of that choice.
+- **Why this supersedes Mauviard et al. 2025 as the headline:** Miller et al. re-ran the Mauviard setup exactly (same NICER+XMM data, same ST+PDT model, same priors, same Riley-style XMM background prior) and recovered the same median with a 28 % wider interval, R = 10.30⁺¹·³⁷₋₁.₀₂ vs 10.29⁺¹·⁰¹₋₀.₈₆. They attribute the difference to under-converged MultiNest settings (2e4 live points, sampling efficiency 0.05). ST+PDT is also a strict subset of the three-circle model. Choosing Miller additionally makes the M-R set homogeneous: J0030, J0740 and J0614 then all come from one analysis pipeline.
+
+### `J0614.dat` — PSR J0614-3329 (NICER) — sensitivity run, not the headline
 - **Paper:** Mauviard, Watts et al. **2025**, "A NICER view of the 1.4 M⊙ edge-on pulsar PSR J0614-3329", *ApJ* — [arXiv:2506.14883](https://arxiv.org/abs/2506.14883), [doi:10.3847/1538-4357/ae145d](https://iopscience.iop.org/article/10.3847/1538-4357/ae145d)
-- **Data (used):** Zenodo **10.5281/zenodo.17380576** — <https://zenodo.org/records/17380576> ("Data and Reproduction package…"; headline M–R samples are inside `Headline_Contours_and_Samples.tar.gz`). Supersedes the initial release 10.5281/zenodo.15603406.
-- **Columns:** `M_sun  R_km` — **mass first, radius second** (opposite order to the NICER files above). Verified: M median 1.445 (68 % 1.38–1.51), R median 10.29 (68 % 9.43–11.30), full R tail [6.9,14.8].
-- **Which run (resolved):** an **exact match** to the paper's *headline NS* result (R=10.29⁺¹·⁰¹₋₀.₈₆, M=1.44⁺⁰·⁰⁶₋₀.₀₇), unimodal. It is **not** a strange-quark-star run — the small-R values are just the lower tail. (A separate SQS interpretation exists in [arXiv:2508.02652](https://arxiv.org/abs/2508.02652); that is *not* this file.)
+- **Data:** Zenodo **10.5281/zenodo.17380576** — <https://zenodo.org/records/17380576> ("Data and Reproduction package…"; headline M-R samples are inside `Headline_Contours_and_Samples.tar.gz`). Supersedes the initial release 10.5281/zenodo.15603406.
+- **Columns:** `M_sun  R_km` — **mass first, radius second** (opposite order to the NICER files above). Verified: M median 1.445 (68 % 1.38-1.51), R median 10.29 (68 % 9.43-11.30), full R tail [6.9,14.8].
+- **Which run (resolved):** an **exact match** to that paper's *headline NS* result (R=10.29⁺¹·⁰¹₋₀.₈₆, M=1.44⁺⁰·⁰⁶₋₀.₀₇), unimodal. It is **not** a strange-quark-star run — the small-R values are just the lower tail. (A separate SQS interpretation exists in [arXiv:2508.02652](https://arxiv.org/abs/2508.02652); that is *not* this file.)
+- **Kept because** it is the systematics variant for this object: swap it back into `MR_SOURCES` to measure how much of an EoS posterior rests on the Amsterdam-vs-Maryland pipeline choice. `plot/plot_j0614_comparison.py` draws the two side by side.
 
 ---
 

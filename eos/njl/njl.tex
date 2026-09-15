@@ -1239,11 +1239,15 @@ one-dimensional solve for $T$.
 \label{sec:enumeration}
 
 Which condensates survive is decided by free energy, not declared. Every
-enumerated candidate --- unpaired, 2SC, CFL, and one asymmetric free seed that
-can land on uSC, dSC or an unequal-gap state --- is solved to
+enumerated candidate --- unpaired, 2SC and CFL --- is solved to
 self-consistency, and the converged one with the lowest $f = \varepsilon - Ts$
 is returned; at fixed $\muB$ (which is what the phase adapter does) the
-criterion is the largest $P$ instead, and the two agree. Every point reports
+criterion is the largest $P$ instead, and the two agree. The asymmetric seeds
+uSC, dSC and free are requestable and not enumerated: \texttt{realised\_pattern}
+can never return free, so that candidate can never seed the next density and is
+re-hunted cold forever, while uSC and dSC reach the same states more cheaply
+and can be cached. A caller who wants the asymmetric sector asks for it by the
+name of the state. Every point reports
 the winner, the three gaps, $\mu_3$, $\mu_8$ and whether the state is gapless.
 
 Two seeding facts. CFL is electrically neutral \emph{without} electrons, so its

@@ -88,7 +88,7 @@ REGISTRY = [
                STANDARD_COLORS['Blue'], "Miller et al. 2021, ApJL 918 L28",
                anchor=(0.0, 0.0, 'center', 'center')),
     Constraint("J0614", "M-R", "contour_2d", "PSR J0614-3329",
-               STANDARD_COLORS['Green'], "Mauviard et al. 2025, ApJ",
+               STANDARD_COLORS['Green'], "Miller et al. 2026, arXiv:2609.00965",
                anchor=(-0.3, 0.0, 'center', 'center')),
     Constraint("HESS", "M-R", "contour_2d", "HESS J1731-347",
                STANDARD_COLORS['Magenta'],
