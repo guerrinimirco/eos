@@ -1,0 +1,4 @@
+python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (18.2353515625, 17.998046875, 17.29931640625)
+  200 rows  wall 71.8s cpu 67.5s  358.8 ms/pt  (600 candidates)
+wrote .scratch/njl-speed/proto13_rungs_VX.json

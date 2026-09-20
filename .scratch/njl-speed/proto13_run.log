@@ -1,0 +1,20 @@
+V0: python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (19.61279296875, 20.71875, 18.501953125)
+  200 rows  wall 138.4s cpu 128.7s  691.8 ms/pt   stops {'layout': 0, 'rung_D': 0}
+wrote .scratch/njl-speed/proto13_V0.json
+VD: python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (14.5185546875, 17.79736328125, 17.68359375)
+  200 rows  wall 154.9s cpu 146.6s  774.7 ms/pt   stops {'layout': 0, 'rung_D': 25}
+wrote .scratch/njl-speed/proto13_VD.json
+VL: python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (13.880859375, 16.5830078125, 17.2255859375)
+  200 rows  wall 149.0s cpu 140.2s  745.2 ms/pt   stops {'layout': 1, 'rung_D': 0}
+wrote .scratch/njl-speed/proto13_VL.json
+V0: python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (18.62109375, 17.73828125, 17.6201171875)
+  200 rows  wall 138.2s cpu 132.0s  690.8 ms/pt   stops {'layout': 0, 'rung_D': 0}
+wrote .scratch/njl-speed/proto13_V0.json
+--- control bracket: V0first vs V0 (the window's drift) ---
+  V0 first 138.4s / cpu 128.7s
+  V0 last  138.2s / cpu 132.0s
+  drift 1.00x wall, 1.03x cpu

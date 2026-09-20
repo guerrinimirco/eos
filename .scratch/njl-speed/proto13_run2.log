@@ -1,0 +1,36 @@
+VX: python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (19.1865234375, 14.75634765625, 15.28955078125)
+  200 rows  wall 73.4s cpu 68.8s  367.0 ms/pt   stops {'layout': 0, 'rung_D': 26, 'cold_retry': 15, 'bounded': 15}
+wrote .scratch/njl-speed/proto13_VX.json
+V0: python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (14.34521484375, 14.16162109375, 14.92333984375)
+  200 rows  wall 147.9s cpu 139.1s  739.7 ms/pt   stops {'layout': 0, 'rung_D': 0, 'cold_retry': 0, 'bounded': 0}
+wrote .scratch/njl-speed/proto13_V0.json
+--- gates (baseline = the V0 run that just closed the window) ---
+VX vs V0: 200 vs 200 rows
+  wall 147.9s -> 73.4s   cpu 139.1s -> 68.8s   speedup 2.02x wall, 2.02x cpu
+  realised-state mismatches: 0
+  worst |dP|/P = 7.009e-10 at n_B=0.563317  (PASS at 1e-8)
+  2SC->CFL onset: V0 0.6582914572865115  VX 0.6582914572865115  (map pins 0.6583) PASS
+  CFL rows: V0 170  VX 170  (map pins 170) PASS
+  non-converged ROWS: V0 0  VX 0
+  layout-column (`pattern`) differences: 4  [not gated]
+
+VD vs V0: 200 vs 200 rows
+  wall 147.9s -> 154.9s   cpu 139.1s -> 146.6s   speedup 0.95x wall, 0.95x cpu
+  realised-state mismatches: 0
+  worst |dP|/P = 7.009e-10 at n_B=0.563317  (PASS at 1e-8)
+  2SC->CFL onset: V0 0.6582914572865115  VD 0.658291457286326  (map pins 0.6583) PASS
+  CFL rows: V0 170  VD 170  (map pins 170) PASS
+  non-converged ROWS: V0 0  VD 0
+  layout-column (`pattern`) differences: 4  [not gated]
+
+VL vs V0: 200 vs 200 rows
+  wall 147.9s -> 149.0s   cpu 139.1s -> 140.2s   speedup 0.99x wall, 0.99x cpu
+  realised-state mismatches: 0
+  worst |dP|/P = 0.000e+00 at n_B=None  (PASS at 1e-8)
+  2SC->CFL onset: V0 0.6582914572865115  VL 0.6582914572865115  (map pins 0.6583) PASS
+  CFL rows: V0 170  VL 170  (map pins 170) PASS
+  non-converged ROWS: V0 0  VL 0
+  layout-column (`pattern`) differences: 0  [not gated]
+

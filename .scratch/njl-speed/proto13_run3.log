@@ -1,0 +1,28 @@
+VX: python 3.14.2, numpy 2.3.5, scipy 1.17.0
+  loadavg (24.43603515625, 17.50390625, 16.109375)
+  200 rows  wall 75.5s cpu 69.3s  377.5 ms/pt   stops {'layout': 0, 'rung_D': 26, 'cold_retry': 15, 'bounded': 15}
+wrote .scratch/njl-speed/proto13_VX.json
+--- gate ---
+VX vs V0: 200 vs 200 rows
+  wall 147.9s -> 75.5s   cpu 139.1s -> 69.3s   speedup 1.96x wall, 2.01x cpu
+  realised-state mismatches: 0
+  worst |dP|/P = 7.009e-10 at n_B=0.563317  (PASS at 1e-8)
+  2SC->CFL onset: V0 0.6582914572865115  VX 0.6582914572865115  (map pins 0.6583) PASS
+  CFL rows: V0 170  VX 170  (map pins 170) PASS
+  non-converged ROWS: V0 0  VX 0
+  layout-column (`pattern`) differences: 4  [not gated]
+--- cross-mode probe: beta-eq and fixed_YC, T = 0 and 30 MeV ---
+V0  beta_eq_neutrinoless_T0                  14.7s  20/20 rows solved
+V0  beta_eq_neutrinoless_T30                 43.0s  20/20 rows solved
+V0  fixed_YC_T0_Y_C0.4                       43.5s  20/20 rows solved
+V0  fixed_YC_T30_Y_C0.4                     325.5s  20/20 rows solved
+VX  beta_eq_neutrinoless_T0                  12.0s  20/20 rows solved
+VX  beta_eq_neutrinoless_T30                 15.9s  20/20 rows solved
+VX  fixed_YC_T0_Y_C0.4                       35.1s  20/20 rows solved
+VX  fixed_YC_T30_Y_C0.4                      69.9s  20/20 rows solved
+
+gate: V0 vs VX
+  beta_eq_neutrinoless_T0                  14.7s ->   12.0s (1.23x)  state-mismatch 0  row-count diffs 0  worst |dP|/P 0.00e+00  PASS
+  beta_eq_neutrinoless_T30                 43.0s ->   15.9s (2.70x)  state-mismatch 0  row-count diffs 0  worst |dP|/P 0.00e+00  PASS
+  fixed_YC_T0_Y_C0.4                       43.5s ->   35.1s (1.24x)  state-mismatch 0  row-count diffs 0  worst |dP|/P 1.91e-10  PASS
+  fixed_YC_T30_Y_C0.4                     325.5s ->   69.9s (4.66x)  state-mismatch 0  row-count diffs 0  worst |dP|/P 4.50e-11  PASS

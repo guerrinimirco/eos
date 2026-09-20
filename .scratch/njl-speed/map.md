@@ -117,8 +117,14 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
   800 candidates, 1.8% of the build — and there is no fuller solve to skip.
   On candidates that do NOT work the screen residual does not discriminate: a
   cross-seeded CFL stalls at 8-9e-2 both where its root exists and where it
-  collapses. Following the winner along a sweep is still **not** adopted and
-  is still in the fog below.
+  collapses. **Ticket 13 closed the two remaining ways to guess**: the
+  iterate's LAYOUT does not discriminate either (it is still CFL at every rung
+  boundary; the collapse happens inside the differenced rescue), and neither
+  does an evaluation budget (the one rescued candidate uses MORE `hybr`
+  evaluations than any dead one). What discriminates is not a property of the
+  solve at all -- it is where the seed came from.
+  Following the winner along a sweep is still **not** adopted and is still in
+  the fog below.
 - **A timing number from this map states the machine's load.** Ticket 05
   measured the same three-pattern configuration at 730 ms/pt against a
   concurrent session and at 267 on a quiet machine — 2.7x apart, cpu tracking
@@ -128,6 +134,39 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 ## Decisions so far
 
 <!-- one line per closed ticket -->
+
+- [Bound the rescue ladder below a branch](issues/13-bound-the-rescue-ladder.md):
+  **most of it goes, and the separator is WHERE THE SEED CAME FROM** -- not a
+  residual, not an evaluation budget. A candidate handed another pattern's
+  state gets one Newton and one `hybr`; a no is then an ordinary answer, and
+  it is reported non-converged rather than walked down `lm`, the differenced
+  repeat and the cold retry. **2.02x on the pinned benchmark**, gate clean:
+  0 `pattern_realised` mismatches, worst |dP|/P **7.009e-10**, the onset
+  **identical to the last digit** at 0.6582914572865115, 170 CFL rows. It pays
+  MORE off the benchmark than on it -- **2.70x** at T = 30 and **4.66x** at
+  `fixed_YC`, T = 30, 20/20 rows and 0 state mismatches in all four sweeps --
+  which is free evidence for ticket 08. **Both cuts the ticket proposed
+  failed, and their failures are the finding.** Dropping rung D alone is a
+  **LOSS** (0.95x): `ok = False` fires `solve_pattern`'s cold retry and the
+  whole ladder runs twice. A layout stop fires **once in 600 candidates** --
+  the collapse happens INSIDE rung D, so there is nothing to detect until the
+  work is done. And an evaluation cap is measured shut: the onset uses **77**
+  `hybr` evaluations, MORE than any of the 13 dead ones (31/55/73). The census
+  that picked the cut: the 13 rootless CFL candidates are **77.2%** of the
+  build, `lm` is entered by exactly those 13 and rescues **none**, rung D
+  converges all 13 onto the 2SC root -- duplicates of a 2SC candidate that
+  already won, agreeing in f to **1.9e-10** -- and rung C fires **0** times.
+  The onset is rescued by `hybr` and never reaches `lm` or D. Two things
+  handed forward: bounding the ladder takes the rootless candidates from 77%
+  to **54.7%** of the build but does not remove them, and there is no further
+  cut inside the ladder, so the next lever is the PROPOSAL, which is the
+  continuation fog below -- now priced, and constrained by the measurement
+  that the onset is found only because CFL is still proposed after 13 failures
+  in a row. Landing it is
+  [ticket 16](issues/16-land-the-bounded-ladder.md); whether it reaches
+  `eos/mixed` is [ticket 17](issues/17-methods-bound-in-mixed.md), and it does
+  NOT come for free -- `njl_phase` goes through `thermo_from_mu`, a path with
+  no Newton rung and no cross-seeds at all.
 
 - [Does `free` belong in the default enumeration?](issues/12-free-in-the-default.md):
   **it leaves `DEFAULT_PATTERNS`, in both models**, and the argument is not the
@@ -234,8 +273,16 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 
 - **Continuation along the sweep.** Enumerate fully once, then follow the
   winner, re-enumerating only when a monitor fires (a gap crossing zero, the
-  free-energy margin over the runner-up narrowing). This is where the
-  fewer-patterns lever actually pays in full — but it can silently seat a
+  free-energy margin over the runner-up narrowing). **Ticket 13 put a price
+  and a hard constraint on this.** The price: with the rescue ladder bounded,
+  the candidates that have no root are STILL **54.7%** of the build -- 13 CFL
+  candidates below the onset, each paying the one `hybr` the bound leaves
+  them, and there is no further cut inside the ladder because `hybr` is what
+  finds the onset. Not proposing them is the only lever left. The constraint:
+  that onset, at n_B = 0.5686, is reached ONLY because CFL is still proposed
+  and cross-seeded there **after 13 consecutive failures**, so a monitor that
+  stops proposing a repeatedly-failing pattern loses 170 of 200 rows. This is
+  where the fewer-patterns lever actually pays in full — but it can silently seat a
   metastable branch, which this model has already done once (tables reported
   metastable 2SC where gapless CFL was the ground state). **Ticket 05 measured
   the capture directly and it is not a tail risk:** given its own seed, the

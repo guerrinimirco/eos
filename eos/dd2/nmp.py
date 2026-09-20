@@ -23,14 +23,16 @@ K_sym, E_sym, L_sym} from a Parameters. This inverts it.
 
 The imposed set is {n_sat, E_sat, m*/m, K_sat, E_sym, L_sym}:
 
-  1. Isoscalar (4x4 root at FIXED n_sat, so no P=0 bracket search in the
-     loop): free {Gamma_sigma, c_sigma, Gamma_omega, b_omega} matched to
-     {P(n_sat)=0, E_sat, m*/m, K_sat}. The other two shape coefficients,
-     b_sigma and c_omega, are PINNED at their published values -- see
-     "Why two coefficients are pinned" below. m_sigma is fixed; a_i, d_i are
-     derived internally (from_microscopic).
-  2. Isovector (near-analytic): Gamma_rho(n_sat) from E_sym in closed form,
-     then a_rho from L_sym by a 1-D root.
+  1. Isoscalar, CLOSED FORM and iterating nothing: Gamma_sigma and
+     Gamma_omega follow from (n_sat, E_sat, m*/m) alone -- that part of the
+     system is triangular -- and then {P(n_sat)=0, K_sat} fix the sigma and
+     omega slopes at saturation, K_sat being an exact quadratic in
+     f'_sigma(1) along the P=0 line. The two shape coefficients c_sigma
+     and c_omega are PINNED at their published values -- see "Why two
+     coefficients are pinned" below. m_sigma is fixed; a_i, d_i are derived
+     internally (from_microscopic).
+  2. Isovector, also closed form: Gamma_rho(n_sat) from E_sym, then a_rho
+     from L_sym, which is affine in it.
   3. The higher derivatives NOT imposed — Q_sat and K_sym — are computed
      forward from the recovered couplings and reported in
      InversionStatus.predictions. They are predictions of the closure, not
@@ -236,6 +238,7 @@ that correction, all within their frozen tolerances:
 
 n_sat, E_sat, m*/m and E_sym need no derivative and did not move at all.
 """
+import math
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -612,13 +615,35 @@ R_MIN, R_MAX = r_of_c(1e8), r_of_c(1e-8)
 
 
 def c_of_r(r):
-    """Invert r(c). One monotone 1-D root; single-valued by construction."""
+    """Invert r(c). CLOSED FORM: this inversion is a cubic, not a root find.
+
+    In t = d = 1/sqrt(3c) the ratio is RATIONAL -- the square roots that make
+    r(c) look transcendental are exactly the ones d already carries:
+
+        r = -3(1 + 2t) / ((1 + t)(4t^2 + 2t + 1))
+
+    so clearing the denominator leaves 4r t^3 + 6r t^2 + (3r + 6) t + (r + 3),
+    and depressing that with t = y - 1/2 leaves y^3 + p y + q with p = 3/(2r)
+    and q = 1/8 CONSTANT. r is confined to (-3, 0) by R_MIN/R_MAX, so the
+    discriminant is positive for every reachable ratio: three real roots, of
+    which exactly one clears t > 0, with no case split to get wrong. One
+    Newton step on the cubic polishes the trigonometric root, which holds the
+    1e-14 the brentq this replaced was asked for.
+    """
     if not (R_MIN < r < R_MAX):
         raise ValueError(
             f"f''(1)/f'(1) = {r:.6g} is outside ({R_MIN:.4f}, {R_MAX:.4f}), the "
             f"range the Typel-Wolter form can realise: no (b, c) has this "
             f"curvature-to-slope ratio at saturation")
-    return brentq(lambda cc: r_of_c(cc) - r, 1e-8, 1e8, xtol=1e-14, rtol=8.9e-16)
+    # k = 0 of y = 2 sqrt(-p/3) cos(arccos((3q/2p) sqrt(-3/p))/3 - 2 pi k/3):
+    # the largest root, and the only one left positive by t = y - 1/2.
+    t = math.sqrt(-2.0 / r) * math.cos(math.acos(
+        max(-1.0, min(1.0, r * math.sqrt(-2.0 * r) / 8.0))) / 3.0) - 0.5
+    f = ((4.0 * r * t + 6.0 * r) * t + 3.0 * r + 6.0) * t + r + 3.0
+    df = (12.0 * r * t + 12.0 * r) * t + 3.0 * r + 6.0
+    if df != 0.0:
+        t -= f / df
+    return 1.0 / (3.0 * t * t)
 
 
 def bc_from_taylor(f1, f2):
@@ -660,20 +685,35 @@ def b_at_pinned_c(f1, c):
     return (c * D + A) / den
 
 
+def s_of_c(c):
+    """f'''(1)/f'(1). A function of c ALONE -- b does not enter.
+
+    With u = (x+d)^2 the form is a(1+bu)/(1+cu), whose u-derivative is
+    a(b-c)/(1+cu)^2, so EVERY x-derivative at x = 1 carries the same overall
+    factor a(b-c) and their ratios drop it. The same cancellation that makes
+    r = f''/f' depend on c alone makes f'''/f' depend on c alone:
+
+        s(c) = 12 c (cU - 1) / D^2,   U = (1+d)^2,  D = 1 + cU
+
+    Verified against `rational_d3f`/`rational_df` at 3000 random (b, c) to a
+    max relative error of 8.6e-16.
+    """
+    d = derived_d(c)
+    U = (1.0 + d) ** 2
+    return 12.0 * c * (c * U - 1.0) / (1.0 + c * U) ** 2
+
+
 def _f3(f1, f2, c=None):
     """f'''(1), which the two-parameter form does NOT leave free.
 
     `c` short-circuits the r -> c inversion where the caller already knows it,
-    which is every pinned channel. That matters: the Q_sat closure evaluates
-    this inside a root scan, and inverting a known c on every evaluation was
-    the whole of its cost.
+    which is every pinned channel. Neither branch needs a or b any more: by
+    `s_of_c` the third derivative is just f'(1) times a function of c, which
+    takes `derived_a` and `rational_d3f` out of the Q_sat scan entirely.
     """
     if c is None:
-        b, c = bc_from_taylor(f1, f2)
-    else:
-        b = b_at_pinned_c(f1, c)
-    d = derived_d(c)
-    return rational_d3f(1.0, derived_a(b, c, d), b, c, d)
+        c = c_of_r(f2 / f1)
+    return f1 * s_of_c(c)
 
 
 def _isoscalar_at_saturation(G, W, n, kF, m, ns_all, fs1, fs2, fw1, fw2,
@@ -719,6 +759,25 @@ def _isoscalar_at_saturation(G, W, n, kF, m, ns_all, fs1, fs2, fw1, fw2,
            - 0.5 * G3 * ns ** 2 - 2.0 * G2 * ns * dns
            - G1 * (dns ** 2 + ns * d2ns))
     return P, 9.0 * n * mu1, 27.0 * n * (n * mu2 - 3.0 * mu1)
+
+
+def _esym_kinetic_slope(G, n, kF, m, ns_all, fs1):
+    """d/dn of the KINETIC part of E_sym at n_sat, in natural units.
+
+    `snm_derivatives` writes E_sym = kF^2/(6 E_F*) + R n / 2 and differentiates
+    the first term through E_F*(n), which moves with the Dirac mass. Every
+    ingredient is already fixed by the targets and the sigma shape, so this
+    needs no solve -- which is what lets `a_rho` be a closed form below.
+    """
+    ns, ns_m, ns_k = ns_all[0], ns_all[1], ns_all[2]
+    G1 = 2.0 * G * fs1 / n
+    kF1 = kF / (3.0 * n)
+    S1 = (G1 * ns + G * ns_k * kF1) / (1.0 + G * ns_m)
+    E = np.sqrt(kF ** 2 + m ** 2)
+    E1 = (kF * kF1 - m * S1) / E
+    u = kF ** 2
+    u1 = 2.0 * u / (3.0 * n)
+    return u1 / (6.0 * E) - u * E1 / (6.0 * E ** 2)
 
 
 def _gammas_and_state(nmp, m_N, m_sigma, m_omega):
@@ -771,11 +830,19 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=None,
               solver made implicitly through which basin its seed fell into.
       True  - Q_sat is imposed: c_omega alone is held -- the same pin the
               iterative closure used -- and b_sigma, c_sigma, b_omega are all
-              fitted. P=0 still fixes f'_omega(1) linearly and K_sat still
-              fixes f''_sigma(1) linearly at given f'_sigma(1), so what is
-              left is ONE scalar equation in f'_sigma(1). Q_sat reaches it
-              through f'''(1), which the two-parameter rational form does not
-              leave free.
+              fitted. P=0 still fixes f'_omega(1) linearly and K_sat
+              fixes f''_sigma(1) as an exact QUADRATIC in f'_sigma(1),
+              so what is left is ONE scalar equation in f'_sigma(1).
+              Q_sat reaches it through f'''(1), which the two-parameter
+              rational form does not leave free, and that equation is
+              ALGEBRAIC rather than rational: it is bracketed and solved,
+              not written down. What IS closed form is the set of
+              f'_sigma(1) the form can realise (`_feasible_intervals`), so
+              the bracket search runs only on admissible ground and cannot
+              lose a root off the edge of it. Two to four roots exist over
+              the empirical box; the one nearest the published f'_sigma(1)
+              is returned, the same branch rule the default closure applies
+              through its vertex.
 
     `pinned` sets the HELD shape coefficients -- {"c_sigma": ..., "c_omega":
     ...} for the default closure, {"c_omega": ...} when Q_sat is imposed --
@@ -865,17 +932,29 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=None,
         # c_omega alone is held. P=0 fixes f'_omega(1) from f'_sigma(1), and
         # K_sat is LINEAR in f''_sigma(1) at fixed f'_sigma(1), so f''_sigma(1)
         # is closed form too. One scalar equation is left: Q_sat.
-        def fs2_of(fs1):
+        # K_sat enters f''_sigma(1) only through G2 = 2G(fs1^2 + fs2)/n^2, so
+        # dK_sat/d f''_sigma(1) = -9 G n_s^2 / n EXACTLY, independent of
+        # f'_sigma(1), and K_sat at fs2 = 0 is exactly quadratic in
+        # f'_sigma(1). Together those make f''_sigma(1) a closed-form
+        # QUADRATIC in f'_sigma(1): three evaluations pin it here, and the
+        # Q_sat scan below then evaluates K_sat not once.
+        slope = -9.0 * G * ns ** 2 / n
+        if slope == 0.0:
+            raise ValueError("NMP inversion infeasible: K_sat does not "
+                             "depend on f''_sigma(1) here")
+
+        def _k_at_zero(fs1):
             fw1 = fw1_of(fs1)
-            k_at_0 = _isoscalar_at_saturation(G, W, n, kF, m, ns_all,
-                                              fs1, 0.0, fw1, r_w * fw1)[1]
-            k_at_1 = _isoscalar_at_saturation(G, W, n, kF, m, ns_all,
-                                              fs1, 1.0, fw1, r_w * fw1)[1]
-            slope = k_at_1 - k_at_0
-            if slope == 0.0:
-                raise ValueError("NMP inversion infeasible: K_sat does not "
-                                 "depend on f''_sigma(1) here")
-            return (nmp["K_sat"] - k_at_0) / slope
+            return _isoscalar_at_saturation(G, W, n, kF, m, ns_all,
+                                            fs1, 0.0, fw1, r_w * fw1)[1]
+
+        k_z, k_p, k_m = _k_at_zero(0.0), _k_at_zero(1.0), _k_at_zero(-1.0)
+        quad = (-(0.5 * (k_p + k_m) - k_z) / slope,
+                -(0.5 * (k_p - k_m)) / slope,
+                (nmp["K_sat"] - k_z) / slope)
+
+        def fs2_of(fs1):
+            return (quad[0] * fs1 + quad[1]) * fs1 + quad[2]
 
         def q_residual(fs1):
             fw1 = fw1_of(fs1)
@@ -883,7 +962,7 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=None,
                 G, W, n, kF, m, ns_all, fs1, fs2_of(fs1), fw1, r_w * fw1,
                 want_Q=True, c_w=held["c_omega"])[2] - nmp["Q_sat"]
 
-        fs1 = _scan_for_root(q_residual, ref_f1=_published_f1(ref))
+        fs1 = _scan_for_root(q_residual, _published_f1(ref), quad)
         if fs1 is None:
             return None, InversionStatus(
                 ok=False,
@@ -944,16 +1023,18 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=None,
     # E_sym = kF^2/(6 EF*) + Gamma_rho^2 n/(2 m_rho^2)  ->  Gamma_rho analytic
     Grho = float(np.sqrt(rho_term * 2.0 * ref.m_rho ** 2 / n))
 
-    def Lsym_of_arho(a_rho):
-        p = Parameters.from_microscopic(
-            n_sat=nmp["n_sat"], gamma_sigma=Gs, b_sigma=b_s, c_sigma=c_s,
-            gamma_omega=Gw, b_omega=b_w, c_omega=c_w,
-            gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
-        return snm_derivatives(p, nmp["n_sat"])["L_sym"]
-
-    a_rho = brentq(lambda a: Lsym_of_arho(a) - nmp["L_sym"], -2.0, 5.0,
-                   xtol=1e-10)
-    isov_res = abs(Lsym_of_arho(a_rho) - nmp["L_sym"])
+    # a_rho IS A CLOSED FORM, not a root. At n = n_sat the rho coupling's
+    # exponential is 1 and its log-derivative is k_rho n = 2 a_rho exactly, so
+    #
+    #     L_sym = 3 n E_s'(n) + 1.5 n R (1 - 2 a_rho),   R = (Gamma_rho/m_rho)^2
+    #
+    # is AFFINE in a_rho. Measured over a_rho in [-2, 3]: the affine fit's
+    # residual is 1.8e-14, i.e. it is an identity and not a fit. Inverting it
+    # here removes the last root find from the inversion, and with it the last
+    # five symmetric-matter solves: the isoscalar sector already solved none.
+    Es1 = _esym_kinetic_slope(G, n, kF, m, ns_all, fs1)
+    R = (Grho / ref.m_rho) ** 2
+    a_rho = 0.5 * (1.0 - (nmp["L_sym"] - 3.0 * n * Es1) / (1.5 * n * R))
 
     par = Parameters.from_microscopic(
         n_sat=nmp["n_sat"], gamma_sigma=Gs, b_sigma=b_s, c_sigma=c_s,
@@ -961,8 +1042,13 @@ def invert_nmp(nmp, m_sigma=546.212459, seed=None, n_restarts=None,
         gamma_rho=Grho, a_rho=a_rho, m_sigma=m_sigma)
 
     # --- report what the closure predicts, with the forward map's stencils --
+    # This call is the one place the inversion still touches symmetric matter,
+    # and it is a CHECK rather than a step: L_sym comes back from `eos`'s own
+    # forward map, independent of the algebra above, so a mistake in the closed
+    # form for a_rho shows up as an isovector residual instead of hiding.
     final = snm_derivatives(par, nmp["n_sat"])
     predictions = {"Q_sat": final["Q_sat"], "K_sym": final["K_sym"]}
+    isov_res = abs(final["L_sym"] - nmp["L_sym"])
 
     status = InversionStatus(
         ok=(isov_res < 1e-3),                # isoscalar check already passed
@@ -983,37 +1069,111 @@ def _published_f1(ref):
 #: Q_sat(f'_sigma(1)) is not a polynomial -- f'''(1) reaches it through the
 #: rational form -- so the one scalar equation left is bracketed rather than
 #: solved. The window is centred on the published f'_sigma(1) = -0.1298 and
-#: spans the range inversions over the empirical box actually produce. Roots
-#: are taken NEAREST THE PUBLISHED VALUE, which is the same branch rule the
-#: default closure applies through its vertex.
-_Q_SCAN = (-3.0, 1.5, 90)
+#: spans the range inversions over the empirical box actually produce; `steps`
+#: is the resolution ACROSS THE FEASIBLE PART of it, which `_scan_for_root`
+#: computes rather than probes. Roots are taken NEAREST THE PUBLISHED VALUE,
+#: which is the same branch rule the default closure applies through its vertex.
+#:
+#: `steps` was 30 when the grid still had to cover infeasible ground. Measured
+#: over 400 draws from the wide empirical box against a 1500-point reference:
+#: 18 and 14 both agree 400/400, 10 first disagrees (398/400) and 8 falls to
+#: 362/400. 18 keeps a 1.8x margin on the first failure for four evaluations.
+_Q_SCAN = (-3.0, 1.5, 18)
 
 
-def _scan_for_root(residual, ref_f1):
-    """Bracket and solve `residual`, returning the root nearest `ref_f1`."""
-    lo, hi, steps = _Q_SCAN
-    grid = np.linspace(lo, hi, steps)
-    values, points = [], []
-    for x in grid:
-        try:
-            values.append(residual(float(x)))
-            points.append(float(x))
-        except (ValueError, ZeroDivisionError, FloatingPointError):
-            values.append(np.nan)
-            points.append(float(x))
-    roots = []
-    for i in range(len(points) - 1):
-        a, b = values[i], values[i + 1]
-        if not (np.isfinite(a) and np.isfinite(b)) or a * b > 0:
+def _quad_roots(a, b, c):
+    """Real roots of a x^2 + b x + c, degenerate cases included."""
+    if a == 0.0:
+        return () if b == 0.0 else (-c / b,)
+    disc = b * b - 4.0 * a * c
+    if disc < 0.0:
+        return ()
+    root = math.sqrt(disc)
+    return tuple(sorted(((-b - root) / (2.0 * a), (-b + root) / (2.0 * a))))
+
+
+def _feasible_intervals(quad, lo, hi):
+    """The f'_sigma(1) for which the sigma shape is REALISABLE, in closed form.
+
+    f''_sigma(1) is the quadratic `quad` in f'_sigma(1), so the curvature-to-
+    slope ratio r = f''/f' is a rational function of it and the admissibility
+    test R_MIN < r < R_MAX is two QUADRATIC inequalities. Their roots, plus the
+    pole at f'_sigma(1) = 0, cut the window into at most four pieces, each
+    wholly in or wholly out -- so one midpoint test per piece settles it.
+
+    The scan used to discover this domain by catching ValueError on a fixed
+    grid, which silently discarded any cell with one endpoint outside: a root
+    adjacent to the boundary was then lost, and which roots survived depended
+    on how the grid happened to land. Checked against 90000 brute-force probes
+    with no disagreement.
+    """
+    qa, qb, qc = quad
+    cuts = {lo, hi, 0.0}
+    for bound in (R_MIN, R_MAX):
+        cuts.update(r for r in _quad_roots(qa, qb - bound, qc) if lo < r < hi)
+    cuts = sorted(x for x in cuts if lo <= x <= hi)
+    out = []
+    for a, b in zip(cuts[:-1], cuts[1:]):
+        mid = 0.5 * (a + b)
+        if mid == 0.0 or b - a <= 0.0:
             continue
+        if R_MIN < ((qa * mid + qb) * mid + qc) / mid < R_MAX:
+            if out and a - out[-1][1] <= 0.0:
+                out[-1] = (out[-1][0], b)
+            else:
+                out.append((a, b))
+    return out
+
+
+def _scan_for_root(residual, ref_f1, quad):
+    """Bracket and solve `residual`, returning the root nearest `ref_f1`.
+
+    The brackets are collected first and solved NEAREST-FIRST, stopping once
+    the root in hand is closer than the nearest edge of every bracket left.
+    The rule is the same one as before -- the root nearest `ref_f1` -- but a
+    scan over the empirical box carries two to four brackets and this solves
+    one of them, where solving all four and discarding three was most of the
+    cost left in the closure.
+    """
+    lo, hi, steps = _Q_SCAN
+    brackets = []
+    for a, b in _feasible_intervals(quad, lo, hi):
+        # r hits its bound exactly at an endpoint, so step just inside it.
+        pad = 1e-12 * max(b - a, 1.0)
+        a, b = a + pad, b - pad
+        if b <= a:
+            continue
+        count = max(3, int(round((b - a) / (hi - lo) * steps)) + 1)
+        points = np.linspace(a, b, count)
+        values = []
+        for x in points:
+            try:
+                values.append(residual(float(x)))
+            except (ValueError, ZeroDivisionError, FloatingPointError):
+                values.append(np.nan)
+        for i in range(count - 1):
+            u, v = values[i], values[i + 1]
+            if not (np.isfinite(u) and np.isfinite(v)) or u * v > 0.0:
+                continue
+            brackets.append((float(points[i]), float(points[i + 1])))
+
+    def _gap(bracket):
+        return max(bracket[0] - ref_f1, ref_f1 - bracket[1], 0.0)
+
+    brackets.sort(key=_gap)
+    best = None
+    for a, b in brackets:
+        # Every remaining bracket starts at least `_gap` away, so nothing left
+        # can beat what is already in hand.
+        if best is not None and abs(best - ref_f1) <= _gap((a, b)):
+            break
         try:
-            roots.append(brentq(residual, points[i], points[i + 1],
-                                xtol=1e-14, rtol=8.9e-16))
+            root = brentq(residual, a, b, xtol=1e-14, rtol=8.9e-16)
         except (ValueError, ZeroDivisionError):
             continue
-    if not roots:
-        return None
-    return min(roots, key=lambda x: abs(x - ref_f1))
+        if best is None or abs(root - ref_f1) < abs(best - ref_f1):
+            best = root
+    return best
 
 
 def from_nmp(nmp, m_sigma=546.212459, return_status=False):
