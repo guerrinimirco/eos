@@ -136,22 +136,26 @@ class TableSpec:
             so a table is the same table it has always been; 'fast' is the
             jitted kernel of `eos.njl.backends`, which agrees to round-off
             rather than bit for bit.
-    patterns: restrict the pairing enumeration to these candidates, exactly as
-            `eos_point`'s argument of the same name does; None enumerates the
-            default set. ('unpaired', '2SC', 'CFL') is the recommended
-            fast restriction: the asymmetric 'free' seed exists to let a
-            CFL-layout solve fall to a state that is not CFL, and where no
-            such state exists it burns its whole retry ladder discovering so
-            -- measured at 90% of one paired point's cost. Restricting is a
-            declaration that uSC/dSC-like states are not being hunted, which
-            is a physics choice the caller makes explicitly.
+    patterns: the pairing candidates to enumerate, exactly as `eos_point`'s
+            argument of the same name; None enumerates `DEFAULT_PATTERNS`,
+            ('unpaired', '2SC', 'CFL'). The asymmetric states are asked for
+            by name, 'uSC' and 'dSC', and warm-start along the sweep like any
+            named pattern. 'free' stays legal for the gap masks no pattern
+            names, but it is the costly candidate in a sweep: its layout is
+            free to collapse, so `realised_pattern` never returns it, it never
+            carries its own seed to the next density, and it starts from
+            another pattern's state at every one. MEASURED on the 200-point
+            csc table the `solve_nodes` measurement below is taken on,
+            backend='fast', with every candidate on the full rescue ladder:
+            adding 'free' to the three defaults cost 12.5x, changed no
+            density's realised state, and moved P by at most 7e-10.
 
             MEASURED, on a 9-point csc=True table over n_B = 1.0 to 1.4 fm^-3
-            at T = 0: 63.9 s with the defaults, 7.5 s with backend='fast',
-            3.7 s with backend='fast' and this restriction -- 17.5x, agreeing
-            with the default table to 1.2e-10 relative in P and 6.2e-12 in
-            eps. Neither argument changes the equations; both are declarations
-            the caller makes.
+            at T = 0 with 'free' enumerated: 63.9 s on the reference backend,
+            7.5 s with backend='fast', 3.7 s with backend='fast' and 'free'
+            dropped -- 17.5x, agreeing with the full enumeration to 1.2e-10
+            relative in P and 6.2e-12 in eps. Neither argument changes the
+            equations; both are declarations the caller makes.
     pair_nodes_per_panel: Gauss-Legendre nodes per panel of the PAIRING
             quadrature; None keeps the shipped rule (24). Lowering it is the
             third speed lever and the only one that moves numbers. Measured on
@@ -176,10 +180,10 @@ class TableSpec:
             MEASURED, on 200-point beta_eq_neutrinoless tables at T = 0 with
             `Parameters.named("rg_njl1")`, eta_D = 1.45, backend='fast' and
             patterns=('2SC', 'CFL'), against the same grid fully solved. The
-            shipped defaults cost 6638 ms/point and the pattern restriction
-            alone 914; the two densities straddling the branch crossing are
-            excluded, since there the two tables differ over WHERE the
-            first-order transition sits and not over a branch:
+            enumeration with 'free' in it cost 6638 ms/point and the pattern
+            restriction alone 914; the two densities straddling the branch
+            crossing are excluded, since there the two tables differ over
+            WHERE the first-order transition sits and not over a branch:
 
               n_B = 0.50 to 1.55 fm^-3, a hybrid-star quark core
                  8 nodes   18 ms/pt   max deps/eps 2.1e-3   median 2.2e-6
@@ -323,9 +327,14 @@ def build_table(spec, skip_errors=True, rows=False, progress=None,
 # comparison between them on the interpolants.
 #
 # Measured on `Parameters.named("rg_njl1")` at T = 0, eta_D = 1.45,
-# beta_eq_neutrinoless, backend='fast', one pattern at a time and warm
-# started: unpaired 6 ms/point, 2SC 63 ms/point, CFL 443 ms/point. The whole
-# enumeration through `build_table` is 6638 ms/point. Over n_B = 0.25 to 1.6
+# beta_eq_neutrinoless, backend='fast', 200 densities over n_B = 0.5 to 1.55
+# fm^-3, one pattern at a time and warm started: unpaired 1.4 ms/point, 2SC
+# 56.5, CFL 719 -- and 89% of the CFL figure is the twelve densities below the
+# CFL branch, where the candidate has no root to find; the 188 that converge
+# cost 80 ms/point. Enumerating ('unpaired', '2SC', 'CFL') through
+# `build_table` cost 637 ms/point with every candidate on the full rescue
+# ladder, and half that once a cross-seeded candidate's ladder is bounded
+# (`eos.njl.solver.solve_pattern`). Over n_B = 0.25 to 1.6
 # the unpaired branch never wins -- f_2SC - f_unpaired is at most -103
 # MeV/fm^3 and falls monotonically -- and f_CFL - f_2SC is monotone with one
 # zero, so the branches cross exactly once and the crossing falls out of the

@@ -143,14 +143,13 @@ class TableSpec:
             (of `DENSITY_BRANCHES`), exactly as `eos_point`'s argument does;
             None enumerates both. ('restored',) draws the deconfined curve
             alone, without the first-order structure the 'partial' root adds.
-    patterns: restrict the pairing enumeration, exactly as `eos_point`'s
-            argument does; None enumerates the default set. ('unpaired',
-            '2SC', 'CFL') is the recommended fast restriction: the asymmetric
-            'free' seed exists to let a CFL-layout solve fall to a state that
-            is not CFL, and where no such state exists it burns its whole
-            retry ladder discovering so. Restricting is a declaration that
-            uSC/dSC-like states are not being hunted -- a physics choice the
-            caller makes explicitly.
+    patterns: the pairing candidates to enumerate, exactly as `eos_point`'s
+            argument does; None enumerates `DEFAULT_PATTERNS`, ('unpaired',
+            '2SC', 'CFL'). The asymmetric states are asked for by name, 'uSC'
+            and 'dSC'. 'free' stays legal for the gap masks no pattern names;
+            it is not a default because the states it aims at are the ones
+            'uSC' and 'dSC' seed directly (the comment above
+            `eos.general.pairing.PATTERNS`).
     """
     par: Parameters = field(default_factory=Parameters.default)
     mode: str = "beta_eq_neutrinoless"

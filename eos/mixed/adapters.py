@@ -1304,7 +1304,7 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
         `Parameters.named("rg_njl1")` and backend='fast', a `thermo` call over
         ('unpaired', '2SC', 'CFL') costs 722 ms cold and 676 ms from a seed
         taken at n_B_guess = 0.6. The lever is the ENUMERATION -- the same
-        call costs 2230 ms over the default patterns, and one mixed point with
+        call costs 2230 ms with 'free' enumerated too, and one mixed point with
         DID at n_B = 0.9 costs 355 s over three patterns against 16.6 s over
         ('2SC',) -- and that is `patterns`, which is the caller's declaration
         to make and not a default this adapter may quietly change.

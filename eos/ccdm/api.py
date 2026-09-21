@@ -116,9 +116,10 @@ def eos_point(par, mode, species=None, n_B=None,
         density is ('restored', 'partial') -- the confined branch carries no
         quarks and cannot meet a nonzero density row.
     patterns : tuple of str
-        Restrict the pairing enumeration. The default enumerates unpaired,
-        2SC, CFL and one asymmetric free seed when the `csc` flag is on, and
-        only the unpaired one when it is off.
+        Restrict the pairing enumeration. The default (`DEFAULT_PATTERNS`)
+        enumerates unpaired, 2SC and CFL when the `csc` flag is on, and only
+        the unpaired one when it is off; 'uSC', 'dSC' and the asymmetric
+        'free' seed are asked for by name.
     leptons : bool
         For the fixed-fraction modes: whether neutralizing leptons are added,
         so the total system is electrically neutral. With leptons=False the

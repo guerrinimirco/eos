@@ -108,8 +108,9 @@ def eos_point(par, mode, species=None, n_B=None,
         not a variable its residual carries.
     patterns : tuple of str
         Restrict the pairing enumeration to these candidates. The default
-        enumerates unpaired, 2SC, CFL and one asymmetric free seed when the
-        `csc` flag is on, and only the unpaired one when it is off.
+        (`DEFAULT_PATTERNS`) enumerates unpaired, 2SC and CFL when the `csc`
+        flag is on, and only the unpaired one when it is off; 'uSC', 'dSC'
+        and the asymmetric 'free' seed are asked for by name.
 
         A RESTRICTION IS NOT A GUARANTEE. A pattern declares which gaps are
         free, and a free gap may come out zero, so `patterns=('CFL',)` can
@@ -218,8 +219,9 @@ def eos_table(par, mode, species=None, axes=None,
         interpolation needs dP/dmu_B = n_B along the sweep and only beta
         equilibrium gives it (`eos.njl.table.FAST_MODES`). Measured on a 200-point
         csc table over n_B = 0.5 to 1.55 fm^-3: 18 ms/point at eight nodes
-        against 6638 with the shipped defaults, eps agreeing with the fully
-        solved table to 2.1e-3 at worst and 2.2e-6 in the median. `TableSpec`
+        against 6638 fully solved over the enumeration with 'free' in it, eps
+        agreeing with the fully solved table to 2.1e-3 at worst and 2.2e-6 in
+        the median. `TableSpec`
         carries the rest of the measurement and says where the error sits.
     """
     species = species if species is not None else SpeciesFlags()

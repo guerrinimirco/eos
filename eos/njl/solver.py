@@ -29,8 +29,9 @@ A pattern is NOT a mode
 Which diquark condensates are nonzero is not something a caller declares and
 not something an equilibrium condition fixes: it is decided by which candidate
 minimises the free energy at the given conditions. So `solve` enumerates
-seeds -- unpaired, 2SC, CFL, and one asymmetric free seed that can land on
-uSC, dSC or an unequal-gap state -- solves each to self-consistency, and
+seeds -- unpaired, 2SC and CFL by default; uSC, dSC and the asymmetric 'free'
+seed, which can land on an unequal-gap state, when asked for by name
+(`DEFAULT_PATTERNS`) -- solves each to self-consistency, and
 returns the survivor with the lowest f = eps - T s at the fixed density. The
 comparison is by FREE ENERGY because these modes fix n_B; a comparison at
 fixed mu_B (which is what `thermo_from_mu` and therefore `eos.mixed` do) is by
@@ -634,7 +635,7 @@ def _refuse_fixed_YS(flags, spec, model):
 
 def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
                   vac=None, backend="reference", pair_nodes_per_panel=None,
-                  rescue=True, **fractions):
+                  rescue=True, cross_seeded=False, **fractions):
     """One mode in ONE declared pattern. The pattern is not chosen here.
 
     `backend` selects the flavour of the medium integrals and is passed
@@ -660,6 +661,13 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
     With no analytic Jacobian there is no Newton run to stop after, so the
     argument is ignored and the full ladder runs; it changes nothing about a
     solve that succeeds.
+
+    `cross_seeded=True` says `x0` is ANOTHER pattern's state mapped into this
+    layout, not this pattern's own earlier root, and bounds the ladder to
+    match (see `attempt` below). Only the caller that made the seed knows
+    which it is, which is why it is an argument; `solve` sets it. Like
+    `rescue=False` it is ignored without an analytic Jacobian, and there it
+    must be: see `attempt`.
     """
     if spec is None:
         # None, not True: an unnamed flag means `resolve_leptons`'s default,
@@ -743,6 +751,10 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
                 J[:, names.index("mu_B")] -= raw * dscale / scales ** 2
             return J
 
+    # The bound is a property of the Newton path, so, like `rescue=False`, a
+    # cross seed without an analytic Jacobian keeps the whole ladder.
+    bounded = cross_seeded and jac is not None
+
     def reinflated(x):
         """x with its gaps reset to the pattern's seed, everything else kept."""
         x = np.array(x, dtype=float)
@@ -784,10 +796,47 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
 
         `rescue=False` stops before all of it: one Newton run, whatever it
         says.
+
+        `cross_seeded=True` bounds it. What separates a candidate worth the
+        whole ladder from one that is not is where its seed came from; the
+        residual does not, and neither does what the solve has spent. A
+        candidate handed ANOTHER pattern's state is being asked whether a root
+        of this pattern lies near the state the enumeration already has, and a
+        no is an ordinary answer: the pattern owning the root it would
+        collapse onto is in the enumeration and finds it from its own seed.
+        So it gets the Newton run and one `hybr`, and no Levenberg-Marquardt,
+        no differenced repeat and no cold retry. A candidate warm-started from
+        its OWN converged point one density down is the case the cold retry
+        was written for -- there was a root here a moment ago -- and keeps the
+        whole ladder. The re-seed of a converged solve that left its layout is
+        kept either way: it is what finds the T = 20 MeV CFL root above.
+
+        MEASURED on a 200-point csc table, `Parameters.named("rg_njl1")`,
+        beta_eq_neutrinoless, T = 0, n_B = 0.5 to 1.55 fm^-3, backend='fast':
+        the 13 cross-seeded CFL candidates below the CFL onset have no CFL
+        root and were 77% of the build. `lm` was entered by those 13 and no
+        other, and rescued none; the differenced repeat converged all 13 onto
+        the 2SC root the 2SC candidate had already reported, f agreeing to
+        2e-10. The CFL candidate AT the onset is rescued by `hybr` and never
+        reaches the rungs removed. Bounded, the table builds 2.0x faster with
+        every density in the same state and P moved by at most 7e-10.
+
+        The bound holds only where there is an analytic Jacobian. It is the
+        Newton run and `hybrj` that reach the CFL root where the branch
+        begins, and the reference backend has neither: from the same cross
+        seed at n_B = 0.5686 fm^-3 `hybrd` stalls at 1e-6, and `lm` or the
+        cold retry reaches the root. Bounded there, the reference sweep
+        misses the branch at its first seven densities, then converges onto a
+        second CFL root about 1 MeV/fm^3 higher in f, carries it forward as
+        its own seed, and never finds the 2SC -> CFL onset: 30 CFL rows of
+        the first 60 densities came back 2SC. So without a Jacobian a cross
+        seed keeps the whole ladder, as `rescue=False` is ignored there.
         """
         if not rescue and jac is not None:
             return newton_solve(rows, jac, seed, unit_scales)
-        x, err, ok = solve_system(rows, seed, unit_scales, tol=1.0e-13, jac=jac)
+        methods = ('hybr',) if bounded else ('hybr', 'lm')
+        x, err, ok = solve_system(rows, seed, unit_scales, tol=1.0e-13,
+                                  jac=jac, methods=methods)
         if jac is None:
             return x, err, ok
         if ok and _left_layout(x, par, spec, pattern):
@@ -795,7 +844,7 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
                                                tol=1.0e-13, jac=jac)
             if ok_re and not _left_layout(x_re, par, spec, pattern):
                 x, err, ok = x_re, err_re, ok_re
-        elif not ok:
+        elif not ok and not bounded:
             x_fd, err_fd, ok_fd = solve_system(rows, seed, unit_scales,
                                                tol=1.0e-13)
             if ok_fd:
@@ -803,7 +852,7 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         return x, err, ok
 
     x, err, ok = attempt(x0)
-    if not ok and warm and rescue:
+    if not ok and warm and rescue and not bounded:
         # A seed that lands in the right basin can still stall just above the
         # gate -- the CFL point at n_B = 1.2 fm^-3 stops at 8e-9 from a
         # continuation seed and reaches 3e-11 from the cold one, on the SAME
@@ -895,6 +944,9 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
     {pattern: vector} mapping as `warm_start` returns, which seeds each named
     pattern and leaves the rest cold. A seed belongs to the layout it was
     solved in, so it cannot simply be handed to whichever pattern comes next.
+    What `solve_pattern` is handed is the seed's ORIGIN as well as its value:
+    a candidate seeded from another pattern's state is `cross_seeded`, which
+    bounds its rescue ladder (see `solve_pattern`).
 
     The winner carries `_seeds` back out, holding the vector of every candidate
     that converged AND stayed in its own layout, so the next density can
@@ -927,13 +979,15 @@ def solve(par, mode, n_B, T=0.0, flags=None, x0=None, patterns=None,
     reference = None
     for pattern in patterns:
         seed = seeds.get(pattern)
-        if seed is None and reference is not None:
+        cross = seed is None and reference is not None
+        if cross:
             seed = seed_from(reference, par, spec, pattern)
         try:
             point = solve_pattern(
                 par, mode, n_B, T, flags, pattern, spec=spec, x0=seed,
                 vac=vac, backend=backend,
-                pair_nodes_per_panel=pair_nodes_per_panel)
+                pair_nodes_per_panel=pair_nodes_per_panel,
+                cross_seeded=cross)
         except (ValueError, RuntimeError, np.linalg.LinAlgError):
             continue
         candidates.append(point)

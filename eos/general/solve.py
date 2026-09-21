@@ -54,6 +54,19 @@ MU_SCALE_FLOOR = 1.0
 #: A rescue that genuinely needed more comes back as non-convergence, which is
 #: a return value the caller can score (CLAUDE.md section 6) -- never a wrong
 #: answer, and never a hang.
+#:
+#: `solve_system`'s `methods` argument makes the same argument one level up:
+#: this budget bounds what the LM rung may spend, `methods` lets the caller
+#: decline the rung altogether when a failure is an answer it can use rather
+#: than one to fight. Neither guesses whether a root exists -- the caller says
+#: what the question is worth. The case that earns it is an enumeration asking
+#: whether a pattern has a root near ANOTHER pattern's state: measured on a
+#: 200-point `eos.njl` csc table (`rg_njl1`, beta_eq_neutrinoless, T = 0,
+#: n_B = 0.5 to 1.55 fm^-3, backend='fast'), LM was entered by exactly the 13
+#: CFL candidates with no CFL root, cost 29.2% of the build, and rescued none
+#: of them. That is a statement about a solve that has a Newton rung first:
+#: on the same table without one, LM is what finds the CFL branch where it
+#: begins, so `eos.njl` declines it only where it passes a Jacobian.
 LM_MAX_EVALUATIONS = 400
 
 
@@ -73,7 +86,7 @@ def scaled_residual_max(residuals, scales):
 
 
 def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None,
-                 jac=None):
+                 jac=None, methods=('hybr', 'lm')):
     """Solve one equilibrium system and judge it on its scaled residual.
 
     Powell's hybrid method first, Levenberg-Marquardt if that does not reach
@@ -105,6 +118,12 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None,
     is accepted: the gate below is judged on the residual either way, and the
     polish that follows a missed gate differences for itself.
 
+    `methods` are the MINPACK rungs the caller is willing to pay for, in
+    order, from x0. The default ('hybr', 'lm') is the ladder above; ('hybr',)
+    declines Levenberg-Marquardt, for a caller to whom a failure is an
+    ordinary answer (see `LM_MAX_EVALUATIONS`). The `x0_fallback` attempt and
+    the closing polish are not affected.
+
     Returns (x, scaled residual, converged) for the best attempt made.
     """
     best_x, best_err = np.asarray(x0, dtype=float), np.inf
@@ -122,7 +141,7 @@ def solve_system(residual, x0, scales_at, x0_fallback=None, tol=None,
     # descent that stalled has usually walked into a residual-norm valley the
     # root is not in, and the hybrid method from the original seed finds the
     # root the cold-start rules were written for.
-    attempts = [('hybr', x0), ('lm', x0)]
+    attempts = [(method, x0) for method in methods]
     if x0_fallback is not None:
         attempts.append(('hybr', x0_fallback))
 
