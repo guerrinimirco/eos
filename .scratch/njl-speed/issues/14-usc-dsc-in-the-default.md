@@ -58,3 +58,23 @@ either, which is the other axis uSC/dSC are argued on.
 - `_left_layout` widened, with the `pattern` column shown stable.
 - A decision, with the same test ticket 12 used: does the candidate find
   anything the others do not, and can it be cached?
+
+### Handed in from ticket 15 (2026-09-21): ccdm's box is not njl's
+
+Ticket 15 ran ticket 12's probe on ccdm (`t15_ccdm_probe.json`: T = 0/30/50,
+n_B = 1.3-2.5), and three things in it belong here:
+
+- **An asymmetric state WINS**: at T = 50, n_B = 1.3, uSC beats 2SC by 0.20
+  MeV/fm^3. That is the first win in this effort.
+- **In ccdm the named `uSC` seed is the unreliable one.** At T = 30 it
+  collapses (to unpaired or 2SC) at n_B = 1.3, 1.6 and 2.0, where `free`
+  reaches a uSC state no named seed does. Those states lose by 4.3-8.5.
+  "Does the candidate find anything the others do not" has a different answer
+  per model.
+- **ccdm's enumeration misses the CFL ground state** at three of those twelve
+  points (+4.3, +22.6 and +6.0 MeV/fm^3), with or without `free`: the
+  cross-seeded CFL candidate collapses, keeps its name and competes, and
+  `eos/ccdm/solver.py` has no `_left_layout` at all. The precondition this
+  ticket names ("widen that filter first") is, for ccdm, "WRITE that filter
+  first". It is a correctness defect in its own right, and ticket 15 recorded
+  it as needing its own ticket.

@@ -1,0 +1,16 @@
+=== njl-speed benchmark, TABLE half, arm control-428cd66 ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /private/tmp/claude-501/-Users-mircoguerrini-Desktop-Research-Python-codes-eos/f595ef23-eb71-4bb9-ac26-71fc39c418c6/scratchpad/wt_control/eos/__init__.py
+loadavg at start (4.4609375, 4.70947265625, 4.845703125)
+set rg_njl1, beta_eq_neutrinoless, T = 0.0 MeV, csc=True, backend 'fast', median of 3
+
+--- table, n_B = 0.50 -> 1.55 fm^-3, 200 points (above chiral restoration) ---
+  default (4)      437.6 ms/pt wall       416.4 cpu       87.5 s median (runs 87.4-103.6)   200 rows   load 6.2
+  three            418.9 ms/pt wall       398.4 cpu       83.8 s median (runs 81.5-83.9)   200 rows   load 3.2
+  unpaired           1.5 ms/pt wall         1.5 cpu        0.3 s median (runs 0.3-0.3)   200 rows   load 3.2
+  2SC               32.4 ms/pt wall        31.9 cpu        6.5 s median (runs 5.5-7.5)   200 rows   load 3.5
+  CFL              442.7 ms/pt wall       440.2 cpu       88.5 s median (runs 80.3-90.2)   188 rows   load 3.3
+  free              31.4 ms/pt wall        31.4 cpu        6.3 s median (runs 6.0-6.4)   200 rows   load 3.3
+
+--- table, n_B = 0.30 -> 1.55 fm^-3, 200 points (crosses chiral restoration) ---
+  three            591.9 ms/pt wall       575.7 cpu      118.4 s median   200 rows   load 6.0

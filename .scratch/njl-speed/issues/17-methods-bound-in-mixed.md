@@ -52,3 +52,18 @@ mixed time is going and the ticket should say so rather than shave it.
   and the per-phase charge decomposition unchanged; P to 1e-8.
 - Counts before and after from ticket 04's instrument, wall quoted beside cpu
   with the machine's load stated.
+
+### Handed in from ticket 16 (2026-09-21): the prior is now AGAINST
+
+The path this ticket would bound has **no Jacobian**, and ticket 16 measured
+the one Jacobian-free path this effort has tried the bound on. There, `lm` was
+not dead weight: it was what found the CFL branch where it begins. On njl's
+reference backend, bounding the cross-seeded candidates to `hybrd` alone lost
+**30 of 30 CFL rows** over the pinned grid's first 60 densities. `hybrd`
+stalled at 1e-6 at the branch's first density, 0.5686, then the sweep
+captured a second CFL root about 1 MeV/fm^3 higher in f, and the onset was
+never found. That is why `50b3b7f` bounds only where there is an analytic
+Jacobian. This ticket's system is different (fixed potentials, own seeds), so
+the result does not transfer as a verdict. It does move the burden: "`lm`
+rescues none of them" has to be MEASURED here, per candidate, and not
+inherited from ticket 13.

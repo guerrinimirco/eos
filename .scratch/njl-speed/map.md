@@ -27,8 +27,9 @@ specified for a hand-off session. **The port itself is not this map's work.**
 
 | what | now | to 1 ms/pt |
 |---|---|---|
-| `eos_table`, default enumeration (4 patterns) | 8100 ms/pt | 8100x |
+| **historical** -- `eos_table`, the old 4-pattern default with `free` ([ticket 15](issues/15-land-the-pattern-default.md): `free` left `DEFAULT_PATTERNS` in `2536d2b`; the default is the 3-pattern row below) | ~~8100 ms/pt~~ | -- |
 | `eos_table`, restricted to 3 patterns | 637 ms/pt | 637x |
+| the same, the DEFAULT since `2536d2b`, with the bounded ladder ([ticket 16](issues/16-land-the-bounded-ladder.md), `50b3b7f`) | **2.51x** below it in one window (419 -> 167 ms/pt), i.e. ~254 ms/pt on this row's scale | ~250x |
 | `eos_table`, one pattern: unpaired / 2SC / CFL / free | 1.4 / 56.5 / 719 / 68.5 ms/pt | — |
 | of that CFL table (ticket 03): 12 dead points / 188 converged | 89% / 80 ms/pt | 80x on the rows |
 | one `eos.mixed` point, DID+NJL, 3 patterns / held 2SC | 29.6 s / 9.2 s | — |
@@ -134,6 +135,47 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 ## Decisions so far
 
 <!-- one line per closed ticket -->
+
+- [Land the bounded rescue ladder](issues/16-land-the-bounded-ladder.md):
+  **landed in `50b3b7f`, 2.51x on the pinned benchmark** (437.6 -> 174.3 ms/pt
+  on the default, 2.10x across chiral restoration, cpu within 5% of wall; the
+  unreachable single-pattern rows drifted 0.84-1.17x in the same window), and
+  bit-identical to ticket 13's VX on all 200 rows -- **but only after a
+  departure from the edit as written: the bound applies only where there is
+  an analytic Jacobian.** Written, the edit also bound `backend="reference"`,
+  `eos_table`'s default, where a cross seed is left `hybrd` alone, and it
+  **lost 30 of 30 CFL rows** over the pinned grid's first 60 densities: the
+  CFL candidate stalls at 1e-6 where the branch begins (0.5686, found there
+  by `lm` or the cold retry), then converges onto a **second CFL root ~1
+  MeV/fm^3 higher**, seeds itself from it and tracks it, and the onset is
+  never found. That is the map's capture hazard, created by a bound. The fix
+  is `rescue=False`'s precedent (ignored without a Jacobian); restricted, the
+  reference sweep is bit-identical to the parent. **All four test directories
+  passed on the broken edit**, so a both-backend regression test now pins it
+  (local; `test/` is gitignored). Two corrections handed on: `eos/mixed` IS
+  reached, through `njl_phase`'s `cold_start`/`seed`/`wing_sweep`, whenever
+  it runs `backend="fast"`; and [ticket 17](issues/17-methods-bound-in-mixed.md)
+  now starts from a prior AGAINST bounding `lm` on a Jacobian-free path.
+
+- [Land the pattern-default decision](issues/15-land-the-pattern-default.md):
+  **closed; the default change changes no delivered ccdm point, but ticket
+  12's premise does not transfer to ccdm.** Ten further stale sites fixed in
+  `50b3b7f`, among them `table.py`'s "recommended fast restriction", the
+  refuted retry-ladder account of `free`'s cost, and 6 / 63 / 443 / 6638
+  ms/pt. ccdm probed cold at 12 points (T = 0/30/50, n_B = 1.3-2.5):
+  - the three- and four-pattern defaults return the **identical state and
+    f at all 12**;
+  - at T = 30 `free` reaches uSC states at **3 of 12** where the NAMED `uSC`
+    seed collapses, losing by 4.3-8.5 MeV/fm^3. That meets the ticket's
+    reopen condition as written, and is handed to
+    [ticket 14](issues/14-usc-dsc-in-the-default.md);
+  - **the first winning asymmetric state**: uSC at T = 50, n_B = 1.3, by
+    0.20 over 2SC;
+  - a defect that predates this work: ccdm's enumeration **misses the CFL
+    ground state at 3 of 12** (+4.3, +22.6, +6.0 MeV/fm^3), with or without
+    `free`, because its cross-seeded CFL candidate collapses, keeps the name
+    and competes, and `eos/ccdm/solver.py` has no layout filter at all.
+    **It needs its own ticket.**
 
 - [Bound the rescue ladder below a branch](issues/13-bound-the-rescue-ladder.md):
   **most of it goes, and the separator is WHERE THE SEED CAME FROM** -- not a
