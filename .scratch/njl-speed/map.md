@@ -21,6 +21,13 @@ the map closes.
 Reached when those three numbers are measured and the production port is
 specified for a hand-off session. **The port itself is not this map's work.**
 
+**Ruled at [ticket 09](issues/09-verdict-and-port.md), part 1 (2026-09-22):
+neither target was reached, and both are retired.** njl landed at ~254 ms/pt
+and has a floor of a few tens of ms per point, set by one converged CFL
+solve. The hybrid build is ~3,200-4,700 s, and the rows alone are at least
+8x over 60 s at every ceiling. The interpolated phase surface graduates as a
+new map.
+
 **Today, MEASURED** (ticket 02's pinned benchmark, python.org 3.14.2 / numpy
 2.3.5 / scipy 1.17.0, `rg_njl1`, `csc=True`, beta-eq, T = 0, `backend="fast"`,
 200 densities over 0.5-1.55 fm^-3, median of 3, cpu and wall agreeing to 2%):
@@ -47,6 +54,7 @@ and at ticket 04, the same configuration instrumented rather than timed
 | the same after [tickets 11](issues/11-cheapen-the-locator.md)/[17](issues/17-methods-bound-in-mixed.md) (`66d713c`), window bit-identical | **3,084 NJL solves**, NJL evals ÷2.35 | not quotable (loaded) |
 | `locate_window`, UNHINTED (what `build_hybrid_table` calls), HEAD -> `66d713c` | **10,425 -> 8,451 NJL solves**, evals ÷1.48 | not quotable (loaded) |
 | whole 200-point build (51 rows + wings + locator) | **~12,100 NJL solves** | ~4,460 s, i.e. **74x** |
+| the same on the landed tree, UNHINTED locator, re-priced from 11's counts and 04's clock ([ticket 09](issues/09-verdict-and-port.md)) | 6,273 row solves + 381,179 locator evals | **~3,200-4,700 s, i.e. 54-79x** |
 | the per-call budget for 60 s | — | **15.2 ms / `thermo`, 4.95 ms / `thermo_from_mu`** |
 
 **`unpaired` is already at 1 ms/pt**, on the exact-solve path, so the target is
