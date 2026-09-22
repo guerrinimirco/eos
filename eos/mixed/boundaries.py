@@ -254,6 +254,14 @@ def locate_window(phases, n_B_grid, eta, spec, T=0.0,
         Steps are `tol` and warm-started, which is the regime the mixed solve
         is reliable in, and the answer lands already refined to `tol`, so no
         bisection follows.
+
+        For the same reason a step DOWN gets no `sweep` retry ladder. A failed
+        step down is the boundary, and the answer is the midpoint of that
+        step whatever the ladder does; all the ladder can add is re-trying the
+        target from ever closer midpoints, each retry a full mixed solve that
+        fails. MEASURED on DID + NJL (`rg_njl1`, three patterns, T = 0): six
+        levels of it were 833 of the 1825 mixed residuals of one
+        `locate_window`, and the window came back bit-identical without them.
         """
         inside = [r for r in probes if r.in_mixed_phase]
         if not inside:
@@ -264,9 +272,13 @@ def locate_window(phases, n_B_grid, eta, spec, T=0.0,
             n_next = r.n_B + direction * tol
             if not (lo <= n_next <= hi):
                 return np.nan                  # ran off the grid, not a crossing
+            # A step down takes no retry ladder (above); a step up keeps
+            # `sweep`'s own, since there a failure is only a failure.
+            ladder = {"max_bisect": 0} if direction < 0 else {}
             stepped = sweep(phases, [r.n_B, n_next], eta, spec, T=T,
                                   x0=warm_start(r, slots), nH0=r.th_H.n_B,
-                                  analytic_jac=analytic_jac, species=species)
+                                  analytic_jac=analytic_jac, species=species,
+                                  **ladder)
             if not stepped or abs(stepped[-1].n_B - n_next) > 1e-12:
                 return 0.5 * (n_next + r.n_B) if direction < 0 else np.nan
             r = stepped[-1]

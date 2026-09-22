@@ -911,7 +911,7 @@ def internal_residual(x, par, mu_B, mu_C, mu_S, T, vac, pattern,
 
 def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, pattern="unpaired",
                    x0=None, vac=None, return_state=False,
-                   backend="reference"):
+                   backend="reference", methods=("hybr", "lm")):
     """The state at given conserved-charge potentials, self-consistently.
 
     Closes the model's own internal system -- masses, gaps, colour neutrality
@@ -924,6 +924,11 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, pattern="unpaired",
     carries the best iterate reached, and `converged` says whether to believe
     it. With `return_state=True` the internal unknown vector comes back beside
     it, which is what a warm start is.
+
+    `methods` is `eos.general.solve.solve_system`'s own argument, passed
+    through: the MINPACK rungs the caller will pay for. The default is the
+    full ladder; ('hybr',) declines Levenberg-Marquardt, for a caller to whom
+    a candidate that fails is an ordinary answer.
     """
     if vac is None:
         vac = vacuum_solution(par)
@@ -941,7 +946,7 @@ def thermo_from_mu(par, mu_B, mu_C=0.0, mu_S=0.0, T=0.0, pattern="unpaired",
         return [1.0] * len(internal_unknowns(par, pattern))
 
     x, err, ok = solve_system(residual, np.asarray(x0, dtype=float),
-                              unit_scales, tol=1.0e-13)
+                              unit_scales, tol=1.0e-13, methods=methods)
 
     M, Delta, mu_3, mu_8, Sigma_V = _unpack_internal(x, par, pattern)
     st = state_at(par, M, Delta, Sigma_V, mu_B, mu_C, mu_S, mu_3, mu_8, T,

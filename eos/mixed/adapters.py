@@ -1224,6 +1224,20 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
     if patterns is None:
         patterns = DEFAULT_PATTERNS if flags.csc else ("unpaired",)
     vac = vacuum_solution(par)
+    # A held pattern is a branch declaration, and a branch's seed picks its
+    # root (the docstring above). The seed exists only where the enumeration
+    # is there to make the choice instead.
+    branch_declared = len(patterns) == 1
+    # Enumerating, a candidate that misses the gate is dropped and its rivals
+    # still answer, so Levenberg-Marquardt is declined; held to one pattern
+    # that candidate IS the phase and keeps the full ladder. MEASURED on DID
+    # + `rg_njl1`, three patterns, T = 0: inside `locate_window` the `lm`
+    # rung is 18-24% of the NJL work, nearly all of it in mixed solves that
+    # fail either way (probes below the onset), and of 687 candidates
+    # entering it four converged where the bounded call does not -- each
+    # inside one of those failing solves. The window, and fifteen mixed rows
+    # through it on both backends, come back bit-identical without it.
+    internal_methods = ("hybr", "lm") if branch_declared else ("hybr",)
 
     def _block(st):
         n = st.n_flavour / hc3
@@ -1260,7 +1274,8 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
             st, ok, _ = thermo_from_mu(par, mu, mu_C, mu_S, T,
                                        pattern=pattern,
                                        x0=seeds.get(pattern), vac=vac,
-                                       backend=backend)
+                                       backend=backend,
+                                       methods=internal_methods)
             if not ok:
                 continue
             if realised_pattern(st.Delta) == pattern:
@@ -1378,10 +1393,6 @@ def njl_phase(par, flags=None, patterns=None, backend="reference"):
             x0 = _njl_warm(point)
         return out
 
-    # A held pattern is a branch declaration, and a branch's seed picks its
-    # root (the docstring above). The seed exists only where the enumeration
-    # is there to make the choice instead.
-    branch_declared = len(patterns) == 1
     return Phase(name="NJL", thermo=thermo, potential_kind="physical",
                  seed=(None if branch_declared else seed),
                  seed_cacheable=not branch_declared,
