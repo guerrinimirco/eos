@@ -1,0 +1,172 @@
+=== ticket 10 attr: CFL, backend 'fast', arms ['24/24', '16/16', '12/12', '10/10', '8/8', '24/16', '24/12', '24/8']
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+loadavg at start (83.955078125, 85.18798828125, 55.94140625)
+  rep 0 arm 24/24    1505.8 ms/pt wall    895.7 cpu  rows 188  converged solves 188/200 at   153.2 ms wall /   100.2 cpu  load 28.8
+    attribution: jitted  66.9%  numpy  28.8%  python   4.3%   named 96.6%
+      pair_pass                 33.5%   10.127 ms/call  x9953
+      pair_pass[vac]            24.7%    5.789 ms/call  x12872
+      gapless_momenta           22.8%    6.303 ms/call  x10889
+      hess_pass                  4.4%   14.125 ms/call  x936
+      hess_pass[vac]             4.2%    7.205 ms/call  x1776
+      unpaired_ref[vac]          1.8%    0.414 ms/call  x12872
+      unpaired_ref               1.6%    0.478 ms/call  x9953
+      panel_nodes[vac]           0.9%    0.181 ms/call  x14648
+      VAC_block                  0.7%    0.110 ms/call  x19906
+      panel_nodes                0.7%    0.187 ms/call  x10889
+      unpaired_ref_hess[vac]     0.6%    1.066 ms/call  x1776
+      unpaired_ref_hess          0.4%    1.319 ms/call  x936
+      VAC_hess                   0.1%    0.240 ms/call  x1872
+      crossing_terms             0.1%    2.496 ms/call  x85
+      modes_thermo               0.1%    0.018 ms/call  x9953
+      gapless_momenta[vac]       0.0%    2.777 ms/call  x6
+      modes_jacobian             0.0%    0.017 ms/call  x936
+      vacuum block cache {'hits': 7034, 'misses': 12872, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1776, 'maxsize': 512, 'currsize': 512}
+  rep 0 arm 16/16    1003.2 ms/pt wall    700.6 cpu  rows 188  converged solves 188/200 at   100.6 ms wall /    75.0 cpu  load 28.1
+    attribution: jitted  57.3%  numpy  37.5%  python   5.2%   named 95.9%
+      gapless_momenta           30.5%    5.576 ms/call  x10990
+      pair_pass                 28.8%    5.769 ms/call  x10028
+      pair_pass[vac]            20.9%    3.225 ms/call  x13020
+      hess_pass                  3.8%    7.864 ms/call  x962
+      hess_pass[vac]             3.7%    4.008 ms/call  x1828
+      unpaired_ref[vac]          2.1%    0.319 ms/call  x13020
+      unpaired_ref               1.8%    0.358 ms/call  x10028
+      panel_nodes[vac]           1.0%    0.138 ms/call  x14848
+      VAC_block                  0.9%    0.087 ms/call  x20056
+      unpaired_ref_hess[vac]     0.8%    0.890 ms/call  x1828
+      panel_nodes                0.8%    0.141 ms/call  x10990
+      unpaired_ref_hess          0.5%    0.982 ms/call  x962
+      VAC_hess                   0.2%    0.183 ms/call  x1924
+      modes_thermo               0.1%    0.019 ms/call  x10028
+      crossing_terms             0.1%    1.615 ms/call  x80
+      modes_jacobian             0.0%    0.016 ms/call  x962
+      gapless_momenta[vac]       0.0%    1.276 ms/call  x6
+      vacuum block cache {'hits': 7036, 'misses': 13020, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1828, 'maxsize': 512, 'currsize': 512}
+  rep 0 arm 12/12     810.6 ms/pt wall    592.2 cpu  rows 188  converged solves 188/200 at    71.2 ms wall /    60.6 cpu  load 31.3
+    attribution: jitted  51.3%  numpy  42.8%  python   5.9%   named 95.3%
+      gapless_momenta           35.2%    5.152 ms/call  x11064
+      pair_pass                 26.0%    4.164 ms/call  x10110
+      pair_pass[vac]            18.8%    2.333 ms/call  x13084
+      hess_pass                  3.2%    5.466 ms/call  x954
+      hess_pass[vac]             3.1%    2.806 ms/call  x1812
+      unpaired_ref[vac]          2.2%    0.268 ms/call  x13084
+      unpaired_ref               1.9%    0.312 ms/call  x10110
+      panel_nodes[vac]           1.1%    0.122 ms/call  x14896
+      VAC_block                  1.0%    0.078 ms/call  x20220
+      panel_nodes                0.9%    0.139 ms/call  x11064
+      unpaired_ref_hess[vac]     0.9%    0.797 ms/call  x1812
+      unpaired_ref_hess          0.5%    0.863 ms/call  x954
+      VAC_hess                   0.2%    0.179 ms/call  x1908
+      modes_thermo               0.1%    0.017 ms/call  x10110
+      crossing_terms             0.1%    1.373 ms/call  x92
+      modes_jacobian             0.0%    0.013 ms/call  x954
+      gapless_momenta[vac]       0.0%    1.264 ms/call  x6
+      vacuum block cache {'hits': 7136, 'misses': 13084, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1812, 'maxsize': 512, 'currsize': 512}
+  rep 0 arm 10/10     688.6 ms/pt wall    532.5 cpu  rows 188  converged solves 188/200 at    64.1 ms wall /    54.8 cpu  load 23.4
+    attribution: jitted  47.5%  numpy  46.1%  python   6.4%   named 94.8%
+      gapless_momenta           38.2%    4.768 ms/call  x11020
+      pair_pass                 23.8%    3.248 ms/call  x10071
+      pair_pass[vac]            17.5%    1.848 ms/call  x13046
+      hess_pass[vac]             3.1%    2.340 ms/call  x1802
+      hess_pass                  3.0%    4.418 ms/call  x949
+      unpaired_ref[vac]          2.2%    0.230 ms/call  x13046
+      unpaired_ref               2.0%    0.279 ms/call  x10071
+      panel_nodes[vac]           1.1%    0.106 ms/call  x14848
+      VAC_block                  1.0%    0.071 ms/call  x20142
+      panel_nodes                1.0%    0.126 ms/call  x11020
+      unpaired_ref_hess[vac]     0.9%    0.720 ms/call  x1802
+      unpaired_ref_hess          0.6%    0.818 ms/call  x949
+      VAC_hess                   0.2%    0.167 ms/call  x1898
+      modes_thermo               0.1%    0.014 ms/call  x10071
+      crossing_terms             0.1%    1.085 ms/call  x79
+      gapless_momenta[vac]       0.0%    2.214 ms/call  x6
+      modes_jacobian             0.0%    0.013 ms/call  x949
+      vacuum block cache {'hits': 7096, 'misses': 13046, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1802, 'maxsize': 512, 'currsize': 512}
+  rep 0 arm 8/8       594.8 ms/pt wall    501.1 cpu  rows 188  converged solves 188/200 at    52.8 ms wall /    47.1 cpu  load 23.7
+    attribution: jitted  41.8%  numpy  51.2%  python   7.0%   named 94.3%
+      gapless_momenta           42.8%    4.448 ms/call  x11435
+      pair_pass                 21.1%    2.392 ms/call  x10485
+      pair_pass[vac]            15.4%    1.346 ms/call  x13578
+      hess_pass                  2.6%    3.315 ms/call  x950
+      hess_pass[vac]             2.6%    1.712 ms/call  x1804
+      unpaired_ref[vac]          2.3%    0.205 ms/call  x13578
+      unpaired_ref               2.1%    0.239 ms/call  x10485
+      panel_nodes[vac]           1.2%    0.095 ms/call  x15382
+      VAC_block                  1.1%    0.060 ms/call  x20970
+      panel_nodes                1.1%    0.109 ms/call  x11435
+      unpaired_ref_hess[vac]     1.0%    0.659 ms/call  x1804
+      unpaired_ref_hess          0.6%    0.756 ms/call  x950
+      VAC_hess                   0.2%    0.138 ms/call  x1900
+      modes_thermo               0.1%    0.014 ms/call  x10485
+      crossing_terms             0.1%    1.122 ms/call  x79
+      modes_jacobian             0.0%    0.016 ms/call  x950
+      gapless_momenta[vac]       0.0%    1.278 ms/call  x6
+      vacuum block cache {'hits': 7392, 'misses': 13578, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1804, 'maxsize': 512, 'currsize': 512}
+  rep 0 arm 24/16    1187.3 ms/pt wall    845.7 cpu  rows 188  converged solves 188/200 at   125.7 ms wall /    91.2 cpu  load 20.2
+    attribution: jitted  61.8%  numpy  33.2%  python   4.9%   named 96.1%
+      pair_pass                 36.1%    8.400 ms/call  x10194
+      gapless_momenta           26.5%    5.635 ms/call  x11162
+      pair_pass[vac]            17.8%    3.201 ms/call  x13186
+      hess_pass                  4.8%   11.795 ms/call  x968
+      hess_pass[vac]             3.1%    3.997 ms/call  x1840
+      unpaired_ref[vac]          1.9%    0.334 ms/call  x13186
+      unpaired_ref               1.8%    0.429 ms/call  x10194
+      panel_nodes[vac]           1.0%    0.156 ms/call  x15026
+      VAC_block                  0.8%    0.097 ms/call  x20388
+      unpaired_ref_hess[vac]     0.8%    1.006 ms/call  x1840
+      panel_nodes                0.8%    0.163 ms/call  x11162
+      unpaired_ref_hess          0.5%    1.178 ms/call  x968
+      VAC_hess                   0.2%    0.223 ms/call  x1936
+      modes_thermo               0.1%    0.019 ms/call  x10194
+      crossing_terms             0.0%    1.247 ms/call  x88
+      modes_jacobian             0.0%    0.016 ms/call  x968
+      gapless_momenta[vac]       0.0%    1.280 ms/call  x6
+      vacuum block cache {'hits': 7202, 'misses': 13186, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1840, 'maxsize': 512, 'currsize': 512}
+  rep 0 arm 24/12     971.0 ms/pt wall    765.5 cpu  rows 188  converged solves 188/200 at   115.6 ms wall /    82.7 cpu  load 33.1
+    attribution: jitted  61.5%  numpy  33.7%  python   4.8%   named 96.1%
+      pair_pass                 38.8%    7.533 ms/call  x10004
+      gapless_momenta           27.3%    4.829 ms/call  x10959
+      pair_pass[vac]            14.4%    2.153 ms/call  x12968
+      hess_pass                  5.5%   11.255 ms/call  x955
+      hess_pass[vac]             2.7%    2.845 ms/call  x1814
+      unpaired_ref               1.8%    0.353 ms/call  x10004
+      unpaired_ref[vac]          1.7%    0.256 ms/call  x12968
+      panel_nodes[vac]           0.9%    0.122 ms/call  x14782
+      panel_nodes                0.8%    0.136 ms/call  x10959
+      VAC_block                  0.7%    0.072 ms/call  x20008
+      unpaired_ref_hess[vac]     0.7%    0.747 ms/call  x1814
+      unpaired_ref_hess          0.5%    1.024 ms/call  x955
+      VAC_hess                   0.2%    0.180 ms/call  x1910
+      modes_thermo               0.1%    0.019 ms/call  x10004
+      crossing_terms             0.0%    1.190 ms/call  x80
+      modes_jacobian             0.0%    0.019 ms/call  x955
+      gapless_momenta[vac]       0.0%    1.664 ms/call  x6
+      vacuum block cache {'hits': 7040, 'misses': 12968, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1814, 'maxsize': 512, 'currsize': 512}
+  rep 0 arm 24/8      816.4 ms/pt wall    698.4 cpu  rows 188  converged solves 188/200 at    81.9 ms wall /    75.0 cpu  load 22.3
+    attribution: jitted  61.1%  numpy  34.3%  python   4.6%   named 96.2%
+      pair_pass                 43.0%    6.936 ms/call  x10118
+      gapless_momenta           28.2%    4.173 ms/call  x11051
+      pair_pass[vac]            10.6%    1.316 ms/call  x13134
+      hess_pass                  5.6%    9.876 ms/call  x933
+      unpaired_ref               1.8%    0.296 ms/call  x10118
+      hess_pass[vac]             1.8%    1.689 ms/call  x1770
+      unpaired_ref[vac]          1.4%    0.179 ms/call  x13134
+      panel_nodes[vac]           0.9%    0.094 ms/call  x14904
+      panel_nodes                0.7%    0.106 ms/call  x11051
+      unpaired_ref_hess[vac]     0.7%    0.627 ms/call  x1770
+      VAC_block                  0.7%    0.054 ms/call  x20236
+      unpaired_ref_hess          0.5%    0.842 ms/call  x933
+      VAC_hess                   0.1%    0.116 ms/call  x1866
+      modes_thermo               0.1%    0.012 ms/call  x10118
+      crossing_terms             0.1%    1.147 ms/call  x85
+      modes_jacobian             0.0%    0.016 ms/call  x933
+      gapless_momenta[vac]       0.0%    1.240 ms/call  x6
+      vacuum block cache {'hits': 7102, 'misses': 13134, 'maxsize': 512, 'currsize': 512}
+      vacuum hessian cache {'hits': 96, 'misses': 1770, 'maxsize': 512, 'currsize': 512}

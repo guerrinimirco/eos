@@ -1,0 +1,4 @@
+arm 24/24 n_B 0.800: edge fast 68.9 ref 68.9  fast 5/5 [G G G G G]  reference 3/3 [G G G]
+arm 24/24 n_B 0.900: edge fast 95.4 ref 95.4  fast 5/5 [G G G G G]  reference 3/3 [G G G]
+arm 24/24 n_B 1.000: edge fast 121.7 ref 121.7  fast 5/5 [G G G G G]  reference 3/3 [G G G]
+arm 24/24 n_B 1.075: edge fast 139.3 ref 139.3  fast 5/5 [G G G G G]  reference 3/3 [G G G]

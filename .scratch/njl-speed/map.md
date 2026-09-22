@@ -32,6 +32,7 @@ specified for a hand-off session. **The port itself is not this map's work.**
 | the same, the DEFAULT since `2536d2b`, with the bounded ladder ([ticket 16](issues/16-land-the-bounded-ladder.md), `50b3b7f`) | **2.51x** below it in one window (419 -> 167 ms/pt), i.e. ~254 ms/pt on this row's scale | ~250x |
 | `eos_table`, one pattern: unpaired / 2SC / CFL / free | 1.4 / 56.5 / 719 / 68.5 ms/pt | — |
 | of that CFL table (ticket 03): 12 dead points / 188 converged | 89% / 80 ms/pt | 80x on the rows |
+| the converged solve at a 12-node pairing rule, T = 0 only ([ticket 10](issues/10-the-quadrature-itself.md), NOT landed) | 1.67x below it, i.e. ~48 ms/pt | ~48x |
 | one `eos.mixed` point, DID+NJL, 3 patterns / held 2SC | 29.6 s / 9.2 s | — |
 | the mixed window: 52 of 200 densities inside it | 52 x 29.6 s = 1539 s | 26x |
 | `eos.mixed` window location, 20 densities | 2576 s | dominates |
@@ -137,6 +138,71 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 ## Decisions so far
 
 <!-- one line per closed ticket -->
+
+- [The bounded ladder loses the gapless CFL ground state](issues/18-bound-loses-gapless-cfl.md):
+  **neither the bound nor the analytic Jacobian is what fails -- the seed
+  is, and on both backends.** A gapped CFL state at T = 0 is an insulator
+  for the rotated charge Q~ (d mu_C = t, d mu_3 = -t, d mu_8 = -t/2, under
+  which every CFL pair is neutral), so at a nonzero fixed Y_C, whose charge
+  row is quark-only, the residual is EXACTLY flat along it until a
+  Q~-charged pair unlocks; the scaled Jacobian at the cross seed is singular
+  there to 1e-17, and the gapless root lies a finite distance out (the
+  unlocking edge moves 69 -> 139 MeV over n_B = 0.8 -> 1.075). The exact
+  Jacobian drops the direction and stalls in the gapped valley (the stall is
+  the root's mirror image); any differenced or jittered one steps along it
+  with the sign of its round-off. So **ticket 10's "rung D reaches the root"
+  was a coin**, and so is the reference backend's 24/12 loss: the analytic
+  Jacobian matches central differences to <= 9.4e-7 on the whole bounded
+  path, which never becomes gapless, while a 1e-6 jitter of it flips the
+  outcome. The ticket's candidates 4 (fix `_crossing_terms`) and 2 (rung D
+  at T = 0) are refuted -- 2 would also give back the 2.51x, the pinned
+  benchmark being T = 0 -- and fixed displacements along Q~ are not robust
+  either. **Landed: `unlocked_seed`** moves a CFL seed on the plateau to just
+  past its own unlocking edge (bisection on the state's `gapless` flag), for
+  pattern CFL, T = 0, fixed Y_C != 0 only; beta equilibrium never reaches it.
+  Gate PASS: gapless CFL at all 13 densities 0.775-1.075, P monotone, on both
+  backends under 24/24, 24/12 and 32/32 (HEAD lost 13 / 0 / 7 fast and 0 / 7
+  / -- reference), realised state identical to the known-good table at all
+  45 densities, |dP|/P <= 6.7e-10; a both-backend regression test red on HEAD
+  on both and green here. The pinned benchmark's rows are bit-identical
+  to HEAD on both backends and its cpu within 1% (the window was contended,
+  loadavg 13-30, so the absolute 2.51x is not re-measured, only kept).
+
+- [The pairing quadrature itself](issues/10-the-quadrature-itself.md):
+  **at T = 0 the shipped 24 nodes per panel buy nothing the gate can see; at
+  T > 0 they are what the gate needs; and the RG vacuum half needs half of
+  them at every T.** Arms H/V (hot pass / vacuum passes) 24/24 down to 8/8
+  plus vacuum-only 24/16-24/8, on the pinned single-pattern tables, both
+  backends: 2SC 200/200 and CFL 188/188 rows at every arm, 0 realised
+  mismatches, worst |dP|/P 9.9e-10 (2SC, where the CONTROL is the outlier) and
+  4.6e-9 (CFL onset, vacuum-only arms equally). Repeats bit-identical, and the
+  rule changes no Newton count. **Converged CFL solve: 1.37 / 1.67 / 1.91 /
+  2.16x at 16 / 12 / 10 / 8 nodes, 1.22x vacuum-only at 12**, n = 3
+  interleaved, so ~48 ms/pt at 12 on ticket 03's 80. Three limits: (1) **12
+  nodes fails the P gate at T = 20-30 MeV** (1.3e-7 .. 1.3e-6; 16 is 2e-9 in
+  P and 3e-8 in s) because the thermal collars are hundreds of MeV wide; the
+  vacuum passes are T = 0 by construction, so vacuum-at-12 holds at every T.
+  (2) The Lambda_UV vacuum is the slow pass, and only in 2SC with M_u ~= 10
+  MeV, a LAYOUT effect: its geometric panels stop at 47 MeV (breakpoints at
+  the masses fix N = 8 in isolation, 88 nodes against 192). (3) A default
+  change moves `test/baseline`'s njl keys past 1e-10 (vacuum-only 12: 9 of
+  139, six of them quantities pinned only to solver resolution, which is a
+  hygiene finding of its own), so landing is its own ticket with an `njl.npz`
+  regeneration; `NODES_PER_PANEL` is shared with every unpaired integral and
+  stays. **The pinned tables contain no gapless state**; at the documented one
+  (`fixed_YC`, Y_C = 0.1, T = 0) a held CFL moves <= 6.3e-10 at all 34 gapless
+  densities under every rule, and the enumeration's ROOT SELECTION there is a
+  lottery any perturbation enters: **the shipped rule on HEAD fast loses
+  gapless CFL at 13 densities** (a finer 32/32 loses 7, coarse ones keep it).
+  That is [ticket 18](issues/18-bound-loses-gapless-cfl.md), a regression of
+  `50b3b7f`'s bound: `428cd66` is right there, and the bound removed the one
+  rung (the differenced repeat) that reaches the root from a cross seed.
+  What is left on a converged solve at 12/12: still 65% jitted quadrature,
+  of which the RG vacuum half is 34%. **Its Hessian alone was 19% at the
+  shipped rule, a cost ticket 03 did not separate, hitting its cache 5% of
+  the time.** And `gapless_momenta` does not scale with the rule: 17% of a
+  converged solve and 35% of the CFL table at 12/12, scanning for crossings
+  in states that have none.
 
 - [Does the `methods` bound pay inside `eos/mixed`?](issues/17-methods-bound-in-mixed.md):
   **yes, and only where the build discards its work.** `lm` is 1.7-4.2% of

@@ -1,0 +1,9 @@
+=== ticket 10 time: 2SC, backend 'reference', arms ['24/24', '16/16', '12/12', '10/10', '24/12']
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+loadavg at start (135.01171875, 77.3310546875, 48.5908203125)
+  rep 0 arm 24/24     997.3 ms/pt wall    494.8 cpu  rows 200  converged solves 200/200 at   997.3 ms wall /   494.7 cpu  load 46.1
+  rep 0 arm 16/16     708.7 ms/pt wall    403.9 cpu  rows 200  converged solves 200/200 at   708.7 ms wall /   403.9 cpu  load 36.3
+  rep 0 arm 12/12     493.3 ms/pt wall    316.2 cpu  rows 200  converged solves 200/200 at   493.3 ms wall /   316.2 cpu  load 28.4
+  rep 0 arm 10/10     453.6 ms/pt wall    293.7 cpu  rows 200  converged solves 200/200 at   453.5 ms wall /   293.7 cpu  load 35.8
+  rep 0 arm 24/12     611.6 ms/pt wall    438.6 cpu  rows 200  converged solves 200/200 at   611.6 ms wall /   438.6 cpu  load 26.8

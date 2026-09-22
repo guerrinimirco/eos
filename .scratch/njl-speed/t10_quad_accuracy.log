@@ -1,0 +1,301 @@
+
+=== CFL n_B=0.7  conv=True realised=CFL gapless=False M=[ 66.6  66.6 296.5] Delta=[167.23 167.23 190.71]
+  nodes at 24: hot 240, vac(UV) 192, vac(L) 192
+  N= 6 hot    omega  5.7e-11       n  2.7e-08   rho_s  3.0e-08  gap_ke  3.1e-10
+       vacUV  omega  1.5e-13       n  3.6e+00   rho_s  1.4e-10  gap_ke  3.4e-13
+       vacL   omega  4.1e-12       n  2.6e+00   rho_s  8.5e-11  gap_ke  2.3e-12
+       ALL@N  omega  2.3e-09       n  2.7e-08   rho_s  7.4e-08  gap_ke  1.5e-08
+       hot24+vac@N  omega  1.7e-11       n  4.8e-13   rho_s  2.3e-10  gap_ke  1.5e-11
+  N= 8 hot    omega  4.4e-13       n  2.1e-10   rho_s  2.1e-10  gap_ke  6.0e-13
+       vacUV  omega  1.5e-13       n  2.5e+00   rho_s  8.9e-14  gap_ke  2.9e-15
+       vacL   omega  4.8e-14       n  2.0e+00   rho_s  2.7e-14  gap_ke  7.0e-15
+       ALL@N  omega  1.2e-11       n  2.1e-10   rho_s  5.2e-10  gap_ke  2.8e-11
+       hot24+vac@N  omega  1.8e-11       n  2.1e-13   rho_s  6.8e-13  gap_ke  3.8e-13
+  N=10 hot    omega  7.4e-13       n  1.1e-12   rho_s  1.1e-12  gap_ke  1.0e-14
+       vacUV  omega  1.2e-12       n  1.5e+00   rho_s  1.8e-13  gap_ke  2.9e-15
+       vacL   omega  5.2e-14       n  3.5e+00   rho_s  2.8e-14  gap_ke  2.3e-15
+       ALL@N  omega  7.8e-11       n  1.2e-12   rho_s  2.5e-12  gap_ke  3.9e-13
+       hot24+vac@N  omega  7.2e-11       n  1.8e-13   rho_s  5.7e-13  gap_ke  3.1e-13
+  N=12 hot    omega  1.0e-12       n  1.5e-13   rho_s  3.7e-13  gap_ke  5.1e-15
+       vacUV  omega  3.0e-12       n  1.6e+00   rho_s  1.8e-13  gap_ke  3.4e-15
+       vacL   omega  6.3e-14       n  1.6e+00   rho_s  4.4e-14  gap_ke  6.5e-16
+       ALL@N  omega  7.8e-11       n  1.3e-13   rho_s  8.5e-13  gap_ke  3.9e-13
+       hot24+vac@N  omega  9.6e-11       n  2.9e-13   rho_s  6.6e-13  gap_ke  3.9e-13
+  N=16 hot    omega  5.9e-13       n  1.6e-13   rho_s  2.6e-13  gap_ke  5.2e-15
+       vacUV  omega  0.0e+00       n  1.8e+00   rho_s  2.3e-13  gap_ke  3.8e-15
+       vacL   omega  6.8e-14       n  1.3e+00   rho_s  3.0e-14  gap_ke  9.8e-16
+       ALL@N  omega  2.4e-11       n  2.3e-13   rho_s  1.1e-12  gap_ke  3.0e-13
+       hot24+vac@N  omega  2.4e-11       n  1.3e-13   rho_s  4.0e-13  gap_ke  3.0e-13
+  N=20 hot    omega  8.9e-13       n  1.7e-13   rho_s  4.4e-13  gap_ke  4.2e-15
+       vacUV  omega  1.5e-12       n  2.2e+00   rho_s  4.1e-13  gap_ke  3.9e-15
+       vacL   omega  8.2e-14       n  1.6e+00   rho_s  1.5e-14  gap_ke  1.8e-15
+       ALL@N  omega  9.6e-11       n  3.2e-13   rho_s  1.8e-12  gap_ke  2.7e-13
+       hot24+vac@N  omega  8.4e-11       n  2.7e-13   rho_s  4.7e-13  gap_ke  3.1e-13
+  N=24 hot    omega  5.9e-13       n  1.8e-13   rho_s  2.2e-13  gap_ke  5.1e-15
+       vacUV  omega  2.4e-12       n  9.5e-01   rho_s  3.0e-13  gap_ke  2.2e-15
+       vacL   omega  6.6e-14       n  1.4e+00   rho_s  3.5e-14  gap_ke  1.3e-15
+       ALL@N  omega  7.2e-11       n  1.6e-13   rho_s  4.0e-13  gap_ke  3.4e-13
+       hot24+vac@N  omega  7.2e-11       n  1.6e-13   rho_s  4.0e-13  gap_ke  3.4e-13
+  N=32 hot    omega  4.4e-13       n  9.2e-14   rho_s  3.1e-13  gap_ke  5.2e-15
+       vacUV  omega  4.8e-12       n  1.4e+00   rho_s  2.3e-13  gap_ke  3.4e-15
+       vacL   omega  3.6e-14       n  1.7e+00   rho_s  3.2e-14  gap_ke  9.8e-16
+       ALL@N  omega  2.1e-10       n  1.7e-13   rho_s  3.5e-13  gap_ke  3.5e-13
+       hot24+vac@N  omega  2.2e-10       n  1.6e-13   rho_s  3.0e-13  gap_ke  3.4e-13
+
+=== CFL n_B=1.0  conv=True realised=CFL gapless=False M=[ 42.2  42.2 245.9] Delta=[187.42 187.42 203.63]
+  nodes at 24: hot 288, vac(UV) 192, vac(L) 192
+  N= 6 hot    omega  7.7e-12       n  1.1e-08   rho_s  5.9e-09  gap_ke  2.5e-10
+       vacUV  omega  2.0e-12       n  4.4e+00   rho_s  1.1e-10  gap_ke  2.8e-13
+       vacL   omega  1.5e-12       n  2.9e+00   rho_s  6.8e-11  gap_ke  2.9e-12
+       ALL@N  omega  3.3e-10       n  1.1e-08   rho_s  1.5e-08  gap_ke  1.0e-08
+       hot24+vac@N  omega  2.5e-11       n  2.0e-13   rho_s  2.0e-10  gap_ke  1.0e-11
+  N= 8 hot    omega  1.1e-12       n  1.4e-11   rho_s  1.3e-11  gap_ke  9.8e-13
+       vacUV  omega  1.1e-12       n  2.8e+00   rho_s  2.1e-13  gap_ke  2.2e-15
+       vacL   omega  3.6e-15       n  2.3e+00   rho_s  2.1e-14  gap_ke  5.8e-15
+       ALL@N  omega  1.1e-15       n  1.4e-11   rho_s  3.5e-11  gap_ke  4.0e-11
+       hot24+vac@N  omega  4.2e-12       n  2.1e-13   rho_s  1.9e-12  gap_ke  2.9e-13
+  N=10 hot    omega  1.6e-12       n  2.2e-13   rho_s  8.9e-14  gap_ke  1.0e-14
+       vacUV  omega  1.7e-12       n  2.0e+00   rho_s  1.1e-13  gap_ke  3.4e-15
+       vacL   omega  2.4e-14       n  2.6e+00   rho_s  2.4e-14  gap_ke  2.3e-15
+       ALL@N  omega  4.2e-12       n  3.1e-13   rho_s  3.4e-13  gap_ke  4.8e-13
+       hot24+vac@N  omega  1.7e-11       n  1.2e-13   rho_s  1.6e-12  gap_ke  3.4e-13
+  N=12 hot    omega  1.1e-12       n  1.5e-13   rho_s  5.8e-13  gap_ke  7.3e-15
+       vacUV  omega  1.2e-13       n  8.9e-01   rho_s  1.6e-13  gap_ke  3.2e-15
+       vacL   omega  5.4e-15       n  1.7e+00   rho_s  1.5e-14  gap_ke  1.4e-15
+       ALL@N  omega  3.4e-11       n  1.4e-13   rho_s  1.9e-12  gap_ke  4.3e-13
+       hot24+vac@N  omega  3.8e-11       n  1.2e-13   rho_s  1.8e-12  gap_ke  3.3e-13
+  N=16 hot    omega  7.3e-13       n  1.7e-13   rho_s  2.3e-13  gap_ke  6.8e-15
+       vacUV  omega  2.7e-12       n  1.7e+00   rho_s  2.0e-13  gap_ke  3.2e-15
+       vacL   omega  9.1e-15       n  1.8e+00   rho_s  2.4e-14  gap_ke  1.4e-15
+       ALL@N  omega  6.8e-11       n  2.0e-13   rho_s  6.2e-13  gap_ke  3.6e-13
+       hot24+vac@N  omega  5.1e-11       n  2.5e-13   rho_s  1.8e-12  gap_ke  2.8e-13
+  N=20 hot    omega  3.6e-13       n  1.4e-13   rho_s  3.4e-13  gap_ke  6.6e-15
+       vacUV  omega  2.4e-12       n  1.2e+00   rho_s  1.4e-13  gap_ke  5.0e-15
+       vacL   omega  2.2e-14       n  1.4e+00   rho_s  2.3e-14  gap_ke  3.4e-15
+       ALL@N  omega  6.8e-11       n  1.4e-13   rho_s  6.3e-13  gap_ke  3.3e-13
+       hot24+vac@N  omega  3.8e-11       n  7.9e-14   rho_s  1.2e-12  gap_ke  2.5e-13
+  N=24 hot    omega  1.2e-12       n  1.3e-13   rho_s  5.7e-13  gap_ke  4.9e-15
+       vacUV  omega  5.0e-13       n  1.0e+00   rho_s  1.8e-13  gap_ke  2.9e-15
+       vacL   omega  5.0e-14       n  2.2e+00   rho_s  2.2e-14  gap_ke  2.3e-15
+       ALL@N  omega  5.9e-11       n  9.6e-14   rho_s  1.9e-12  gap_ke  3.2e-13
+       hot24+vac@N  omega  5.9e-11       n  9.6e-14   rho_s  1.9e-12  gap_ke  3.2e-13
+  N=32 hot    omega  1.8e-12       n  1.7e-13   rho_s  3.9e-13  gap_ke  5.2e-15
+       vacUV  omega  5.0e-12       n  1.3e+00   rho_s  4.6e-13  gap_ke  3.0e-15
+       vacL   omega  2.2e-14       n  8.6e-01   rho_s  2.7e-14  gap_ke  2.0e-15
+       ALL@N  omega  1.1e-10       n  1.0e-13   rho_s  2.0e-12  gap_ke  3.4e-13
+       hot24+vac@N  omega  1.3e-10       n  5.9e-14   rho_s  2.4e-12  gap_ke  3.2e-13
+
+=== CFL n_B=1.149  conv=True realised=CFL gapless=False M=[ 35.7  35.7 226.8] Delta=[194.69 194.69 208.2 ]
+  nodes at 24: hot 288, vac(UV) 192, vac(L) 192
+  N= 6 hot    omega  4.0e-11       n  2.3e-08   rho_s  1.9e-08  gap_ke  2.1e-10
+       vacUV  omega  2.7e-12       n  3.3e+00   rho_s  9.8e-11  gap_ke  2.5e-13
+       vacL   omega  8.0e-13       n  2.0e+00   rho_s  3.7e-11  gap_ke  3.7e-12
+       ALL@N  omega  1.2e-09       n  2.3e-08   rho_s  5.2e-08  gap_ke  8.0e-09
+       hot24+vac@N  omega  7.1e-11       n  2.7e-13   rho_s  2.0e-10  gap_ke  8.6e-12
+  N= 8 hot    omega  8.0e-13       n  5.2e-11   rho_s  4.1e-11  gap_ke  5.9e-13
+       vacUV  omega  1.7e-12       n  1.6e+00   rho_s  5.9e-13  gap_ke  2.4e-15
+       vacL   omega  4.8e-14       n  3.4e+00   rho_s  3.6e-14  gap_ke  8.0e-15
+       ALL@N  omega  3.0e-11       n  5.2e-11   rho_s  1.1e-10  gap_ke  2.3e-11
+       hot24+vac@N  omega  4.1e-11       n  2.0e-13   rho_s  2.6e-12  gap_ke  2.2e-13
+  N=10 hot    omega  4.5e-13       n  3.7e-13   rho_s  1.6e-13  gap_ke  3.7e-15
+       vacUV  omega  2.1e-12       n  2.2e+00   rho_s  2.0e-13  gap_ke  2.5e-15
+       vacL   omega  5.4e-14       n  2.5e+00   rho_s  1.0e-14  gap_ke  2.0e-15
+       ALL@N  omega  8.1e-11       n  3.4e-13   rho_s  6.0e-13  gap_ke  2.4e-13
+       hot24+vac@N  omega  5.2e-11       n  1.9e-13   rho_s  1.7e-12  gap_ke  2.3e-13
+  N=12 hot    omega  4.5e-13       n  8.3e-14   rho_s  1.3e-13  gap_ke  3.7e-15
+       vacUV  omega  2.4e-12       n  1.5e+00   rho_s  6.5e-13  gap_ke  3.0e-15
+       vacL   omega  4.5e-14       n  1.5e+00   rho_s  1.6e-14  gap_ke  4.2e-15
+       ALL@N  omega  6.3e-11       n  5.5e-14   rho_s  1.3e-12  gap_ke  2.6e-13
+       hot24+vac@N  omega  6.3e-11       n  2.4e-13   rho_s  2.7e-12  gap_ke  2.4e-13
+  N=16 hot    omega  8.0e-13       n  1.6e-13   rho_s  1.4e-13  gap_ke  2.6e-15
+       vacUV  omega  2.1e-12       n  2.4e+00   rho_s  2.3e-13  gap_ke  2.8e-15
+       vacL   omega  6.4e-14       n  3.3e+00   rho_s  1.0e-14  gap_ke  1.1e-15
+       ALL@N  omega  4.1e-11       n  2.9e-13   rho_s  8.9e-13  gap_ke  2.0e-13
+       hot24+vac@N  omega  5.2e-11       n  2.7e-13   rho_s  1.8e-12  gap_ke  2.4e-13
+  N=20 hot    omega  3.4e-13       n  8.5e-14   rho_s  6.7e-13  gap_ke  4.9e-15
+       vacUV  omega  6.1e-12       n  2.0e+00   rho_s  3.2e-13  gap_ke  2.0e-15
+       vacL   omega  5.0e-14       n  2.3e+00   rho_s  1.2e-14  gap_ke  3.1e-15
+       ALL@N  omega  1.8e-10       n  2.0e-13   rho_s  2.5e-12  gap_ke  2.7e-13
+       hot24+vac@N  omega  1.8e-10       n  2.7e-13   rho_s  2.0e-12  gap_ke  2.1e-13
+  N=24 hot    omega  4.5e-13       n  2.3e-13   rho_s  4.7e-13  gap_ke  3.5e-15
+       vacUV  omega  1.9e-12       n  2.1e+00   rho_s  3.2e-13  gap_ke  3.1e-15
+       vacL   omega  2.6e-14       n  1.2e+00   rho_s  1.9e-14  gap_ke  1.4e-15
+       ALL@N  omega  7.4e-11       n  2.3e-13   rho_s  2.0e-12  gap_ke  2.5e-13
+       hot24+vac@N  omega  7.4e-11       n  2.3e-13   rho_s  2.0e-12  gap_ke  2.5e-13
+  N=32 hot    omega  2.3e-13       n  1.8e-13   rho_s  1.9e-13  gap_ke  4.0e-15
+       vacUV  omega  8.1e-13       n  1.2e+00   rho_s  2.3e-13  gap_ke  3.9e-15
+       vacL   omega  6.7e-14       n  1.6e+00   rho_s  1.5e-14  gap_ke  3.7e-15
+       ALL@N  omega  3.3e-11       n  1.8e-13   rho_s  8.3e-13  gap_ke  3.0e-13
+       hot24+vac@N  omega  1.1e-11       n  2.2e-13   rho_s  1.8e-12  gap_ke  2.8e-13
+
+=== CFL n_B=1.5  conv=True realised=CFL gapless=False M=[ 26.   26.  192.3] Delta=[207.3  207.3  216.42]
+  nodes at 24: hot 288, vac(UV) 192, vac(L) 192
+  N= 6 hot    omega  6.3e-11       n  5.6e-08   rho_s  4.9e-08  gap_ke  4.9e-10
+       vacUV  omega  1.8e-12       n  3.0e+00   rho_s  7.5e-11  gap_ke  2.1e-13
+       vacL   omega  6.6e-13       n  2.2e+00   rho_s  3.7e-11  gap_ke  5.2e-12
+       ALL@N  omega  1.8e-09       n  5.6e-08   rho_s  1.4e-07  gap_ke  1.7e-08
+       hot24+vac@N  omega  3.5e-11       n  1.6e-13   rho_s  2.1e-10  gap_ke  5.5e-12
+  N= 8 hot    omega  8.1e-13       n  1.3e-10   rho_s  7.6e-11  gap_ke  3.7e-12
+       vacUV  omega  1.4e-12       n  5.1e+00   rho_s  2.8e-12  gap_ke  1.4e-15
+       vacL   omega  6.0e-14       n  2.0e+00   rho_s  6.5e-14  gap_ke  5.0e-15
+       ALL@N  omega  1.4e-11       n  1.3e-10   rho_s  2.3e-10  gap_ke  1.3e-10
+       hot24+vac@N  omega  2.3e-11       n  2.6e-13   rho_s  7.2e-12  gap_ke  6.5e-14
+  N=10 hot    omega  1.0e-12       n  5.9e-13   rho_s  3.6e-13  gap_ke  1.5e-14
+       vacUV  omega  1.1e-12       n  4.4e+00   rho_s  3.6e-13  gap_ke  4.5e-16
+       vacL   omega  4.6e-14       n  1.6e+00   rho_s  9.0e-15  gap_ke  2.0e-15
+       ALL@N  omega  2.9e-12       n  5.9e-13   rho_s  5.2e-13  gap_ke  5.1e-13
+       hot24+vac@N  omega  1.7e-11       n  2.8e-13   rho_s  9.6e-13  gap_ke  2.0e-14
+  N=12 hot    omega  2.0e-13       n  1.5e-13   rho_s  1.7e-13  gap_ke  2.2e-15
+       vacUV  omega  8.4e-13       n  1.7e+00   rho_s  5.1e-14  gap_ke  1.1e-15
+       vacL   omega  5.4e-14       n  1.2e+00   rho_s  9.0e-15  gap_ke  1.5e-15
+       ALL@N  omega  1.7e-11       n  2.1e-13   rho_s  5.7e-13  gap_ke  1.0e-13
+       hot24+vac@N  omega  8.7e-12       n  1.3e-13   rho_s  1.7e-13  gap_ke  3.0e-14
+  N=16 hot    omega  7.1e-13       n  1.3e-13   rho_s  1.9e-13  gap_ke  1.9e-15
+       vacUV  omega  2.0e-12       n  1.8e+00   rho_s  1.0e-13  gap_ke  1.4e-15
+       vacL   omega  4.3e-14       n  3.0e+00   rho_s  1.3e-14  gap_ke  2.6e-15
+       ALL@N  omega  3.5e-11       n  1.6e-13   rho_s  3.5e-13  gap_ke  2.0e-14
+       hot24+vac@N  omega  4.0e-11       n  1.5e-13   rho_s  5.2e-13  gap_ke  2.5e-14
+  N=20 hot    omega  1.1e-12       n  8.7e-14   rho_s  1.9e-14  gap_ke  2.8e-15
+       vacUV  omega  2.1e-12       n  1.1e+00   rho_s  3.0e-13  gap_ke  1.1e-15
+       vacL   omega  1.7e-14       n  1.7e+00   rho_s  3.6e-15  gap_ke  2.6e-15
+       ALL@N  omega  2.6e-11       n  9.0e-14   rho_s  7.4e-13  gap_ke  8.0e-14
+       hot24+vac@N  omega  4.3e-11       n  1.2e-13   rho_s  8.0e-13  gap_ke  2.0e-14
+  N=24 hot    omega  5.1e-13       n  1.2e-13   rho_s  8.9e-14  gap_ke  1.0e-15
+       vacUV  omega  1.7e-12       n  1.2e+00   rho_s  2.5e-13  gap_ke  3.8e-15
+       vacL   omega  2.5e-14       n  3.3e+00   rho_s  3.3e-15  gap_ke  2.6e-15
+       ALL@N  omega  6.1e-11       n  1.2e-13   rho_s  6.8e-13  gap_ke  1.3e-13
+       hot24+vac@N  omega  6.1e-11       n  1.2e-13   rho_s  6.8e-13  gap_ke  1.3e-13
+  N=32 hot    omega  4.1e-13       n  1.1e-13   rho_s  8.6e-14  gap_ke  3.3e-15
+       vacUV  omega  1.3e-12       n  1.5e+00   rho_s  4.3e-13  gap_ke  1.5e-15
+       vacL   omega  6.0e-14       n  1.8e+00   rho_s  3.3e-15  gap_ke  4.4e-15
+       ALL@N  omega  2.3e-11       n  1.3e-13   rho_s  1.0e-12  gap_ke  1.6e-13
+       hot24+vac@N  omega  2.0e-11       n  1.3e-13   rho_s  1.1e-12  gap_ke  8.4e-14
+
+=== 2SC n_B=0.55  conv=True realised=2SC gapless=False M=[ 32.7  26.6 461. ] Delta=[  0.     0.   256.41]
+  nodes at 24: hot 216, vac(UV) 192, vac(L) 192
+  N= 6 hot    omega  8.8e-12       n  1.8e-09   rho_s  1.5e-09  gap_ke  1.8e-12
+       vacUV  omega  2.2e-12       n  3.1e+00   rho_s  8.2e-10  gap_ke  5.7e-13
+       vacL   omega  2.0e-12       n  3.3e+00   rho_s  4.4e-11  gap_ke  1.3e-11
+       ALL@N  omega  3.2e-10       n  1.8e-09   rho_s  1.9e-09  gap_ke  7.1e-11
+       hot24+vac@N  omega  2.0e-10       n  2.1e-13   rho_s  1.6e-09  gap_ke  2.4e-11
+  N= 8 hot    omega  1.0e-12       n  3.0e-13   rho_s  4.8e-12  gap_ke  5.7e-14
+       vacUV  omega  1.2e-12       n  2.1e+00   rho_s  2.0e-11  gap_ke  1.9e-15
+       vacL   omega  5.2e-15       n  2.1e+00   rho_s  1.8e-14  gap_ke  6.2e-16
+       ALL@N  omega  1.0e-10       n  2.6e-13   rho_s  4.7e-11  gap_ke  2.9e-12
+       hot24+vac@N  omega  1.5e-10       n  2.4e-13   rho_s  3.5e-11  gap_ke  6.0e-14
+  N=10 hot    omega  1.1e-12       n  2.3e-13   rho_s  2.0e-12  gap_ke  1.6e-15
+       vacUV  omega  6.3e-13       n  4.1e+00   rho_s  1.2e-12  gap_ke  1.3e-15
+       vacL   omega  3.6e-15       n  2.5e+00   rho_s  4.4e-15  gap_ke  1.4e-15
+       ALL@N  omega  8.5e-11       n  3.6e-13   rho_s  4.8e-12  gap_ke  2.0e-14
+       hot24+vac@N  omega  1.2e-10       n  2.7e-13   rho_s  3.2e-12  gap_ke  9.3e-14
+  N=12 hot    omega  9.4e-13       n  6.2e-14   rho_s  3.1e-13  gap_ke  1.6e-15
+       vacUV  omega  1.2e-12       n  2.1e+00   rho_s  8.4e-13  gap_ke  6.4e-16
+       vacL   omega  7.3e-15       n  3.4e+00   rho_s  2.9e-15  gap_ke  2.0e-15
+       ALL@N  omega  1.0e-10       n  1.4e-13   rho_s  1.0e-12  gap_ke  1.2e-13
+       hot24+vac@N  omega  1.5e-10       n  7.1e-14   rho_s  3.3e-12  gap_ke  1.3e-13
+  N=16 hot    omega  9.4e-13       n  2.0e-13   rho_s  3.4e-13  gap_ke  8.8e-16
+       vacUV  omega  2.2e-12       n  4.0e-01   rho_s  1.3e-12  gap_ke  1.5e-15
+       vacL   omega  8.0e-15       n  1.6e+00   rho_s  2.9e-15  gap_ke  1.7e-15
+       ALL@N  omega  1.5e-10       n  2.2e-13   rho_s  3.2e-12  gap_ke  1.3e-13
+       hot24+vac@N  omega  2.0e-10       n  8.3e-14   rho_s  4.1e-12  gap_ke  7.9e-14
+  N=20 hot    omega  1.2e-12       n  1.1e-13   rho_s  7.7e-13  gap_ke  1.6e-15
+       vacUV  omega  2.2e-12       n  3.6e-01   rho_s  3.2e-13  gap_ke  2.7e-15
+       vacL   omega  1.5e-14       n  2.6e+00   rho_s  2.2e-15  gap_ke  1.5e-15
+       ALL@N  omega  1.6e-10       n  1.3e-13   rho_s  2.2e-12  gap_ke  5.3e-14
+       hot24+vac@N  omega  2.0e-10       n  1.0e-13   rho_s  2.3e-12  gap_ke  2.1e-14
+  N=24 hot    omega  2.0e-12       n  1.1e-13   rho_s  7.5e-13  gap_ke  3.0e-15
+       vacUV  omega  1.1e-12       n  1.5e+00   rho_s  6.9e-13  gap_ke  1.9e-15
+       vacL   omega  9.6e-15       n  1.7e+00   rho_s  2.2e-15  gap_ke  1.7e-15
+       ALL@N  omega  1.4e-10       n  1.1e-13   rho_s  3.0e-12  gap_ke  5.9e-14
+       hot24+vac@N  omega  1.4e-10       n  1.1e-13   rho_s  3.0e-12  gap_ke  5.9e-14
+  N=32 hot    omega  1.2e-12       n  3.3e-14   rho_s  8.2e-13  gap_ke  2.0e-15
+       vacUV  omega  1.1e-13       n  1.1e+00   rho_s  5.9e-13  gap_ke  6.0e-15
+       vacL   omega  1.7e-14       n  1.4e+00   rho_s  2.2e-15  gap_ke  3.2e-15
+       ALL@N  omega  5.5e-11       n  8.3e-14   rho_s  2.1e-12  gap_ke  4.2e-13
+       hot24+vac@N  omega  9.0e-11       n  9.9e-14   rho_s  1.5e-12  gap_ke  1.5e-13
+
+=== 2SC n_B=0.9  conv=True realised=2SC gapless=False M=[ 15.8  12.9 403.7] Delta=[  0.     0.   283.48]
+  nodes at 24: hot 240, vac(UV) 192, vac(L) 192
+  N= 6 hot    omega  2.2e-11       n  2.9e-09   rho_s  4.7e-09  gap_ke  5.1e-11
+       vacUV  omega  6.0e-13       n  2.5e+00   rho_s  4.0e-08  gap_ke  5.0e-13
+       vacL   omega  2.8e-13       n  3.4e+00   rho_s  3.8e-11  gap_ke  1.1e-11
+       ALL@N  omega  8.2e-10       n  2.9e-09   rho_s  8.7e-08  gap_ke  2.2e-09
+       hot24+vac@N  omega  1.6e-11       n  1.1e-13   rho_s  7.6e-08  gap_ke  1.7e-11
+  N= 8 hot    omega  5.1e-13       n  1.1e-11   rho_s  4.2e-12  gap_ke  1.6e-13
+       vacUV  omega  8.6e-13       n  3.3e+00   rho_s  1.0e-09  gap_ke  2.0e-15
+       vacL   omega  1.2e-14       n  1.7e+00   rho_s  9.8e-15  gap_ke  5.3e-15
+       ALL@N  omega  1.3e-11       n  1.1e-11   rho_s  2.0e-09  gap_ke  7.0e-12
+       hot24+vac@N  omega  2.6e-11       n  1.0e-13   rho_s  1.9e-09  gap_ke  1.0e-13
+  N=10 hot    omega  8.5e-13       n  2.2e-13   rho_s  5.1e-13  gap_ke  3.1e-15
+       vacUV  omega  1.2e-12       n  2.8e+00   rho_s  7.2e-11  gap_ke  5.8e-16
+       vacL   omega  9.7e-15       n  5.4e+00   rho_s  2.0e-15  gap_ke  3.6e-15
+       ALL@N  omega  1.3e-11       n  2.5e-13   rho_s  1.4e-10  gap_ke  1.1e-13
+       hot24+vac@N  omega  3.9e-11       n  7.0e-14   rho_s  1.4e-10  gap_ke  4.5e-14
+  N=12 hot    omega  9.3e-13       n  1.1e-13   rho_s  2.7e-13  gap_ke  1.4e-15
+       vacUV  omega  1.5e-12       n  7.6e+00   rho_s  5.4e-12  gap_ke  2.0e-15
+       vacL   omega  1.2e-14       n  7.9e-01   rho_s  7.3e-15  gap_ke  2.7e-15
+       ALL@N  omega  1.9e-11       n  1.5e-13   rho_s  9.8e-12  gap_ke  2.5e-14
+       hot24+vac@N  omega  4.8e-11       n  1.6e-13   rho_s  9.7e-12  gap_ke  1.0e-13
+  N=16 hot    omega  5.9e-13       n  1.1e-13   rho_s  2.0e-13  gap_ke  4.2e-15
+       vacUV  omega  1.3e-12       n  3.3e+00   rho_s  2.9e-12  gap_ke  5.8e-16
+       vacL   omega  6.0e-15       n  1.9e+00   rho_s  8.2e-15  gap_ke  1.2e-15
+       ALL@N  omega  2.6e-11       n  8.8e-14   rho_s  5.0e-12  gap_ke  1.6e-13
+       hot24+vac@N  omega  4.2e-11       n  9.2e-14   rho_s  6.6e-12  gap_ke  4.4e-14
+  N=20 hot    omega  6.8e-13       n  9.0e-14   rho_s  1.7e-12  gap_ke  4.5e-15
+       vacUV  omega  1.3e-12       n  3.7e+00   rho_s  3.0e-12  gap_ke  0.0e+00
+       vacL   omega  5.6e-15       n  1.7e+00   rho_s  4.0e-15  gap_ke  1.4e-15
+       ALL@N  omega  2.3e-11       n  7.4e-14   rho_s  2.0e-12  gap_ke  1.9e-13
+       hot24+vac@N  omega  4.2e-11       n  1.2e-13   rho_s  4.7e-12  gap_ke  2.0e-14
+  N=24 hot    omega  1.7e-13       n  1.1e-13   rho_s  4.7e-13  gap_ke  4.5e-16
+       vacUV  omega  1.1e-12       n  3.7e+00   rho_s  1.1e-12  gap_ke  1.0e-15
+       vacL   omega  1.2e-14       n  1.8e+00   rho_s  2.3e-15  gap_ke  2.5e-15
+       ALL@N  omega  3.5e-11       n  1.2e-13   rho_s  2.8e-12  gap_ke  6.4e-14
+       hot24+vac@N  omega  3.5e-11       n  1.2e-13   rho_s  2.8e-12  gap_ke  6.4e-14
+  N=32 hot    omega  3.4e-13       n  8.9e-14   rho_s  6.1e-14  gap_ke  3.6e-15
+       vacUV  omega  1.2e-12       n  1.6e+00   rho_s  8.5e-13  gap_ke  3.1e-15
+       vacL   omega  8.4e-15       n  2.7e+00   rho_s  7.3e-15  gap_ke  1.7e-15
+       ALL@N  omega  3.2e-11       n  5.9e-14   rho_s  1.8e-12  gap_ke  2.4e-14
+       hot24+vac@N  omega  3.9e-11       n  1.0e-13   rho_s  2.7e-12  gap_ke  1.5e-13
+
+=== 2SC n_B=1.3  conv=True realised=2SC gapless=False M=[ 10.7   9.1 306.8] Delta=[  0.     0.   299.63]
+  nodes at 24: hot 240, vac(UV) 192, vac(L) 192
+  N= 6 hot    omega  1.8e-11       n  1.1e-09   rho_s  6.4e-09  gap_ke  1.4e-10
+       vacUV  omega  1.8e-12       n  1.7e+00   rho_s  2.3e-07  gap_ke  4.2e-13
+       vacL   omega  1.1e-12       n  6.0e+00   rho_s  3.1e-11  gap_ke  8.5e-12
+       ALL@N  omega  6.5e-10       n  1.1e-09   rho_s  4.8e-07  gap_ke  5.4e-09
+       hot24+vac@N  omega  5.4e-11       n  1.0e-13   rho_s  4.9e-07  gap_ke  1.3e-11
+  N= 8 hot    omega  3.8e-13       n  3.2e-11   rho_s  2.9e-11  gap_ke  5.4e-14
+       vacUV  omega  1.7e-12       n  2.3e+00   rho_s  1.6e-08  gap_ke  4.4e-16
+       vacL   omega  2.0e-14       n  3.9e+00   rho_s  1.2e-14  gap_ke  2.0e-15
+       ALL@N  omega  4.1e-11       n  3.2e-11   rho_s  3.3e-08  gap_ke  2.0e-12
+       hot24+vac@N  omega  5.1e-11       n  1.1e-13   rho_s  3.3e-08  gap_ke  1.7e-14
+  N=10 hot    omega  1.5e-13       n  9.0e-14   rho_s  2.3e-12  gap_ke  3.2e-15
+       vacUV  omega  1.1e-12       n  2.3e+00   rho_s  5.3e-10  gap_ke  1.7e-15
+       vacL   omega  1.6e-14       n  7.3e+00   rho_s  6.4e-15  gap_ke  8.9e-16
+       ALL@N  omega  2.9e-11       n  6.5e-14   rho_s  1.1e-09  gap_ke  5.6e-14
+       hot24+vac@N  omega  3.2e-11       n  1.7e-13   rho_s  1.1e-09  gap_ke  6.5e-14
+  N=12 hot    omega  3.0e-13       n  9.0e-14   rho_s  2.0e-12  gap_ke  6.4e-16
+       vacUV  omega  1.5e-12       n  1.6e+00   rho_s  2.4e-11  gap_ke  1.7e-15
+       vacL   omega  6.6e-15       n  3.0e+00   rho_s  1.2e-14  gap_ke  8.9e-16
+       ALL@N  omega  3.6e-11       n  1.0e-13   rho_s  5.6e-11  gap_ke  4.0e-14
+       hot24+vac@N  omega  4.4e-11       n  1.4e-13   rho_s  5.5e-11  gap_ke  6.4e-14
+  N=16 hot    omega  1.5e-13       n  1.5e-13   rho_s  5.6e-13  gap_ke  8.6e-16
+       vacUV  omega  1.9e-12       n  1.3e+00   rho_s  2.3e-12  gap_ke  2.4e-15
+       vacL   omega  4.4e-15       n  4.2e+00   rho_s  1.5e-14  gap_ke  5.6e-16
+       ALL@N  omega  5.3e-11       n  2.1e-13   rho_s  4.2e-12  gap_ke  5.7e-14
+       hot24+vac@N  omega  5.6e-11       n  1.0e-13   rho_s  8.8e-12  gap_ke  8.9e-14
+  N=20 hot    omega  1.5e-13       n  7.1e-14   rho_s  6.6e-13  gap_ke  3.2e-15
+       vacUV  omega  1.3e-12       n  1.9e+00   rho_s  1.6e-12  gap_ke  6.5e-16
+       vacL   omega  2.3e-14       n  2.5e+00   rho_s  8.0e-15  gap_ke  0.0e+00
+       ALL@N  omega  4.6e-11       n  1.1e-13   rho_s  5.1e-12  gap_ke  9.6e-14
+       hot24+vac@N  omega  3.9e-11       n  1.5e-13   rho_s  3.9e-12  gap_ke  2.4e-14
+  N=24 hot    omega  7.5e-14       n  6.6e-14   rho_s  1.6e-12  gap_ke  0.0e+00
+       vacUV  omega  1.5e-12       n  1.2e+00   rho_s  2.7e-12  gap_ke  6.5e-16
+       vacL   omega  1.4e-14       n  3.0e+00   rho_s  7.4e-15  gap_ke  2.2e-16
+       ALL@N  omega  4.4e-11       n  1.2e-13   rho_s  9.8e-12  gap_ke  2.4e-14
+       hot24+vac@N  omega  4.4e-11       n  1.2e-13   rho_s  9.8e-12  gap_ke  2.4e-14
+  N=32 hot    omega  2.3e-13       n  6.4e-14   rho_s  6.1e-13  gap_ke  4.3e-16
+       vacUV  omega  7.7e-13       n  5.7e-01   rho_s  1.7e-12  gap_ke  2.6e-15
+       vacL   omega  1.7e-14       n  2.2e+00   rho_s  3.7e-15  gap_ke  0.0e+00
+       ALL@N  omega  3.2e-11       n  9.2e-14   rho_s  2.7e-12  gap_ke  1.1e-13
+       hot24+vac@N  omega  2.2e-11       n  8.4e-14   rho_s  5.2e-12  gap_ke  9.6e-14

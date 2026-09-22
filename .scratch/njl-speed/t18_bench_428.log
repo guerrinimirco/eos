@@ -1,0 +1,8 @@
+=== ticket 18 benchmark, arm 428 ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /private/tmp/claude-501/-Users-mircoguerrini-Desktop-Research-Python-codes-eos/ff512d92-1fc8-4b07-92df-7001ae7e4c7e/scratchpad/wt_428/eos/__init__.py
+loadavg at start (18.328125, 20.98046875, 27.8330078125)
+  default (4)       972.9 ms/pt wall     753.2 cpu    194.6 s median (runs 191.2-202.1)  200 rows  load 22.8
+  three             839.0 ms/pt wall     732.3 cpu    167.8 s median (runs 164.3-180.5)  200 rows  load 30.4
+  three, chiral    1151.8 ms/pt wall    1083.2 cpu    230.4 s median (runs 229.8-249.6)  200 rows  load 12.9
+  dumped 200 default-table rows to t18_bench_428.json

@@ -1,0 +1,22 @@
+T=20.0 n_B=1.4 2SC nodes 24: conv True realised 2SC P 261.2855427172  dP/P 0.0e+00  ds/s 0.0e+00  deps/eps 0.0e+00  dDelta 0.0e+00 MeV
+T=20.0 n_B=1.4 2SC nodes 16: conv True realised 2SC P 261.2855422094  dP/P 1.9e-09  ds/s 6.0e-09  deps/eps 6.9e-11  dDelta 1.3e-07 MeV
+T=20.0 n_B=1.4 2SC nodes 12: conv True realised 2SC P 261.2855078009  dP/P 1.3e-07  ds/s 9.4e-07  deps/eps 1.3e-08  dDelta 8.4e-06 MeV
+T=20.0 n_B=1.4 2SC nodes 10: conv True realised 2SC P 261.2851993712  dP/P 1.3e-06  ds/s 1.1e-05  deps/eps 1.4e-07  dDelta 8.8e-05 MeV
+T=30.0 n_B=1.2 CFL nodes 24: conv True realised CFL P 179.5374483222  dP/P 0.0e+00  ds/s 0.0e+00  deps/eps 0.0e+00  dDelta 0.0e+00 MeV
+T=30.0 n_B=1.2 CFL nodes 16: conv True realised CFL P 179.5374482187  dP/P 5.8e-10  ds/s 2.6e-08  deps/eps 6.7e-10  dDelta 4.9e-07 MeV
+T=30.0 n_B=1.2 CFL nodes 12: conv True realised CFL P 179.5374179574  dP/P 1.7e-07  ds/s 6.4e-07  deps/eps 2.3e-08  dDelta 1.1e-04 MeV
+T=30.0 n_B=1.2 CFL nodes 10: conv True realised CFL P 179.5374893918  dP/P 2.3e-07  ds/s 2.3e-05  deps/eps 6.4e-07  dDelta 1.9e-04 MeV
+T=20.0 n_B=1.2 CFL nodes 24: conv True realised CFL P 150.6380785945  dP/P 0.0e+00  ds/s 0.0e+00  deps/eps 0.0e+00  dDelta 0.0e+00 MeV
+T=20.0 n_B=1.2 CFL nodes 16: conv True realised CFL P 150.6380786575  dP/P 4.2e-10  ds/s 3.5e-10  deps/eps 9.0e-12  dDelta 1.4e-07 MeV
+T=20.0 n_B=1.2 CFL nodes 12: conv True realised CFL P 150.6380782487  dP/P 2.3e-09  ds/s 1.4e-06  deps/eps 1.0e-08  dDelta 2.1e-06 MeV
+T=20.0 n_B=1.2 CFL nodes 10: conv True realised CFL P 150.6381403636  dP/P 4.1e-07  ds/s 9.6e-06  deps/eps 6.1e-08  dDelta 1.5e-04 MeV
+T=20.0 n_B=1.4 2SC nodes 48: conv True P 261.2855427205  dP/P vs 48 0.0e+00  ds/s 0.0e+00  dDelta 0.0e+00 MeV
+T=20.0 n_B=1.4 2SC nodes 32: conv True P 261.2855427304  dP/P vs 48 3.8e-11  ds/s 4.6e-14  dDelta 5.5e-12 MeV
+T=20.0 n_B=1.4 2SC nodes 24: conv True P 261.2855427172  dP/P vs 48 1.3e-11  ds/s 7.2e-13  dDelta 4.9e-12 MeV
+T=20.0 n_B=1.4 2SC nodes 20: conv True P 261.2855427226  dP/P vs 48 7.9e-12  ds/s 6.0e-11  dDelta 1.2e-09 MeV
+T=20.0 n_B=1.4 2SC nodes 16: conv True P 261.2855422094  dP/P vs 48 2.0e-09  ds/s 5.9e-09  dDelta 1.3e-07 MeV
+T=30.0 n_B=1.2 CFL nodes 48: conv True P 179.5374483223  dP/P vs 48 0.0e+00  ds/s 0.0e+00  dDelta 0.0e+00 MeV
+T=30.0 n_B=1.2 CFL nodes 32: conv True P 179.5374483222  dP/P vs 48 6.2e-13  ds/s 3.2e-13  dDelta 3.4e-11 MeV
+T=30.0 n_B=1.2 CFL nodes 24: conv True P 179.5374483222  dP/P vs 48 8.3e-13  ds/s 2.2e-12  dDelta 1.0e-10 MeV
+T=30.0 n_B=1.2 CFL nodes 20: conv True P 179.5374483215  dP/P vs 48 4.3e-12  ds/s 9.7e-11  dDelta 1.6e-08 MeV
+T=30.0 n_B=1.2 CFL nodes 16: conv True P 179.5374482187  dP/P vs 48 5.8e-10  ds/s 2.6e-08  dDelta 4.9e-07 MeV

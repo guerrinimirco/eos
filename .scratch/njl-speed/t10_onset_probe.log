@@ -1,0 +1,12 @@
+n_B 0.800 nodes 24 bounded: converged False err 4.7e-02 realised CFL  gapless False eps    922.184    2.6 s
+n_B 0.800 nodes 24 full   : converged True  err 3.4e-13 realised CFL  gapless True  eps    955.092    9.5 s
+n_B 0.800 nodes 12 bounded: converged False err 4.7e-02 realised CFL  gapless False eps    922.184    1.4 s
+n_B 0.800 nodes 12 full   : converged True  err 4.4e-13 realised CFL  gapless True  eps    955.092    5.5 s
+n_B 0.900 nodes 24 bounded: converged False err 4.6e-02 realised CFL  gapless False eps   1076.364    3.2 s
+n_B 0.900 nodes 24 full   : converged True  err 2.2e-13 realised CFL  gapless True  eps   1107.061    5.1 s
+n_B 0.900 nodes 12 bounded: converged False err 4.6e-02 realised CFL  gapless False eps   1076.364    1.5 s
+n_B 0.900 nodes 12 full   : converged True  err 2.3e-13 realised CFL  gapless True  eps   1107.061    1.4 s
+n_B 1.000 nodes 24 bounded: converged False err 4.6e-02 realised CFL  gapless False eps   1237.782    4.0 s
+n_B 1.000 nodes 24 full   : converged True  err 2.7e-13 realised CFL  gapless True  eps   1267.804    5.2 s
+n_B 1.000 nodes 12 bounded: converged False err 4.6e-02 realised CFL  gapless False eps   1237.782    1.7 s
+n_B 1.000 nodes 12 full   : converged True  err 1.7e-13 realised CFL  gapless True  eps   1267.804    1.8 s

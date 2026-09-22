@@ -1,0 +1,61 @@
+
+=== n_B 0.800 nodes 24: bounded, analytic J -> converged False err 4.7e-02 gapless False eps 922.184; 10 Jacobians
+  J# 0 gaps ( 205.01, 205.01, 205.01) gapless False crossings 0: |J-FD| 1e-4 3.6e-07 [colour_3/mu_3]  1e-6 7.2e-01 [colour_3/mu_3]  FD4-FD6 2.5e+00
+  J# 1 gaps ( 169.94, 181.24, 207.11) gapless False crossings 0: |J-FD| 1e-4 2.1e-07 [mass_s/mu_C]  1e-6 5.4e-06 [gap_2/mu_C]  FD4-FD6 5.4e-06
+  J# 2 gaps ( 157.73, 179.73, 197.94) gapless False crossings 0: |J-FD| 1e-4 1.8e-07 [mass_s/mu_C]  1e-6 2.5e-05 [gap_3/mu_C]  FD4-FD6 2.5e-05
+  J# 3 gaps ( 161.54, 179.65, 196.35) gapless False crossings 0: |J-FD| 1e-4 8.6e-08 [mass_d/mu_C]  1e-6 1.5e-05 [mass_s/mu_C]  FD4-FD6 1.5e-05
+  J# 4 gaps ( 205.01, 205.01, 205.01) gapless False crossings 0: |J-FD| 1e-4 3.6e-07 [colour_3/mu_3]  1e-6 7.2e-01 [colour_3/mu_3]  FD4-FD6 2.5e+00
+  J# 5 gaps ( 205.01, 205.01, 205.01) gapless False crossings 0: |J-FD| 1e-4 3.6e-07 [colour_3/mu_3]  1e-6 7.2e-01 [colour_3/mu_3]  FD4-FD6 2.5e+00
+  J# 6 gaps ( 168.91, 176.93, 198.12) gapless False crossings 0: |J-FD| 1e-4 2.6e-07 [mass_s/mu_C]  1e-6 9.6e-06 [colour_8/mu_C]  FD4-FD6 9.5e-06
+  J# 7 gaps ( 168.86, 181.58, 195.87) gapless False crossings 0: |J-FD| 1e-4 9.7e-08 [mass_s/mu_C]  1e-6 1.6e-05 [gap_1/mu_C]  FD4-FD6 1.6e-05
+  J# 8 gaps ( 167.40, 180.65, 196.00) gapless False crossings 0: |J-FD| 1e-4 5.3e-08 [gap_3/mu_8]  1e-6 3.3e-06 [gap_2/mu_8]  FD4-FD6 3.4e-06
+  J# 9 gaps ( 167.40, 180.66, 195.98) gapless False crossings 0: |J-FD| 1e-4 1.5e-08 [mass_s/M_u]  1e-6 6.1e-06 [mass_s/mu_8]  FD4-FD6 6.1e-06
+  B: bounded, central-difference J -> converged True err 5.4e-13 gapless True eps 955.092
+  full ladder -> converged True gapless True eps 955.092
+  C t=0.00 gapless False crossings 0: |J-FD| 1e-4 3.6e-07 [colour_3/mu_3]  1e-6 7.2e-01 [colour_3/mu_3]  FD4-FD6 2.5e+00
+  C t=0.25 gapless False crossings 0: |J-FD| 1e-4 9.3e-08 [colour_3/mu_3]  1e-6 1.2e-05 [mass_s/mu_3]  FD4-FD6 1.2e-05
+  C t=0.50 gapless False crossings 0: |J-FD| 1e-4 5.6e-08 [colour_3/mu_3]  1e-6 8.5e-06 [colour_3/mu_3]  FD4-FD6 8.4e-06
+  C t=0.75 gapless False crossings 0: |J-FD| 1e-4 2.6e-08 [colour_3/mu_3]  1e-6 2.9e-06 [mass_s/mu_3]  FD4-FD6 2.9e-06
+  C t=0.90 gapless False crossings 0: |J-FD| 1e-4 2.8e-08 [gap_1/mu_3]  1e-6 4.4e-06 [gap_3/mu_3]  FD4-FD6 4.4e-06
+  C t=1.00 gapless True  crossings 2: |J-FD| 1e-4 5.8e-06 [gap_2/Delta_2]  1e-6 3.2e-06 [gap_3/mu_3]  FD4-FD6 5.8e-06
+
+=== n_B 0.900 nodes 24: bounded, analytic J -> converged False err 4.6e-02 gapless False eps 1076.364; 11 Jacobians
+  J# 0 gaps ( 214.29, 214.29, 214.29) gapless False crossings 0: |J-FD| 1e-4 7.3e-07 [mass_s/mu_C]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 2.9e+00
+  J# 1 gaps ( 176.68, 188.81, 211.76) gapless False crossings 0: |J-FD| 1e-4 6.5e-08 [gap_2/mu_C]  1e-6 4.3e-06 [gap_3/mu_C]  FD4-FD6 4.3e-06
+  J# 2 gaps ( 165.50, 187.12, 202.19) gapless False crossings 0: |J-FD| 1e-4 5.8e-07 [gap_1/mu_C]  1e-6 2.4e-05 [mass_s/mu_C]  FD4-FD6 2.4e-05
+  J# 3 gaps ( 168.06, 186.95, 201.35) gapless False crossings 0: |J-FD| 1e-4 5.9e-07 [gap_1/mu_C]  1e-6 8.7e-05 [colour_8/mu_C]  FD4-FD6 8.7e-05
+  J# 4 gaps ( 214.29, 214.29, 214.29) gapless False crossings 0: |J-FD| 1e-4 7.3e-07 [mass_s/mu_C]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 2.9e+00
+  J# 5 gaps ( 214.29, 214.29, 214.29) gapless False crossings 0: |J-FD| 1e-4 7.3e-07 [mass_s/mu_C]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 2.9e+00
+  J# 6 gaps ( 171.56, 186.53, 202.60) gapless False crossings 0: |J-FD| 1e-4 2.3e-07 [gap_3/mu_C]  1e-6 1.5e-05 [colour_8/mu_C]  FD4-FD6 1.5e-05
+  J# 7 gaps ( 171.97, 187.61, 202.80) gapless False crossings 0: |J-FD| 1e-4 1.6e-07 [mass_s/mu_8]  1e-6 1.8e-05 [gap_2/mu_8]  FD4-FD6 1.8e-05
+  J# 8 gaps ( 172.29, 187.94, 202.23) gapless False crossings 0: |J-FD| 1e-4 1.5e-07 [colour_8/mu_8]  1e-6 1.1e-05 [mass_s/mu_8]  FD4-FD6 1.1e-05
+  J# 9 gaps ( 173.65, 188.15, 200.59) gapless False crossings 0: |J-FD| 1e-4 8.8e-08 [colour_3/mu_8]  1e-6 1.1e-05 [colour_3/mu_8]  FD4-FD6 1.1e-05
+  J#10 gaps ( 173.49, 188.20, 200.81) gapless False crossings 0: |J-FD| 1e-4 7.3e-08 [mass_s/mu_8]  1e-6 8.9e-06 [mass_s/mu_8]  FD4-FD6 8.8e-06
+  B: bounded, central-difference J -> converged True err 3.5e-13 gapless True eps 1107.061
+  full ladder -> converged True gapless True eps 1107.061
+  C t=0.00 gapless False crossings 0: |J-FD| 1e-4 7.3e-07 [mass_s/mu_C]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 2.9e+00
+  C t=0.25 gapless False crossings 0: |J-FD| 1e-4 1.0e-07 [mass_s/mu_3]  1e-6 7.4e-06 [mass_s/M_u]  FD4-FD6 7.4e-06
+  C t=0.50 gapless False crossings 0: |J-FD| 1e-4 3.7e-08 [gap_1/M_d]  1e-6 3.8e-06 [colour_3/mu_3]  FD4-FD6 3.8e-06
+  C t=0.75 gapless False crossings 0: |J-FD| 1e-4 3.4e-08 [mass_s/M_d]  1e-6 3.0e-06 [mass_s/mu_3]  FD4-FD6 3.0e-06
+  C t=0.90 gapless False crossings 0: |J-FD| 1e-4 4.4e-08 [gap_2/M_u]  1e-6 3.8e-06 [colour_3/M_d]  FD4-FD6 3.8e-06
+  C t=1.00 gapless True  crossings 2: |J-FD| 1e-4 6.1e-06 [gap_2/Delta_2]  1e-6 1.6e-06 [mass_u/M_u]  FD4-FD6 6.1e-06
+
+=== n_B 1.000 nodes 24: bounded, analytic J -> converged False err 4.6e-02 gapless False eps 1237.782; 10 Jacobians
+  J# 0 gaps ( 222.56, 222.56, 222.56) gapless False crossings 0: |J-FD| 1e-4 9.4e-07 [mass_s/mu_3]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 3.0e+00
+  J# 1 gaps ( 182.14, 194.82, 215.14) gapless False crossings 0: |J-FD| 1e-4 5.8e-08 [gap_1/mu_C]  1e-6 5.8e-06 [colour_8/mu_C]  FD4-FD6 5.7e-06
+  J# 2 gaps ( 172.42, 193.62, 205.84) gapless False crossings 0: |J-FD| 1e-4 6.6e-08 [gap_3/mu_C]  1e-6 5.0e-06 [gap_2/mu_C]  FD4-FD6 5.0e-06
+  J# 3 gaps ( 173.76, 193.41, 205.30) gapless False crossings 0: |J-FD| 1e-4 1.4e-07 [colour_8/mu_C]  1e-6 2.2e-05 [mass_s/mu_C]  FD4-FD6 2.2e-05
+  J# 4 gaps ( 222.56, 222.56, 222.56) gapless False crossings 0: |J-FD| 1e-4 9.4e-07 [mass_s/mu_3]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 3.0e+00
+  J# 5 gaps ( 222.56, 222.56, 222.56) gapless False crossings 0: |J-FD| 1e-4 9.4e-07 [mass_s/mu_3]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 3.0e+00
+  J# 6 gaps ( 177.58, 191.66, 206.09) gapless False crossings 0: |J-FD| 1e-4 7.4e-08 [colour_3/mu_C]  1e-6 9.2e-06 [colour_3/mu_C]  FD4-FD6 9.3e-06
+  J# 7 gaps ( 178.36, 193.45, 205.95) gapless False crossings 0: |J-FD| 1e-4 3.2e-08 [mass_s/mu_3]  1e-6 2.1e-06 [mass_s/M_d]  FD4-FD6 2.1e-06
+  J# 8 gaps ( 178.29, 194.06, 204.75) gapless False crossings 0: |J-FD| 1e-4 1.5e-08 [gap_2/mu_8]  1e-6 1.6e-06 [mass_s/M_u]  FD4-FD6 1.6e-06
+  J# 9 gaps ( 178.23, 194.02, 204.70) gapless False crossings 0: |J-FD| 1e-4 3.7e-08 [mass_s/M_u]  1e-6 5.1e-06 [mass_s/M_d]  FD4-FD6 5.1e-06
+  B: bounded, central-difference J -> converged False err 4.7e-02 gapless False eps 1236.772
+  full ladder -> converged True gapless True eps 1267.804
+  C t=0.00 gapless False crossings 0: |J-FD| 1e-4 9.4e-07 [mass_s/mu_3]  1e-6 7.5e-01 [colour_3/mu_3]  FD4-FD6 3.0e+00
+  C t=0.25 gapless False crossings 0: |J-FD| 1e-4 4.4e-08 [mass_s/M_d]  1e-6 1.2e-05 [mass_s/M_d]  FD4-FD6 1.2e-05
+  C t=0.50 gapless False crossings 0: |J-FD| 1e-4 3.5e-08 [mass_s/M_d]  1e-6 5.9e-06 [mass_s/M_d]  FD4-FD6 5.9e-06
+  C t=0.75 gapless False crossings 0: |J-FD| 1e-4 4.9e-08 [mass_s/M_d]  1e-6 2.1e-06 [mass_s/M_d]  FD4-FD6 2.2e-06
+  C t=0.90 gapless False crossings 0: |J-FD| 1e-4 2.5e-08 [colour_8/M_d]  1e-6 5.4e-06 [mass_s/M_d]  FD4-FD6 5.4e-06
+  C t=1.00 gapless True  crossings 2: |J-FD| 1e-4 6.5e-06 [gap_2/Delta_2]  1e-6 1.1e-06 [gap_1/M_u]  FD4-FD6 6.3e-06

@@ -1,0 +1,10 @@
+n_B 0.8 bounded: converged False realised CFL gapless False eps 922.184
+   call 0: methods ('hybr',), analytic Jacobian -> err 4.7e-02 ok False
+n_B 0.8 full: converged True realised CFL gapless True eps 955.092
+   call 0: methods ('hybr', 'lm'), analytic Jacobian -> err 4.6e-02 ok False
+   call 1: methods ('hybr', 'lm'), differenced Jacobian -> err 3.4e-13 ok True
+n_B 1.0 bounded: converged False realised CFL gapless False eps 1237.782
+   call 0: methods ('hybr',), analytic Jacobian -> err 4.6e-02 ok False
+n_B 1.0 full: converged True realised CFL gapless True eps 1267.804
+   call 0: methods ('hybr', 'lm'), analytic Jacobian -> err 4.5e-02 ok False
+   call 1: methods ('hybr', 'lm'), differenced Jacobian -> err 2.7e-13 ok True

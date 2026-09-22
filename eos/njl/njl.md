@@ -1157,11 +1157,25 @@ cached; see the comment above `PATTERNS` in `eos/general/pairing.py`.
 Every point reports the winner, the
 three gaps, $\mu_3$, $\mu_8$ and whether the state is gapless.
 
-Two seeding facts. CFL is electrically neutral **without** electrons, so its
+Three seeding facts. CFL is electrically neutral **without** electrons, so its
 seed puts $\mu_C$ at zero; seeded with an electron-bearing potential the solve
-reaches a spurious point with an 11 % flavour-density spread. And in an
+reaches a spurious point with an 11 % flavour-density spread. In an
 unpaired region $\mu_8$ is unconstrained — $n_8$ vanishes identically at
-$\mu_8 = 0$ (trap 5) — so it is pinned there rather than solved for. A warm
+$\mu_8 = 0$ (trap 5) — so it is pinned there rather than solved for. And at
+$T = 0$ in a mode that fixes a nonzero $Y_C$, a gapped CFL seed sits on a
+plateau of the rotated charge $\tilde Q_{(f,a)} = q_f - q_a$ (the colour $a$
+read as the flavour it locks to, r–u, g–d, b–s), moved by
+$(\delta\mu_C, \delta\mu_3, \delta\mu_8) = t\,(1, -1, -1/2)$. Every CFL pair is
+$\tilde Q$-neutral, so a gapped state does not respond to this potential at
+all: every row is exactly flat along it until $|t|$ breaks a $\tilde Q$-charged
+pair. A gapped CFL state carries $n_C = 0$ once colour neutral, so the CFL root
+at $Y_C \neq 0$ is the gapless one, a finite distance along a direction the
+Jacobian at the seed is singular in, and no derivative method started on the
+plateau can tell which way it lies. The seed is therefore moved along
+$\mathrm{sign}(Y_C)\,\tilde Q$ to just past the $t$ where the state first turns
+gapless, found by bisection on that property (`unlocked_seed`); in beta
+equilibrium the electrons give the charge row a slope along $\tilde Q$ and
+nothing is moved. A warm
 start is keyed by pattern, because the pattern decides the vector's *layout*;
 a density sweep carries the winning pattern's seed and lets the others start
 cold, which is also what keeps the enumeration honest.

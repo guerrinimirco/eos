@@ -1250,11 +1250,25 @@ and can be cached. A caller who wants the asymmetric sector asks for it by the
 name of the state. Every point reports
 the winner, the three gaps, $\mu_3$, $\mu_8$ and whether the state is gapless.
 
-Two seeding facts. CFL is electrically neutral \emph{without} electrons, so its
+Three seeding facts. CFL is electrically neutral \emph{without} electrons, so its
 seed puts $\muC$ at zero; seeded with an electron-bearing potential the solve
-reaches a spurious point with an $11\%$ flavour-density spread. And in an
+reaches a spurious point with an $11\%$ flavour-density spread. In an
 unpaired region $\mu_8$ is unconstrained --- $n_8$ vanishes identically at
-$\mu_8 = 0$ --- so it is pinned there rather than solved for.
+$\mu_8 = 0$ --- so it is pinned there rather than solved for. And at $T = 0$ in
+a mode that fixes a nonzero $Y_C$, a gapped CFL seed sits on a plateau of the
+rotated charge $\tilde Q_{(f,a)} = q_f - q_a$ (the colour $a$ read as the flavour
+it locks to, $r\!-\!u$, $g\!-\!d$, $b\!-\!s$), moved by
+$(\delta\muC, \delta\mu_3, \delta\mu_8) = t\,(1, -1, -\tfrac12)$. Every CFL pair
+is $\tilde Q$-neutral, so a gapped state does not respond to this potential at
+all: every row is exactly flat along it until $|t|$ is large enough to break a
+$\tilde Q$-charged pair. A gapped CFL state carries $n_C = 0$ once colour
+neutral, so the CFL root at $Y_C \neq 0$ is the gapless one, a finite distance
+along a direction the Jacobian at the seed is singular in, and no derivative
+method started on the plateau can tell which way it lies. The seed is therefore
+moved along $\operatorname{sign}(Y_C)\,\tilde Q$ to just past the value of $t$
+where the state first turns gapless, found by bisection on that property
+(\texttt{unlocked\_seed}); in beta equilibrium the electrons give the charge row
+a slope along $\tilde Q$ and nothing is moved.
 
 \paragraph{The residual handed to the root finder is dimensionless.} The rows
 above span twenty orders of magnitude in their raw units --- mass rows in MeV

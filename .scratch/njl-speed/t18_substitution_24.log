@@ -1,0 +1,24 @@
+n_B 0.800 nodes 24 analytic                : converged False err 4.7e-02 realised CFL  gapless False eps    922.184
+n_B 0.800 nodes 24 central 1e-03           : converged True  err 4.8e-13 realised CFL  gapless True  eps    955.092
+n_B 0.800 nodes 24 central 1e-04           : converged True  err 4.1e-13 realised CFL  gapless True  eps    955.092
+n_B 0.800 nodes 24 central 1e-05           : converged False err 5.3e-02 realised CFL  gapless False eps    932.230
+n_B 0.800 nodes 24 central 1e-06           : converged True  err 5.4e-13 realised CFL  gapless True  eps    955.092
+n_B 0.800 nodes 24 central 1e-07           : converged False err 5.2e-02 realised CFL  gapless False eps    926.688
+n_B 0.800 nodes 24 analytic x(1+1e-06 N)   : converged True  err 7.3e-13 realised CFL  gapless True  eps    955.092
+n_B 0.800 nodes 24 analytic x(1+1e-03 N)   : converged True  err 2.4e-11 realised CFL  gapless True  eps    955.092
+n_B 0.900 nodes 24 analytic                : converged False err 4.6e-02 realised CFL  gapless False eps   1076.364
+n_B 0.900 nodes 24 central 1e-03           : converged False err 5.0e-02 realised CFL  gapless False eps   1084.853
+n_B 0.900 nodes 24 central 1e-04           : converged True  err 4.2e-13 realised CFL  gapless True  eps   1107.061
+n_B 0.900 nodes 24 central 1e-05           : converged False err 5.0e-02 realised CFL  gapless False eps   1083.620
+n_B 0.900 nodes 24 central 1e-06           : converged True  err 3.5e-13 realised CFL  gapless True  eps   1107.061
+n_B 0.900 nodes 24 central 1e-07           : converged True  err 3.7e-13 realised CFL  gapless True  eps   1107.061
+n_B 0.900 nodes 24 analytic x(1+1e-06 N)   : converged True  err 4.2e-13 realised CFL  gapless True  eps   1107.061
+n_B 0.900 nodes 24 analytic x(1+1e-03 N)   : converged True  err 1.3e-11 realised CFL  gapless True  eps   1107.061
+n_B 1.000 nodes 24 analytic                : converged False err 4.6e-02 realised CFL  gapless False eps   1237.782
+n_B 1.000 nodes 24 central 1e-03           : converged False err 4.7e-02 realised CFL  gapless False eps   1240.467
+n_B 1.000 nodes 24 central 1e-04           : converged False err 4.7e-02 realised CFL  gapless False eps   1240.674
+n_B 1.000 nodes 24 central 1e-05           : converged False err 4.8e-02 realised CFL  gapless False eps   1243.417
+n_B 1.000 nodes 24 central 1e-06           : converged False err 4.7e-02 realised CFL  gapless False eps   1236.772
+n_B 1.000 nodes 24 central 1e-07           : converged True  err 2.7e-13 realised CFL  gapless True  eps   1267.804
+n_B 1.000 nodes 24 analytic x(1+1e-06 N)   : converged False err 4.8e-02 realised CFL  gapless False eps   1242.804
+n_B 1.000 nodes 24 analytic x(1+1e-03 N)   : converged False err 4.7e-02 realised CFL  gapless False eps   1240.691

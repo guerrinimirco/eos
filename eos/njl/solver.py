@@ -59,13 +59,16 @@ root -- so a single Newton solve returns whichever root its seed was nearest,
 silently. Every point reports the pattern it was solved in for the same reason
 `eos.mixed` reports its window: it is part of the answer.
 
-Two seeding facts, both from experience rather than taste:
+Three seeding facts, all from experience rather than taste:
 
   * CFL is electrically neutral WITHOUT electrons, so its seed puts mu_C at
     zero. Seeded with an electron-bearing potential the solve converges to a
     spurious point with an 11% flavour-density spread;
   * in an UNPAIRED region mu_8 is unconstrained -- n_8 vanishes identically at
-    mu_8 = 0 -- so it is pinned there, never solved for.
+    mu_8 = 0 -- so it is pinned there, never solved for;
+  * at T = 0 with a nonzero fixed Y_C, a gapped CFL seed sits on a plateau of
+    the rotated charge the residual is exactly flat across, so it is moved to
+    where it first unlocks before any solve starts (`unlocked_seed`).
 
 Natural units inside, fm-based at the entry points: n_B arrives in fm^-3
 because that is what a caller holds, and is converted once.
@@ -249,6 +252,91 @@ def seed_from(point, par, spec, pattern):
     if spec.is_fixed("L_e"):
         guess.append(mu_nue)
     return np.array(guess, dtype=float)
+
+
+#: The rotated electric charge of the colour-flavour-locked phase, as the
+#: direction it moves the potentials: d mu_C = t, d mu_3 = -t, d mu_8 = -t/2
+#: shifts mode (f, a) by t (q_f - q_a), with the colour a read as the flavour
+#: it locks to (r-u, g-d, b-s) and T_3, T_8 normalised as in
+#: `eos.general.pairing`. Every CFL Cooper pair is neutral under it -- (u_g,
+#: d_r) and (u_b, s_r) carry +1 and -1, the rest zero -- which is why the
+#: gapped phase is an insulator for this charge (Rajagopal and Wilczek, PRL 86,
+#: 3492 (2001)).
+ROTATED_CHARGE = {"mu_C": 1.0, "mu_3": -1.0, "mu_8": -0.5}
+
+#: Halvings of the bracket in which `unlocked_seed` places the CFL unlocking
+#: edge: eight take a bracket of twice the seed gap to under 2 MeV.
+UNLOCKING_BISECTIONS = 8
+
+
+def unlocked_seed(x, par, spec, pattern, T, vac, two_flavour=False,
+                  backend="reference", pair_nodes_per_panel=None):
+    """A CFL seed moved along the rotated charge to where it first unlocks.
+
+    At T = 0 a CFL state whose gaps are all open does not respond to the
+    rotated-charge potential at all: every density, and so every row, is
+    exactly flat along `ROTATED_CHARGE` until the potential is large enough
+    to break a Q~-charged pair. Such a state carries n_C = 0 once it is colour
+    neutral, so in a mode that fixes a NONZERO quark charge fraction the CFL
+    root cannot be gapped; it is the gapless state (Alford, Kouvaris and
+    Rajagopal, PRL 92, 222001 (2004)), a finite distance along a direction
+    the Jacobian at a gapped seed is exactly singular in. Measured at
+    `Parameters.named("rg_njl1")`, fixed_YC with Y_C = 0.1 and leptons,
+    n_B = 0.8-1.0 fm^-3: the smallest singular value of the scaled Jacobian
+    at the cross seed is 1e-17 of the largest, along this direction and no
+    other. A derivative method started there does not know which way the
+    root lies: with the exact Jacobian the least-squares step drops the
+    direction and the solve stalls in the gapped valley, and with a
+    differenced one the step along it is noise, of either sign, so which
+    root is reached is decided by round-off.
+
+    So a seed on that plateau is moved along the rotated charge -- positive
+    for a positive Y_C, since the Q~ = +1 modes it populates first are the u
+    quarks -- to just past the edge where it turns gapless, located by
+    bisection on the state's own `gapless` flag between zero and twice the
+    seed's largest gap. From there both backends reach the gapless CFL root:
+    at the four densities 0.8, 0.9, 1.0 and 1.075 fm^-3 the bounded fast
+    path does from the analytic Jacobian and four copies of it jittered at
+    1e-6, and the reference ladder from the seed and two copies jittered at
+    1e-9, every one of them. From the unmoved seed the same five fast draws
+    reached it 0 to 2 times per density, at 24 and at 12 nodes, and the
+    reference ladder missed it at 3 of 14 density-and-rule pairs. Swept over
+    45 densities from 0.5 to 1.6 fm^-3, the default enumeration now delivers
+    gapless CFL at every density from 0.775 up, with P monotone there, on
+    both backends and under three pairing quadrature rules; unmoved, the
+    same sweeps lost it at up to 13 densities, a different set on each
+    backend and rule.
+
+    Anything else comes back unchanged: another pattern, T > 0, a mode whose
+    charge row is not a fixed quark fraction (in beta equilibrium the
+    electrons give that row a slope along the direction), Y_C = 0 (the
+    gapped root is then on the plateau and a solve there is well posed), a
+    seed that is already gapless, and one that is still gapped at the far
+    end of the bracket.
+    """
+    if (pattern != "CFL" or T != 0.0 or not spec.is_fixed("C")
+            or spec.targets["Y_C"] == 0.0):
+        return x
+    names = unknown_slots(par, spec, pattern)
+    direction = np.zeros(len(x))
+    for name, weight in ROTATED_CHARGE.items():
+        direction[names.index(name)] = weight * np.sign(spec.targets["Y_C"])
+
+    def gapless(t):
+        return _state(x + t * direction, par, spec, pattern, T, vac,
+                      two_flavour, backend, pair_nodes_per_panel).gapless
+
+    lo = 0.0
+    hi = 2.0 * float(np.max(np.abs(_unpack(x, par, spec, pattern)[1])))
+    if gapless(lo) or not gapless(hi):
+        return x
+    for _ in range(UNLOCKING_BISECTIONS):
+        mid = 0.5 * (lo + hi)
+        if gapless(mid):
+            hi = mid
+        else:
+            lo = mid
+    return x + hi * direction
 
 
 def warm_start(point):
@@ -831,7 +919,17 @@ def solve_pattern(par, mode, n_B, T, flags, pattern, spec=None, x0=None,
         its own seed, and never finds the 2SC -> CFL onset: 30 CFL rows of
         the first 60 densities came back 2SC. So without a Jacobian a cross
         seed keeps the whole ladder, as `rescue=False` is ignored there.
+
+        Before any of it, a CFL seed that sits on the rotated-charge plateau
+        of a fixed-Y_C mode at T = 0 is moved to where it unlocks
+        (`unlocked_seed`). No rung of the ladder can leave that plateau except
+        by round-off, so without the move the bound above loses the gapless
+        CFL ground state from a cross seed at every density measured, and
+        the full ladder keeps it only as often as its differenced rung
+        happens to step the right way.
         """
+        seed = unlocked_seed(seed, par, spec, pattern, T, vac,
+                             flags.two_flavour, backend, pair_nodes_per_panel)
         if not rescue and jac is not None:
             return newton_solve(rows, jac, seed, unit_scales)
         methods = ('hybr',) if bounded else ('hybr', 'lm')

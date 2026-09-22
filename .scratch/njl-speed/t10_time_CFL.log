@@ -1,0 +1,25 @@
+=== ticket 10 time: CFL, backend 'fast', arms ['24/24', '16/16', '12/12', '10/10', '8/8', '24/12', '24/8']
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+loadavg at start (27.0380859375, 30.17529296875, 31.59765625)
+  rep 0 arm 24/24    1470.6 ms/pt wall    868.0 cpu  rows 188  converged solves 188/200 at   192.0 ms wall /    99.8 cpu  load 163.7
+  rep 0 arm 16/16    1140.9 ms/pt wall    686.7 cpu  rows 188  converged solves 188/200 at   111.9 ms wall /    72.9 cpu  load 68.9
+  rep 0 arm 12/12     907.7 ms/pt wall    579.3 cpu  rows 188  converged solves 188/200 at    95.4 ms wall /    60.2 cpu  load 52.4
+  rep 0 arm 10/10     795.9 ms/pt wall    520.9 cpu  rows 188  converged solves 188/200 at    65.1 ms wall /    50.6 cpu  load 103.2
+  rep 0 arm 8/8       532.3 ms/pt wall    439.8 cpu  rows 188  converged solves 188/200 at    53.9 ms wall /    42.1 cpu  load 72.3
+  rep 0 arm 24/12     853.7 ms/pt wall    679.6 cpu  rows 188  converged solves 188/200 at    93.7 ms wall /    74.8 cpu  load 128.0
+  rep 0 arm 24/8      795.7 ms/pt wall    636.8 cpu  rows 188  converged solves 188/200 at    80.2 ms wall /    68.8 cpu  load 71.3
+  rep 1 arm 24/24     890.0 ms/pt wall    775.5 cpu  rows 188  converged solves 188/200 at   102.8 ms wall /    87.8 cpu  load 51.0
+  rep 1 arm 16/16     669.3 ms/pt wall    597.2 cpu  rows 188  converged solves 188/200 at    68.0 ms wall /    64.5 cpu  load 32.5
+  rep 1 arm 12/12     553.5 ms/pt wall    511.3 cpu  rows 188  converged solves 188/200 at    55.4 ms wall /    53.0 cpu  load 34.3
+  rep 1 arm 10/10     491.4 ms/pt wall    453.0 cpu  rows 188  converged solves 188/200 at    50.5 ms wall /    46.0 cpu  load 31.5
+  rep 1 arm 8/8       459.1 ms/pt wall    427.6 cpu  rows 188  converged solves 188/200 at    44.2 ms wall /    40.8 cpu  load 36.5
+  rep 1 arm 24/12     714.2 ms/pt wall    659.6 cpu  rows 188  converged solves 188/200 at    78.8 ms wall /    72.1 cpu  load 34.5
+  rep 1 arm 24/8      679.8 ms/pt wall    619.8 cpu  rows 188  converged solves 188/200 at    73.6 ms wall /    67.8 cpu  load 48.6
+  rep 2 arm 24/24     812.3 ms/pt wall    763.8 cpu  rows 188  converged solves 188/200 at    91.2 ms wall /    88.3 cpu  load 48.2
+  rep 2 arm 16/16     618.0 ms/pt wall    599.5 cpu  rows 188  converged solves 188/200 at    62.8 ms wall /    62.0 cpu  load 45.8
+  rep 2 arm 12/12     461.1 ms/pt wall    458.6 cpu  rows 188  converged solves 188/200 at    47.7 ms wall /    47.6 cpu  load 18.7
+  rep 2 arm 10/10     440.4 ms/pt wall    431.4 cpu  rows 188  converged solves 188/200 at    47.1 ms wall /    46.1 cpu  load 32.1
+  rep 2 arm 8/8       406.7 ms/pt wall    401.7 cpu  rows 188  converged solves 188/200 at    39.0 ms wall /    38.5 cpu  load 28.0
+  rep 2 arm 24/12     686.5 ms/pt wall    641.5 cpu  rows 188  converged solves 188/200 at    72.1 ms wall /    70.7 cpu  load 26.7
+  rep 2 arm 24/8      622.2 ms/pt wall    601.0 cpu  rows 188  converged solves 188/200 at    65.3 ms wall /    64.7 cpu  load 24.2

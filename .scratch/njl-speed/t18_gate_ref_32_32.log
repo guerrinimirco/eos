@@ -1,0 +1,5 @@
+eos from /private/tmp/claude-501/-Users-mircoguerrini-Desktop-Research-Python-codes-eos/ff512d92-1fc8-4b07-92df-7001ae7e4c7e/scratchpad/wt_fix/eos/__init__.py
+=== ticket 10 gapless: fixed_YC Y_C=0.1 leptons T=0, patterns None, backend 'reference', n_B 0.5-1.6 x 45
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+loadavg (27.802734375, 32.4111328125, 29.44140625)
+  arm 32/32   11894.9 ms/pt wall   4197.2 cpu  rows 45  {'2SC': 11, 'CFL': 34}  gapless at 34: [0.775, 0.8, 0.825, 0.85, 0.875, 0.9, 0.925, 0.95, 0.975, 1.0, 1.025, 1.05, 1.075, 1.1, 1.125, 1.15, 1.175, 1.2, 1.225, 1.25, 1.275, 1.3, 1.325, 1.35, 1.375, 1.4, 1.425, 1.45, 1.475, 1.5, 1.525, 1.55, 1.575, 1.6]

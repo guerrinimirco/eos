@@ -1,0 +1,8 @@
+=== ticket 18 benchmark, arm fix ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /private/tmp/claude-501/-Users-mircoguerrini-Desktop-Research-Python-codes-eos/ff512d92-1fc8-4b07-92df-7001ae7e4c7e/scratchpad/wt_fix/eos/__init__.py
+loadavg at start (20.84716796875, 22.9638671875, 26.4580078125)
+  default (4)       414.6 ms/pt wall     362.3 cpu     82.9 s median (runs 82.8-84.0)  200 rows  load 22.4
+  three             415.0 ms/pt wall     360.9 cpu     83.0 s median (runs 77.9-85.7)  200 rows  load 20.0
+  three, chiral     651.9 ms/pt wall     580.2 cpu    130.4 s median (runs 122.2-137.3)  200 rows  load 15.1
+  dumped 200 default-table rows to t18_bench_fix.json
