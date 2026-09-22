@@ -1,0 +1,181 @@
+ticket 11/17 trace, variant HEAD
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+  solve    0 locate.scan      0  0.080000   -     +nan    91   270  27620     0   243.6
+  solve    1 locate.scan      0  0.218182   -     +nan   137   414  20003     0   175.7
+  solve    2 locate.scan      0  0.356364   -     +nan   131   396  22709     0   212.3
+  solve    3 locate.scan      0  0.494545   -     +nan   112   339  20677     0   212.0
+  solve    4 locate.scan      0  0.632727   -     +nan    48   147  10534     0   148.8
+  solve    5 locate.scan      0  0.770909   -     +nan    62   189  15609     0   185.4
+  solve    6 locate.scan      0  0.909091   Y  +0.8625    57   177   7280     0    52.7
+  solve    7 locate.scan      0  1.047273   Y  +0.9906    41   129   4804     0    36.0
+  solve    8 locate.scan      0  1.185455   Y  +0.9999    41   129   4958     0    35.1
+  solve    9 locate.scan      0  1.323636   Y  +1.0001    35   111   4077     0    28.9
+  solve   10 locate.scan      0  1.461818   Y  +1.0018    32   102   3963     0    27.0
+  solve   11 locate.scan      0  1.600000   Y  +1.0055    23    75   2853     0    19.7
+  solve   12 locate.walk      0  0.909091   Y  +0.8625    10    36   1309     0    10.2
+  solve   13 locate.walk      0  0.905272   Y  +0.8537    24    78   2971     0    22.3
+  solve   14 locate.walk      0  0.905272   Y  +0.8537    10    36   1335     0    10.7
+  solve   15 locate.walk      0  0.901453   Y  +0.8444    48   150   5702     0    41.9
+  solve   16 locate.walk      0  0.901453   Y  +0.8444    10    36   1255     0    11.3
+  solve   17 locate.walk      0  0.897634   Y  +0.8347    35   111   4019     0    28.8
+  solve   18 locate.walk      0  0.897634   Y  +0.8347    17    57   1971     0     9.3
+  solve   19 locate.walk      0  0.893815   Y  +0.8246    24    78   2857     0    11.9
+  solve   20 locate.walk      0  0.893815   Y  +0.8246    32   102   3766     0    15.9
+  solve   21 locate.walk      0  0.889995   Y  +0.8141    38   120   4272     0    19.0
+  solve   22 locate.walk      0  0.889995   Y  +0.8141    27    87   3320     0    15.2
+  solve   23 locate.walk      0  0.886176   Y  +0.8031    33   105   3892     0    18.2
+  solve   24 locate.walk      0  0.886176   Y  +0.8031    10    36   1347     0     6.1
+  solve   25 locate.walk      0  0.882357   Y  +0.7918    24    78   2834     0    13.3
+  solve   26 locate.walk      0  0.882357   Y  +0.7918    10    36   1297     0     6.4
+  solve   27 locate.walk      0  0.878538   Y  +0.7800    27    87   3143     0    18.0
+  solve   28 locate.walk      0  0.878538   Y  +0.7800    28    90   3302     0    20.1
+  solve   29 locate.walk      0  0.874719   Y  +0.7679    79   246  10142     0    70.5
+  solve   30 locate.walk      0  0.874719   Y  +0.7679    26    84   3030     0    20.4
+  solve   31 locate.walk      0  0.870900   Y  +0.7553    49   153   5556     0    36.5
+  solve   32 locate.walk      0  0.870900   Y  +0.7553    27    87   3166     0    20.9
+  solve   33 locate.walk      0  0.867081   Y  +0.7424    25    81   2925     0    19.1
+  solve   34 locate.walk      0  0.867081   Y  +0.7424    10    36   1348     0    10.2
+  solve   35 locate.walk      0  0.863262   Y  +0.7291    36   114   4340     0    30.3
+  solve   36 locate.walk      0  0.863262   Y  +0.7291    25    81   3073     0    21.9
+  solve   37 locate.walk      0  0.859443   Y  +0.7155    45   141   5447     0    38.3
+  solve   38 locate.walk      0  0.859443   Y  +0.7155    25    81   3035     0    22.9
+  solve   39 locate.walk      0  0.855624   Y  +0.7015    33   105   3904     0    28.6
+  solve   40 locate.walk      0  0.855624   Y  +0.7015    12    42   1578     0    12.6
+  solve   41 locate.walk      0  0.851804   Y  +0.6872    37   117   4376     0    33.3
+  solve   42 locate.walk      0  0.851804   Y  +0.6872    21    69   2674     0    20.9
+  solve   43 locate.walk      0  0.847985   -     +nan    92   282  13283     0   124.7
+  solve   44 locate.bisect    0  1.185455   Y  +0.9999     9    33   1194     0     8.0
+  solve   45 locate.bisect    0  1.254545   Y  +1.0000    38   120   4569     0    30.5
+  solve   46 locate.bisect    0  1.185455   Y  +0.9999     9    33   1194     0     7.8
+  solve   47 locate.bisect    0  1.220000   Y  +1.0000    40   126   4982     0    32.9
+  solve   48 locate.bisect    0  1.220000   Y  +1.0000    16    54   2106     0    14.1
+  solve   49 locate.bisect    0  1.237273   Y  +1.0000    19    63   2336     0    16.1
+  solve   50 locate.bisect    0  1.237273   Y  +1.0000    11    39   1496     0     9.8
+  solve   51 locate.bisect    0  1.245909   Y  +1.0000    28    90   3275     0    22.8
+  solve   52 locate.bisect    0  1.237273   Y  +1.0000    11    39   1496     0     9.9
+  solve   53 locate.bisect    0  1.241591   Y  +1.0000    32   102   3685     0    26.3
+  solve   54 locate.bisect    0  1.241591   Y  +1.0000    23    75   2705     0    18.2
+  solve   55 locate.bisect    0  1.243750   Y  +1.0000    27    87   3215     0    23.3
+  solve   56 solve_fixed_chi  0  0.849895   -     +nan    81   249  21257     0   258.4
+  solve   57 solve_fixed_chi  0  1.019341   -     +nan   607  1821  66113     0   484.4
+
+locate_window hint=None refine='exact': window 0.8498949291914121 -> 1.2426704545454546 exists=True 27 probes   wall 4082.9 s  cpu 3129.6 s
+
+=== unhinted ===
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  locate.bisect       263    275    275     861    24     0    232.2    248.1    36
+  locate.scan         810    816    814    2478    24     7   1895.5   1929.0    57
+  locate.walk         949    980    980    3042    68     2    814.5    851.1   108
+  solve_fixed_chi     688    688    686    2070     8     2    928.8    933.8    18
+  TOTAL              2710   2759   2755    8451   124    11   3870.9   3962.0   219
+  sweep retry depth: 0=2710
+  scipy nfev 2648
+  62 root calls   site              n  steps   jac
+      locate.bisect    n=4 calls=  12 steps=   203 jac=    48  (19% of residuals)
+      locate.scan      n=4 calls=  12 steps=   738 jac=    60  (8% of residuals)
+      locate.walk      n=4 calls=  34 steps=   771 jac=   144  (16% of residuals)
+      solve_fixed_chi  n=4 calls=   4 steps=   660 jac=    24  (4% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      locate.scan:90/8  locate.scan:136/4  locate.scan:130/8  locate.scan:111/4  locate.scan:47/4  locate.scan:61/8
+      locate.scan:56/4  locate.scan:40/4  locate.scan:40/4  locate.scan:34/4  locate.scan:31/4  locate.scan:22/4
+      locate.walk:9/4  locate.walk:23/4  locate.walk:9/4  locate.walk:47/4  locate.walk:9/4  locate.walk:34/4
+      locate.walk:16/4  locate.walk:23/4  locate.walk:31/4  locate.walk:37/4  locate.walk:26/4  locate.walk:32/4
+      locate.walk:9/4  locate.walk:23/4  locate.walk:9/4  locate.walk:26/4  locate.walk:27/4  locate.walk:35/4
+      locate.walk:42/4  locate.walk:25/4  locate.walk:48/4  locate.walk:26/4  locate.walk:24/4  locate.walk:9/4
+      locate.walk:35/4  locate.walk:24/4  locate.walk:44/4  locate.walk:24/4  locate.walk:32/4  locate.walk:11/4
+      locate.walk:36/4  locate.walk:20/4  locate.walk:30/8  locate.walk:60/8  locate.bisect:8/4  locate.bisect:37/4
+      locate.bisect:8/4  locate.bisect:39/4  locate.bisect:15/4  locate.bisect:18/4  locate.bisect:10/4  locate.bisect:27/4
+      locate.bisect:10/4  locate.bisect:31/4  locate.bisect:22/4  locate.bisect:26/4  solve_fixed_chi:43/4  solve_fixed_chi:36/4
+      solve_fixed_chi:141/8  solve_fixed_chi:464/8
+
+##### ticket 17: unhinted -- 8451 thermo_from_mu calls, 2817 quark thermo calls
+  internal_residual evaluations by rung: hybr 358721 (94.1%), polish 22458 (5.9%)   total 381179
+  seconds (NOT quotable under load): all 3962.1, hybr 3491.3, polish 393.9
+  site             pattern        hybr-ok    lm-rescue lm+polish-ok     fail(lm)    polish-ok         fail  lm evals  of evals
+  locate.bisect    2SC                287            0            0            0            0            0         0      0.0%
+  locate.bisect    CFL                287            0            0            0            0            0         0      0.0%
+  locate.bisect    unpaired           287            0            0            0            0            0         0      0.0%
+  locate.scan      2SC                726            0            0            0           17           83         0      0.0%
+  locate.scan      CFL                644            0            0            0            4          178         0      0.0%
+  locate.scan      unpaired           815            0            0            0            0           11         0      0.0%
+  locate.walk      2SC               1010            0            0            0            4            0         0      0.0%
+  locate.walk      CFL               1002            0            0            0            0           12         0      0.0%
+  locate.walk      unpaired          1014            0            0            0            0            0         0      0.0%
+  solve_fixed_chi  2SC                671            0            0            0           14            5         0      0.0%
+  solve_fixed_chi  CFL                630            0            0            0            0           60         0      0.0%
+  solve_fixed_chi  unpaired           689            0            0            0            0            1         0      0.0%
+  entered lm: 0   converged after lm (lm or polish): 0
+    ...of which the bounded call ALSO converges: 0; LOST under the bound: 0; failing now but converging bounded: 0
+  quark thermo calls whose RETURNED BLOCK would change under the bound: 0
+  lm-rescued candidates that held their layout (would be carried as a seed by `seed()`): 0
+  lm share of evals by (site, retry depth>=1): locate.bisect/d0: 0/32253 = 0.0%; locate.scan/d0: 0/145087 = 0.0%; locate.walk/d0: 0/116469 = 0.0%; solve_fixed_chi/d0: 0/87370 = 0.0%
+
+##### ticket 11 trace: unhinted -- 58 mixed solves
+    # site             d       n_B  ok      chi resid   tfm  evals    lm   cpu s
+    0 locate.scan      0  0.080000   -     +nan    91   270  27620     0   243.6
+    1 locate.scan      0  0.218182   -     +nan   137   414  20003     0   175.7
+    2 locate.scan      0  0.356364   -     +nan   131   396  22709     0   212.3
+    3 locate.scan      0  0.494545   -     +nan   112   339  20677     0   212.0
+    4 locate.scan      0  0.632727   -     +nan    48   147  10534     0   148.8
+    5 locate.scan      0  0.770909   -     +nan    62   189  15609     0   185.4
+    6 locate.scan      0  0.909091   Y  +0.8625    57   177   7280     0    52.7
+    7 locate.scan      0  1.047273   Y  +0.9906    41   129   4804     0    36.0
+    8 locate.scan      0  1.185455   Y  +0.9999    41   129   4958     0    35.1
+    9 locate.scan      0  1.323636   Y  +1.0001    35   111   4077     0    28.9
+   10 locate.scan      0  1.461818   Y  +1.0018    32   102   3963     0    27.0
+   11 locate.scan      0  1.600000   Y  +1.0055    23    75   2853     0    19.7
+   12 locate.walk      0  0.909091   Y  +0.8625    10    36   1309     0    10.2
+   13 locate.walk      0  0.905272   Y  +0.8537    24    78   2971     0    22.3
+   14 locate.walk      0  0.905272   Y  +0.8537    10    36   1335     0    10.7
+   15 locate.walk      0  0.901453   Y  +0.8444    48   150   5702     0    41.9
+   16 locate.walk      0  0.901453   Y  +0.8444    10    36   1255     0    11.3
+   17 locate.walk      0  0.897634   Y  +0.8347    35   111   4019     0    28.8
+   18 locate.walk      0  0.897634   Y  +0.8347    17    57   1971     0     9.3
+   19 locate.walk      0  0.893815   Y  +0.8246    24    78   2857     0    11.9
+   20 locate.walk      0  0.893815   Y  +0.8246    32   102   3766     0    15.9
+   21 locate.walk      0  0.889995   Y  +0.8141    38   120   4272     0    19.0
+   22 locate.walk      0  0.889995   Y  +0.8141    27    87   3320     0    15.2
+   23 locate.walk      0  0.886176   Y  +0.8031    33   105   3892     0    18.2
+   24 locate.walk      0  0.886176   Y  +0.8031    10    36   1347     0     6.1
+   25 locate.walk      0  0.882357   Y  +0.7918    24    78   2834     0    13.3
+   26 locate.walk      0  0.882357   Y  +0.7918    10    36   1297     0     6.4
+   27 locate.walk      0  0.878538   Y  +0.7800    27    87   3143     0    18.0
+   28 locate.walk      0  0.878538   Y  +0.7800    28    90   3302     0    20.1
+   29 locate.walk      0  0.874719   Y  +0.7679    79   246  10142     0    70.5
+   30 locate.walk      0  0.874719   Y  +0.7679    26    84   3030     0    20.4
+   31 locate.walk      0  0.870900   Y  +0.7553    49   153   5556     0    36.5
+   32 locate.walk      0  0.870900   Y  +0.7553    27    87   3166     0    20.9
+   33 locate.walk      0  0.867081   Y  +0.7424    25    81   2925     0    19.1
+   34 locate.walk      0  0.867081   Y  +0.7424    10    36   1348     0    10.2
+   35 locate.walk      0  0.863262   Y  +0.7291    36   114   4340     0    30.3
+   36 locate.walk      0  0.863262   Y  +0.7291    25    81   3073     0    21.9
+   37 locate.walk      0  0.859443   Y  +0.7155    45   141   5447     0    38.3
+   38 locate.walk      0  0.859443   Y  +0.7155    25    81   3035     0    22.9
+   39 locate.walk      0  0.855624   Y  +0.7015    33   105   3904     0    28.6
+   40 locate.walk      0  0.855624   Y  +0.7015    12    42   1578     0    12.6
+   41 locate.walk      0  0.851804   Y  +0.6872    37   117   4376     0    33.3
+   42 locate.walk      0  0.851804   Y  +0.6872    21    69   2674     0    20.9
+   43 locate.walk      0  0.847985   -     +nan    92   282  13283     0   124.7
+   44 locate.bisect    0  1.185455   Y  +0.9999     9    33   1194     0     8.0
+   45 locate.bisect    0  1.254545   Y  +1.0000    38   120   4569     0    30.5
+   46 locate.bisect    0  1.185455   Y  +0.9999     9    33   1194     0     7.8
+   47 locate.bisect    0  1.220000   Y  +1.0000    40   126   4982     0    32.9
+   48 locate.bisect    0  1.220000   Y  +1.0000    16    54   2106     0    14.1
+   49 locate.bisect    0  1.237273   Y  +1.0000    19    63   2336     0    16.1
+   50 locate.bisect    0  1.237273   Y  +1.0000    11    39   1496     0     9.8
+   51 locate.bisect    0  1.245909   Y  +1.0000    28    90   3275     0    22.8
+   52 locate.bisect    0  1.237273   Y  +1.0000    11    39   1496     0     9.9
+   53 locate.bisect    0  1.241591   Y  +1.0000    32   102   3685     0    26.3
+   54 locate.bisect    0  1.241591   Y  +1.0000    23    75   2705     0    18.2
+   55 locate.bisect    0  1.243750   Y  +1.0000    27    87   3215     0    23.3
+   56 solve_fixed_chi  0  0.849895   -     +nan    81   249  21257     0   258.4
+   57 solve_fixed_chi  0  1.019341   -     +nan   607  1821  66113     0   484.4
+  site             retry  ok solves  resid    tfm   evals     lm    cpu s
+  locate.bisect        0   Y     12    263    861   32253      0    219.7
+  locate.scan          0   -      6    581   1755  117152      0   1177.8
+  locate.scan          0   Y      6    229    723   27935      0    199.4
+  locate.walk          0   -      1     92    282   13283      0    124.7
+  locate.walk          0   Y     31    857   2760  103186      0    665.0
+  solve_fixed_chi      0   -      2    688   2070   87370      0    742.8
+  TOTAL                          58   2710   8451  381179      0   3129.4
+EXIT 0

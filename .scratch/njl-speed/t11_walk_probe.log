@@ -1,0 +1,39 @@
+3.14.2
+dd2vmit eta=0.3 T=0.0: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit eta=0.3 T=0.0] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit eta=0.3 T=25.0: window 0.94280 -> 1.10426 (ok)
+  [dd2vmit eta=0.3 T=25.0] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit eta=0.6 T=0.0: window 0.99946 -> 1.17078 (ok)
+  [dd2vmit eta=0.6 T=0.0] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit eta=1.0 T=0.0: window 0.99954 -> 1.17017 (ok)
+  [dd2vmit eta=1.0 T=0.0] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit eta=0.3 T=15.0: window 0.97935 -> 1.14987 (ok)
+  [dd2vmit eta=0.3 T=15.0] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit eta=0.3 T=20.0: window 0.96371 -> 1.13023 (ok)
+  [dd2vmit eta=0.3 T=20.0] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit eta=0.3 T=30.0: window 0.91616 -> 1.07157 (ok)
+  [dd2vmit eta=0.3 T=30.0] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=8 n_lo=0.03: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=8 n_lo=0.03] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=8 n_lo=0.05: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=8 n_lo=0.05] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=8 n_lo=0.08: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=8 n_lo=0.08] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=12 n_lo=0.03: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=12 n_lo=0.03] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=12 n_lo=0.05: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=12 n_lo=0.05] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=12 n_lo=0.08: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=12 n_lo=0.08] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=20 n_lo=0.03: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=20 n_lo=0.03] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=20 n_lo=0.05: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=20 n_lo=0.05] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit probes=20 n_lo=0.08: window 0.99892 -> 1.17448 (ok)
+  [dd2vmit probes=20 n_lo=0.08] walk steps 0: down 0, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 0 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit dropped-probe U_L=-25.0: window 0.31324 -> 0.99496 (ok)
+  [dd2vmit dropped-probe U_L=-25.0] walk steps 2: down 2, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 4 walk solves, cpu in failed steps 0.0 of 0.0 s
+dd2vmit dropped-probe U_L=-30.0: window 0.31324 -> 1.02517 (ok)
+  [dd2vmit dropped-probe U_L=-30.0] walk steps 2: down 2, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 4 walk solves, cpu in failed steps 0.0 of 0.0 s
+  [ALL dd2+vmit] walk steps 4: down 4, up 0; RESCUED by the ladder 0 (); failed 0 spending 0 retry solves of 8 walk solves, cpu in failed steps 0.0 of 0.1 s
+EXIT 0

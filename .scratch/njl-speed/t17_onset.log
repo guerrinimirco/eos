@@ -1,0 +1,60 @@
+ticket 11/17 trace
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+
+=== E. 7 rows at the ONSET, n_B = 0.859 -> 0.905 fm^-3 ===
+  wall 449.5 s   cpu 248.4 s   7 of 7 solved
+  chi: +0.714 +0.741 +0.767 +0.791 +0.813 +0.834 +0.853
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  sweep               268    275    275     846    14     1    409.8    423.3    24
+  TOTAL               268    275    275     846    14     1    409.8    423.3    24
+  sweep retry depth: 0=268
+  scipy nfev 261
+  7 root calls   site              n  steps   jac
+      sweep            n=4 calls=   7 steps=   229 jac=    32  (12% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      sweep:63/8  sweep:39/4  sweep:35/4  sweep:30/4  sweep:35/4  sweep:33/4
+      sweep:26/4
+
+=== onset ===
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  sweep               268    275    275     846    14     1    409.8    423.3    24
+  TOTAL               268    275    275     846    14     1    409.8    423.3    24
+  sweep retry depth: 0=268
+  scipy nfev 261
+  7 root calls   site              n  steps   jac
+      sweep            n=4 calls=   7 steps=   229 jac=    32  (12% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      sweep:63/8  sweep:39/4  sweep:35/4  sweep:30/4  sweep:35/4  sweep:33/4
+      sweep:26/4
+
+##### ticket 17: onset -- 846 thermo_from_mu calls, 282 quark thermo calls
+  internal_residual evaluations by rung: hybr 31837 (96.9%), lm 770 (2.3%), polish 246 (0.7%)   total 32853
+  seconds (NOT quotable under load): all 423.3, hybr 402.4, lm 6.8, polish 1.9
+  site             pattern        hybr-ok    lm-rescue lm+polish-ok     fail(lm)    polish-ok         fail  lm evals  of evals
+  sweep            2SC                275            0            7            0            0            0       770      6.0%
+  sweep            CFL                282            0            0            0            0            0         0      0.0%
+  sweep            unpaired           282            0            0            0            0            0         0      0.0%
+  entered lm: 7   converged after lm (lm or polish): 7
+    ...of which the bounded call ALSO converges: 7; LOST under the bound: 0; failing now but converging bounded: 0
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+  quark thermo calls whose RETURNED BLOCK would change under the bound: 0
+  lm-rescued candidates that held their layout (would be carried as a seed by `seed()`): 0
+  lm share of evals by (site, retry depth>=1): sweep/d0: 770/32853 = 2.3%
+
+##### ticket 11 trace: onset -- 7 mixed solves
+    # site             d       n_B  ok      chi resid   tfm  evals    lm   cpu s
+Traceback (most recent call last):
+  File "/Users/mircoguerrini/Desktop/Research/Python_codes/eos/.scratch/njl-speed/t11_trace_locator.py", line 155, in <module>
+    report(name)
+    ~~~~~~^^^^^^
+  File "/Users/mircoguerrini/Desktop/Research/Python_codes/eos/.scratch/njl-speed/t11_trace_locator.py", line 96, in report
+    f"{'Y' if r['ok'] else '-':>3s} {r['chi']:+8.4f} {r['resid']:5d} "
+                                                     ^^^^^^^^^^^^^^^
+ValueError: Unknown format code 'd' for object of type 'float'
+EXIT 1

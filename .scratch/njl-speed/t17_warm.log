@@ -1,0 +1,63 @@
+ticket 11/17 trace
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+  solve    0 sweep            0  1.004221   Y  +0.9766    48   150   6381   409    47.6
+  solve    1 sweep            0  1.011859   Y  +0.9800    89   276  10912   189    82.8
+  solve    2 sweep            0  1.019497   Y  +0.9829    26    84   3158     0    23.3
+  solve    3 sweep            0  1.027136   Y  +0.9854    26    84   3100     0    23.7
+  solve    4 sweep            0  1.034774   Y  +0.9876    39   123   4662     0    32.7
+  solve    5 sweep            0  1.042412   Y  +0.9895    35   111   4169     0    30.4
+  solve    6 sweep            0  1.050050   Y  +0.9912    26    84   3102     0    22.3
+
+=== B. 7 WARM rows, n_B = 1.004 -> 1.050 fm^-3 (target-grid spacing 0.0076) ===
+  wall 479.7 s   cpu 262.8 s   7 of 7 solved   chi +0.9766 -> +0.9912
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  sweep               289    296    296     912    16     2    432.5    450.0    30
+  TOTAL               289    296    296     912    16     2    432.5    450.0    30
+  sweep retry depth: 0=289
+  scipy nfev 281
+  8 root calls   site              n  steps   jac
+      sweep            n=4 calls=   8 steps=   249 jac=    32  (11% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      sweep:47/4  sweep:36/4  sweep:51/4  sweep:25/4  sweep:25/4  sweep:38/4
+      sweep:34/4  sweep:25/4
+
+=== warm ===
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  sweep               289    296    296     912    16     2    432.5    450.0    30
+  TOTAL               289    296    296     912    16     2    432.5    450.0    30
+  sweep retry depth: 0=289
+  scipy nfev 281
+  8 root calls   site              n  steps   jac
+      sweep            n=4 calls=   8 steps=   249 jac=    32  (11% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      sweep:47/4  sweep:36/4  sweep:51/4  sweep:25/4  sweep:25/4  sweep:38/4
+      sweep:34/4  sweep:25/4
+
+##### ticket 17: warm -- 912 thermo_from_mu calls, 304 quark thermo calls
+  internal_residual evaluations by rung: hybr 34788 (98.0%), lm 598 (1.7%), polish 98 (0.3%)   total 35484
+  seconds (NOT quotable under load): all 450.0, hybr 430.7, lm 6.3, polish 0.7
+  site             pattern        hybr-ok    lm-rescue lm+polish-ok     fail(lm)    polish-ok         fail  lm evals  of evals
+  sweep            2SC                302            0            2            0            0            0       598      4.2%
+  sweep            CFL                304            0            0            0            0            0         0      0.0%
+  sweep            unpaired           304            0            0            0            0            0         0      0.0%
+  entered lm: 2   converged after lm (lm or polish): 2
+    ...of which the bounded call ALSO converges: 2; LOST under the bound: 0; failing now but converging bounded: 0
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+  quark thermo calls whose RETURNED BLOCK would change under the bound: 0
+  lm-rescued candidates that held their layout (would be carried as a seed by `seed()`): 0
+  lm share of evals by (site, retry depth>=1): sweep/d0: 598/35484 = 1.7%
+
+##### ticket 11 trace: warm -- 7 mixed solves
+    # site             d       n_B  ok      chi resid   tfm  evals    lm   cpu s
+    0 sweep            0  1.004221   Y  +0.9766    48   150   6381   409    47.6
+    1 sweep            0  1.011859   Y  +0.9800    89   276  10912   189    82.8
+    2 sweep            0  1.019497   Y  +0.9829    26    84   3158     0    23.3
+    3 sweep            0  1.027136   Y  +0.9854    26    84   3100     0    23.7
+    4 sweep            0  1.034774   Y  +0.9876    39   123   4662     0    32.7
+    5 sweep            0  1.042412   Y  +0.9895    35   111   4169     0    30.4
+    6 sweep            0  1.050050   Y  +0.9912    26    84   3102     0    22.3
+  site             retry  ok solves  resid    tfm   evals     lm    cpu s
+  sweep                0   Y      7    289    912   35484    598    262.8
+  TOTAL                           7    289    912   35484    598    262.8
+EXIT 0

@@ -43,6 +43,8 @@ and at ticket 04, the same configuration instrumented rather than timed
 |---|---|---|
 | one hybrid row | 40 residuals / 41 `thermo` / **123 NJL solves** | 12.8 s onset, 28.8 s deep |
 | `locate_window`, HINTED (the cheap form) | **5,700 NJL solves** | 3,385 s |
+| the same after [tickets 11](issues/11-cheapen-the-locator.md)/[17](issues/17-methods-bound-in-mixed.md) (`66d713c`), window bit-identical | **3,084 NJL solves**, NJL evals ÷2.35 | not quotable (loaded) |
+| `locate_window`, UNHINTED (what `build_hybrid_table` calls), HEAD -> `66d713c` | **10,425 -> 8,451 NJL solves**, evals ÷1.48 | not quotable (loaded) |
 | whole 200-point build (51 rows + wings + locator) | **~12,100 NJL solves** | ~4,460 s, i.e. **74x** |
 | the per-call budget for 60 s | — | **15.2 ms / `thermo`, 4.95 ms / `thermo_from_mu`** |
 
@@ -135,6 +137,40 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 ## Decisions so far
 
 <!-- one line per closed ticket -->
+
+- [Does the `methods` bound pay inside `eos/mixed`?](issues/17-methods-bound-in-mixed.md):
+  **yes, and only where the build discards its work.** `lm` is 1.7-4.2% of
+  the NJL work in a mixed ROW (so not where the row time goes -- the
+  ticket's own trap, answered) and **18-24% of it in `locate_window`**,
+  nearly all at trial potentials of mixed solves that fail either way. The
+  discriminator is not ticket 13's seed origin (every candidate here is
+  seeded from the per-solve constant) but **whether the candidate has
+  rivals**: enumerating, a failed candidate is dropped and the max-P rival
+  answers; held to one pattern it is the phase. Measured with an EXACT
+  per-candidate counterfactual (the bounded call is `hybr` then the polish
+  from its own iterate), 4 of 687 candidates `lm` rescued would be lost,
+  every one inside a solve that fails anyway. **Landed in `66d713c`** for the
+  enumeration only; window bit-identical, 15 rows bit-identical in every
+  field on BOTH backends (ticket 16's trap checked, not inherited).
+
+- [Cheapen the locator](issues/11-cheapen-the-locator.md): **landed with 17
+  in `66d713c`, window bit-identical on both forms; NJL work ÷2.35 hinted,
+  ÷1.48 unhinted** (the unhinted form measured to completion for the first
+  time: 10,425 NJL solves, and it does return). The cut was `sweep`'s retry
+  ladder on the walk's failing DOWNWARD step: six levels re-trying a
+  density with no mixed solution from ever closer midpoints, whose result
+  the walk discards (833 of 1825 residuals hinted). Two corrections to
+  ticket 04: **the onset was never exactly refined** -- the chi = 0 solve
+  fails on this pairing, 0.8534 is the walk's tol midpoint -- and **the
+  mixed branch does not start at chi = 0**: it ends at chi ~= 0.69 near
+  n_B = 0.8516, so the "onset" is an existence boundary (physics or a second
+  branch: not decided). What is left is still ~57% doomed work unhinted: the
+  scan's probes below the onset (31%, needs a design decision), two failed
+  exact refines (23%), and the honest 15-step walk (27%, a third of it
+  re-solves). At ticket 09's target the landed locator is **~3-4 s hinted,
+  ~9-10 s unhinted**, so the whole build lands near 15-16 s against 60: the
+  locator no longer decides whether 60 s is reachable. Clock not quotable
+  this session (loadavg 70-430, battery died mid-run).
 
 - [Land the bounded rescue ladder](issues/16-land-the-bounded-ladder.md):
   **landed in `50b3b7f`, 2.51x on the pinned benchmark** (437.6 -> 174.3 ms/pt

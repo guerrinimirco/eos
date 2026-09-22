@@ -1,0 +1,30 @@
+ticket 17: lm inside the mixed loop
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+rg_njl1, beta_eq_neutrinoless, T = 0.0, eta = 0.0, patterns ('unpaired', '2SC', 'CFL'), backend 'fast'
+
+=== A. one COLD mixed row, n_B = 1.000 fm^-3 ===
+  wall 123.0 s   cpu 51.9 s   chi = +0.9745
+  site              resid    thH    thQ     tfm  seed  cold    thQ s    tfm s  sPat
+  sweep                47     48     48     147     2     1    116.0    115.7     6
+  TOTAL                47     48     48     147     2     1    116.0    115.7     6
+  sweep retry depth: 0=47
+  scipy nfev 46
+  1 root calls   site              n  steps   jac
+      sweep            n=4 calls=   1 steps=    42 jac=     4  (9% of residuals)
+  per root call (site:residuals/jac-cols, depth>0 marked *):
+      sweep:46/4
+
+##### ticket 17: cold -- 147 thermo_from_mu calls, 49 quark thermo calls
+  internal_residual evaluations by rung: hybr 5934 (94.7%), lm 265 (4.2%), polish 65 (1.0%)   total 6264
+  seconds (NOT quotable under load): all 115.7, hybr 108.0, lm 2.5, polish 2.4
+  site             pattern        hybr-ok    lm-rescue lm+polish-ok     fail(lm)    polish-ok         fail  lm evals  of evals
+  sweep            2SC                 48            0            1            0            0            0       265      9.7%
+  sweep            CFL                 49            0            0            0            0            0         0      0.0%
+  sweep            unpaired            49            0            0            0            0            0         0      0.0%
+  entered lm: 1   converged after lm (lm or polish): 1
+    ...of which the bounded call ALSO converges: 1; LOST under the bound: 0; failing now but converging bounded: 0
+    kept  sweep            2SC       realised 2SC/2SC  |dP|/P 0.0e+00
+  quark thermo calls whose RETURNED BLOCK would change under the bound: 0
+  lm-rescued candidates that held their layout (would be carried as a seed by `seed()`): 0
+  lm share of evals by (site, retry depth>=1): sweep/d0: 265/6264 = 4.2%
+EXIT 0

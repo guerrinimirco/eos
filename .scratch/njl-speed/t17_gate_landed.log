@@ -1,0 +1,19 @@
+arm head  python 3.14.2 numpy 2.3.5 scipy 1.17.0
+15 rows  wall 1002.8 s  cpu 491.8 s
+EXIT 0
+  cold  n_B 1.000000 CFL      chi +0.974496/+0.974496  |dP|/P 0.0e+00  bit-identical
+  onset n_B 0.859095 CFL      chi +0.714230/+0.714230  |dP|/P 0.0e+00  bit-identical
+  onset n_B 0.866734 CFL      chi +0.741202/+0.741202  |dP|/P 0.0e+00  bit-identical
+  onset n_B 0.874372 CFL      chi +0.766729/+0.766729  |dP|/P 0.0e+00  bit-identical
+  onset n_B 0.882010 CFL      chi +0.790720/+0.790720  |dP|/P 0.0e+00  bit-identical
+  onset n_B 0.889648 CFL      chi +0.813103/+0.813103  |dP|/P 0.0e+00  bit-identical
+  onset n_B 0.897286 CFL      chi +0.833827/+0.833827  |dP|/P 0.0e+00  bit-identical
+  onset n_B 0.904925 CFL      chi +0.852869/+0.852869  |dP|/P 0.0e+00  bit-identical
+  deep  n_B 1.004221 CFL      chi +0.976581/+0.976581  |dP|/P 0.0e+00  bit-identical
+  deep  n_B 1.011859 CFL      chi +0.979965/+0.979965  |dP|/P 0.0e+00  bit-identical
+  deep  n_B 1.019497 CFL      chi +0.982899/+0.982899  |dP|/P 0.0e+00  bit-identical
+  deep  n_B 1.027136 CFL      chi +0.985441/+0.985441  |dP|/P 0.0e+00  bit-identical
+  deep  n_B 1.034774 CFL      chi +0.987638/+0.987638  |dP|/P 0.0e+00  bit-identical
+  deep  n_B 1.042412 CFL      chi +0.989536/+0.989536  |dP|/P 0.0e+00  bit-identical
+  deep  n_B 1.050050 CFL      chi +0.991173/+0.991173  |dP|/P 0.0e+00  bit-identical
+15 rows, 15 bit-identical in every field, worst |dP|/P 0.00e+00, same pattern everywhere

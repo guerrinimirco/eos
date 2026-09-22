@@ -1,0 +1,3 @@
+arm head  python 3.14.2 numpy 2.3.5 scipy 1.17.0
+15 rows  wall 1064.0 s  cpu 476.5 s
+EXIT 0
