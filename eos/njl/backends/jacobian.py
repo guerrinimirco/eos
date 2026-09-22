@@ -58,8 +58,8 @@ from eos.njl.backends.kernel_numba import NUMBA_OK, modes_jacobian
 from eos.njl.couplings import vector_self_energy_derivative
 from eos.njl.species import DEGENERACY_SEA
 from eos.njl.thermodynamics import (
-    PAIRS, RG_PANEL_RATIO, _shape_gap_derivative, counterterm_shape,
-    has_vector, state_at,
+    PAIRS, RG_PANEL_RATIO, VACUUM_NODES_PER_PANEL, _shape_gap_derivative,
+    counterterm_shape, has_vector, state_at,
 )
 
 _PI2 = math.pi ** 2
@@ -171,8 +171,10 @@ def rg_pair_jacobian(par, M, mu_star, Delta, T, nodes_per_panel=NODES_PER_PANEL)
 
     The same three passes as `thermodynamics.rg_pair_block`, differentiated:
     hot(Lambda_UV) - vac(Lambda_UV) + vac(Lambda), on the same quadrature
-    rules, so this is the derivative of the block the residual carries. At
-    lambda = 1, or with no gap on, it is the hot pass alone.
+    rules -- `nodes_per_panel` on the hot pass, `VACUUM_NODES_PER_PANEL` on
+    the two vacuum passes -- so this is the derivative of the block the
+    residual carries. At lambda = 1, or with no gap on, it is the hot pass
+    alone.
     """
     if par.lambda_UV == 1.0 or not any(active_gaps(Delta)):
         ph = pair_hessian(M, mu_star, Delta, T, par.Lambda_medium,
@@ -191,9 +193,9 @@ def rg_pair_jacobian(par, M, mu_star, Delta, T, nodes_per_panel=NODES_PER_PANEL)
     M_bytes = np.ascontiguousarray(M, dtype=float).tobytes()
     Delta_bytes = np.ascontiguousarray(Delta, dtype=float).tobytes()
     hi = _vacuum_pair_hessian(M_bytes, Delta_bytes, par.Lambda_medium,
-                              nodes_per_panel)
+                              VACUUM_NODES_PER_PANEL)
     lo = _vacuum_pair_hessian(M_bytes, Delta_bytes, par.Lambda,
-                              nodes_per_panel)
+                              VACUUM_NODES_PER_PANEL)
     return tuple(h - a + b for h, a, b in
                  zip((hot.d_delta_n, hot.d_delta_rho_s, hot.d_gap_kernel),
                      hi, lo))

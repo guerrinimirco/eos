@@ -156,14 +156,16 @@ class TableSpec:
             dropped -- 17.5x, agreeing with the full enumeration to 1.2e-10
             relative in P and 6.2e-12 in eps. Neither argument changes the
             equations; both are declarations the caller makes.
-    pair_nodes_per_panel: Gauss-Legendre nodes per panel of the PAIRING
-            quadrature; None keeps the shipped rule (24). Lowering it is the
-            third speed lever and the only one that moves numbers. Measured on
-            the same 9-point csc=True table: 11.5 s at 24 nodes, 6.2 s at 16
-            and 3.6 s at 12, with P moving by 3e-10 and 4e-10 relative -- both
-            above the 1e-10 the `test/baseline` entries are frozen at, and a
-            point can miss the convergence gate outright at 16. The default is
-            unchanged and this is an argument the caller sets deliberately.
+    pair_nodes_per_panel: Gauss-Legendre nodes per panel of the IN-MEDIUM
+            pairing pass; None keeps the shipped rule (24). The two RG vacuum
+            passes stay at `thermodynamics.VACUUM_NODES_PER_PANEL` (12)
+            whatever is passed. Lowering it is the third speed lever and the
+            only one that moves numbers, and how far depends on T: 12 is at
+            the quadrature floor at T = 0 (the default table's realised state
+            at every density, P within 5e-9, 1.31x on the 200-point
+            `rg_njl1` beta-eq table) and leaves P at up to 1.7e-7 and s at up
+            to 1.4e-6 at T = 20-30 MeV, where the thermal collars are hundreds
+            of MeV wide. See `eos.njl.eos_point`.
     solve_nodes: solve this many densities PER BRANCH and interpolate the
             rest (`build_fast_table`). None, the default, solves every
             requested density. `beta_eq_neutrinoless` on a temperature axis

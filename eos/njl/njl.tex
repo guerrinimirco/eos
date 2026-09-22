@@ -729,8 +729,9 @@ quadrature is split there (and at $k_{F,j}\pm 25T$) exactly as in
 Sec.~\ref{sec:medium}. It is the \emph{splitting} that buys the accuracy, not
 the node count: at $100$ nodes per panel the relative error is
 $3\times10^{-14}$ where a single panel of $800$ nodes reaches
-$2\times10^{-7}$. The shipped rule is $24$ Gauss--Legendre nodes per panel,
-overridable per call.
+$2\times10^{-7}$. The shipped rule is $24$ Gauss--Legendre nodes per panel on
+the in-medium pass, overridable per call, and $12$ on the two vacuum passes of
+the RG split (Sec.~\ref{sec:rgcost}), which the call does not reach.
 
 \subsection{The gap equations, and everything else the same pass returns}
 \label{sec:kernels}
@@ -936,11 +937,31 @@ failures look like a plausible equation of state. It carries no explicit $T$
 and no mass, so it contributes to neither $s$ nor the scalar density.
 
 \subsection{Cost, and one numerical trap}
+\label{sec:rgcost}
 
 Three quadrature passes instead of one --- the medium at $\Lam_{\rm UV}$, and
 the vacuum block at $\Lam_{\rm UV}$ and at $\Lam$ --- over a momentum range ten
 times wider. At $\lambda = 1$ the two vacuum blocks are the same integral and
 the single pass is taken directly.
+
+The vacuum passes run on half the nodes. A vacuum block is evaluated at
+$\mu^* = 0$ and $T = 0$ whatever the state's temperature, so it has no Fermi
+surface to split at and no thermal collar, and its rule cannot depend on $T$.
+It runs on $12$ Gauss--Legendre nodes per panel against the in-medium pass's
+$24$. Measured against $64$ nodes on the same panels, at converged CFL and 2SC
+states over $n_B = 0.55$--$1.50$ fm$^{-3}$, $12$ nodes leave $\delta\rho_s$ at
+$2.4\times10^{-11}$ in the worst case --- 2SC at $1.30$ fm$^{-3}$, where
+$M_u = 10.7$ MeV lies inside the lowest geometric panel
+$[0, \Lam_{\rm UV}/2^7]$ --- and at round-off elsewhere; $8$ nodes leave $M_u$ at
+$2\times10^{-8}$ there. The in-medium pass keeps $24$ because at $T > 0$ its
+panels around each $k_F$ are the $\pm 25T$ collars of Sec.~\ref{sec:medium},
+hundreds of MeV wide at $T = 20$--$30$ MeV, and $12$ nodes across them leave
+$P$ at up to $1.7\times10^{-7}$ and $s$ at up to $1.4\times10^{-6}$ relative ($16$ leave $P$ at
+$2\times10^{-9}$ and $s$ at $3\times10^{-8}$). The three passes need not share
+a rule --- measured, the decoupled one takes the same Newton steps and delivers
+the same rows --- but the residual and its analytic Jacobian must take the
+vacuum passes on the \emph{same} rule, so both read one constant,
+\texttt{thermodynamics.VACUUM\_NODES\_PER\_PANEL}.
 
 The panels have to follow the cutoff. The pairing quadrature breaks at each
 Fermi momentum, which at $\lambda = 1$ covers the whole interval; at
@@ -1316,7 +1337,8 @@ argument & legal values & default \\
   \texttt{dSC}, \texttt{CFL}, \texttt{free} &
   the enumeration of Sec.~\ref{sec:enumeration} \\
 \texttt{backend} & \texttt{reference}, \texttt{fast} & \texttt{reference} \\
-\texttt{pair\_nodes\_per\_panel} & $\ge 1$ & 24 \\
+\texttt{pair\_nodes\_per\_panel} & $\ge 1$; the in-medium pairing pass only,
+  the two RG vacuum passes stay at 12 & 24 \\
 conditions & $Y_C$, $Y_S$, $Y_{L_e}$ as the mode requires; $Y_{L_\mu}$ raises
   & --- \\
 \bottomrule

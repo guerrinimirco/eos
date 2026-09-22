@@ -242,6 +242,22 @@ PAIRS = ((0, 4, 8), (0, 5, 7),      # Delta_1: (d_g, s_b), (d_b, s_g)
 #: enough: it already reaches round-off, and a finer ratio only buys nodes.
 RG_PANEL_RATIO = 2.0
 
+#: Gauss-Legendre nodes per panel on the two VACUUM passes of the RG split,
+#: half the in-medium rule. A vacuum pass is taken at mu* = 0 and T = 0
+#: whatever the state's temperature, so it has no Fermi surface and no thermal
+#: collar, and its rule cannot depend on T the way the in-medium pass's does.
+#: Measured against 64 nodes on the same panels, at converged CFL and 2SC
+#: states over n_B = 0.55-1.50 fm^-3: 12 nodes leave delta_rho_s at 2.4e-11 in
+#: the worst case (2SC at 1.30 fm^-3, where M_u = 10.7 MeV sits inside the
+#: lowest geometric panel, [0, Lambda_UV/2^7]) and at round-off elsewhere.
+#: Against 24 nodes, on 200-point tables at T = 0 and at points at T = 20 and
+#: 30 MeV, both backends, every realised state is the same, P moves by at most
+#: 4e-9 and the masses by at most 3e-10 relative (M_u in dense 2SC, the same
+#: panel). 8 nodes do not hold: they leave M_u at 2e-8 there.
+#: `pair_nodes_per_panel` does not reach this rule; it sets the in-medium
+#: pass, the one whose accuracy is the caller's choice.
+VACUUM_NODES_PER_PANEL = 12
+
 
 def counterterm_shape(Delta, Lambda, Lambda_UV):
     """g(Delta), the dimensionless shape of the massless counterterm.
@@ -364,6 +380,15 @@ def rg_pair_block(par, M, mu_star, Delta, T,
     accuracy but a quadrature error that cancels between the two blocks, and
     the mass residual is what notices. Three passes is the price.
 
+    The two vacuum passes are cheaper than the hot one, though: they run on
+    `VACUUM_NODES_PER_PANEL` (12) where the hot pass runs on `nodes_per_panel`
+    (24 by default), because a mu* = 0, T = 0 integrand has no Fermi surface
+    and no thermal collar to resolve. The nesting does not need the three
+    passes to share nodes -- measured, the decoupled rule takes the same Newton
+    steps and delivers the same rows -- only needs the residual and its
+    Jacobian (`backends.jacobian.rg_pair_jacobian`) on the SAME vacuum rule,
+    which is why both read the one constant.
+
     At lambda = 1 the two vacuum blocks are the same integral and the whole
     expression collapses to `hot(Lambda)`, which is returned directly -- so
     conventional sharp-cutoff regularization costs exactly one quadrature pass
@@ -390,9 +415,9 @@ def rg_pair_block(par, M, mu_star, Delta, T,
     Delta_bytes = np.ascontiguousarray(Delta, dtype=float).tobytes()
     backend = kwargs.get("backend", "reference")
     hi = _vacuum_pair_block(M_bytes, Delta_bytes, par.Lambda_medium,
-                            nodes_per_panel, backend)
+                            VACUUM_NODES_PER_PANEL, backend)
     lo = _vacuum_pair_block(M_bytes, Delta_bytes, par.Lambda,
-                            nodes_per_panel, backend)
+                            VACUUM_NODES_PER_PANEL, backend)
     return replace(
         hot,
         delta_omega=hot.delta_omega - hi.delta_omega + lo.delta_omega,

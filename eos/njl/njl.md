@@ -659,7 +659,8 @@ split there (and at $k_{F,j}\pm 25T$) exactly as in §4.1. It is the
 *splitting* that buys the accuracy, not the node count: at 100 nodes per panel
 the relative error is $3\times10^{-14}$ where a single panel of 800 nodes
 reaches $2\times10^{-7}$. The shipped rule is 24 Gauss–Legendre nodes per
-panel, overridable per call.
+panel on the in-medium pass, overridable per call, and 12 on the two vacuum
+passes of the RG split (§8.2), which the call does not reach.
 
 ### 7.4 The gap equations, and everything else the same pass returns
 
@@ -844,6 +845,25 @@ Three quadrature passes instead of one — the medium at $\Lambda_\mathrm{UV}$,
 and the vacuum block at $\Lambda_\mathrm{UV}$ and at $\Lambda$ — over a
 momentum range ten times wider. At $\lambda = 1$ the two vacuum blocks are the
 same integral and the single pass is taken directly.
+
+**The vacuum passes run on half the nodes.** A vacuum block is evaluated at
+$\mu^* = 0$ and $T = 0$ whatever the state's temperature, so it has no Fermi
+surface to split at and no thermal collar, and its rule cannot depend on $T$.
+It runs on 12 Gauss–Legendre nodes per panel against the in-medium pass's 24.
+Measured against 64 nodes on the same panels, at converged CFL and 2SC states
+over $n_B = 0.55$–1.50 fm⁻³, 12 nodes leave $\delta\rho_s$ at
+$2.4\times10^{-11}$ in the worst case — 2SC at 1.30 fm⁻³, where
+$M_u = 10.7$ MeV lies inside the lowest geometric panel
+$[0, \Lambda_\mathrm{UV}/2^7]$ — and at round-off elsewhere; 8 nodes leave
+$M_u$ at $2\times10^{-8}$ there. The in-medium pass keeps 24 because at
+$T > 0$ its panels around each $k_F$ are the $\pm 25T$ collars of §4.1,
+hundreds of MeV wide at $T = 20$–30 MeV, and 12 nodes across them leave $P$ at
+up to $1.7\times10^{-7}$ and $s$ at up to $1.4\times10^{-6}$ relative (16 leave $P$ at
+$2\times10^{-9}$ and $s$ at $3\times10^{-8}$). The three passes need not share
+a rule — measured, the decoupled one takes the same Newton steps and delivers
+the same rows — but the residual and its analytic Jacobian must take the
+vacuum passes on the SAME rule, so both read one constant,
+`thermodynamics.VACUUM_NODES_PER_PANEL`.
 
 **The panels have to follow the cutoff.** The pairing quadrature breaks at
 each Fermi momentum, which at $\lambda = 1$ covers the whole interval; at
@@ -1216,7 +1236,7 @@ eos_point(par, mode, species=None, n_B=None, T=None, SnB=None,
 | `x0` | array, or `{pattern: array}`, or `None` | a converged `point.x`, or `warm_start(point)` | `None` (cold) | warm start. A bare vector seeds the FIRST pattern tried; a mapping seeds each named pattern and leaves the rest cold |
 | `patterns` | tuple of `str`, or `None` | any of `"unpaired"`, `"2SC"`, `"uSC"`, `"dSC"`, `"CFL"`, `"free"` | `None` | restricts the enumeration. `None` means `("unpaired","2SC","CFL")` with `csc=True` and `("unpaired",)` with it off. The asymmetric seeds `"uSC"`, `"dSC"` and `"free"` are requestable and not enumerated (§12.4) |
 | `backend` | `str` | `"reference"`, `"fast"` | `"reference"` | which flavour of the nine medium integrals. `"fast"` needs numba and raises rather than falling back |
-| `pair_nodes_per_panel` | `int` or `None` | $\ge 1$ | `None` $\to$ 24 | Gauss–Legendre nodes per panel of the PAIRING quadrature |
+| `pair_nodes_per_panel` | `int` or `None` | $\ge 1$ | `None` $\to$ 24 | Gauss–Legendre nodes per panel of the in-medium PAIRING pass; the two RG vacuum passes stay at 12 (§8.2) |
 | `**conditions` | | `Y_C`, `Y_S`, `Y_Le` as the mode requires | — | a missing one raises; an extra one raises; `Y_Lmu` raises `NotImplementedError`; `leptons` in here raises `TypeError` |
 
 Returns `PointResult(ok: bool, message: str, point: EoSPoint)`. **`point` is
@@ -1237,13 +1257,18 @@ replaces. The two flavours sum the modes in different orders, so they agree to
 round-off rather than bit for bit, which is why the default is the reference
 one and `test/baseline` is frozen against it.
 
-**What `pair_nodes_per_panel` is worth**, on a 9-point `csc=True` table over
-$n_B = 1.0$–1.4 fm⁻³ at $T = 0$, `backend="fast"`,
-`patterns=("unpaired","2SC","CFL")`: 11.5 s at the shipped 24 nodes, 6.2 s at
-16, 3.6 s at 12, with $P$ moving by $3\times10^{-10}$ and $4\times10^{-10}$
-relative. Both are ABOVE the $10^{-10}$ the `test/baseline` entries are frozen
-at, so lowering it is a deliberate act by a caller who has decided what
-accuracy the answer needs.
+**What `pair_nodes_per_panel` is worth, and where.** It sets the in-medium
+pass only; the two vacuum passes stay at 12 (§8.2). At $T = 0$ every kink of
+the integrand sits on a panel edge and 12 is at the quadrature floor: on
+200-point `beta_eq_neutrinoless` tables of `rg_njl1` over
+$n_B = 0.5$–1.55 fm⁻³ it delivers the default's realised state at every
+density with $P$ within $5\times10^{-9}$ (2SC and CFL held, both backends;
+the default enumeration, `backend="fast"`), and builds the default table
+1.31× faster. At $T > 0$ it does not hold: across the $\pm 25T$ collars 12
+leaves $P$ at up to $1.7\times10^{-7}$ and $s$ at up to $1.4\times10^{-6}$ at
+$T = 20$–30 MeV (16: $P$ at $2\times10^{-9}$, $s$ at $3\times10^{-8}$). So
+lowering it is a deliberate act by a caller who knows its temperature and has
+decided what accuracy the answer needs.
 
 **What `backend="fast"` also selects: the analytic Jacobian.** With
 `backends/jacobian.py` present, the fast backend hands the root finder the

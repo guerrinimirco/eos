@@ -141,18 +141,26 @@ def eos_point(par, mode, species=None, n_B=None,
         blocks and the one 12x12 the 36-state Dirac-basis spectrum decomposes
         into -- which is what the compiled pass replaces.
     pair_nodes_per_panel : int
-        Gauss-Legendre nodes per panel of the PAIRING quadrature; None (the
-        default) keeps the shipped rule of 24. It is the third speed lever
-        after `backend` and `patterns`, and the only one that MOVES NUMBERS:
-        the diagonalisation count is linear in it. Measured on a 9-point
-        csc=True table over n_B = 1.0 to 1.4 fm^-3 at T = 0, backend='fast'
-        with patterns=('unpaired', '2SC', 'CFL'): 11.5 s at the shipped 24
-        nodes, 6.2 s at 16 and 3.6 s at 12, with P moving by 3e-10 and 4e-10
-        relative. Both are ABOVE the 1e-10 the `test/baseline` entries are
-        frozen at, and a colour-superconducting point can miss the
-        convergence gate outright at 16 -- so the default is unchanged and
-        lowering this is a deliberate act by a caller who has decided what
-        accuracy the answer needs and checks that its points converged.
+        Gauss-Legendre nodes per panel of the IN-MEDIUM pairing pass; None
+        (the default) keeps the shipped rule of 24. The two vacuum passes of
+        the RG split do not take it: they are evaluated at mu* = 0 and T = 0
+        whatever the state's temperature, and run on
+        `thermodynamics.VACUUM_NODES_PER_PANEL` (12). It is the third speed
+        lever after `backend` and `patterns`, and the only one that MOVES
+        NUMBERS: the diagonalisation count is linear in it.
+
+        How far it can be lowered depends on T. At T = 0 every kink of the
+        integrand sits on a panel edge, and 12 is at the quadrature floor:
+        on 200-point beta_eq_neutrinoless tables of `rg_njl1` over n_B = 0.5
+        to 1.55 fm^-3 it delivers the default's realised state at every
+        density, with P within 5e-9 (2SC and CFL held, both backends; the
+        default enumeration, backend='fast'), and builds the default table
+        1.31x faster. At T > 0 the panels around each Fermi momentum are
+        +-25 T thermal collars, hundreds of MeV wide at T = 20-30 MeV, and
+        12 leaves P at up to 1.7e-7 and s at up to 1.4e-6 relative (16: P
+        at 2e-9, s at 3e-8). So lowering it is a deliberate act by a caller
+        who knows its temperature and has decided what accuracy the answer
+        needs.
     conditions :
         The fractions the mode fixes (Y_C, Y_S, Y_Le).
     """
