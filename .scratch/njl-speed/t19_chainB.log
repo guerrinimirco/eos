@@ -1,0 +1,20 @@
+=== ticket 19 table control 2SC reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (27.9, 20.6, 18.6)
+  200 rows  wall 182.1 s  cpu 94.7 s  loadavg 55.4
+=== ticket 19 table landed 2SC reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (53.7, 43.7, 29.4)
+  200 rows  wall 154.7 s  cpu 87.0 s  loadavg 43.1
+=== ticket 19 table control CFL reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (43.2, 42.8, 31.4)
+  188 rows  wall 659.0 s  cpu 448.9 s  loadavg 43.2
+=== ticket 19 table landed CFL reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (43.2, 44.3, 38.2)
+  188 rows  wall 446.7 s  cpu 373.1 s  loadavg 22.1

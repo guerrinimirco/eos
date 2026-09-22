@@ -1,0 +1,16 @@
+=== ticket 19 bench, default table, arms ['control', 'landed', 'hot12'] interleaved x 3 ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (26.1, 18.7, 24.0)
+  rep 0 control     422.5 ms/pt wall    361.9 cpu  cpu/wall 0.86  rows 200  loadavg 24.7 -> 20.7
+  rep 0 landed      433.2 ms/pt wall    309.1 cpu  cpu/wall 0.71  rows 200  loadavg 20.7 -> 24.0
+  rep 0 hot12       302.8 ms/pt wall    235.1 cpu  cpu/wall 0.78  rows 200  loadavg 24.0 -> 22.5
+  rep 1 control     428.0 ms/pt wall    364.2 cpu  cpu/wall 0.85  rows 200  loadavg 22.5 -> 21.6
+  rep 1 landed      356.2 ms/pt wall    301.2 cpu  cpu/wall 0.85  rows 200  loadavg 21.6 -> 25.2
+  rep 1 hot12       267.1 ms/pt wall    229.9 cpu  cpu/wall 0.86  rows 200  loadavg 25.2 -> 30.1
+  rep 2 control     392.5 ms/pt wall    356.4 cpu  cpu/wall 0.91  rows 200  loadavg 30.1 -> 24.7
+  rep 2 landed      325.9 ms/pt wall    295.3 cpu  cpu/wall 0.91  rows 200  loadavg 24.7 -> 23.2
+  rep 2 hot12       255.1 ms/pt wall    228.2 cpu  cpu/wall 0.89  rows 200  loadavg 23.2 -> 21.1
+  control  median cpu    361.9 ms/pt  x1.000 vs control (per repeat 1.000, 1.000, 1.000)
+  landed   median cpu    301.2 ms/pt  x1.207 vs control (per repeat 1.171, 1.209, 1.207)
+  hot12    median cpu    229.9 ms/pt  x1.562 vs control (per repeat 1.539, 1.584, 1.562)

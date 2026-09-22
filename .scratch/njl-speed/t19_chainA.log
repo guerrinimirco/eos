@@ -1,0 +1,68 @@
+=== ticket 19 table control default fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (27.9, 20.6, 18.6)
+  200 rows  wall 142.9 s  cpu 73.7 s  loadavg 65.4
+=== ticket 19 table landed default fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (59.5, 43.3, 28.6)
+  200 rows  wall 109.1 s  cpu 60.8 s  loadavg 42.4
+=== ticket 19 table control 2SC fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (43.1, 42.4, 30.1)
+  200 rows  wall 25.0 s  cpu 13.9 s  loadavg 40.9
+=== ticket 19 table landed 2SC fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (41.7, 42.2, 30.4)
+  200 rows  wall 19.6 s  cpu 11.3 s  loadavg 46.0
+=== ticket 19 table control CFL fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (47.0, 43.4, 31.2)
+  188 rows  wall 256.0 s  cpu 173.9 s  loadavg 29.6
+=== ticket 19 table landed CFL fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (32.8, 42.5, 34.6)
+  188 rows  wall 213.4 s  cpu 150.1 s  loadavg 33.7
+=== ticket 19 gapless control fast: fixed_YC Y_C=0.1 leptons T=0, default enumeration ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (41.1, 39.2, 34.8)
+  45 rows  wall 48.9 s  cpu 31.6 s  gapless at 34: [0.775, 0.8, 0.825, 0.85, 0.875, 0.9, 0.925, 0.95, 0.975, 1.0, 1.025, 1.05, 1.075, 1.1, 1.125, 1.15, 1.175, 1.2, 1.225, 1.25, 1.275, 1.3, 1.325, 1.35, 1.375, 1.4, 1.425, 1.45, 1.475, 1.5, 1.525, 1.55, 1.575, 1.6]
+=== ticket 19 gapless landed fast: fixed_YC Y_C=0.1 leptons T=0, default enumeration ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (49.6, 42.5, 36.3)
+  45 rows  wall 46.0 s  cpu 28.5 s  gapless at 34: [0.775, 0.8, 0.825, 0.85, 0.875, 0.9, 0.925, 0.95, 0.975, 1.0, 1.025, 1.05, 1.075, 1.1, 1.125, 1.15, 1.175, 1.2, 1.225, 1.25, 1.275, 1.3, 1.325, 1.35, 1.375, 1.4, 1.425, 1.45, 1.475, 1.5, 1.525, 1.55, 1.575, 1.6]
+=== ticket 19 finiteT control fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (50.1, 43.9, 37.2)
+  2SC n_B=1.4 T=20.0: ok True realised 2SC P np.float64(261.2855426776526) s np.float64(1.0539272272613527)
+  CFL n_B=1.2 T=30.0: ok True realised CFL P np.float64(179.5374481965034) s np.float64(1.2551933513660887)
+  CFL n_B=1.2 T=20.0: ok True realised CFL P np.float64(150.6380785877956) s np.float64(0.478087721795324)
+=== ticket 19 finiteT control reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (50.7, 44.1, 37.3)
+  2SC n_B=1.4 T=20.0: ok True realised 2SC P np.float64(261.28554271722464) s np.float64(1.0539272272612557)
+  CFL n_B=1.2 T=30.0: ok True realised CFL P np.float64(179.53744832215517) s np.float64(1.2551933513674347)
+  CFL n_B=1.2 T=20.0: ok True realised CFL P np.float64(150.63807859454516) s np.float64(0.4780877217960776)
+=== ticket 19 finiteT landed fast ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (52.2, 44.8, 37.7)
+  2SC n_B=1.4 T=20.0: ok True realised 2SC P np.float64(261.2855427073677) s np.float64(1.0539272272613265)
+  CFL n_B=1.2 T=30.0: ok True realised CFL P np.float64(179.5374484077012) s np.float64(1.2551933513663756)
+  CFL n_B=1.2 T=20.0: ok True realised CFL P np.float64(150.6380786275201) s np.float64(0.47808772179602277)
+=== ticket 19 finiteT landed reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (51.4, 44.9, 37.8)
+  2SC n_B=1.4 T=20.0: ok True realised 2SC P np.float64(261.2855427171761) s np.float64(1.053927227261252)
+  CFL n_B=1.2 T=30.0: ok True realised CFL P np.float64(179.53744832866357) s np.float64(1.2551933513673303)
+  CFL n_B=1.2 T=20.0: ok True realised CFL P np.float64(150.63807858800706) s np.float64(0.4780877217960112)

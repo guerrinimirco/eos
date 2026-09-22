@@ -1,0 +1,13 @@
+3.14.2 2.3.5 1.17.0 /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+....................                                                     [100%]
+=============================== warnings summary ===============================
+test/baseline/test_baseline.py: 43 warnings
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/astro/tov/solver.py:395: DeprecationWarning: `trapz` is deprecated. Use `trapezoid` instead, or one of the numerical integration functions in `scipy.integrate`.
+    M_b_MeV = m_nucleon_MeV * np.trapz(integrand, dx=dr_fm)
+
+test/baseline/test_baseline.py::test_baseline[zlvmit]
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/zl/thermodynamics.py:331: RuntimeWarning: invalid value encountered in scalar divide
+    Y_p=n_p_calc / n_B, Y_n=n_n_calc / n_B, Y_C=n_C / n_B, Y_S=n_S / n_B,
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+20 passed, 44 warnings in 76.29s (0:01:16)

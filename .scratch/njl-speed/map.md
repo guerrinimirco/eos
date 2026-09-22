@@ -39,7 +39,9 @@ new map.
 | the same, the DEFAULT since `2536d2b`, with the bounded ladder ([ticket 16](issues/16-land-the-bounded-ladder.md), `50b3b7f`) | **2.51x** below it in one window (419 -> 167 ms/pt), i.e. ~254 ms/pt on this row's scale | ~250x |
 | `eos_table`, one pattern: unpaired / 2SC / CFL / free | 1.4 / 56.5 / 719 / 68.5 ms/pt | — |
 | of that CFL table (ticket 03): 12 dead points / 188 converged | 89% / 80 ms/pt | 80x on the rows |
-| the converged solve at a 12-node pairing rule, T = 0 only ([ticket 10](issues/10-the-quadrature-itself.md), NOT landed) | 1.67x below it, i.e. ~48 ms/pt | ~48x |
+| the same with the LANDED pairing rule, hot 24 / vacuum 12 ([ticket 19](issues/19-land-the-quadrature-rule.md), `a9a4aa1`) | **1.207x** below the DEFAULT row (~254 ms/pt) in one window (362 -> 301 cpu ms/pt), i.e. ~210 ms/pt on that row's scale | ~210x |
+| the same at `pair_nodes_per_panel=12`, a T = 0 caller's option ([ticket 19](issues/19-land-the-quadrature-rule.md)) | 1.562x below the default, i.e. ~163 ms/pt | ~163x |
+| the converged solve at a 12-node pairing rule, T = 0 only ([ticket 10](issues/10-the-quadrature-itself.md), NOT landed as a default) | 1.67x below it, i.e. ~48 ms/pt | ~48x |
 | one `eos.mixed` point, DID+NJL, 3 patterns / held 2SC | 29.6 s / 9.2 s | — |
 | the mixed window: 52 of 200 densities inside it | 52 x 29.6 s = 1539 s | 26x |
 | `eos.mixed` window location, 20 densities | 2576 s | dominates |
@@ -146,6 +148,35 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 ## Decisions so far
 
 <!-- one line per closed ticket -->
+
+- [Land the pairing quadrature rule ticket 10 measured](issues/19-land-the-quadrature-rule.md):
+  **the vacuum half of the RG split lands at 12 nodes and the in-medium pass
+  keeps 24, at every T; the T = 0 rule is the CALLER's, through the argument
+  that already exists.** Landed in `a9a4aa1` as one constant,
+  `thermodynamics.VACUUM_NODES_PER_PANEL`, which `backends/jacobian` imports,
+  so residual and Jacobian share a vacuum rule by construction rather than by
+  a harness; `pair_nodes_per_panel` still means the in-medium pass, so an
+  explicit 24 is still the default bit for bit. **1.207x on the pinned
+  benchmark** (cpu, n = 3 interleaved against a control arm in the same tree
+  whose rows are bit-identical to `a948b33`), i.e. ~254 -> **~210 ms/pt**, and
+  `pair_nodes_per_panel=12` is 1.562x, ~163 ms/pt. Gate clean on SIX tables --
+  default/2SC/CFL on both backends, 0 realised mismatches, worst |dP|/P 3.9e-9
+  at the CFL onset (where ticket 10 measured 2.9-4.6e-9 under every arm) and
+  3.5e-9 deep in reference CFL, which a point solve from every seed shows is
+  where that warm sweep STOPS, not the rule (<= 7.2e-11 between them) -- plus
+  the gapless `fixed_YC` table by name on both backends and at the caller's
+  12: **34 of 34 gapless CFL, P monotone, none of ticket 10's lottery losses
+  reproducing** under 18's seed. **Why not the two rivals**, both measured: 16
+  hot is T-agnostic in P but leaves s at 2.6e-8, three decades worse, for
+  ~0.1x; and a T-aware 12 was refused because **12 in the medium fails the P
+  gate at T = 1 MeV (1.9e-8) as well as at 20-30 (1.3e-7), and not monotonically
+  in between** -- so `T == 0` is not a rule the library can key on, though it
+  is exactly what a T = 0 caller can ask for. `njl.npz` regenerated on purpose:
+  3713 of 3790 keys bit-identical, 9 outside 1e-10 -- six pinned only to solver
+  resolution (the CFL three move exactly along ticket 18's rotated charge,
+  d mu_C = -d mu_3 = -2 d mu_8) and three physical at 1.1-2.9e-10, all the
+  Lambda_UV vacuum pass's own truncation where M_u sits in its lowest panel.
+  It is not a commit: `test/` is gitignored.
 
 - [The bounded ladder loses the gapless CFL ground state](issues/18-bound-loses-gapless-cfl.md):
   **neither the bound nor the analytic Jacobian is what fails -- the seed

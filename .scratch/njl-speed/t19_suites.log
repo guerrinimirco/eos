@@ -1,0 +1,8 @@
+fingerprint before: 3c3b4cc240a72462cf367c526216e53f5d16051a  -  HEAD 211dbed
+test/njl exit 0 :: 135 passed in 209.36s (0:03:29)
+test/baseline exit 0 :: 20 passed, 44 warnings in 76.29s (0:01:16)
+test/test_imports.py exit 0 :: 221 passed in 12.80s
+test/test_nonconvergence_return.py exit 0 :: 12 passed in 8.48s
+test/general/test_zero_pressure.py exit 0 :: 9 passed in 1.36s
+test/mixed exit 0 :: 272 passed in 765.30s (0:12:45)
+fingerprint after:  3c3b4cc240a72462cf367c526216e53f5d16051a  -

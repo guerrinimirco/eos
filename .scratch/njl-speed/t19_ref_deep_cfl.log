@@ -1,0 +1,7 @@
+/Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+n_B = 1.43391959798995
+reference landed, cold                    : M_u 27.383182772799  P np.float64(797.7186541240261)  error 1.4e-11  dP/P vs fast-landed +6.16e-11
+reference landed, seed fast-landed root   : M_u 27.383182774152  P np.float64(797.7186541210655)  error 1.8e-11  dP/P vs fast-landed +5.79e-11
+reference landed, seed ref-control root   : M_u 27.383182774485  P np.float64(797.718654132153)  error 9.8e-12  dP/P vs fast-landed +7.18e-11
+fast landed                                : M_u 27.383182774615  P np.float64(797.7186540748999)  error 5.1e-11
+reference control (24/24)                  : M_u 27.383182774485  P np.float64(797.7186541387551)  error 9.8e-12

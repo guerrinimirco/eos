@@ -1,0 +1,10 @@
+=== ticket 19 table control default reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (27.9, 20.6, 18.6)
+  200 rows  wall 632.9 s  cpu 388.1 s  loadavg 31.3
+=== ticket 19 table landed default reference ===
+python 3.14.2 (/Library/Frameworks/Python.framework/Versions/3.14/bin/python3), numpy 2.3.5, scipy 1.17.0
+eos from /Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+HEAD 211dbed  loadavg (31.8, 40.5, 34.4)
+  200 rows  wall 479.1 s  cpu 326.1 s  loadavg 32.2

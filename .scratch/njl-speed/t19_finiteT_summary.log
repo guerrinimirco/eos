@@ -1,0 +1,6 @@
+fast      2SC n_B=1.4 T=20: ok True/True realised 2SC/2SC  dP/P 1.1e-10  ds/s 2.5e-14  dM/M 2.0e-11  dDelta 1.1e-11 MeV
+fast      CFL n_B=1.2 T=30: ok True/True realised CFL/CFL  dP/P 1.2e-09  ds/s 2.3e-13  dM/M 3.5e-12  dDelta 5.4e-11 MeV
+fast      CFL n_B=1.2 T=20: ok True/True realised CFL/CFL  dP/P 2.6e-10  ds/s 1.5e-12  dM/M 3.6e-12  dDelta 5.2e-11 MeV
+reference 2SC n_B=1.4 T=20: ok True/True realised 2SC/2SC  dP/P 1.9e-13  ds/s 3.4e-15  dM/M 7.9e-12  dDelta 1.5e-11 MeV
+reference CFL n_B=1.2 T=30: ok True/True realised CFL/CFL  dP/P 3.6e-11  ds/s 8.3e-14  dM/M 3.1e-12  dDelta 2.3e-11 MeV
+reference CFL n_B=1.2 T=20: ok True/True realised CFL/CFL  dP/P 4.3e-11  ds/s 1.4e-13  dM/M 6.1e-12  dDelta 1.9e-11 MeV

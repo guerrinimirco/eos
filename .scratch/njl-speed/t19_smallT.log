@@ -1,0 +1,11 @@
+/Users/mircoguerrini/Desktop/Research/Python_codes/eos/eos/__init__.py
+2SC n_B=1.4 T= 1.0: ok True/True realised 2SC/2SC  12 vs 24: dP/P 1.9e-08  ds/s 1.5e-06
+2SC n_B=1.4 T= 2.0: ok True/True realised 2SC/2SC  12 vs 24: dP/P 1.1e-10  ds/s 5.9e-08
+2SC n_B=1.4 T= 5.0: ok True/True realised 2SC/2SC  12 vs 24: dP/P 7.9e-11  ds/s 4.3e-10
+2SC n_B=1.4 T=10.0: ok True/True realised 2SC/2SC  12 vs 24: dP/P 1.8e-09  ds/s 2.6e-08
+2SC n_B=1.4 T=20.0: ok True/True realised 2SC/2SC  12 vs 24: dP/P 1.3e-07  ds/s 9.4e-07
+CFL n_B=1.2 T= 1.0: ok True/True realised CFL/dSC  12 vs 24: dP/P 4.2e-01  ds/s 1.2e+05
+CFL n_B=1.2 T= 2.0: ok True/True realised dsSC/CFL  12 vs 24: dP/P 2.0e-01  ds/s 1.0e+00
+CFL n_B=1.2 T= 5.0: ok True/True realised CFL/CFL  12 vs 24: dP/P 1.5e-11  ds/s 1.3e-10
+CFL n_B=1.2 T=10.0: ok True/True realised CFL/CFL  12 vs 24: dP/P 2.8e-10  ds/s 1.7e-08
+CFL n_B=1.2 T=20.0: ok True/True realised CFL/CFL  12 vs 24: dP/P 2.3e-09  ds/s 1.4e-06
