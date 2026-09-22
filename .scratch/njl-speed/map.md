@@ -149,6 +149,23 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 
 <!-- one line per closed ticket -->
 
+- [Is the acceleration mode-agnostic?](issues/08-is-it-mode-agnostic.md):
+  **yes.** Rescoped from 05/06 (refuted / never run) to the whole LANDED path
+  (`2536d2b` + `50b3b7f` + `a948b33` + `a9a4aa1`), timed against the map's
+  baseline `d6d9e7c` (with `free`) on ticket 13's 20-point grid. `backend="fast"`,
+  cpu, n = 3, the arms interleaved: beta-eq T = 0 / 30 **26.05x / 5.55x**,
+  fixed_YC 0.4 with leptons **3.38x / 6.83x**, without leptons (what
+  `eos/mixed` needs per pure phase) **3.19x / 7.04x**, trapped Y_Le = 0.4
+  T = 30 **7.68x**. All 140 rows solved in both arms, 0 realised mismatches,
+  worst |dP|/P 8.9e-10, so nothing needed adjudicating. `free` won the f-tie at
+  29 rows of the base arm and duplicated the landed state at every one, and no
+  row anywhere is uSC/dSC or gapless (Y_C = 0.4 is 2SC throughout). The spread
+  in the ratio is what `free` cost the base arm in each mode, not a lever
+  shrinking: the ladder alone was 1.23x / 1.24x at T = 0 in both modes. Landed
+  fixed_YC is 3.4x dearer per point than beta-eq at T = 0 (630 against 185
+  ms/pt), and that cost goes to the finite-T / `fixed_YC` fog entry. Loadavg
+  2.9-7 (one 15.8 reading at the start), cpu/wall 0.91-1.00, on AC.
+
 - [Land the pairing quadrature rule ticket 10 measured](issues/19-land-the-quadrature-rule.md):
   **the vacuum half of the RG split lands at 12 nodes and the in-medium pass
   keeps 24, at every T; the T = 0 rule is the CALLER's, through the argument

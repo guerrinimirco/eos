@@ -1,0 +1,22 @@
+t08_rep0.json: fingerprint UNCHANGED {'base': 'c3f0d3533eb88c54413c69f15db8d5952d3a0a32', 'landed': '3c3b4cc240a72462cf367c526216e53f5d16051a'}
+t08_reps12.json: fingerprint UNCHANGED {'base': 'c3f0d3533eb88c54413c69f15db8d5952d3a0a32', 'landed': '3c3b4cc240a72462cf367c526216e53f5d16051a'}
+
+| case | base cpu | landed cpu | ratio | rows solved (base/landed) | realised mismatches | worst |dP|/P | load |
+|---|---|---|---|---|---|---|---|
+| 1 beta-eq T=0 | 95.5 s | 3.7 s | **26.05x** (27.89, 26.18, 26.05) | 20/20 | 0 | 8.9e-10 | 3-16 |
+  NOTE 2 beta-eq T=30 base: repeat 1.0 rows differ from the first repeat
+  NOTE 2 beta-eq T=30 base: repeat 1.1 rows differ from the first repeat
+| 2 beta-eq T=30 | 37.3 s | 6.7 s | **5.55x** (6.09, 5.97, 4.39) | 20/20 | 0 | 5.2e-10 | 4-6 |
+| 3 fixed_YC 0.4 lep T=0 | 42.6 s | 12.6 s | **3.38x** (3.03, 3.13, 3.38) | 20/20 | 0 | 1.6e-10 | 4-6 |
+  NOTE 4 fixed_YC 0.4 lep T=30 base: repeat 1.0 rows differ from the first repeat
+  NOTE 4 fixed_YC 0.4 lep T=30 base: repeat 1.1 rows differ from the first repeat
+| 4 fixed_YC 0.4 lep T=30 | 179.5 s | 26.3 s | **6.83x** (6.86, 7.11, 6.53) | 20/20 | 0 | 2.1e-10 | 3-6 |
+| 5 fixed_YC 0.4 nolep T=0 | 41.4 s | 13.0 s | **3.19x** (3.16, 3.33, 3.19) | 20/20 | 0 | 1.8e-10 | 3-4 |
+| 6 fixed_YC 0.4 nolep T=30 | 188.1 s | 26.7 s | **7.04x** (7.14, 6.08, 7.00) | 20/20 | 0 | 2.3e-10 | 3-7 |
+  NOTE 7 trapped Y_Le=0.4 T=30 base: repeat 1.0 rows differ from the first repeat
+  NOTE 7 trapped Y_Le=0.4 T=30 base: repeat 1.1 rows differ from the first repeat
+| 7 trapped Y_Le=0.4 T=30 | 88.2 s | 11.5 s | **7.68x** (7.22, 8.12, 7.68) | 20/20 | 0 | 4.5e-10 | 3-7 |
+
+wall/cpu over all runs: 0.91 .. 1.00; loadavg 2.9 .. 15.8; repeats per arm/case 3
+
+0 rows to adjudicate
