@@ -1,7 +1,7 @@
 # The verdict: did exact solves reach 1 ms/pt and 60 s, and what ports?
 
 Type: grilling
-Status: open
+Status: closed
 Blocked by: 13, 16, 11, 17, 10, 18
 Parent: ../map.md
 
@@ -254,18 +254,270 @@ its own old rate.
 - [20: re-look at 06 now that `gapless_momenta` is the wall](20-relook-gapless-momenta.md),
   blocked by this ticket and 19.
 
-Not done: part 2 (the port specification), charting the two graduating maps,
-and closing this map.
+Part 2 below does the rest. The two graduating maps are named there, not
+charted.
 
+---
+
+## Part 2, 2026-09-23: the port, the rulings, and the map closed
+
+Part 1's rulings stand and are not revisited: both targets retired, the fog
+ruled, `build_fast_table` survives. Part 2 owed four things: the port
+specification, a ruling on every ticket still open, the landing measurement,
+and the map marked closed.
+
+### The port specification
+
+**The port is a fast-forward, and it is held.** Every lever landed in
+production form on `njl-speed`, with its documentation and local tests:
+`2536d2b` (the three-pattern default), `50b3b7f` (the bounded ladder),
+`66d713c` (the locator and `lm` cuts), `a948b33` (`unlocked_seed`) and
+`a9a4aa1` (the vacuum rule). No code is left to port. `njl-speed` is 13
+commits ahead of `main` and 0 behind, counting this one; the merge-base is
+`d6d9e7c`.
+
+- **Mechanics.** Take a CLEAN landing certificate on the SHA that main will
+  move to. Then run `git fetch . njl-speed:main`. That form refuses anything
+  but a fast-forward and needs no checkout, so the other sessions sharing this
+  tree are not disturbed.
+- **Held by ruling 7 below.** One blocker: the 188 MB blob described at the
+  end of this list.
+
+**What the map changed under `eos/`, by file:**
+
+| file | commit | what | ticket |
+|---|---|---|---|
+| `eos/general/pairing.py` | `2536d2b` | `free` leaves `DEFAULT_PATTERNS` | [12], [15] |
+| `eos/general/solve.py` | `50b3b7f` | `solve_system(methods=)`; default unchanged | [13], [16] |
+| `eos/njl/solver.py` | `50b3b7f`, `a948b33` | `cross_seeded` bounds the ladder where there is a Jacobian; `unlocked_seed` | [16], [18] |
+| `eos/njl/thermodynamics.py` | `66d713c`, `a9a4aa1` | `thermo_from_mu(methods=)`; `VACUUM_NODES_PER_PANEL = 12` | [17], [19] |
+| `eos/njl/backends/jacobian.py` | `a9a4aa1` | reads the same vacuum constant | [19] |
+| `eos/njl/api.py`, `table.py` | `50b3b7f`, `a9a4aa1` | docstrings; `pair_nodes_per_panel` means the in-medium pass | [15], [16], [19] |
+| `eos/mixed/adapters.py` | `50b3b7f`, `66d713c` | enumerating `njl_phase` declines `lm` | [17] |
+| `eos/mixed/boundaries.py` | `66d713c` | a failing downward walk step takes no retry ladder | [11] |
+| `eos/ccdm/api.py`, `table.py` | `50b3b7f` | docstrings only | [15] |
+
+The documents are `njl.tex`/`njl.md`, `ccdm.tex`/`ccdm.md` and
+`docs/DEFERRED.md`. This commit adds `njl.tex`/`njl.md`, `mixed.tex`/`mixed.md`
+and `DEFERRED.md` (the audit below).
+
+**What the fast-forward also carries, which is not this map's.**
+[Ticket 01][01] left the J0614 group "to its owning session", and `2536d2b`
+then committed it on this branch:
+
+- **`plot/data/samples/J0614_Miller.txt`, 188,310,363 bytes. This is the
+  blocker.**
+  - By the repository's own `.gitignore` convention, raw posterior samples are
+    not tracked. They are re-fetched by `plot/fetch_samples.py`, which already
+    carries this file's sha256. The file's `.gitignore` line was never added.
+  - GitHub rejects any blob over 100 MB. Once the blob is in `main`'s history,
+    `main` cannot be pushed, and a later `git rm --cached` does not help.
+  - There are two ways out, and both are the user's call:
+    - rewrite `njl-speed` from `2536d2b` without the blob before the
+      fast-forward. Every SHA from `2536d2b` on changes, and this map cites
+      them throughout, so the rewrite owes a SHA table in `map.md`;
+    - fast-forward as it is, and never push `main` until both branches are
+      rewritten.
+
+  Either way, the `.gitignore` line belongs beside `J0614.dat`. It is not
+  added here.
+- `eos/dd2/nmp.py`, about 1,000 lines changed across `2536d2b` and `428cd66`
+  (the latter is titled "improving speed njl"), and
+  `eos/dd2/verify/run_full_check.py`. This is a DD2 inverse-map change that no
+  ticket on this map reviewed. Only the landing certificate below covers it.
+- The J0614 constraint data under `eos/general/constraints/`, `plot/`,
+  `docs/csc_bag_mapping.md`, notebooks and `.scratch/pqm`.
+
+**Decisions that change nothing in code:**
+
+- **`backends/` stays deletable (CLAUDE.md §5). Measured, not argued.** An
+  isolated worktree at `80e26d1` had `eos/njl/backends` removed. Run from
+  inside it with `PYTHONPATH` on it, `eos.__file__` pointed at the worktree,
+  and `NUMBA_OK` was False and `residual_jacobian` None. `import eos.njl`,
+  `eos.mixed.adapters` and `eos.njl.verify.run_full_check` all load. The
+  reference table (20 points over n_B = 0.6-1.5, `beta_eq_neutrinoless`,
+  T = 0, `rg_njl1`, `csc=True`) came back **bit-identical to the main tree:
+  20 rows, all 30 fields, 0 differences**, at 17.9 against 17.6 cpu s. It did
+  not fail, so it was not repeated at `d6d9e7c`. The worktree is removed.
+- `build_fast_table` and `FAST_MODES` stay (part 1).
+- `analytic_jac` stays default-False at its four call sites ([07]).
+
+### The audit: documents, `verify/`, tests
+
+Each of the five landed behaviours was checked against CLAUDE.md §11 (it is
+written out in `njl.tex` and `njl.md`) and §12 (a `verify/` entry where it is
+a physics invariant, and a test). Tests are gitignored, and these were checked
+in the local tree.
+
+| behaviour | `.tex` / `.md` | `verify/` | test |
+|---|---|---|---|
+| three-pattern default | stated in both; **`njl.tex`'s RG paragraph still said "the free seed is in the enumeration"** (fixed here) | none owed: a seed list is not an invariant | **nothing pins `DEFAULT_PATTERNS`**; only `test_baseline`'s `enumeration.n1.2` covers it, indirectly |
+| bounded ladder, fast backend only | **absent from `njl.tex`; `njl.md` §13.1 still described the unbounded rescue** (fixed here: `njl.tex` enumeration section, `njl.md` §12.4 and §13.1) | **owed**: backend parity is checked state by state (`state_at`), so a divergence of the solve PATH is invisible to it, and that is the hazard [16] met | `test_a_cross_seeded_cfl_candidate_finds_the_branch_where_it_begins`, both backends; **no unit test of `solve_system(methods=)`** |
+| `unlocked_seed` | stated in both | **owed**: "a CFL root at T = 0 and Y_C != 0 is gapless" is a physics statement, since gapped CFL carries n_C = 0; `verify/` only constructs a gapless state, for Jacobian parity | `test_the_enumeration_finds_the_gapless_cfl_ground_state`, both backends |
+| `VACUUM_NODES_PER_PANEL` | stated in both (the rule, the RG cost section, the API table) | none owed: Jacobian parity cannot resolve it ([19]), so a test pins it | `test_vacuum_passes_keep_their_own_rule_in_residual_and_jacobian` |
+| locator step-down and adapter `lm` decline | **absent from both adapter sections and from `mixed.tex`/`mixed.md`** (fixed here) | none owed: the cut is bit-identical | **none**: [17] argued the held-pattern carve-out rather than testing it |
+
+Two more things turned up:
+
+- `mixed.tex`/`.md` called `MAX_WALK` a bound on "the bisection that backs"
+  the scan. It bounds the WALK, and this commit's paragraph now describes the
+  walk.
+- `test_table_restriction_matches_the_point_solve`'s docstring still calls the
+  three patterns "the documented fast one", which "drops only the asymmetric
+  free seed". Those three patterns are now the default. The docstring is not
+  edited here.
+
+The fixed documents compile clean under `pdflatex` (`njl.tex`, `mixed.tex`).
+
+### The rulings
+
+1. **[06] closed, absorbed by [20].** Compiling the loop is 1.05x
+   ([03](03-profile-one-cfl-solve.md)). The one surviving block, and 06's
+   route and gate, live in 20.
+2. **[07] closed, not pursued. `analytic_jac` stays default-False.** The
+   ceiling is 1.1-1.3x ([04](04-count-the-mixed-loop.md)). `did_phase` has
+   no block either. The 60 s target is retired.
+3. **[14] closed into `docs/DEFERRED.md`**, entry "njl, ccdm: where the
+   asymmetric pairing sector wins is not known". [08] found no uSC/dSC state on
+   140 rows. The entry was stale on ccdm. It is corrected here with [15]'s
+   measured win (uSC over 2SC by 0.20 MeV/fm^3 at T = 50, n_B = 1.3) and
+   with the named `uSC` seed collapsing at T = 30.
+4. **[20] handed on** to the BayEoS njl registry map. At the landed 24/12
+   rule its ceiling is <= 1.39x on the CFL table and <= 1.19x on 2SC ([19]'s
+   "Handed on").
+5. **`test/baseline/njl.npz`: the six solver-resolution keys are dropped**,
+   with the reason written in `generate_baseline.py`
+   (`_flat_paired_potentials`). The rule is keyed on a criterion, not on key
+   names: T = 0, not gapless, and realised 2SC (mu_3) or CFL (mu_C, mu_3,
+   mu_8 along Q~), plus `.x`, which carries them.
+   - Regenerated on python.org 3.14.2 / numpy 2.3.5 / scipy 1.17.0:
+     **3790 -> 3784 keys, exactly the six gone, and all 3784 kept
+     bit-identical** to [19]'s file (sha1 `0571bd07` -> `3924dbd1`).
+     `test_baseline[njl]` passes.
+   - Not a commit: `test/` is gitignored. The previous file is kept in this
+     session's scratchpad.
+6. **Audit gaps.** The document gaps are fixed in this commit: `njl.tex`,
+   `njl.md`, `mixed.tex` and `mixed.md`. The `verify/` and test gaps are
+   recorded below as owed, because they need `eos/*.py` or test edits, which
+   are out of this session's scope.
+7. **Merge: held.** `main` does not move. The blob above is the one blocker.
+   **Push: no.**
+8. From the landing, below: `test/njl/test_jacobian.py` renamed to
+   `test/njl/test_analytic_jacobian.py`, content unchanged.
+
+### Owed by the port, not done here
+
+- `verify/`:
+  - a solve-level backend-parity entry: same realised pattern and P to 1e-8
+    over a warm sweep on both backends, which is where the bound can diverge;
+  - an entry for "the CFL root at T = 0, Y_C != 0 is gapless".
+- tests:
+  - one pinning `DEFAULT_PATTERNS` (and that `free` is requestable and not
+    enumerated);
+  - one for `solve_system(methods=('hybr',))` declining `lm`;
+  - one for 66d713c's two cuts;
+  - the stale docstring above;
+  - `bisect`'s bracketed-but-unlocated `nan`, which [11] recorded as untested
+    on a real solve.
+- `.gitignore`: `plot/data/samples/J0614_Miller.txt`.
+- `test/run_clean_suite.sh` **fails open on a suite that cannot run** (below).
+  Its verdict judges only the fingerprints, so a collection error is
+  certified CLEAN. It needs a verdict that also requires a pytest summary
+  line with a passed count.
+
+### Loose ends, recorded and NOT acted on
+
+- **ccdm's enumeration misses the CFL ground state at 3 of 12 points**
+  ([15] item 2). T = 30, n_B = 1.3 returns uSC at +4.27 MeV/fm^3; T = 30,
+  n_B = 1.6 returns usSC at +22.56; T = 50, n_B = 1.6 returns sSC at +6.04.
+  A cross-seeded CFL candidate collapses, keeps its name and competes, because
+  `eos/ccdm/solver.py` has no layout filter, no re-seed and no
+  `realised_pattern`. It is a wrong ground state in shipped code, on the
+  default call, at finite T. **Deferred by the user, still unfiled.**
+- **The mixed branch's existence boundary is undecided** ([11]). The branch
+  does not start at chi = 0: it ends at chi ~= 0.69 near n_B ~= 0.8516. So
+  the "onset" is an existence boundary, and whether that is physics or a
+  second branch was not decided.
+- **The locator's probes below the onset** ([11]) are 31% of the unhinted
+  locator's NJL work and wait on a design decision. Beside them sit two
+  failed exact refines (23%) and the honest walk (27%, a third of it
+  re-solves).
+- **Continuation along the sweep stays in fog, with its price** ([13], [05]):
+  - the price: rootless candidates are still 54.7% of the build after the
+    bound, so the ceiling is <= 2.2x on njl and nothing on the mixed rows;
+  - the constraint: the CFL onset is reached only because CFL is still
+    proposed after 13 consecutive failures, so a monitor that stops proposing
+    a failing pattern loses 170 of 200 rows;
+  - capture was measured at 200 of 200, and a cold re-hunt every ten densities
+    cost 6x of the 12.5x it protected.
+
+  Nothing graduates until a monitor is stated and its miss is priced.
+
+### Graduating maps: named, not charted
+
+- **The interpolated phase surface** (a new map, in `eos`). Build
+  P(mu_B, mu_C, mu_S) once per theta, T and pattern, and root-find every mode
+  and the mixed Gibbs solve against that one interpolant: the only route to
+  the 1 s hybrid aspiration. It starts from [08]'s warning (the beta-eq
+  spline was 3-5% out in P at `fixed_YC`) and from the kink in the winner's P
+  at a pattern switch.
+- **The BayEoS `njl` registry entry** (a new map, charted in `bayeos`, which
+  consumes `eos`). Add `njl` to `bayeos/registry/models.toml` at a per-theta
+  cost of ~29-42 s for a 200-point beta-eq T = 0 CSC table (part 1's 35-51 s
+  divided by [19]'s 1.207x). Its first question is whether a sampler can
+  afford a table build per theta; if not, it consumes the phase-surface map.
+  It inherits [20] and the continuation fog.
+
+### The landing measurement
+
+Two certificates, both from this work, and both cited (CLAUDE.md §12). The
+stack for both is python.org CPython 3.14.2 / numpy 2.3.5 / scipy 1.17.0, on
+AC power, at HEAD `80e26d1`, with no uncommitted `eos/*.py` and the `eos/`
+fingerprint `cae94720` on both sides of each run.
+
+- **`test/suite_certificates/20260923T120316.txt`: verdict CLEAN, and it is
+  NOT a measurement.** pytest stopped at collection after 1 s with `1 error`,
+  the `import file mismatch` between `test/njl/test_jacobian.py` and
+  `test/mixed/test_jacobian.py` that [ticket 01][01] recorded. No test ran.
+  The certifier judged only the fingerprints, so it certified a suite that
+  could not run. That is a fail-open defect of `test/run_clean_suite.sh`,
+  recorded above as owed. The file is committed with the others, because a
+  certificate that exists is cited.
+  - Why the full suite had not run since: `test/njl/test_jacobian.py` was
+    created on 2026-09-04, and the last full run (`20260903T015007.txt`, a
+    DISCARD) predates it.
+  - `--import-mode=importlib` is not a way out: it breaks five modules that
+    import sibling helpers by bare name (the dd2 and did TOV tests, three
+    enjl tests).
+  - With the user's go-ahead, the newer file was renamed to
+    `test/njl/test_analytic_jacobian.py`, content unchanged, which makes
+    `test_jacobian.py` the only such basename again. That is a local change:
+    `test/` is gitignored.
+- **`test/suite_certificates/20260923T120508.txt`: CLEAN, 1958 passed, 23
+  skipped, 0 failed** (1981 collected), 12:05:08-12:30:02, 1492.9 s. This is
+  the landing measurement for `80e26d1`. It ran with this ticket's regenerated
+  `njl.npz` and the renamed test in place.
+
+This commit changes no `eos/*.py`: only `.tex`/`.md` documents, ticket files
+and certificates. So the measurement still describes the `eos/` tree at the
+commit this ticket lands in. `main` was NOT moved (ruling 7).
+
+[01]: 01-land-the-fast-table-work.md
 [02]: 02-pin-the-benchmark.md
 [03]: 03-profile-one-cfl-solve.md
 [04]: 04-count-the-mixed-loop.md
 [05]: 05-cheap-pre-screen.md
+[06]: 06-compile-the-newton-loop.md
+[07]: 07-njl-jacobian-block.md
+[08]: 08-is-it-mode-agnostic.md
 [10]: 10-the-quadrature-itself.md
 [11]: 11-cheapen-the-locator.md
 [12]: 12-free-in-the-default.md
 [13]: 13-bound-the-rescue-ladder.md
+[14]: 14-usc-dsc-in-the-default.md
 [15]: 15-land-the-pattern-default.md
 [16]: 16-land-the-bounded-ladder.md
 [17]: 17-methods-bound-in-mixed.md
 [18]: 18-bound-loses-gapless-cfl.md
+[19]: 19-land-the-quadrature-rule.md
+[20]: 20-relook-gapless-momenta.md

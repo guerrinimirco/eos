@@ -795,8 +795,19 @@ leaves the probes' bracket is rejected in favour of the bisected estimate. The
 scan itself uses \texttt{n\_probe} $= 12$ probes per line by default, refined up
 to \texttt{max\_refine} $= 2$ times --- each refinement adding
 $3 \times \texttt{n\_probe}$ probes on the bracketing subinterval --- when no
-hint is available, and the bisection that backs it is bounded by
-\texttt{MAX\_WALK} $= 64$ steps.
+hint is available. Where the probes never bracket a crossing --- below the
+onset the mixed system has no solution, so the surviving probes can begin
+above it with every $\chi > 0$ --- the boundary is walked to from the nearest
+mixed probe in warm-started steps of \texttt{tol}, at most
+\texttt{MAX\_WALK} $= 64$ of them. Going down, a step that fails \emph{is}
+the boundary and the walk returns that step's midpoint, so such a step takes
+none of the sweep's retry ladder: the ladder could only re-try, from ever
+closer midpoints, a target with no mixed solution. Measured on DID + NJL
+(\texttt{rg\_njl1}, three patterns, $T = 0$) that ladder was 833 of the 1825
+mixed residuals of one window search, and the window is bit-identical without
+it. Going up, a failure is only a failure: the step keeps the ladder, and a
+walk that cannot reach the crossing returns \texttt{nan} rather than an
+invented offset.
 Along a temperature axis the scan is then needed only twice: once two
 isotherms carry converged boundary states, the next isotherm's boundaries are
 two warm-started fixed-$\chi$ solves seeded by linear extrapolation of the

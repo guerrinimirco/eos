@@ -3,6 +3,11 @@
 Label: `wayfinder:map`
 Effort: `njl-speed`
 Charted: 2026-09-08
+Status: **CLOSED, 2026-09-23**, at [ticket 09](issues/09-verdict-and-port.md)
+part 2. Both targets are retired. Every lever is landed on `njl-speed`, and
+the port is a fast-forward of `main`, held on one blocker (a 188 MB blob that
+`2536d2b` committed). Two maps graduate, named in 09 and not charted. No
+ticket is left open.
 
 ## Destination
 
@@ -148,6 +153,41 @@ for the profiling tickets; `mattpocock-skills:prototype` for 05, 06, 07;
 ## Decisions so far
 
 <!-- one line per closed ticket -->
+
+- [The verdict, and what ports](issues/09-verdict-and-port.md): **both targets
+  retired (part 1); the port is a fast-forward, held; the map is closed
+  (part 2).**
+  - Every lever is already in production form on `njl-speed` (`2536d2b`,
+    `50b3b7f`, `66d713c`, `a948b33`, `a9a4aa1`), 13 commits ahead of `main`
+    and 0 behind. The fast-forward is **held** because `2536d2b` also
+    committed `plot/data/samples/J0614_Miller.txt` (188 MB). That breaks the
+    repo's own `.gitignore` convention and would make `main` unpushable to
+    GitHub; the ways out are the user's call. The same fast-forward carries
+    `eos/dd2/nmp.py` changes no ticket here reviewed.
+  - **`backends/` is deletable, measured**: with it removed, the reference
+    table is bit-identical, 20 rows in all 30 fields.
+  - **The audit** fixed the document gaps in this commit: the bounded ladder
+    was undescribed and the adapter's `lm` decline, the locator's step-down
+    rule and a stale `free` sentence were missing or wrong, in
+    `njl.tex`/`njl.md` and `mixed.tex`/`mixed.md`. Two `verify/` entries and
+    five tests are recorded as owed.
+  - **Rulings:** [06](issues/06-compile-the-newton-loop.md) closed into 20;
+    [07](issues/07-njl-jacobian-block.md) not pursued (`analytic_jac` stays
+    False); [14](issues/14-usc-dsc-in-the-default.md) closed into
+    `docs/DEFERRED.md`, whose ccdm sentence is corrected;
+    [20](issues/20-relook-gapless-momenta.md) handed to the BayEoS map
+    (<= 1.39x / 1.19x).
+  - **Baseline:** `njl.npz` drops the six keys pinned only to solver
+    resolution (3790 -> 3784, the rest bit-identical).
+  - **Loose ends, recorded and not acted on:** ccdm's missed CFL ground state
+    (unfiled), 11's existence boundary and below-onset probes, and the
+    continuation fog with its price.
+  - **Landing:** `test/suite_certificates/20260923T120508.txt`, **CLEAN,
+    1958 passed / 23 skipped / 0 failed**, at `80e26d1` on python.org 3.14.2 /
+    numpy 2.3.5 / scipy 1.17.0. The same work produced
+    `20260923T120316.txt`, which says CLEAN but is not a measurement: it
+    stopped at collection on the duplicate basename `test_jacobian.py`, and
+    the certifier failed open.
 
 - [Is the acceleration mode-agnostic?](issues/08-is-it-mode-agnostic.md):
   **yes.** Rescoped from 05/06 (refuted / never run) to the whole LANDED path

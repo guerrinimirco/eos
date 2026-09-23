@@ -1,7 +1,7 @@
 # Compile `gapless_momenta`, the only uncompiled block that costs anything
 
 Type: prototype
-Status: open
+Status: closed
 Blocked by: 03
 Parent: ../map.md
 
@@ -81,3 +81,20 @@ solve).
   Falling short of those is the answer, not a failure; what it opens is a
   decision about the f2py fog entry, and on these numbers f2py is very
   unlikely to be worth it.
+
+## Resolution, 2026-09-23: absorbed by ticket 20
+
+**Closed without running. Nothing is left here that
+[ticket 20](20-relook-gapless-momenta.md) does not hold.** Ruled at
+[ticket 09](09-verdict-and-port.md) part 2.
+
+- The loop is spent: compiling it buys 1.05x, and every uncompiled numpy
+  block together 1.3x, at best ([03](03-profile-one-cfl-solve.md)).
+- The one block that survived, `gapless_momenta`, was re-scoped by ticket 20
+  at the landed pairing rule (24 in-medium / 12 vacuum,
+  [19](19-land-the-quadrature-rule.md)). This ticket's route, a jitted
+  crossing search in `backends/`, is ticket 20's option 1, with this ticket's
+  gate (`backends/` still deletable, a parity check in `eos/njl/verify/`)
+  carried over whole.
+- Ticket 20 is handed on, not run (see its resolution). So numba has not been
+  measured short, and the f2py fog entry stays shut.

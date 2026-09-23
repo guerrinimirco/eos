@@ -1291,6 +1291,34 @@ where the state first turns gapless, found by bisection on that property
 (\texttt{unlocked\_seed}); in beta equilibrium the electrons give the charge row
 a slope along $\tilde Q$ and nothing is moved.
 
+\paragraph{How hard each candidate is pushed.} Each candidate is handed to a
+root finder that tries Powell's hybrid method and then Levenberg--Marquardt from
+the seed, and closes with a Newton polish if neither reached the gate. With
+\texttt{backend="fast"} the analytic Jacobian of \texttt{backends/} is passed
+in, a damped Newton run comes first, and two rescues follow: a solve that
+converged but left its layout is re-seeded with its gaps reset and solved
+again, and one that failed is repeated with a differenced Jacobian. A
+warm-started candidate that still fails is retried once from its cold seed, on
+either backend. A candidate seeded from \emph{another} pattern's state --- a
+cross seed, which is what a sweep hands every pattern that did not win the
+previous density --- is asking whether this pattern has a root near the state
+the enumeration already holds, and a no is an ordinary answer: the pattern
+owning the root it would collapse onto is in the enumeration and finds it from
+its own seed. So on the fast backend a cross-seeded candidate gets the Newton
+run and one hybrid solve, and no Levenberg--Marquardt, no differenced repeat
+and no cold retry; the re-seed after leaving its layout is kept. On
+\texttt{rg\_njl1}, beta equilibrium, $T = 0$, 200 densities over
+$\nB = 0.5$--$1.55$ fm$^{-3}$, the 13 cross-seeded CFL candidates below the
+CFL onset have no CFL root and were $77\%$ of the table; bounded, it builds
+$2.0$--$2.5\times$ faster (two measurement windows) with every density in the
+same realised state and $P$ within $7\times10^{-10}$. On the reference backend
+the bound does \emph{not} apply, and must not: the Newton run and the
+Jacobian-driven hybrid solve are what reach the CFL root where its branch
+begins. Without them the hybrid solve alone stalls at $10^{-6}$ at the first
+density of the CFL branch ($\nB = 0.5686$ fm$^{-3}$ on the grid above), and a bounded sweep
+then converges onto a second CFL root about $1$~MeV\,fm$^{-3}$ higher in $f$,
+carries it forward as its own seed and never finds the 2SC$\to$CFL onset.
+
 \paragraph{The residual handed to the root finder is dimensionless.} The rows
 above span twenty orders of magnitude in their raw units --- mass rows in MeV
 against gap and colour rows in MeV$^3$ --- and a root finder terminates on its
@@ -1581,7 +1609,14 @@ enumerates the patterns at every call and keeps the one with the largest $P$,
 which at fixed potentials is the stable one; the \emph{label} of that winner
 is not one of the declared fields --- it comes back as the key of the
 warm-start mapping the adapter returns alongside the block, and the gaps in the
-block are what say whether and how the phase paired. No lepton enters it, by
+block are what say whether and how the phase paired. While it enumerates, each
+candidate's internal solve declines Levenberg--Marquardt: a candidate that
+misses the gate is dropped and its rivals still answer. Measured on DID +
+\texttt{rg\_njl1}, three patterns, $T = 0$, that rung was $18$--$24\%$ of the NJL
+work inside the mixed engine's window search, nearly all of it at trial
+potentials of mixed solves that fail either way, and the located window and
+fifteen mixed rows come back bit-identical without it. An adapter held to one
+pattern keeps the full ladder, since there that candidate \emph{is} the phase. No lepton enters it, by
 Sec.~\ref{sec:leptons}. There is no thermo-at-given-\emph{densities} surface,
 so a mixed-phase response that would need one raises
 (Sec.~\ref{sec:notimplemented}).
@@ -1828,7 +1863,9 @@ re-derived: the \emph{massive} scheme must not be used, since it inverts the
 gap ordering to $\Delta_3 < \Delta_1 = \Delta_2$ and predicts the wrong melting
 pattern; and the RG-consistent phase diagram melts CFL in a dSC pattern where
 the sharp-cutoff one melts it in a uSC pattern --- which is why the asymmetric
-\texttt{free} seed is in the enumeration of Sec.~\ref{sec:enumeration}. Two
+seeds uSC, dSC and \texttt{free} stay requestable by name
+(Sec.~\ref{sec:enumeration}). They are not enumerated by default, and the
+points at which that default was checked do not reach the melting region. Two
 things their prose does not state and that measurement forced are recorded in
 Sec.~\ref{sec:rg}: the vacuum piece of the split is taken at the same
 condensates \emph{gaps included}, and the pairing panels must follow

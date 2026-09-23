@@ -1,7 +1,7 @@
 # Give `njl_phase` a `jacobian_block`, and turn `analytic_jac` on
 
 Type: prototype
-Status: open
+Status: closed
 Blocked by: 04
 Parent: ../map.md
 
@@ -112,3 +112,26 @@ bottom of the charting notes — "the window locator, not the point solve, is
 what makes a hybrid table unaffordable" — is confirmed (76% of a build) and has
 become [ticket 11](11-cheapen-the-locator.md). This ticket is now the Jacobian
 block and nothing else.
+
+## Resolution, 2026-09-23: not pursued; `analytic_jac` stays default-False
+
+**Closed, not pursued.** Ruled at [ticket 09](09-verdict-and-port.md) part 2.
+
+- **The lever is not there.** `hybr` forms its differenced Jacobian once per
+  `root` call and Broyden-updates it afterwards, so the differenced columns
+  are 9-24% of residuals: a **1.1-1.3x ceiling**, not the ~6x this ticket was
+  charted on ([04](04-count-the-mixed-loop.md)).
+- **It could not reach the pairing the map measures.** `did_phase` has no
+  `jacobian_block` either, and `_jac_with_fallback` returns None if any phase
+  in a pair lacks one. So a block on `njl_phase` alone changes nothing on
+  DID+NJL ([04]).
+- **What it served is retired.** The 60 s hybrid target is retired, and the
+  rows alone stay >= 8x over it with this ticket's ceiling included
+  ([09](09-verdict-and-port.md) part 1).
+
+`analytic_jac` stays default-False at its four call sites (`eos/mixed`'s
+`api.py`, `hybrid.py`, `table.py`, `solver.py`). Nothing was changed, so they
+stay consistent. `Phase.jacobian_block` stays in the adapter contract for
+`dd2_phase` and `vmit_phase`, unchanged.
+
+[04]: 04-count-the-mixed-loop.md

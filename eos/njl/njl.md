@@ -1200,6 +1200,34 @@ start is keyed by pattern, because the pattern decides the vector's *layout*;
 a density sweep carries the winning pattern's seed and lets the others start
 cold, which is also what keeps the enumeration honest.
 
+**How hard each candidate is pushed.** Each candidate is handed to a root
+finder that tries Powell's hybrid method and then Levenberg–Marquardt from the
+seed, and closes with a Newton polish if neither reached the gate. With
+`backend="fast"` the analytic Jacobian of `backends/` is passed in, a damped
+Newton run comes first, and two rescues follow (§13.1): a solve that converged
+but left its layout is re-seeded with its gaps reset and solved again, and one
+that failed is repeated with a differenced Jacobian. A warm-started candidate
+that still fails is retried once from its cold seed, on either backend. A
+candidate seeded from *another* pattern's state — a cross seed, which is what
+a sweep hands every pattern that did not win the previous density — is asking
+whether this pattern has a root near the state the enumeration already holds,
+and a no is an ordinary answer: the pattern owning the root it would collapse
+onto is in the enumeration and finds it from its own seed. So on the fast
+backend a cross-seeded candidate (`solve_pattern(..., cross_seeded=True)`, set
+by `solve`) gets the Newton run and one hybrid solve, and no
+Levenberg–Marquardt, no differenced repeat and no cold retry; the re-seed after
+leaving its layout is kept. On `rg_njl1`, beta equilibrium, $T = 0$, 200
+densities over $n_B = 0.5$–1.55 fm⁻³, the 13 cross-seeded CFL candidates below
+the CFL onset have no CFL root and were 77 % of the table; bounded, it builds
+2.0–2.5× faster (two measurement windows) with every density in the same
+realised state and $P$ within $7\times10^{-10}$. On the reference backend the
+bound does **not** apply, and must not: the Newton run and the Jacobian-driven
+hybrid solve are what reach the CFL root where its branch begins. Without them
+the hybrid solve alone stalls at $10^{-6}$ at the first density of the
+CFL branch ($n_B = 0.5686$ fm⁻³ on the grid above), and a bounded sweep then converges
+onto a second CFL root about 1 MeV/fm³ higher in $f$, carries it forward as its
+own seed and never finds the 2SC → CFL onset.
+
 The cold-start gap seed is one rule, $\Delta_\mathrm{seed} = \max(0.35\,\mu_q, 50)$
 MeV, set ABOVE the physical gap rather than below it: the gap equation has a
 trivial root at $\Delta = 0$ as well as the physical one, the residual between
@@ -1298,7 +1326,9 @@ converged but left its layout is re-seeded with the gaps reset and solved
 again (three or four Newton steps either way), and a solve that failed is
 followed by the differenced solve from the same seed. Below the CFL onset
 every CFL candidate collapses and pays the first rescue, which is why a
-table whose CFL layout never wins gains least. Every 200-point table built
+table whose CFL layout never wins gains least. A cross-seeded candidate is
+owed less: it keeps the re-seed and loses the differenced solve,
+Levenberg–Marquardt and the cold retry (§12.4). Every 200-point table built
 both ways agrees to $10^{-8}$ relative in $P$ with the same realised pattern
 at every point; the per-table factors are in `output/njl_tables/summary.txt`.
 
@@ -1552,7 +1582,14 @@ masses, the three gaps, $\mu_3$, $\mu_8$ and $\Sigma_V$. The adapter
 enumerates the patterns at every call and keeps the one with the largest $P$,
 which at fixed potentials is the stable one; the *label* of that winner comes
 back as the key of the warm-start mapping the adapter returns alongside the
-block. No lepton enters it. There is no thermo-at-given-*densities* surface,
+block. While it enumerates, each candidate's internal solve declines
+Levenberg–Marquardt (`thermo_from_mu(..., methods=("hybr",))`): a candidate
+that misses the gate is dropped and its rivals still answer. Measured on DID +
+`rg_njl1`, three patterns, $T = 0$, that rung was 18–24 % of the NJL work inside
+the mixed engine's window search, nearly all of it at trial potentials of mixed
+solves that fail either way, and the located window and fifteen mixed rows come
+back bit-identical without it. An adapter held to one pattern keeps the full
+ladder, since there that candidate *is* the phase. No lepton enters it. There is no thermo-at-given-*densities* surface,
 so a mixed-phase response that would need one raises.
 
 ---
@@ -1851,8 +1888,8 @@ Two of their conclusions are load-bearing here and are adopted rather than
 re-derived: the **massive scheme must not be used** (it inverts the gap
 ordering to $\Delta_3 < \Delta_1 = \Delta_2$ and predicts the wrong melting
 pattern), and the RG-consistent phase diagram melts CFL in a **dSC** pattern
-where the sharp-cutoff one melts it in a uSC pattern. The `free` seed in our
-enumeration exists so that a `CFL`-layout solve can fall onto exactly such an
+where the sharp-cutoff one melts it in a uSC pattern. The `free` seed exists so
+that a `CFL`-layout solve can fall onto exactly such an
 asymmetric state.
 
 That seed is requestable and **not enumerated by default** (§12.4), and the

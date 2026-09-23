@@ -1,7 +1,7 @@
 # Re-look at 06: `gapless_momenta` is the wall once the quadrature is cut
 
 Type: prototype
-Status: open
+Status: handed on
 Blocked by: 09, 19
 Parent: ../map.md
 
@@ -78,3 +78,25 @@ block's cost falls in calls that find no crossing.
   in `eos/njl/verify/`.
 - **Measured against the ceilings above.** Falling short of them is the
   answer and settles the f2py fog entry. It is not a failure.
+
+## Resolution, 2026-09-23: handed on, not run
+
+**Handed to the future BayEoS `njl` registry map** (named in
+[ticket 09](09-verdict-and-port.md) part 2). The effort that next prices an
+njl table per theta is the one this ceiling matters to. Ruled at 09 part 2.
+
+- **The ceiling at the landed rule** (24 in-medium / 12 vacuum,
+  [19](19-land-the-quadrature-rule.md)'s "Handed on", from
+  [10](10-the-quadrature-itself.md) section 6's 24/12 column):
+  `gapless_momenta` is 12.3% of a converged CFL solve, 28.2% of the CFL table
+  and 15.9% of the 2SC table. If the block became free, that is **<= 1.39x on
+  the CFL table and <= 1.19x on 2SC**. The 12/12 shares quoted above (1.54x)
+  apply only to a caller who passes `pair_nodes_per_panel=12`.
+- **It moves neither retired target** (09 part 1). The gate is expensive: a
+  wrong no-crossing verdict loses gapless CFL, the failure
+  [18](18-bound-loses-gapless-cfl.md) fixed, and `t10_gapless.py` on both
+  backends is the check.
+- The question as written stands for the next owner: measure how much of the
+  block's cost falls in calls that find no crossing before building either
+  route. Ticket 06 is closed into this one. The f2py fog entry stays shut
+  until numba is measured short here.

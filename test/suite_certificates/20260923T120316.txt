@@ -1,0 +1,22 @@
+suite certificate
+  opened      2026-09-23T12:03:16
+  closed      2026-09-23T12:03:18
+  HEAD        80e26d1
+  interpreter CPython 3.14.2, numpy 2.3.5, scipy 1.17.0
+  eos/ before cae94720075f1e60029965f00bbedd146713728b
+  eos/ after  cae94720075f1e60029965f00bbedd146713728b
+  verdict     CLEAN -- no eos/*.py changed during the run
+
+
+==================================== ERRORS ====================================
+__________________ ERROR collecting test/njl/test_jacobian.py __________________
+import file mismatch:
+imported module 'test_jacobian' has this __file__ attribute:
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/test/mixed/test_jacobian.py
+which is not the same as the test file we want to collect:
+  /Users/mircoguerrini/Desktop/Research/Python_codes/eos/test/njl/test_jacobian.py
+HINT: remove __pycache__ / .pyc files and/or use a unique basename for your test file modules
+=========================== short test summary info ============================
+ERROR test/njl/test_jacobian.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 1.06s

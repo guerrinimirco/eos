@@ -2563,8 +2563,19 @@ finite-T phenomenon and **that region is not inside the box above**: at T = 50
 MeV, n_B = 0.8 fm^-3 CFL has already lost, but to `2SC`, not to an asymmetric
 state. So the measurement bounds nothing about the melting pattern. Nothing
 above varies `G_D`/`eta_D` or `m_s` either, which is the other axis uSC/dSC are
-argued on, and nothing at all has been measured on `ccdm` beyond a
-confirmation that `free` finds nothing its named rivals do not.
+argued on.
+
+**On `ccdm` an asymmetric state DOES win, and there the named seed is the
+unreliable one.** `Parameters.default()`, `csc=True`, beta equilibrium, every
+candidate solved cold and alone at T = 0, 30, 50 MeV and n_B = 1.3–2.5 fm^-3:
+at T = 50, n_B = 1.3 uSC beats 2SC by 0.20 MeV/fm^3 (1720.398 against
+1720.601), and the three-pattern default reaches it only because its CFL
+candidate lands there. At T = 30 the named `uSC` seed collapses (to unpaired
+or 2SC) at n_B = 1.3, 1.6 and 2.0, where `free` reaches uSC states that no
+named seed does; those lose by 4.3–8.5 MeV/fm^3, so the delivered rows do not
+move, and the three- and four-pattern defaults return the identical state and
+f at all twelve points. So whether the named seeds dominate `free` has a
+different answer per model.
 
 **What closing it takes.** A T-scan at fixed n_B carried until CFL stops
 winning, with `uSC` and `dSC` enumerated, recording what it melts INTO; then a

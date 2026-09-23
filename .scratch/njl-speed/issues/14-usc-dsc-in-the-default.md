@@ -1,7 +1,7 @@
 # Should `uSC` and `dSC` join the default enumeration?
 
 Type: prototype
-Status: open
+Status: closed
 Blocked by: 12, 13
 Parent: ../map.md
 
@@ -78,3 +78,26 @@ n_B = 1.3-2.5), and three things in it belong here:
   ticket names ("widen that filter first") is, for ccdm, "WRITE that filter
   first". It is a correctness defect in its own right, and ticket 15 recorded
   it as needing its own ticket.
+
+## Resolution, 2026-09-23: closed into `docs/DEFERRED.md`
+
+**Closed, with the question handed to the ledger.** Its home is the
+`docs/DEFERRED.md` entry "njl, ccdm: where the asymmetric pairing sector wins
+is not known". Ruled at [ticket 09](09-verdict-and-port.md) part 2.
+
+- The entry already carries this ticket's gate: the T-scan at fixed n_B
+  carried until CFL stops winning, what it melts INTO, the `_left_layout`
+  precondition, and a decision on `DEFAULT_PATTERNS` after that.
+- **Nothing measured since contradicts leaving uSC/dSC out today.**
+  [Ticket 08](08-is-it-mode-agnostic.md) found no uSC/dSC state on any of its
+  140 rows (seven modes/temperatures, n_B = 0.6-1.5, T = 0/30). Ticket 12's
+  twelve cold points found none winning either. Neither reaches the melting
+  region, and that is the gap the entry records.
+- **The entry was stale on ccdm, and was corrected in this commit.** It said
+  nothing had been measured on ccdm. [Ticket 15](15-land-the-pattern-default.md)
+  has since measured the first winning asymmetric state (uSC over 2SC by 0.20
+  MeV/fm^3, T = 50, n_B = 1.3), and a named `uSC` seed that collapses at
+  T = 30 where `free` does not. Both are now in the entry.
+- ccdm's missed CFL ground state at 3 of 12 points (15 item 2) is NOT this
+  ticket's and is NOT in that entry. It is recorded unfiled in 09 part 2's
+  loose ends.
