@@ -64,6 +64,7 @@ plot/data/samples/J0030.txt
 plot/data/samples/J0740.txt
 plot/data/samples/HESS.txt
 plot/data/samples/J0614.dat
+plot/data/samples/J0614_Miller.txt
 plot/data/samples/GW190425_nocosmo.h5
 plot/data/samples/GW170817_GWTC-1.hdf5
 plot/data/samples/*.part

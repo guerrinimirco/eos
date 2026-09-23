@@ -402,6 +402,9 @@ The fixed documents compile clean under `pdflatex` (`njl.tex`, `mixed.tex`).
    are out of this session's scope.
 7. **Merge: held.** `main` does not move. The blob above is the one blocker.
    **Push: no.**
+   **Resolved 2026-09-23:** the blob was removed from `njl-speed`'s history by
+   rewriting it. The old -> new SHA table is in
+   [map.md, "History rewritten"](../map.md#history-rewritten-2026-09-23).
 8. From the landing, below: `test/njl/test_jacobian.py` renamed to
    `test/njl/test_analytic_jacobian.py`, content unchanged.
 

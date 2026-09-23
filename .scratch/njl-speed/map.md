@@ -9,6 +9,48 @@ the port is a fast-forward of `main`, held on one blocker (a 188 MB blob that
 `2536d2b` committed). Two maps graduate, named in 09 and not charted. No
 ticket is left open.
 
+## History rewritten, 2026-09-23
+
+**Why.** `2536d2b` committed `plot/data/samples/J0614_Miller.txt`
+(188,310,363 bytes). GitHub rejects any blob over 100 MB, so `main` could not
+be pushed after the fast-forward. The fix was
+`git filter-repo --path plot/data/samples/J0614_Miller.txt --invert-paths`,
+run in a throwaway clone of the unpublished `njl-speed`. The file is now
+untracked and ignored, and `plot/fetch_samples.py` re-fetches it against its
+sha256.
+
+**What changed.** The 12 commits from `2536d2b` on have new SHAs. Every SHA
+cited elsewhere in this map and its tickets is a pre-rewrite SHA; look it up
+here. The old tip is kept as `refs/backup/njl-speed-pre-rewrite`.
+
+| # | old | new | subject |
+|---|---|---|---|
+| 1 | `2536d2b` | `d5db3f2` | feat: add J0614 comparison plots, contour data, … |
+| 2 | `428cd66` | `664b2f0` | improving speed njl |
+| 3 | `50b3b7f` | `91131a5` | feat(njl): bound the rescue ladder … |
+| 4 | `63a6dfa` | `e067ad7` | docs(njl-speed): close tickets 15 and 16 … |
+| 5 | `66d713c` | `fa32a66` | feat(mixed): stop paying for locator solves … |
+| 6 | `e2729bd` | `3553010` | docs(njl-speed): close tickets 11 and 17 … |
+| 7 | `a948b33` | `d48859d` | fix(njl): unlock the CFL seed … |
+| 8 | `211dbed` | `85e0b1f` | docs(njl-speed): ticket 09 part 1 … |
+| 9 | `a9a4aa1` | `54814fb` | feat(njl): run the two RG vacuum pairing passes … |
+| 10 | `071d712` | `6c4e986` | docs(njl-speed): close ticket 19 |
+| 11 | `80e26d1` | `8595d9e` | docs(njl-speed): close ticket 08 |
+| 12 | `133fc3a` | `9a88953` | docs(njl-speed): ticket 09 part 2, close the map |
+
+**What did not change.** `54c7be9` and every older commit keep their SHAs,
+including the baseline `d6d9e7c`. Each old/new pair differs by exactly one
+deletion, `D plot/data/samples/J0614_Miller.txt`. Author, committer and both
+dates are identical in every pair. The commit messages differ only where
+filter-repo translated an abbreviated SHA.
+
+**Why the certificates still hold.** `eos/` is the same tree before and after
+the rewrite: `80e26d1:eos` and `8595d9e:eos` are both `3221ddb6`, and
+`133fc3a:eos` and `9a88953:eos` are both `2082da9c`. So
+`test/suite_certificates/20260923T120316.txt` and `20260923T120508.txt`
+(HEAD `80e26d1`) describe `8595d9e` exactly. Between that commit and the tip,
+`eos/` changes only in `.tex`/`.md` files.
+
 ## Destination
 
 A **proving prototype** — not a production port — that demonstrates, on a pinned
